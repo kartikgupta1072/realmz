@@ -293,3 +293,13 @@ int16_t CountMItems(MenuHandle theMenu) {
 int32_t MenuKey(int16_t ch) {
   return 0;
 }
+
+void MM_SetItemIcon(MenuHandle theMenu, int16_t item, int16_t iconID) {
+  auto menu = mm.get_menu(theMenu);
+  if (item < 1 || item > static_cast<int16_t>(menu->items.size())) {
+    mm_log.warning_f("Attempted to set icon of MENU:{} item {}, but it doesn't exist", menu->menu_id, item);
+    return;
+  }
+  menu->items.at(item - 1).icon_id = iconID;
+  mm.sync();
+}

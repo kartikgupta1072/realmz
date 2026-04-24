@@ -825,6 +825,15 @@ CIconHandle GetCIcon(uint16_t iconID) {
   return h;
 }
 
+phosg::ImageRGBA8888N DecodeCIconImage(int16_t iconID) {
+  auto data_handle = GetResource(ResourceDASM::RESOURCE_TYPE_cicn, iconID);
+  if (data_handle == NULL) {
+    throw std::runtime_error(std::format("cicn resource {} not found", iconID));
+  }
+  auto decoded = ResourceDASM::ResourceFile::decode_cicn(*data_handle, GetHandleSize(data_handle));
+  return std::move(decoded.image);
+}
+
 OSErr DisposeCIcon(CIconHandle icon) {
   if ((*icon)->iconData) {
     DisposeHandle((*icon)->iconData);

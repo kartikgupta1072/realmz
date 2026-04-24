@@ -111,3 +111,6 @@ SDL_Color GetBackColorSDL();
 SDL_Color GetForeColorSDL();
 
 CCGrafPort& current_port();
+
+// Decodes cicn resource into a phosg-native RGBA
+phosg::ImageRGBA8888N DecodeCIconImage(int16_t iconID);

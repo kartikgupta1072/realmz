@@ -4,10 +4,62 @@
 #include <cstddef>
 #include <cstdint>
 #include <objc/NSObject.h>
-#include <resource_file/ResourceFile.hh>
+#include <phosg/Image.hh>
 
 NSMenu* MCCreateMenu(const MenuList& menuList);
 NSMenu* MCCreateSubMenu(NSString* title, const Menu& menuRes, const std::list<std::shared_ptr<Menu>> submenus);
+
+// We have to forward declare because of PixMap collision w/QuickDraw
+phosg::ImageRGBA8888N DecodeCIconImage(int16_t iconID);
+
+// Wraps a decoded cicn as an NSImage, NN scale 2x, byteswap BGRA->RGBA.
+static constexpr NSInteger kMenuIconUpscale = 2;
+
+static NSImage* MCImageForCicn(int16_t cicnID) {
+  if (cicnID == 0) {
+    return nil;
+  }
+  try {
+    auto decoded = DecodeCIconImage(cicnID);
+    NSInteger srcW = decoded.get_width();
+    NSInteger srcH = decoded.get_height();
+    if (srcW <= 0 || srcH <= 0) {
+      return nil;
+    }
+    NSInteger dstW = srcW * kMenuIconUpscale;
+    NSInteger dstH = srcH * kMenuIconUpscale;
+    NSBitmapImageRep* rep = [[NSBitmapImageRep alloc]
+        initWithBitmapDataPlanes:NULL
+                      pixelsWide:dstW
+                      pixelsHigh:dstH
+                   bitsPerSample:8
+                 samplesPerPixel:4
+                        hasAlpha:YES
+                        isPlanar:NO
+                  colorSpaceName:NSDeviceRGBColorSpace
+                    bitmapFormat:0
+                     bytesPerRow:dstW * 4
+                    bitsPerPixel:32];
+    if (rep == nil) {
+      return nil;
+    }
+    const uint32_t* src = decoded.get_data();
+    uint32_t* dst = reinterpret_cast<uint32_t*>([rep bitmapData]);
+    for (NSInteger y = 0; y < dstH; y++) {
+      const uint32_t* srcRow = src + (y / kMenuIconUpscale) * srcW;
+      uint32_t* dstRow = dst + y * dstW;
+      for (NSInteger x = 0; x < dstW; x++) {
+        dstRow[x] = __builtin_bswap32(srcRow[x / kMenuIconUpscale]);
+      }
+    }
+    [rep setSize:NSMakeSize(srcW, srcH)];
+    NSImage* image = [[NSImage alloc] initWithSize:NSMakeSize(srcW, srcH)];
+    [image addRepresentation:rep];
+    return image;
+  } catch (const std::exception&) {
+    return nil;
+  }
+}
 
 @interface MCMenuItemIdentifier : NSObject
 
@@ -91,6 +143,10 @@ NSMenu* MCCreateSubMenu(NSString* title, const Menu& menuRes, const std::list<st
         if (subMenuItemRes.checked) {
           subMenuItem.state = NSControlStateValueOn;
         }
+        NSImage* icon = MCImageForCicn(subMenuItemRes.icon_id);
+        if (icon != nil) {
+          [subMenuItem setImage:icon];
+        }
 
         // Submenu ids are specified by the itemMark field if the itemCmd field has
         // the value 0x1B
@@ -158,6 +214,10 @@ NSMenu* MCCreateSubMenu(NSString* title, const Menu& menuRes, const std::list<st
     id menuIdentifier = [[MCMenuItemIdentifier alloc] initWithRawIds:menu->menu_id itemId:itemId];
     [menuItem setRepresentedObject:menuIdentifier];
     menuItem.enabled = item.enabled;
+    NSImage* icon = MCImageForCicn(item.icon_id);
+    if (icon != nil) {
+      [menuItem setImage:icon];
+    }
     [_contextualMenu addItem:menuItem];
   }
 

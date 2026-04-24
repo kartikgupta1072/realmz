@@ -7,7 +7,7 @@
 WinMenu::Item win_menu_item_from_menu_item(const Menu::Item& item) {
   return WinMenu::Item{
       .name = item.name,
-      .icon_number = item.icon_number,
+      .icon_id = item.icon_id,
       .key_equivalent = item.key_equivalent,
       .mark_character = item.mark_character,
       .style_flags = item.style_flags,

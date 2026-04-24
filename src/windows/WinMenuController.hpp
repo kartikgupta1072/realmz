@@ -7,7 +7,7 @@
 struct WinMenu {
   struct Item {
     std::string name;
-    uint8_t icon_number;
+    int16_t icon_id;
     char key_equivalent;
     char mark_character; // In MacRoman; use decode_mac_roman if needed
     uint8_t style_flags; // See TextStyleFlag

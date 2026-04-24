@@ -6,7 +6,7 @@
 struct Menu {
   struct Item {
     std::string name;
-    uint8_t icon_number = 0;
+    int16_t icon_id = 0; // Absolute cicn resource id
     char key_equivalent = 0;
     char mark_character = 0; // In MacRoman; use decode_mac_roman if needed
     uint8_t style_flags = 0; // See TextStyleFlag
@@ -18,7 +18,7 @@ struct Menu {
 
     Item(ResourceDASM::ResourceFile::DecodedMenu::Item& item)
         : name{item.name},
-          icon_number{item.icon_number},
+          icon_id{static_cast<int16_t>(item.icon_number ? 256 + item.icon_number : 0)}, // icon number to resource id (0 for none)
           key_equivalent{item.key_equivalent},
           mark_character{item.mark_character},
           style_flags{item.style_flags},

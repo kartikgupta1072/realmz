@@ -31,6 +31,7 @@ int32_t PopUpMenuSelect(MenuHandle menu, int16_t top, int16_t left, int16_t popU
 void AppendMenu(MenuHandle menu, ConstStr255Param data);
 int16_t CountMItems(MenuHandle theMenu);
 int32_t MenuKey(int16_t ch);
+void MM_SetItemIcon(MenuHandle theMenu, int16_t item, int16_t iconID);
 
 #ifdef __cplusplus
 }
