@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "PortMenu.hpp"
 #include "QuickDraw.hpp"
 #include "SDLHelpers.hpp"
 
@@ -101,6 +102,19 @@ private:
   sdl_window_shared sdl_window;
   bool text_editing_active = false;
   bool recomposite_enabled = true;
+  SDL_ScaleMode scale_mode = SDL_SCALEMODE_PIXELART;
+  bool aspect_locked = true;
+  int gamma_idx = 0;
+  int windowed_w = kLogicalWindowWidth;
+  int windowed_h = kLogicalWindowHeight;
+  int windowed_x = SDL_WINDOWPOS_CENTERED;
+  int windowed_y = SDL_WINDOWPOS_CENTERED;
+  // Cached gamma correction state, so the present path does not rebuild the LUT
+  // or reallocate the pixel buffer every frame. The LUT is rebuilt only when
+  // gamma_idx changes; the scratch buffer is reused across presents.
+  int gamma_lut_idx = -1;
+  uint8_t gamma_lut[256] = {};
+  std::vector<uint32_t> gamma_scratch;
 
   WindowManager();
 
@@ -144,6 +158,24 @@ public:
   }
 
   void on_debug_signal();
+
+  SDL_ScaleMode get_scale_mode() const { return this->scale_mode; }
+  void set_scale_mode(SDL_ScaleMode mode);
+
+  int get_gamma_idx() const { return this->gamma_idx; }
+  void set_gamma_idx(int idx);
+
+  bool get_aspect_locked() const { return this->aspect_locked; }
+  void set_aspect_locked(bool locked);
+
+  void set_window_size(int w, int h);
+  bool size_fits(int w, int h) const;
+  void get_window_size(int* w, int* h) const;
+  bool is_fullscreen() const;
+
+  void note_window_moved();
+
+  void save_prefs();
 
 private:
   void print_window_stack() const;

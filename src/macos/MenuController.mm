@@ -1,4 +1,5 @@
 #import "../MenuController.h"
+#import "../PortMenu.hpp"
 #import <Cocoa/Cocoa.h>
 #import <Foundation/Foundation.h>
 #include <cstddef>
@@ -84,7 +85,7 @@ static NSImage* MCImageForCicn(int16_t cicnID) {
 
 @end
 
-@interface MCMenuBar : NSObject
+@interface MCMenuBar : NSObject <NSMenuDelegate>
 
 @property(readonly) NSMenu* menuObject;
 @property(nonatomic) void (*callback)(int16_t, int16_t);
@@ -108,6 +109,10 @@ static NSImage* MCImageForCicn(int16_t cicnID) {
   callback([identifier menuID], [identifier itemID]);
 }
 
+- (IBAction)MCHandlePortItem:(id)sender {
+  PortMenu_Apply((int)[sender tag]);
+}
+
 - (void)MCCreateMenu:(const MenuList&)menuList {
   _menuObject = [[NSMenu alloc] initWithTitle:@"Realmz"];
   [_menuObject setAutoenablesItems:NO];
@@ -121,6 +126,79 @@ static NSImage* MCImageForCicn(int16_t cicnID) {
       NSMenu* subMenu = [self MCCreateSubMenu:title parentMenu:*menu submenus:menuList.submenus];
       [_menuObject setSubmenu:subMenu forItem:menuItem];
     }
+  }
+
+  [self addPortMenu];
+}
+
+- (void)addPortMenu {
+  NSMenuItem* portItem = [[NSMenuItem alloc] initWithTitle:@"Port" action:NULL keyEquivalent:@""];
+  [_menuObject addItem:portItem];
+  NSMenu* portMenu = [[NSMenu alloc] initWithTitle:@"Port"];
+  [portMenu setAutoenablesItems:NO];
+  portMenu.delegate = self;
+
+  NSMenuItem* filteringItem = [[NSMenuItem alloc] initWithTitle:@"Filter" action:NULL keyEquivalent:@""];
+  [portMenu addItem:filteringItem];
+  NSMenu* filterMenu = [[NSMenu alloc] initWithTitle:@"Filter"];
+  [filterMenu setAutoenablesItems:NO];
+  filterMenu.delegate = self;
+  for (int i = 0; i < kPortFilterCount; i++) {
+    NSMenuItem* item = [filterMenu addItemWithTitle:[NSString stringWithUTF8String:kPortFilters[i].title]
+                                             action:@selector(MCHandlePortItem:)
+                                      keyEquivalent:@""];
+    [item setTarget:self];
+    [item setTag:(NSInteger)(kPortFilterId + i)];
+  }
+  [portMenu setSubmenu:filterMenu forItem:filteringItem];
+
+  NSMenuItem* scaleItem = [[NSMenuItem alloc] initWithTitle:@"Scale" action:NULL keyEquivalent:@""];
+  [portMenu addItem:scaleItem];
+  NSMenu* scaleMenu = [[NSMenu alloc] initWithTitle:@"Scale"];
+  [scaleMenu setAutoenablesItems:NO];
+  scaleMenu.delegate = self;
+  for (int i = 0; i < kPortScaleCount; i++) {
+    NSMenuItem* item = [scaleMenu addItemWithTitle:[NSString stringWithUTF8String:kPortScales[i].title]
+                                            action:@selector(MCHandlePortItem:)
+                                     keyEquivalent:@""];
+    [item setTarget:self];
+    [item setTag:(NSInteger)(kPortScaleId + i)];
+  }
+  [portMenu setSubmenu:scaleMenu forItem:scaleItem];
+
+  NSMenuItem* aspectItem = [portMenu addItemWithTitle:@"Lock Aspect Ratio"
+                                               action:@selector(MCHandlePortItem:)
+                                        keyEquivalent:@""];
+  [aspectItem setTarget:self];
+  [aspectItem setTag:(NSInteger)kPortAspectLockId];
+
+  [portMenu addItem:[NSMenuItem separatorItem]];
+  NSMenuItem* gammaItem = [[NSMenuItem alloc] initWithTitle:@"Color Correction" action:NULL keyEquivalent:@""];
+  [portMenu addItem:gammaItem];
+  NSMenu* gammaMenu = [[NSMenu alloc] initWithTitle:@"Color Correction"];
+  [gammaMenu setAutoenablesItems:NO];
+  gammaMenu.delegate = self;
+  for (int i = 0; i < kPortGammaCount; i++) {
+    NSMenuItem* item = [gammaMenu addItemWithTitle:[NSString stringWithUTF8String:kPortGammaOptions[i].title]
+                                           action:@selector(MCHandlePortItem:)
+                                    keyEquivalent:@""];
+    [item setTarget:self];
+    [item setTag:(NSInteger)(kPortGammaId + i)];
+  }
+  [portMenu setSubmenu:gammaMenu forItem:gammaItem];
+
+  [_menuObject setSubmenu:portMenu forItem:portItem];
+}
+
+- (void)menuNeedsUpdate:(NSMenu*)menu {
+  for (NSMenuItem* item in menu.itemArray) {
+    if (item.action != @selector(MCHandlePortItem:)) {
+      continue;
+    }
+    int checked = 0, enabled = 1;
+    PortMenu_ItemState((int)item.tag, &checked, &enabled);
+    item.enabled = enabled ? YES : NO;
+    item.state = checked ? NSControlStateValueOn : NSControlStateValueOff;
   }
 }
 

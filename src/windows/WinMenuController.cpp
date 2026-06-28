@@ -4,12 +4,77 @@
 #include <memory>
 #include <phosg/Strings.hh>
 
+#include "../PortMenu.hpp"
 #include "./WinMenuController.hpp"
 #include <utility>
 
 static phosg::PrefixedLogger wmc_log("[WinMenuController] ");
 
-// Static variable to keep the original window proc
+// Command IDs for the Port menu. They sit in a reserved high range so they never
+// collide with the packed (menu_id, item_id) identifiers the game's own menus use,
+// which top out at 0x7F7F because menu_id and item_id are each a single byte.
+static constexpr WORD PORT_CMD_BASE = 0xE000;
+static constexpr WORD PORT_CMD_MIN = PORT_CMD_BASE;
+static constexpr WORD PORT_CMD_MAX = 0xE0FF;
+
+static bool IsPortCommand(WORD cmd) {
+  return (cmd >= PORT_CMD_MIN) && (cmd <= PORT_CMD_MAX);
+}
+
+// Builds the Port menu and appends it to the given menu bar. Mirrors the layout of
+// the macOS Port menu (filters, a Scale submenu, an aspect-lock toggle, and a
+// Color Correction submenu).
+static void BuildPortMenu(HMENU menubar) {
+  HMENU port_menu = CreatePopupMenu();
+
+  HMENU filter_menu = CreatePopupMenu();
+  for (int i = 0; i < kPortFilterCount; i++) {
+    AppendMenu(filter_menu, MF_STRING, PORT_CMD_BASE + kPortFilterId + i, kPortFilters[i].title);
+  }
+  AppendMenu(port_menu, MF_POPUP | MF_STRING, reinterpret_cast<UINT_PTR>(filter_menu), "Filter");
+
+  HMENU scale_menu = CreatePopupMenu();
+  for (int i = 0; i < kPortScaleCount; i++) {
+    AppendMenu(scale_menu, MF_STRING, PORT_CMD_BASE + kPortScaleId + i, kPortScales[i].title);
+  }
+  AppendMenu(port_menu, MF_POPUP, reinterpret_cast<UINT_PTR>(scale_menu), "Scale");
+  AppendMenu(port_menu, MF_STRING, PORT_CMD_BASE + kPortAspectLockId, "Lock Aspect Ratio");
+
+  HMENU gamma_menu = CreatePopupMenu();
+  for (int i = 0; i < kPortGammaCount; i++) {
+    AppendMenu(gamma_menu, MF_STRING, PORT_CMD_BASE + kPortGammaId + i, kPortGammaOptions[i].title);
+  }
+
+  AppendMenu(port_menu, MF_SEPARATOR, 0, nullptr);
+  AppendMenu(port_menu, MF_POPUP | MF_STRING, reinterpret_cast<UINT_PTR>(gamma_menu), "Color Correction");
+
+  AppendMenu(menubar, MF_POPUP | MF_STRING, reinterpret_cast<UINT_PTR>(port_menu), "Port");
+}
+
+// Refreshes the checkmarks and enabled state of the Port menu items in the given
+// popup. Called from WM_INITMENUPOPUP so the state is current each time the menu (or
+// its Scale submenu) opens, the same role the menuNeedsUpdate delegate plays on macOS.
+static void UpdatePortMenuState(HMENU menu) {
+  if (!menu) {
+    return;
+  }
+  int count = GetMenuItemCount(menu);
+  for (int pos = 0; pos < count; pos++) {
+    UINT cmd = GetMenuItemID(menu, pos);
+    if (!IsPortCommand(static_cast<WORD>(cmd))) {
+      continue;
+    }
+    int checked = 0, enabled = 1;
+    PortMenu_ItemState(cmd - PORT_CMD_BASE, &checked, &enabled);
+    EnableMenuItem(menu, pos, MF_BYPOSITION | (enabled ? MF_ENABLED : MF_GRAYED));
+    CheckMenuItem(menu, pos, MF_BYPOSITION | (checked ? MF_CHECKED : MF_UNCHECKED));
+  }
+}
+
+static void HandlePortCommand(WORD cmd) {
+  PortMenu_Apply(cmd - PORT_CMD_BASE);
+}
+
 static WNDPROC g_OldWndProc = nullptr;
 
 // Callback to invoke with clicked menu items. Should be a pointer to a function that
@@ -66,7 +131,17 @@ std::pair<int16_t, int16_t> FindMenuItemByKeyEquivalent(char ch) {
 }
 
 LRESULT CALLBACK RealmzWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+  if (msg == WM_INITMENUPOPUP) {
+    UpdatePortMenuState(reinterpret_cast<HMENU>(wParam));
+    return CallWindowProc(g_OldWndProc, hwnd, msg, wParam, lParam);
+  }
+
   if (msg == WM_COMMAND) {
+    WORD cmd = LOWORD(wParam);
+    if (IsPortCommand(cmd)) {
+      HandlePortCommand(cmd);
+      return 0;
+    }
     if (menuCallback != nullptr) {
       auto identifier_pair = UnpackMenuIdentifier(wParam);
       menuCallback(identifier_pair.first, identifier_pair.second);
@@ -112,13 +187,16 @@ HWND get_window_handle(SDL_Window* sdl_window) {
 }
 
 void WinMenuSync(SDL_Window* sdl_window, std::shared_ptr<WinMenuList> menu_list, void (*callback)(int16_t, int16_t)) {
-  // Update current menu click callback function
   menuCallback = callback;
-
-  // Store the current menu list for keyboard shortcut lookup
   current_menu_list = menu_list;
 
   auto wind_handle = get_window_handle(sdl_window);
+
+  // Capture the current logical size so it can be reapplied after the menu bar is
+  // attached (see the note below). Reapplying the current size rather than the fixed
+  // logical default keeps a scale chosen from the Port menu from being reset on the next sync.
+  int client_w = kLogicalWindowWidth, client_h = kLogicalWindowHeight;
+  SDL_GetWindowSize(sdl_window, &client_w, &client_h);
 
   HMENU win_menu = CreateMenu();
   MENUINFO win_menu_info = MENUINFO{
@@ -167,6 +245,8 @@ void WinMenuSync(SDL_Window* sdl_window, std::shared_ptr<WinMenuList> menu_list,
     InsertMenuItem(win_menu, menu->menu_id, FALSE, &item_info);
   }
 
+  BuildPortMenu(win_menu);
+
   auto old_menu = GetMenu(wind_handle);
   SetMenu(wind_handle, win_menu);
   HookWndProc(wind_handle);
@@ -181,12 +261,13 @@ void WinMenuSync(SDL_Window* sdl_window, std::shared_ptr<WinMenuList> menu_list,
   // client area of the window, not the full window size inclusive of the menu bar. Since we have to
   // bypass SDL to create the menu directly via the Windows API, it seems that SDL doesn't know that
   // the rendering of the menu bar has shrunk the client area. So, a quick call to SDL_SetWindowSize is
-  // enough to force SDL to realize the menu bar now exists and to expand the window to ensure that the
-  // client area is the full 800x600.
-  SDL_SetWindowSize(sdl_window, 800, 600);
+  // enough to force SDL to realize the menu bar now exists and to expand the window so the client area
+  // is the full size it expects. Reapply the size captured above rather than the fixed logical
+  // default so a scale picked from the Port menu survives a menu re-sync.
+  SDL_SetWindowSize(sdl_window, client_w, client_h);
 }
 
-int WinCreatePopupMenu(SDL_Window* sdl_window, std::shared_ptr<WinMenu> menu) {
+int WinCreatePopupMenu(SDL_Window* sdl_window, std::shared_ptr<WinMenu> menu, int window_x, int window_y) {
   auto wind_handle = get_window_handle(sdl_window);
 
   HMENU popupMenu = CreatePopupMenu();
@@ -198,11 +279,12 @@ int WinCreatePopupMenu(SDL_Window* sdl_window, std::shared_ptr<WinMenu> menu) {
     AppendMenu(popupMenu, (item.enabled ? MF_ENABLED : 0) | MF_STRING, i, name);
   }
 
-  // TrackPopupMenu displays the menu in screen coordinates, not window coordinates. Rather
-  // thank require the caller to convert the mouse position from local to global coordinates,
-  // it's easier to just get the mouse position fresh right here.
-  POINT pt;
-  GetCursorPos(&pt);
+  // TrackPopupMenu displays the menu in screen coordinates. The caller hands us the requested
+  // position in window (client-area) coordinates, already converted from the game's logical
+  // render space, so convert client -> screen here to anchor the menu where the caller asked
+  // rather than wherever the cursor happens to be.
+  POINT pt{window_x, window_y};
+  ClientToScreen(wind_handle, &pt);
 
   int result = TrackPopupMenu(popupMenu,
       TPM_RETURNCMD | TPM_RIGHTBUTTON,

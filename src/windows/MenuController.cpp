@@ -35,7 +35,7 @@ void MCSync(std::shared_ptr<MenuList> menuList, void (*callback)(int16_t, int16_
 
   auto win_menu_list = std::make_shared<WinMenuList>();
 
-  auto menus = std::transform(
+  std::transform(
       menuList->menus.begin(),
       menuList->menus.end(),
       std::back_inserter(win_menu_list->menus),
@@ -51,6 +51,7 @@ void MCCreatePopupMenu(
     void (*callback)(int16_t, int16_t)) {
   auto sdl_window = WindowManager::instance().get_sdl_window();
   auto m = win_menu_from_menu(menu);
-  auto result = WinCreatePopupMenu(sdl_window.get(), m);
+  // loc is {top, left} = {y, x} in window coordinates.
+  auto result = WinCreatePopupMenu(sdl_window.get(), m, loc.second, loc.first);
   callback(m->menu_id, result);
 }

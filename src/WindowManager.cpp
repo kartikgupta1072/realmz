@@ -1,9 +1,18 @@
 #include "WindowManager.hpp"
 
+#include "PortMenu.hpp"
+#include "PortPrefs.hpp"
+
+#ifdef __APPLE__
+#include "macos/WindowAspect.h"
+#endif
+
 #include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_properties.h>
+#include <cmath>
 #include <memory>
 #include <stdexcept>
+#include <vector>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_events.h>
@@ -1100,19 +1109,54 @@ void Window::remove_text_edit(std::shared_ptr<DialogItem> item) {
 WindowManager::WindowManager() = default;
 WindowManager::~WindowManager() = default;
 
+static bool window_pos_on_screen(int x, int y, int w, int h) {
+  if (SDL_WINDOWPOS_ISCENTERED(x) || SDL_WINDOWPOS_ISUNDEFINED(x) ||
+      SDL_WINDOWPOS_ISCENTERED(y) || SDL_WINDOWPOS_ISUNDEFINED(y)) {
+    return false;
+  }
+  SDL_Rect win{x, y, w, h};
+  SDL_DisplayID display = SDL_GetDisplayForRect(&win);
+  SDL_Rect bounds;
+  if (!display || !SDL_GetDisplayUsableBounds(display, &bounds)) {
+    return false;
+  }
+  SDL_Rect overlap;
+  if (!SDL_GetRectIntersection(&win, &bounds, &overlap)) {
+    return false;
+  }
+  static constexpr int kMinVisible = 80;
+  return overlap.w >= kMinVisible && overlap.h >= kMinVisible;
+}
+
 void WindowManager::create_sdl_window() {
   wm_log.debug_f("WindowManager::create_sdl_window()");
 
-  static constexpr size_t w = 800;
-  static constexpr size_t h = 600;
-  this->sdl_window = sdl_make_shared(SDL_CreateWindow("Realmz", w, h, 0));
+  PortPrefs prefs = load_port_prefs();
+  this->scale_mode = prefs.scale_mode;
+  this->aspect_locked = prefs.aspect_locked;
+  this->gamma_idx = prefs.gamma_idx;
+  this->windowed_w = prefs.window_w;
+  this->windowed_h = prefs.window_h;
+  this->windowed_x = prefs.window_x;
+  this->windowed_y = prefs.window_y;
+
+  this->sdl_window = sdl_make_shared(SDL_CreateWindow("Realmz", prefs.window_w, prefs.window_h, SDL_WINDOW_RESIZABLE));
   if (!this->sdl_window) {
     throw std::runtime_error(std::format("Could not create SDL window: {}", SDL_GetError()));
   }
-  if (!SDL_CreateRenderer(this->sdl_window.get(), nullptr)) {
+  if (window_pos_on_screen(this->windowed_x, this->windowed_y, prefs.window_w, prefs.window_h)) {
+    SDL_SetWindowPosition(this->sdl_window.get(), this->windowed_x, this->windowed_y);
+  }
+  if (this->aspect_locked) {
+    SDL_SetWindowAspectRatio(this->sdl_window.get(), kLogicalAspect, kLogicalAspect);
+  }
+  SDL_Renderer* renderer = SDL_CreateRenderer(this->sdl_window.get(), nullptr);
+  if (!renderer) {
     throw std::runtime_error(std::format("Could not create window renderer: {}", SDL_GetError()));
   }
-  this->screen_port.resize(w, h);
+  SDL_SetRenderLogicalPresentation(renderer, kLogicalWindowWidth, kLogicalWindowHeight, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+
+  this->screen_port.resize(kLogicalWindowWidth, kLogicalWindowHeight);
   this->recomposite_all();
 }
 
@@ -1263,11 +1307,20 @@ void WindowManager::on_dialog_item_focus_changed() {
     const auto& window_rect = this->top_window->port.portRect;
     const auto& item_rect = this->top_window->focused_item->rect;
 
+    float left = window_rect.left + item_rect.left;
+    float top = window_rect.top + item_rect.top;
+    float right = window_rect.left + item_rect.right;
+    float bottom = window_rect.top + item_rect.bottom;
+    if (auto* renderer = SDL_GetRenderer(this->sdl_window.get())) {
+      SDL_RenderCoordinatesToWindow(renderer, left, top, &left, &top);
+      SDL_RenderCoordinatesToWindow(renderer, right, bottom, &right, &bottom);
+    }
+
     SDL_Rect rect;
-    rect.x = window_rect.left + item_rect.left;
-    rect.y = window_rect.top + item_rect.top;
-    rect.w = item_rect.right - item_rect.left;
-    rect.h = item_rect.bottom - item_rect.top;
+    rect.x = static_cast<int>(SDL_lroundf(left));
+    rect.y = static_cast<int>(SDL_lroundf(top));
+    rect.w = static_cast<int>(SDL_lroundf(right - left));
+    rect.h = static_cast<int>(SDL_lroundf(bottom - top));
     if (!SDL_SetTextInputArea(this->sdl_window.get(), &rect, 0)) {
       wm_log.error_f("Could not create text area: {}", SDL_GetError());
     }
@@ -1343,8 +1396,39 @@ void WindowManager::recomposite(std::shared_ptr<Window> updated_window) {
         wm_log.info_f("Writing debug{}.bmp", debug_number);
         phosg::save_file(std::format("debug{}.bmp", debug_number++), this->screen_port.data.serialize(phosg::ImageFormat::WINDOWS_BITMAP));
       }
+      // Apply gamma correction if enabled. The correction treats Mac content as
+      // 1.8-gamma-encoded and remaps it for the chosen target display gamma. The
+      // lookup table is rebuilt only when the gamma option changes, and the pixel
+      // buffer is reused, so an enabled gamma adds only the per-pixel remap (not a
+      // table rebuild and a full-frame allocation) to each present.
+      const void* surface_data = this->screen_port.data.get_data();
+      float gdisplay = kPortGammaOptions[this->gamma_idx].display_gamma;
+      if (gdisplay > 0.0f) {
+        if (this->gamma_lut_idx != this->gamma_idx) {
+          float exp = 1.8f / gdisplay;
+          this->gamma_lut[0] = 0;
+          for (int i = 1; i < 255; i++) {
+            this->gamma_lut[i] = static_cast<uint8_t>(std::round(255.0f * std::pow(i / 255.0f, exp)));
+          }
+          this->gamma_lut[255] = 255;
+          this->gamma_lut_idx = this->gamma_idx;
+        }
+        const uint8_t* lut = this->gamma_lut;
+        size_t n = static_cast<size_t>(w) * h;
+        this->gamma_scratch.resize(n);
+        const uint32_t* src = static_cast<const uint32_t*>(surface_data);
+        for (size_t i = 0; i < n; i++) {
+          uint32_t p = src[i];
+          this->gamma_scratch[i] =
+              (static_cast<uint32_t>(lut[(p >> 24) & 0xFF]) << 24) |
+              (static_cast<uint32_t>(lut[(p >> 16) & 0xFF]) << 16) |
+              (static_cast<uint32_t>(lut[(p >>  8) & 0xFF]) <<  8) |
+              (p & 0xFF);
+        }
+        surface_data = this->gamma_scratch.data();
+      }
       auto surface = sdl_make_unique(SDL_CreateSurfaceFrom(
-          w, h, SDL_PIXELFORMAT_RGBA8888, this->screen_port.data.get_data(), 4 * this->screen_port.data.get_width()));
+          w, h, SDL_PIXELFORMAT_RGBA8888, const_cast<void*>(surface_data), 4 * w));
       if (!surface) {
         wm_log.error_f("Could not create surface: {}", SDL_GetError());
       } else {
@@ -1352,6 +1436,9 @@ void WindowManager::recomposite(std::shared_ptr<Window> updated_window) {
         if (!texture) {
           wm_log.error_f("Could not create texture: {}", SDL_GetError());
         } else {
+          SDL_SetTextureScaleMode(texture.get(), this->scale_mode);
+          SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+          SDL_RenderClear(renderer);
           SDL_RenderTexture(renderer, texture.get(), nullptr, nullptr);
         }
       }
@@ -1391,6 +1478,109 @@ void WindowManager::recomposite_from_window(std::shared_ptr<Window> updated_wind
 }
 void WindowManager::recomposite_all() {
   this->recomposite(nullptr);
+}
+
+void WindowManager::set_scale_mode(SDL_ScaleMode mode) {
+  if (mode == this->scale_mode) {
+    return;
+  }
+  this->scale_mode = mode;
+  this->recomposite_all();
+  this->save_prefs();
+}
+
+void WindowManager::set_aspect_locked(bool locked) {
+  this->aspect_locked = locked;
+  if (this->sdl_window) {
+    if (locked) {
+      int w = 0, h = 0;
+      SDL_GetWindowSize(this->sdl_window.get(), &w, &h);
+      int snapped_h = (w * kLogicalWindowHeight + kLogicalWindowWidth / 2) / kLogicalWindowWidth;
+      if (snapped_h != h && !this->is_fullscreen()) {
+        SDL_SetWindowSize(this->sdl_window.get(), w, snapped_h);
+      }
+      if (!this->is_fullscreen()) {
+        SDL_SetWindowAspectRatio(this->sdl_window.get(), kLogicalAspect, kLogicalAspect);
+      }
+    } else {
+#ifdef __APPLE__
+      MacResetWindowAspect(this->sdl_window.get());
+#else
+      SDL_SetWindowAspectRatio(this->sdl_window.get(), 0.0f, 0.0f);
+#endif
+    }
+  }
+  this->save_prefs();
+}
+
+void WindowManager::set_window_size(int w, int h) {
+  if (!this->sdl_window) {
+    return;
+  }
+  SDL_SetWindowSize(this->sdl_window.get(), w, h);
+  this->recomposite_all();
+  this->save_prefs();
+}
+
+bool WindowManager::size_fits(int w, int h) const {
+  if (!this->sdl_window) {
+    return false;
+  }
+  SDL_Rect usable;
+  SDL_DisplayID display = SDL_GetDisplayForWindow(this->sdl_window.get());
+  if (!SDL_GetDisplayUsableBounds(display, &usable)) {
+    return true;
+  }
+  return (w <= usable.w) && (h <= usable.h);
+}
+
+void WindowManager::get_window_size(int* w, int* h) const {
+  if (this->sdl_window) {
+    SDL_GetWindowSize(this->sdl_window.get(), w, h);
+  } else {
+    *w = *h = 0;
+  }
+}
+
+bool WindowManager::is_fullscreen() const {
+  if (!this->sdl_window) {
+    return false;
+  }
+  return (SDL_GetWindowFlags(this->sdl_window.get()) & SDL_WINDOW_FULLSCREEN) != 0;
+}
+
+void WindowManager::note_window_moved() {
+  if (this->sdl_window && !this->is_fullscreen()) {
+    SDL_GetWindowPosition(this->sdl_window.get(), &this->windowed_x, &this->windowed_y);
+  }
+}
+
+void WindowManager::save_prefs() {
+  PortPrefs prefs;
+  prefs.scale_mode = this->scale_mode;
+  prefs.aspect_locked = this->aspect_locked;
+  prefs.gamma_idx = this->gamma_idx;
+  if (this->sdl_window && !this->is_fullscreen()) {
+    SDL_GetWindowSize(this->sdl_window.get(), &this->windowed_w, &this->windowed_h);
+  }
+  prefs.window_w = this->windowed_w;
+  prefs.window_h = this->windowed_h;
+  prefs.window_x = this->windowed_x;
+  prefs.window_y = this->windowed_y;
+  save_port_prefs(prefs);
+}
+
+void WindowManager::set_gamma_idx(int idx) {
+  if (idx < 0 || idx >= kPortGammaCount || idx == this->gamma_idx) {
+    return;
+  }
+  this->gamma_idx = idx;
+  this->recomposite_all();
+  this->save_prefs();
+}
+
+extern "C" void WM_SavePrefs(void) {
+  WindowManager::instance().save_prefs();
 }
 
 void WindowManager::on_debug_signal() {
