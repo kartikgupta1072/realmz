@@ -72,7 +72,7 @@ public:
     return channel;
   }
 
-  void play_sound(SDL_AudioStream* sdlAudioStream, Handle data_handle) {
+  void play_sound(SDL_AudioStream* sdlAudioStream, Handle data_handle, bool async) {
     std::shared_ptr<const Sound> sound;
     try {
       sound = this->sound_for_handle(data_handle);
@@ -91,6 +91,17 @@ public:
 
     if (!SDL_PutAudioStreamData(sdlAudioStream, sound->data.data(), static_cast<int>(sound->data.size()))) {
       sm_log.warning_f("Could not put audio stream data: {}", SDL_GetError());
+      return;
+    }
+
+    if (!async) {
+      if (!SDL_FlushAudioStream(sdlAudioStream)) {
+        sm_log.warning_f("Could not flush audio stream: {}", SDL_GetError());
+        return;
+      }
+      while (SDL_GetAudioStreamAvailable(sdlAudioStream) > 0) {
+        SDL_Delay(10);
+      }
     }
   }
 
@@ -225,7 +236,7 @@ OSErr SndPlay(SndChannelPtr chan, Handle data_handle, Boolean async) {
   if (data_handle == nullptr) {
     return resProblem;
   }
-  sm.play_sound(chan->sdlAudioStream, data_handle);
+  sm.play_sound(chan->sdlAudioStream, data_handle, async != 0);
   return noErr;
 }
 
