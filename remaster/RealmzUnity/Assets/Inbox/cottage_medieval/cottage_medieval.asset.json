@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "id": "cottage_medieval",
+  "name": "Cottage Medieval",
+  "category": "Building",
+  "rig_profile": "Static",
+  "rigged": false,
+  "rig_source": "none",
+  "bones": [],
+  "animations": [],
+  "bounds_m": {
+    "x": 3.78843,
+    "y": 4.5,
+    "z": 4.49011,
+    "width": 3.78843,
+    "height": 4.5,
+    "depth": 4.49011
+  },
+  "pivot": "bottom_center",
+  "forward_axis": "+Z",
+  "triangle_count": 4500,
+  "target_scale_m": 4.5,
+  "preferred_mode": "Both",
+  "hd2d_frame_size": 256,
+  "hd2d_frame_count": 1,
+  "hd2d_ppu": 256,
+  "source_image": "cottage_medieval.png",
+  "peak_vram_mib": 7774,
+  "timestamp": "2026-11-23T18:57:58Z"
+}

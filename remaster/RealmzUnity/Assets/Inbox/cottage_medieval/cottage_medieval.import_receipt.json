@@ -1,0 +1,22 @@
+{
+    "schema_version": "1.0",
+    "id": "cottage_medieval",
+    "name": "Cottage Medieval",
+    "category": "Building",
+    "rig_profile": "Static",
+    "preferred_mode": "Both",
+    "prefab_3d_path": "Assets/Prefabs/Foundry/cottage_medieval_3D.prefab",
+    "prefab_hd2d_path": "Assets/Prefabs/Foundry/cottage_medieval_HD2D.prefab",
+    "material_3d_path": "Assets/Materials/Foundry/cottage_medieval_Stylized3D.mat",
+    "material_hd2d_path": "Assets/Materials/Foundry/cottage_medieval_HD2D.mat",
+    "animator_controller_path": "",
+    "shader_name": "Realmz/Stylized3D",
+    "mesh_count": 1,
+    "triangle_count": 4500,
+    "bone_count": 0,
+    "animation_clips": [],
+    "hd2d_sprite_count": 1,
+    "imported_timestamp": "2026-11-23T19:26:35Z",
+    "success": true,
+    "notes": ""
+}

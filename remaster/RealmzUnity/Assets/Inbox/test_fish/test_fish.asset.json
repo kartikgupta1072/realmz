@@ -1,0 +1,43 @@
+{
+  "schema_version": "1.0",
+  "id": "test_fish",
+  "name": "Test Fish",
+  "category": "Monster",
+  "rig_profile": "Aquatic",
+  "rigged": true,
+  "rig_source": "blender_template+gaussian_skin",
+  "bones": [
+    "Root",
+    "Head",
+    "Body_Mid",
+    "Tail_Base",
+    "Tail_Mid",
+    "Tail_Fin",
+    "Fin_L",
+    "Fin_R"
+  ],
+  "animations": [
+    "Idle",
+    "Move",
+    "Attack"
+  ],
+  "bounds_m": {
+    "x": 0.9,
+    "y": 0.34215,
+    "z": 0.24615,
+    "width": 0.9,
+    "height": 0.34215,
+    "depth": 0.24615
+  },
+  "pivot": "bottom_center",
+  "forward_axis": "+Z",
+  "triangle_count": 6500,
+  "target_scale_m": 0.9,
+  "preferred_mode": "Both",
+  "hd2d_frame_size": 128,
+  "hd2d_frame_count": 4,
+  "hd2d_ppu": 128,
+  "source_image": "test_fish.png",
+  "peak_vram_mib": 7779,
+  "timestamp": "2026-11-23T19:00:43Z"
+}

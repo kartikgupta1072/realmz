@@ -1,0 +1,51 @@
+{
+  "schema_version": "1.0",
+  "id": "giant_frog",
+  "name": "Giant Frog",
+  "category": "Monster",
+  "rig_profile": "Quadruped",
+  "rigged": true,
+  "rig_source": "blender_template+gaussian_skin",
+  "bones": [
+    "Root",
+    "Hips",
+    "Spine",
+    "Chest",
+    "Neck",
+    "Head",
+    "FrontLeg_L",
+    "FrontPaw_L",
+    "FrontLeg_R",
+    "FrontPaw_R",
+    "Tail1",
+    "Tail2",
+    "BackLeg_L",
+    "BackPaw_L",
+    "BackLeg_R",
+    "BackPaw_R"
+  ],
+  "animations": [
+    "Idle",
+    "Move",
+    "Attack"
+  ],
+  "bounds_m": {
+    "x": 1.25,
+    "y": 0.80445,
+    "z": 0.47435,
+    "width": 1.25,
+    "height": 0.80445,
+    "depth": 0.47435
+  },
+  "pivot": "bottom_center",
+  "forward_axis": "+Z",
+  "triangle_count": 6500,
+  "target_scale_m": 1.25,
+  "preferred_mode": "Both",
+  "hd2d_frame_size": 128,
+  "hd2d_frame_count": 1,
+  "hd2d_ppu": 128,
+  "source_image": "giant_frog.png",
+  "peak_vram_mib": 7775,
+  "timestamp": "2026-11-23T18:56:23Z"
+}

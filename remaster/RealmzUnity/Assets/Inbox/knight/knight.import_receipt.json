@@ -1,0 +1,26 @@
+{
+    "schema_version": "1.0",
+    "id": "knight",
+    "name": "Knight",
+    "category": "Hero",
+    "rig_profile": "Humanoid",
+    "preferred_mode": "Both",
+    "prefab_3d_path": "Assets/Prefabs/Foundry/knight_3D.prefab",
+    "prefab_hd2d_path": "Assets/Prefabs/Foundry/knight_HD2D.prefab",
+    "material_3d_path": "Assets/Materials/Foundry/knight_Stylized3D.mat",
+    "material_hd2d_path": "Assets/Materials/Foundry/knight_HD2D.mat",
+    "animator_controller_path": "Assets/Prefabs/Foundry/knight_Controller.controller",
+    "shader_name": "Realmz/Stylized3D",
+    "mesh_count": 1,
+    "triangle_count": 6500,
+    "bone_count": 134,
+    "animation_clips": [
+        "Attack",
+        "Idle",
+        "Move"
+    ],
+    "hd2d_sprite_count": 1,
+    "imported_timestamp": "2026-11-23T19:26:35Z",
+    "success": true,
+    "notes": ""
+}
