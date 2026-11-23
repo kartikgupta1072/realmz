@@ -137,9 +137,9 @@ namespace Realmz.World
             }
 
             RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.17f, 0.22f, 0.38f, 1f);
-            RenderSettings.ambientEquatorColor = new Color(0.12f, 0.16f, 0.28f, 1f);
-            RenderSettings.ambientGroundColor = new Color(0.08f, 0.10f, 0.18f, 1f);
+            RenderSettings.ambientSkyColor = new Color(0.20f, 0.25f, 0.42f, 1f);
+            RenderSettings.ambientEquatorColor = new Color(0.14f, 0.19f, 0.32f, 1f);
+            RenderSettings.ambientGroundColor = new Color(0.09f, 0.12f, 0.22f, 1f);
             RenderSettings.ambientIntensity = 1.0f;
 
             if (targetCamera != null)

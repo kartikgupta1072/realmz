@@ -224,16 +224,17 @@ namespace Realmz.World
                 return;
             }
 
-            _partyLantern.transform.position = new Vector3(worldPos.x, worldPos.y + 1.02f, worldPos.z);
+            _partyLantern.transform.position = new Vector3(worldPos.x, worldPos.y + 1.65f, worldPos.z - 0.85f);
             if (isDungeon)
             {
-                _partyLantern.intensity = 3.6f;
-                _partyLantern.range = 9.5f;
+                _partyLantern.enabled = true;
+                _partyLantern.intensity = 2.6f;
+                _partyLantern.range = 10.5f;
             }
             else
             {
-                _partyLantern.intensity = 1.5f;
-                _partyLantern.range = 4.8f;
+                _partyLantern.intensity = 0f;
+                _partyLantern.enabled = false;
             }
         }
 
@@ -320,7 +321,7 @@ namespace Realmz.World
                 {
                     BywaterTileKind kind = BywaterTileClassifier.Classify(map, x, y);
                     int tileHash = BywaterTileClassifier.DeterministicTileHash(x, y);
-                    int variantIdx = BywaterTileClassifier.GetTileVariantIndex(x, y, 3);
+                    int variantIdx = ResolveWeightedTileVariant(kind, isDungeon, x, y, tileHash);
 
                     // Floor quad with multi-variant material, deterministic yaw, and subtle per-tile tint
                     float floorY = kind == BywaterTileKind.ShallowWater ? -0.12f : 0f;
@@ -458,21 +459,32 @@ namespace Realmz.World
             floorQuad.SetPropertyBlock(_floorPropBlock);
         }
 
+        private static int ResolveWeightedTileVariant(BywaterTileKind kind, bool isDungeon, int x, int y, int tileHash)
+        {
+            if (isDungeon)
+            {
+                return BywaterTileClassifier.GetTileVariantIndex(x, y, 3);
+            }
+
+            if (kind == BywaterTileKind.Grass || kind == BywaterTileKind.ForestCover)
+            {
+                int roll = tileHash % 10;
+                return roll < 7 ? 0 : (roll < 9 ? 1 : 2);
+            }
+
+            if (kind == BywaterTileKind.Cobblestone || kind == BywaterTileKind.TownBuildingDoor)
+            {
+                int roll = tileHash % 10;
+                return roll < 7 ? 0 : (roll < 9 ? 1 : 2);
+            }
+
+            return BywaterTileClassifier.GetTileVariantIndex(x, y, 3);
+        }
+
         private static float ResolveFloorYaw(BywaterTileKind kind, int tileHash)
         {
-            switch (kind)
-            {
-                case BywaterTileKind.Grass:
-                case BywaterTileKind.ForestCover:
-                case BywaterTileKind.DirtPath:
-                case BywaterTileKind.DungeonFloor:
-                    return 90f * (tileHash % 4);
-                case BywaterTileKind.Cobblestone:
-                case BywaterTileKind.TownBuildingDoor:
-                    return 180f * (tileHash % 2);
-                default:
-                    return 0f;
-            }
+            // Keep 0 deg alignment so seamless W-222 tile borders and +Y-up normal bevels align cleanly.
+            return 0f;
         }
 
         private void ConfigureCottageProp(CottagePropEntry entry, int x, int y, int variantHash)
@@ -796,18 +808,19 @@ namespace Realmz.World
                 }
             }
 
-            float targetIntensity = isDungeon ? 4.2f : 1.6f;
-            float targetRange = isDungeon ? 7.8f : 4.2f;
-            float targetFlickerAmp = isDungeon ? 0.50f : 0.25f;
+            float targetIntensity = isDungeon ? 2.8f : 0.70f;
+            float targetRange = isDungeon ? 8.5f : 3.8f;
+            float targetFlickerAmp = isDungeon ? 0.35f : 0.14f;
 
             Material ironMat = _catalog != null
                 ? FirstNonNull(_catalog.ironTrimMaterial, _catalog.stoneFenceMaterial, _catalog.dungeonWallMaterial)
                 : null;
-            Material brazierQuadMat = _catalog != null
-                ? (_catalog.brazierBillboardSprite != null && _catalog.brazierBillboardMaterial != null
-                    ? _catalog.brazierBillboardMaterial
-                    : _catalog.torchPropMaterial)
-                : null;
+            bool hasBrazierBillboard = _catalog != null
+                && _catalog.brazierBillboardSprite != null
+                && _catalog.brazierBillboardMaterial != null;
+            Material brazierQuadMat = hasBrazierBillboard
+                ? _catalog.brazierBillboardMaterial
+                : (_catalog != null ? _catalog.torchPropMaterial : null);
             Material emberMat = _catalog != null ? _catalog.torchEmberMaterial : null;
 
             for (int i = 0; i < _selectedTorches.Count; i++)
@@ -821,6 +834,15 @@ namespace Realmz.World
                     entry.StandRenderer.sharedMaterial = ironMat;
                     entry.BowlRenderer.sharedMaterial = ironMat;
                 }
+                entry.StandRenderer.gameObject.SetActive(!hasBrazierBillboard);
+                entry.BowlRenderer.gameObject.SetActive(!hasBrazierBillboard);
+                entry.EmberRenderer.gameObject.SetActive(!hasBrazierBillboard);
+                entry.QuadRenderer.transform.localPosition = hasBrazierBillboard
+                    ? new Vector3(0f, 0.54f, 0f)
+                    : new Vector3(0f, 0.72f, 0f);
+                entry.QuadRenderer.transform.localScale = hasBrazierBillboard
+                    ? new Vector3(1.12f, 1.12f, 1f)
+                    : new Vector3(0.88f, 0.88f, 1f);
                 entry.QuadRenderer.sharedMaterial = brazierQuadMat;
                 entry.EmberRenderer.sharedMaterial = emberMat;
 
@@ -1285,7 +1307,7 @@ namespace Realmz.World
             MeshRenderer ridgeBeam = CreatePrimitivePiece(PrimitiveType.Cube, "RidgeBeam", modular.transform, new Vector3(0f, 1.46f, 0f), new Vector3(0.10f, 0.10f, 1.10f), Quaternion.identity);
             MeshRenderer windowFront = CreatePrimitivePiece(PrimitiveType.Cube, "WindowFront", modular.transform, new Vector3(0f, 0.56f, -0.475f), new Vector3(0.30f, 0.28f, 0.03f), Quaternion.identity, castShadows: false);
 
-            MeshRenderer billboardQuad = CreateBillboardQuad("CottageBillboard", root.transform, new Vector3(0f, 0.78f, 0f), new Vector3(1.42f, 1.56f, 1f));
+            MeshRenderer billboardQuad = CreateBillboardQuad("CottageBillboard", root.transform, new Vector3(0f, 0.86f, 0f), new Vector3(1.76f, 1.76f, 1f));
             billboardQuad.gameObject.SetActive(false);
 
             return new CottagePropEntry
@@ -1320,7 +1342,7 @@ namespace Realmz.World
             MeshRenderer coping = CreatePrimitivePiece(PrimitiveType.Cube, "FenceCoping", modular.transform, new Vector3(0f, 0.56f, 0f), new Vector3(1.00f, 0.08f, 0.60f), Quaternion.identity);
             MeshRenderer post = CreatePrimitivePiece(PrimitiveType.Cube, "FencePost", modular.transform, new Vector3(-0.38f, 0.36f, 0f), new Vector3(0.24f, 0.72f, 0.54f), Quaternion.identity);
 
-            MeshRenderer billboardQuad = CreateBillboardQuad("FenceBillboard", root.transform, new Vector3(0f, 0.45f, 0f), new Vector3(1.05f, 0.90f, 1f));
+            MeshRenderer billboardQuad = CreateBillboardQuad("FenceBillboard", root.transform, new Vector3(0f, 0.48f, 0f), new Vector3(1.16f, 0.96f, 1f));
             billboardQuad.gameObject.SetActive(false);
 
             return new FencePropEntry
@@ -1361,7 +1383,7 @@ namespace Realmz.World
             MeshRenderer pineMid = CreatePrimitivePiece(PrimitiveType.Cube, "PineTierMid", pineRoot.transform, new Vector3(0f, 0.98f, 0f), new Vector3(0.64f, 0.36f, 0.64f), Quaternion.Euler(0f, 45f, 0f));
             MeshRenderer pineTop = CreatePrimitivePiece(PrimitiveType.Cube, "PineTierTop", pineRoot.transform, new Vector3(0f, 1.32f, 0f), new Vector3(0.38f, 0.40f, 0.38f), Quaternion.Euler(0f, 20f, 0f));
 
-            MeshRenderer billboardQuad = CreateBillboardQuad("TreeBillboard", swayGo.transform, new Vector3(0f, 0.82f, 0f), new Vector3(1.36f, 1.64f, 1f));
+            MeshRenderer billboardQuad = CreateBillboardQuad("TreeBillboard", swayGo.transform, new Vector3(0f, 0.90f, 0f), new Vector3(1.82f, 1.82f, 1f));
             billboardQuad.gameObject.SetActive(false);
 
             return new TreePropEntry
@@ -1409,7 +1431,7 @@ namespace Realmz.World
 
             GameObject swayGo = new GameObject("SwayTarget");
             swayGo.transform.SetParent(root.transform, false);
-            swayGo.transform.localPosition = new Vector3(0.28f, 0f, 0.26f);
+            swayGo.transform.localPosition = new Vector3(0.06f, 0f, 0.06f);
 
             BywaterPropSway sway = swayGo.AddComponent<BywaterPropSway>();
             sway.targetTransform = swayGo.transform;
@@ -1426,7 +1448,7 @@ namespace Realmz.World
             MeshRenderer blossomB = CreatePrimitivePiece(PrimitiveType.Sphere, "BlossomB", modular.transform, new Vector3(0.06f, 0.18f, -0.04f), new Vector3(0.08f, 0.08f, 0.08f), Quaternion.identity, castShadows: false);
             MeshRenderer blossomC = CreatePrimitivePiece(PrimitiveType.Sphere, "BlossomC", modular.transform, new Vector3(0.01f, 0.15f, 0.07f), new Vector3(0.07f, 0.07f, 0.07f), Quaternion.identity, castShadows: false);
 
-            MeshRenderer billboardQuad = CreateBillboardQuad("WildflowerBillboard", swayGo.transform, new Vector3(0f, 0.18f, 0f), new Vector3(0.36f, 0.36f, 1f), castShadows: false);
+            MeshRenderer billboardQuad = CreateBillboardQuad("WildflowerBillboard", swayGo.transform, new Vector3(0f, 0.34f, 0f), new Vector3(0.70f, 0.70f, 1f), castShadows: false);
             billboardQuad.gameObject.SetActive(false);
 
             return new WildflowerPropEntry
@@ -1456,7 +1478,7 @@ namespace Realmz.World
             MeshRenderer barrelBody = CreatePrimitivePiece(PrimitiveType.Cylinder, "BarrelBody", modular.transform, new Vector3(-0.16f, 0.15f, 0.38f), new Vector3(0.20f, 0.15f, 0.20f), Quaternion.identity);
             MeshRenderer barrelBand = CreatePrimitivePiece(PrimitiveType.Cylinder, "BarrelBand", modular.transform, new Vector3(-0.16f, 0.19f, 0.38f), new Vector3(0.22f, 0.03f, 0.22f), Quaternion.identity);
 
-            MeshRenderer billboardQuad = CreateBillboardQuad("CrateBillboard", root.transform, new Vector3(0.18f, 0.32f, 0.36f), new Vector3(0.68f, 0.64f, 1f));
+            MeshRenderer billboardQuad = CreateBillboardQuad("CrateBillboard", root.transform, new Vector3(0f, 0.42f, 0.24f), new Vector3(0.88f, 0.88f, 1f));
             billboardQuad.gameObject.SetActive(false);
 
             return new CratePropEntry
@@ -1559,7 +1581,7 @@ namespace Realmz.World
 
             GameObject lightGo = new GameObject("TorchLight");
             lightGo.transform.SetParent(root.transform, false);
-            lightGo.transform.localPosition = new Vector3(0f, 1.05f, 0f);
+            lightGo.transform.localPosition = new Vector3(0f, 1.35f, -0.45f);
             Light pointLight = lightGo.AddComponent<Light>();
             pointLight.type = LightType.Point;
             pointLight.color = new Color(1.0f, 0.580f, 0.239f, 1f);

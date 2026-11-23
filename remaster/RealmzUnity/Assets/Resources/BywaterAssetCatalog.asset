@@ -25,7 +25,7 @@ MonoBehaviour:
   torchEmberMaterial: {fileID: 2100000, guid: 25eac3fe02fe3134c87b89bc8a4a8a12, type: 2}
   portalBeaconMaterial: {fileID: 2100000, guid: d1e964e100a3e6149bcecf0349d9f500, type: 2}
   overlayBaseMaterial: {fileID: 2100000, guid: fa025c0a0b1c7c147bd3f9e5a48a8376, type: 2}
-  torchSprite: {fileID: 21300000, guid: 0cc27bd5cafe137429f21c682c0ac0e5, type: 3}
+  torchSprite: {fileID: 21300000, guid: c5802bc7df1bac945b0c79b7a256a33d, type: 3}
   uiFont: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   grassVariantMaterials:
   - {fileID: 2100000, guid: 2c57f8586e7eac24fad9cab0d9946ca4, type: 2}
@@ -61,22 +61,22 @@ MonoBehaviour:
   crateWoodMaterial: {fileID: 2100000, guid: a4b47e294235ddf4a9c464e2ba57df6e, type: 2}
   ironTrimMaterial: {fileID: 2100000, guid: 848a002e7024e934abcc5588efe62607, type: 2}
   wildflowerMaterial: {fileID: 2100000, guid: 4194e10c90adefa4eb5d3abeb6fd4b5d, type: 2}
-  cottageBillboardMaterial: {fileID: 0}
-  cottageBillboardSprite: {fileID: 0}
+  cottageBillboardMaterial: {fileID: 2100000, guid: 04e9d50c5b403a64aaecade69dc95ce4, type: 2}
+  cottageBillboardSprite: {fileID: 21300000, guid: 977016c4b0b8609499d05d7d5ee4ae0e, type: 3}
   tavernBillboardMaterial: {fileID: 0}
   tavernBillboardSprite: {fileID: 0}
-  oakTreeBillboardMaterial: {fileID: 0}
-  oakTreeBillboardSprite: {fileID: 0}
-  pineTreeBillboardMaterial: {fileID: 0}
-  pineTreeBillboardSprite: {fileID: 0}
-  stoneFenceBillboardMaterial: {fileID: 0}
-  stoneFenceBillboardSprite: {fileID: 0}
-  marketCratesBillboardMaterial: {fileID: 0}
-  marketCratesBillboardSprite: {fileID: 0}
-  wildflowerBushBillboardMaterial: {fileID: 0}
-  wildflowerBushBillboardSprite: {fileID: 0}
-  brazierBillboardMaterial: {fileID: 0}
-  brazierBillboardSprite: {fileID: 0}
+  oakTreeBillboardMaterial: {fileID: 2100000, guid: 68ce7b3f1453beb4299b0cca9517d4e2, type: 2}
+  oakTreeBillboardSprite: {fileID: 21300000, guid: 13a8668a024637647badc7cba3dcdbe6, type: 3}
+  pineTreeBillboardMaterial: {fileID: 2100000, guid: e5820cd3f3810394c978198d4f0e3d1a, type: 2}
+  pineTreeBillboardSprite: {fileID: 21300000, guid: 0a408e1f141b5e6459a65886a41417f5, type: 3}
+  stoneFenceBillboardMaterial: {fileID: 2100000, guid: c89f6ba9bb8a0304bb0f6b94153b8895, type: 2}
+  stoneFenceBillboardSprite: {fileID: 21300000, guid: 8884598f267b0ca409ad55c670ddea60, type: 3}
+  marketCratesBillboardMaterial: {fileID: 2100000, guid: bdbfd87190b2ca34a9df7b699b1c8484, type: 2}
+  marketCratesBillboardSprite: {fileID: 21300000, guid: d81cf0e25bf0a9641bf6ab17e30bc840, type: 3}
+  wildflowerBushBillboardMaterial: {fileID: 2100000, guid: 56367d7ecf1e5d24f971210db4b24ca3, type: 2}
+  wildflowerBushBillboardSprite: {fileID: 21300000, guid: b23daccadb2ad0a4fa0f74bcf85b7c52, type: 3}
+  brazierBillboardMaterial: {fileID: 2100000, guid: 236a057e9fecfa549b31a4c47e4103d9, type: 2}
+  brazierBillboardSprite: {fileID: 21300000, guid: c5802bc7df1bac945b0c79b7a256a33d, type: 3}
   heroes:
   - id: hero_knight
     archetype: Knight

@@ -48,11 +48,11 @@ namespace Realmz.EditorTests
         }
 
         [Test]
-        public void All44M1ArtPngs_AreImportedWithCrispPointAndNormalSettings()
+        public void All68M15ArtPngs_AreImportedWithCrispPointAndNormalSettings()
         {
             string m1Root = Path.GetFullPath(Path.Combine(Application.dataPath, "Art", "M1"));
             string[] pngs = Directory.GetFiles(m1Root, "*.png", SearchOption.AllDirectories);
-            Assert.That(pngs.Length, Is.EqualTo(44), "Expected exactly 44 M1 art PNGs under Assets/Art/M1.");
+            Assert.That(pngs.Length, Is.EqualTo(68), "Expected all 68 M1.5 art PNGs under Assets/Art/M1.");
 
             foreach (string fullPath in pngs)
             {
@@ -77,7 +77,9 @@ namespace Realmz.EditorTests
                 {
                     Assert.That(importer.textureType, Is.EqualTo(TextureImporterType.Sprite), "Expected Sprite textureType on " + rel);
                     Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>(rel);
-                    float expectedPpu = (tex != null && tex.width >= 128) ? 128f : 64f;
+                    float expectedPpu = (tex != null && tex.width >= 256)
+                        ? 256f
+                        : ((tex != null && tex.width >= 128) ? 128f : 64f);
                     Assert.That(importer.spritePixelsPerUnit, Is.EqualTo(expectedPpu), "Expected " + expectedPpu + " PPU on " + rel);
                 }
             }
@@ -367,6 +369,21 @@ namespace Realmz.EditorTests
             {
                 Assert.That(propMaterials[i], Is.Not.Null, $"M1.5 modular prop material at index {i} is null.");
             }
+
+            Assert.That(catalog.cottageBillboardSprite, Is.Not.Null, "cottageBillboardSprite missing.");
+            Assert.That(catalog.cottageBillboardMaterial, Is.Not.Null, "cottageBillboardMaterial missing.");
+            Assert.That(catalog.oakTreeBillboardSprite, Is.Not.Null, "oakTreeBillboardSprite missing.");
+            Assert.That(catalog.oakTreeBillboardMaterial, Is.Not.Null, "oakTreeBillboardMaterial missing.");
+            Assert.That(catalog.pineTreeBillboardSprite, Is.Not.Null, "pineTreeBillboardSprite missing.");
+            Assert.That(catalog.pineTreeBillboardMaterial, Is.Not.Null, "pineTreeBillboardMaterial missing.");
+            Assert.That(catalog.stoneFenceBillboardSprite, Is.Not.Null, "stoneFenceBillboardSprite missing.");
+            Assert.That(catalog.stoneFenceBillboardMaterial, Is.Not.Null, "stoneFenceBillboardMaterial missing.");
+            Assert.That(catalog.marketCratesBillboardSprite, Is.Not.Null, "marketCratesBillboardSprite missing.");
+            Assert.That(catalog.marketCratesBillboardMaterial, Is.Not.Null, "marketCratesBillboardMaterial missing.");
+            Assert.That(catalog.wildflowerBushBillboardSprite, Is.Not.Null, "wildflowerBushBillboardSprite missing.");
+            Assert.That(catalog.wildflowerBushBillboardMaterial, Is.Not.Null, "wildflowerBushBillboardMaterial missing.");
+            Assert.That(catalog.brazierBillboardSprite, Is.Not.Null, "brazierBillboardSprite missing.");
+            Assert.That(catalog.brazierBillboardMaterial, Is.Not.Null, "brazierBillboardMaterial missing.");
         }
 
         [Test]

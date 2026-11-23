@@ -82,13 +82,17 @@ namespace Realmz.EditorTools
 
         private static readonly string[] OptionalPropKeys =
         {
+            "cottage_medieval",
             "cottage",
             "tavern",
+            "tree_oak",
+            "tree_pine",
             "oak_tree",
             "pine_tree",
             "stone_fence",
             "market_crates",
             "wildflower_bush",
+            "torch_brazier",
             "brazier"
         };
 
@@ -159,9 +163,9 @@ namespace Realmz.EditorTools
                 });
             }
 
-            // 3. Props (torch billboard + ember + portal beacon)
-            string torchAlbedoPath = PropsDir + "/torch.png";
-            string torchNormalPath = PropsDir + "/torch_n.png";
+            // 3. Props (torch/brazier billboard + ember + portal beacon)
+            string torchAlbedoPath = FirstExistingPropPath("torch_brazier", "torch");
+            string torchNormalPath = FirstExistingPropPath("torch_brazier_n", "torch_n");
             Texture2D torchAlbedo = AssetDatabase.LoadAssetAtPath<Texture2D>(torchAlbedoPath);
             Texture2D torchNormal = AssetDatabase.LoadAssetAtPath<Texture2D>(torchNormalPath);
             catalog.torchSprite = AssetDatabase.LoadAssetAtPath<Sprite>(torchAlbedoPath);
@@ -170,7 +174,7 @@ namespace Realmz.EditorTools
                 torchAlbedo,
                 torchNormal,
                 0.18f,
-                subtleTorchEmission: true);
+                subtleTorchEmission: false);
 
             catalog.torchEmberMaterial = CreateOrUpdateEmissiveMaterial(
                 MaterialsDir + "/M1_Prop_torch_ember.mat",
@@ -185,18 +189,12 @@ namespace Realmz.EditorTools
                 0.35f);
 
             // 4. Tiles & World Structure Materials
-            Texture2D grassTex = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/bywater_grass.png");
-            Texture2D grassNorm = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/bywater_grass_n.png");
-            Texture2D cobbleTex = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/cobblestone_road.png");
-            Texture2D cobbleNorm = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/cobblestone_road_n.png");
-            Texture2D dirtTex = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/dirt_path.png");
-            Texture2D dirtNorm = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/dirt_path_n.png");
-            Texture2D dFloorTex = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/dungeon_floor.png");
-            Texture2D dFloorNorm = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/dungeon_floor_n.png");
-            Texture2D dWallTex = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/dungeon_wall.png");
-            Texture2D dWallNorm = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/dungeon_wall_n.png");
-            Texture2D waterTex = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/shallow_water.png");
-            Texture2D waterNorm = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/shallow_water_n.png");
+            LoadTileBaseTextures("bywater_grass", out Texture2D grassTex, out Texture2D grassNorm);
+            LoadTileBaseTextures("cobblestone_road", out Texture2D cobbleTex, out Texture2D cobbleNorm);
+            LoadTileBaseTextures("dirt_path", out Texture2D dirtTex, out Texture2D dirtNorm);
+            LoadTileBaseTextures("dungeon_floor", out Texture2D dFloorTex, out Texture2D dFloorNorm);
+            LoadTileBaseTextures("dungeon_wall", out Texture2D dWallTex, out Texture2D dWallNorm);
+            LoadTileBaseTextures("shallow_water", out Texture2D waterTex, out Texture2D waterNorm);
 
             catalog.grassMaterial = CreateOrUpdateTileMaterial(
                 MaterialsDir + "/M1_Tile_bywater_grass.mat", grassTex, grassNorm, Color.white, 0.08f);
@@ -335,14 +333,14 @@ namespace Realmz.EditorTools
                 0.10f);
 
             // 4c. Optional W-222 Hi-Bit Prop Billboards
-            TryLoadPropBillboard("cottage", out catalog.cottageBillboardMaterial, out catalog.cottageBillboardSprite);
+            TryLoadPropBillboardWithFallback("cottage_medieval", "cottage", out catalog.cottageBillboardMaterial, out catalog.cottageBillboardSprite);
             TryLoadPropBillboard("tavern", out catalog.tavernBillboardMaterial, out catalog.tavernBillboardSprite);
-            TryLoadPropBillboard("oak_tree", out catalog.oakTreeBillboardMaterial, out catalog.oakTreeBillboardSprite);
-            TryLoadPropBillboard("pine_tree", out catalog.pineTreeBillboardMaterial, out catalog.pineTreeBillboardSprite);
+            TryLoadPropBillboardWithFallback("tree_oak", "oak_tree", out catalog.oakTreeBillboardMaterial, out catalog.oakTreeBillboardSprite);
+            TryLoadPropBillboardWithFallback("tree_pine", "pine_tree", out catalog.pineTreeBillboardMaterial, out catalog.pineTreeBillboardSprite);
             TryLoadPropBillboard("stone_fence", out catalog.stoneFenceBillboardMaterial, out catalog.stoneFenceBillboardSprite);
             TryLoadPropBillboard("market_crates", out catalog.marketCratesBillboardMaterial, out catalog.marketCratesBillboardSprite);
             TryLoadPropBillboard("wildflower_bush", out catalog.wildflowerBushBillboardMaterial, out catalog.wildflowerBushBillboardSprite);
-            TryLoadPropBillboard("brazier", out catalog.brazierBillboardMaterial, out catalog.brazierBillboardSprite, subtleEmission: true);
+            TryLoadPropBillboardWithFallback("torch_brazier", "brazier", out catalog.brazierBillboardMaterial, out catalog.brazierBillboardSprite, subtleEmission: false);
 
             // 5. Transparent Overlay Material (URP Unlit)
             catalog.overlayBaseMaterial = CreateOrUpdateOverlayBaseMaterial(
@@ -412,7 +410,7 @@ namespace Realmz.EditorTools
             importer.GetSourceTextureWidthAndHeight(out int texW, out int texH);
             importer.textureType = TextureImporterType.Sprite;
             importer.spriteImportMode = SpriteImportMode.Single;
-            importer.spritePixelsPerUnit = texW >= 128 ? 128f : 64f;
+            importer.spritePixelsPerUnit = ResolveCrispPpu(texW);
             importer.filterMode = FilterMode.Point;
             importer.textureCompression = TextureImporterCompression.Uncompressed;
             importer.mipmapEnabled = false;
@@ -438,7 +436,7 @@ namespace Realmz.EditorTools
             importer.GetSourceTextureWidthAndHeight(out int texW, out int texH);
             importer.textureType = TextureImporterType.Sprite;
             importer.spriteImportMode = SpriteImportMode.Single;
-            importer.spritePixelsPerUnit = texW >= 128 ? 128f : 64f;
+            importer.spritePixelsPerUnit = ResolveCrispPpu(texW);
             importer.filterMode = FilterMode.Point;
             importer.textureCompression = TextureImporterCompression.Uncompressed;
             importer.mipmapEnabled = false;
@@ -512,7 +510,7 @@ namespace Realmz.EditorTools
             mat.renderQueue = (int)RenderQueue.AlphaTest;
 
             mat.SetFloat("_Cull", 0f);
-            mat.SetFloat("_Smoothness", smoothness);
+            mat.SetFloat("_Smoothness", Mathf.Min(smoothness, 0.04f));
             mat.SetFloat("_Metallic", 0f);
 
             ApplyNormalMap(mat, normalMap);
@@ -669,15 +667,78 @@ namespace Realmz.EditorTools
                 Texture2D chosenTex = varTex != null ? varTex : baseTex;
                 Texture2D chosenNorm = varNorm != null ? varNorm : baseNorm;
                 Color tint = varTex != null ? Color.white : VariantTints[i];
+                if (varTex != null && tileKey == "bywater_grass" && suffix == "_b")
+                {
+                    // Soften clover grass luminance so grass_a/b/c blend without sharp square contrast.
+                    tint = new Color(0.78f, 0.90f, 0.72f, 1f);
+                }
+                else if (varTex != null && tileKey == "bywater_grass" && suffix == "_c")
+                {
+                    tint = new Color(0.95f, 1.00f, 0.86f, 1f);
+                }
+                else if (varTex != null && tileKey == "cobblestone_road" && suffix == "_c")
+                {
+                    tint = new Color(0.86f, 0.88f, 0.90f, 1f);
+                }
 
                 variants[i] = CreateOrUpdateTileMaterial(
                     MaterialsDir + "/M1_Tile_" + tileKey + suffix + ".mat",
                     chosenTex,
                     chosenNorm,
                     tint,
-                    0.08f);
+                    0.05f);
             }
             return variants;
+        }
+
+        private static float ResolveCrispPpu(int texWidth)
+        {
+            if (texWidth >= 256)
+            {
+                return 256f;
+            }
+
+            return texWidth >= 128 ? 128f : 64f;
+        }
+
+        private static string FirstExistingPropPath(string primaryKey, string fallbackKey)
+        {
+            string primary = PropsDir + "/" + primaryKey + ".png";
+            if (AssetDatabase.LoadAssetAtPath<Texture2D>(primary) != null)
+            {
+                return primary;
+            }
+
+            return PropsDir + "/" + fallbackKey + ".png";
+        }
+
+        private static void LoadTileBaseTextures(string key, out Texture2D tex, out Texture2D norm)
+        {
+            tex = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/" + key + ".png");
+            if (tex == null)
+            {
+                tex = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/" + key + "_a.png");
+            }
+
+            norm = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/" + key + "_n.png");
+            if (norm == null)
+            {
+                norm = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/" + key + "_a_n.png");
+            }
+        }
+
+        private static void TryLoadPropBillboardWithFallback(
+            string primaryKey,
+            string fallbackKey,
+            out Material mat,
+            out Sprite sprite,
+            bool subtleEmission = false)
+        {
+            TryLoadPropBillboard(primaryKey, out mat, out sprite, subtleEmission);
+            if (mat == null && !string.IsNullOrEmpty(fallbackKey))
+            {
+                TryLoadPropBillboard(fallbackKey, out mat, out sprite, subtleEmission);
+            }
         }
 
         private static void TryLoadPropBillboard(

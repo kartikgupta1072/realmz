@@ -90,10 +90,12 @@ namespace Realmz.World
                 {
                     return (variantHash % 3) != 0
                         ? BywaterOutdoorPropKind.PineTree
-                        : BywaterOutdoorPropKind.BoulderCliff;
+                        : BywaterOutdoorPropKind.OakTree;
                 }
 
-                return BywaterOutdoorPropKind.BoulderCliff;
+                return (variantHash & 1) == 0
+                    ? BywaterOutdoorPropKind.PineTree
+                    : BywaterOutdoorPropKind.OakTree;
             }
 
             if (kind == BywaterTileKind.ForestCover)
@@ -110,7 +112,7 @@ namespace Realmz.World
 
             if (kind == BywaterTileKind.Grass)
             {
-                if ((variantHash % 9) == 0)
+                if ((variantHash % 27) == 0)
                 {
                     return BywaterOutdoorPropKind.WildflowerBush;
                 }
@@ -124,8 +126,9 @@ namespace Realmz.World
                 {
                     BywaterTileKind northKind = Classify(map, x, y - 1);
                     if ((northKind == BywaterTileKind.TownBuildingSolid
-                         || northKind == BywaterTileKind.TownBuildingDoor)
-                        && (variantHash % 7) == 0)
+                         || northKind == BywaterTileKind.TownBuildingDoor
+                         || (northKind == BywaterTileKind.WallBlock && HasAdjacentTownFeature(map, x, y - 1)))
+                        && (variantHash % 5) == 0)
                     {
                         return BywaterOutdoorPropKind.MarketCrates;
                     }
