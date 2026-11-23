@@ -1,0 +1,97 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 29fde939e17ed1246a97a1c6ef9fc800, type: 3}
+  m_Name: BywaterAssetCatalog
+  m_EditorClassIdentifier: 
+  grassMaterial: {fileID: 2100000, guid: db3cbc0080c099441942f337d31dbb9a, type: 2}
+  cobblestoneMaterial: {fileID: 2100000, guid: b2a6900378e81334ea966f35b0f088df, type: 2}
+  dirtPathMaterial: {fileID: 2100000, guid: 36ad862ee46fcaf44b05cbd49b07aca1, type: 2}
+  dungeonFloorMaterial: {fileID: 2100000, guid: da320d79227f85b48b347a38558d3ef7, type: 2}
+  dungeonWallMaterial: {fileID: 2100000, guid: aa329f97c59222b4ba7e658d6ebc0e0a, type: 2}
+  shallowWaterMaterial: {fileID: 2100000, guid: c40134f87f7a36b449e55f0ebe108c3c, type: 2}
+  doorArchMaterial: {fileID: 2100000, guid: 792044987720d1148af0ced6bfcf577c, type: 2}
+  buildingWallMaterial: {fileID: 2100000, guid: 772d347c0b6a1cb4f8b3dd4596d6d5fa, type: 2}
+  treeCoverMaterial: {fileID: 2100000, guid: b2aaabe2545d12441b84199b4346d57d, type: 2}
+  torchPropMaterial: {fileID: 2100000, guid: fe772c71eb8ac834281df1546f7b0bf3, type: 2}
+  torchEmberMaterial: {fileID: 2100000, guid: 25eac3fe02fe3134c87b89bc8a4a8a12, type: 2}
+  portalBeaconMaterial: {fileID: 2100000, guid: d1e964e100a3e6149bcecf0349d9f500, type: 2}
+  overlayBaseMaterial: {fileID: 2100000, guid: fa025c0a0b1c7c147bd3f9e5a48a8376, type: 2}
+  torchSprite: {fileID: 21300000, guid: 0cc27bd5cafe137429f21c682c0ac0e5, type: 3}
+  uiFont: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  heroes:
+  - id: hero_knight
+    archetype: Knight
+    iconId: 9018
+    portraitId: 275
+    billboardMaterial: {fileID: 2100000, guid: f54ebc3e93ec28d4b830bc4a136568b9, type: 2}
+    sprite: {fileID: 21300000, guid: ebe26189f4d6cb940b34ce8ec5f795f4, type: 3}
+    portrait: {fileID: 21300000, guid: 39f36b74c1cd5be4ab227ae0d2f6a701, type: 3}
+  - id: hero_cleric
+    archetype: Cleric
+    iconId: 9072
+    portraitId: 329
+    billboardMaterial: {fileID: 2100000, guid: 844a46a43c538bd4b96406f4bf223c6b, type: 2}
+    sprite: {fileID: 21300000, guid: 76b47e7e45d45cc4a8919ca5f3d39a7b, type: 3}
+    portrait: {fileID: 21300000, guid: d4af185f2bd45004bb44c68d6e3f61c6, type: 3}
+  - id: hero_ranger
+    archetype: Ranger
+    iconId: 9047
+    portraitId: 304
+    billboardMaterial: {fileID: 2100000, guid: 5ef9d683242117c42bbc2a83d66ef8d7, type: 2}
+    sprite: {fileID: 21300000, guid: 57c6f26ac06e0e2458d930f4449bc6b0, type: 3}
+    portrait: {fileID: 21300000, guid: 3573c8a37ca123d4fa23014fb41e5862, type: 3}
+  - id: hero_mage
+    archetype: Mage
+    iconId: 9084
+    portraitId: 341
+    billboardMaterial: {fileID: 2100000, guid: 0b17bc5e79a2ef74a9f81a47187c4845, type: 2}
+    sprite: {fileID: 21300000, guid: 12ad9fb8d647ed04abb1de1f1adb972b, type: 3}
+    portrait: {fileID: 21300000, guid: be5fc5596490e6a49a6ef2f5aac9cc66, type: 3}
+  - id: hero_paladin
+    archetype: Paladin
+    iconId: 9054
+    portraitId: 311
+    billboardMaterial: {fileID: 2100000, guid: 79430794055c44f409dbef753ce51924, type: 2}
+    sprite: {fileID: 21300000, guid: c1c9298f96d947442b4de8c9d387bef7, type: 3}
+    portrait: {fileID: 21300000, guid: ee498c09d50eaad4283b9366b336a667, type: 3}
+  - id: hero_rogue
+    archetype: Rogue
+    iconId: 9106
+    portraitId: 363
+    billboardMaterial: {fileID: 2100000, guid: 138af521225c4d4479e61fe7fb2d9e6a, type: 2}
+    sprite: {fileID: 21300000, guid: 2378dca02f2c0d44daf893688f4d7a72, type: 3}
+    portrait: {fileID: 21300000, guid: 8a0a9ff7d3444814f994b12fb3906969, type: 3}
+  monsters:
+  - key: giant_frog
+    displayName: Giant Frog
+    billboardMaterial: {fileID: 2100000, guid: 5842464dcd24ac34387063636ec00c9e, type: 2}
+    sprite: {fileID: 21300000, guid: 984f5f535a60ea84a9b87ef734b5e89f, type: 3}
+  - key: goblin_raider
+    displayName: Goblin Raider
+    billboardMaterial: {fileID: 2100000, guid: 096f48df2022593428ff28d934d7be62, type: 2}
+    sprite: {fileID: 21300000, guid: e87085fdd8f4eb948a01e7a2cde37f94, type: 3}
+  - key: kobold_spearman
+    displayName: Kobold Spearman
+    billboardMaterial: {fileID: 2100000, guid: b2b64e8df3b31d94abbfdf3960681815, type: 2}
+    sprite: {fileID: 21300000, guid: 7d0f7e5b78b43ba4fa32a7abb3203dcd, type: 3}
+  - key: giant_sewer_rat
+    displayName: Giant Sewer Rat
+    billboardMaterial: {fileID: 2100000, guid: f8bf26d9d8c1cf247a26ab5ad329ed69, type: 2}
+    sprite: {fileID: 21300000, guid: 6bc229dec6e6cd1448d7469b1716bbab, type: 3}
+  - key: skeleton_warrior
+    displayName: Skeleton Warrior
+    billboardMaterial: {fileID: 2100000, guid: fb1f7673c4418874a83a84adac11515e, type: 2}
+    sprite: {fileID: 21300000, guid: 5965faf5e31455146be23c88c57faa39, type: 3}
+  - key: bandit_cutthroat
+    displayName: Bandit Cutthroat
+    billboardMaterial: {fileID: 2100000, guid: d510cfbeabada1d4e9a39794356252e7, type: 2}
+    sprite: {fileID: 21300000, guid: 7cc8db3e821f0fa4ab19f4f96ea4b081, type: 3}

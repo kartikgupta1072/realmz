@@ -1,0 +1,652 @@
+{
+  "total_assets": 25,
+  "passed": 25,
+  "failed": 0,
+  "all_passed": true,
+  "total_png_files": 44,
+  "generation": {
+    "total_gen_sec": 21.13,
+    "peak_vram_mib": 7526,
+    "vram_budget_mib": 8151,
+    "items_generated": 1,
+    "log": [
+      {
+        "category": "tiles",
+        "name": "cobblestone_road",
+        "seed": 2026432,
+        "sec": 20.2,
+        "peak_mib": 7526
+      }
+    ]
+  },
+  "results": [
+    {
+      "category": "heroes",
+      "name": "knight",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "opaque_pixels": 1394,
+        "opaque_coverage_pct": 34.03,
+        "alpha_values": [
+          0,
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 31,
+        "off_palette_colors": 0,
+        "normal_mean_rgb": [
+          128.0,
+          127.2,
+          250.3
+        ],
+        "normal_xy_std": 0.373,
+        "normal_unit_mag_mean": 1.0002,
+        "normal_min_z": 0.733,
+        "normal_bg_neutral_ok": true
+      }
+    },
+    {
+      "category": "heroes",
+      "name": "cleric",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "opaque_pixels": 1102,
+        "opaque_coverage_pct": 26.9,
+        "alpha_values": [
+          0,
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 42,
+        "off_palette_colors": 0,
+        "normal_mean_rgb": [
+          127.3,
+          128.0,
+          247.7
+        ],
+        "normal_xy_std": 0.463,
+        "normal_unit_mag_mean": 1.0002,
+        "normal_min_z": 0.757,
+        "normal_bg_neutral_ok": true
+      }
+    },
+    {
+      "category": "heroes",
+      "name": "mage",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "opaque_pixels": 886,
+        "opaque_coverage_pct": 21.63,
+        "alpha_values": [
+          0,
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 43,
+        "off_palette_colors": 0,
+        "normal_mean_rgb": [
+          128.0,
+          127.1,
+          247.9
+        ],
+        "normal_xy_std": 0.456,
+        "normal_unit_mag_mean": 1.0002,
+        "normal_min_z": 0.796,
+        "normal_bg_neutral_ok": true
+      }
+    },
+    {
+      "category": "heroes",
+      "name": "ranger",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "opaque_pixels": 1048,
+        "opaque_coverage_pct": 25.59,
+        "alpha_values": [
+          0,
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 33,
+        "off_palette_colors": 0,
+        "normal_mean_rgb": [
+          127.8,
+          125.9,
+          247.2
+        ],
+        "normal_xy_std": 0.481,
+        "normal_unit_mag_mean": 1.0002,
+        "normal_min_z": 0.757,
+        "normal_bg_neutral_ok": true
+      }
+    },
+    {
+      "category": "heroes",
+      "name": "paladin",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "opaque_pixels": 1671,
+        "opaque_coverage_pct": 40.8,
+        "alpha_values": [
+          0,
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 45,
+        "off_palette_colors": 0,
+        "normal_mean_rgb": [
+          127.9,
+          126.4,
+          249.6
+        ],
+        "normal_xy_std": 0.399,
+        "normal_unit_mag_mean": 1.0003,
+        "normal_min_z": 0.71,
+        "normal_bg_neutral_ok": true
+      }
+    },
+    {
+      "category": "heroes",
+      "name": "rogue",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "opaque_pixels": 1348,
+        "opaque_coverage_pct": 32.91,
+        "alpha_values": [
+          0,
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 19,
+        "off_palette_colors": 0,
+        "normal_mean_rgb": [
+          127.8,
+          127.4,
+          249.2
+        ],
+        "normal_xy_std": 0.415,
+        "normal_unit_mag_mean": 1.0002,
+        "normal_min_z": 0.812,
+        "normal_bg_neutral_ok": true
+      }
+    },
+    {
+      "category": "portraits",
+      "name": "knight_portrait",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "alpha_values": [
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 47,
+        "off_palette_colors": 0
+      }
+    },
+    {
+      "category": "portraits",
+      "name": "cleric_portrait",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "alpha_values": [
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 36,
+        "off_palette_colors": 0
+      }
+    },
+    {
+      "category": "portraits",
+      "name": "mage_portrait",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "alpha_values": [
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 50,
+        "off_palette_colors": 0
+      }
+    },
+    {
+      "category": "portraits",
+      "name": "ranger_portrait",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "alpha_values": [
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 40,
+        "off_palette_colors": 0
+      }
+    },
+    {
+      "category": "portraits",
+      "name": "paladin_portrait",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "alpha_values": [
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 44,
+        "off_palette_colors": 0
+      }
+    },
+    {
+      "category": "portraits",
+      "name": "rogue_portrait",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "alpha_values": [
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 42,
+        "off_palette_colors": 0
+      }
+    },
+    {
+      "category": "monsters",
+      "name": "giant_frog",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "opaque_pixels": 1187,
+        "opaque_coverage_pct": 28.98,
+        "alpha_values": [
+          0,
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 35,
+        "off_palette_colors": 0,
+        "normal_mean_rgb": [
+          127.5,
+          127.5,
+          249.3
+        ],
+        "normal_xy_std": 0.408,
+        "normal_unit_mag_mean": 1.0,
+        "normal_min_z": 0.788,
+        "normal_bg_neutral_ok": true
+      }
+    },
+    {
+      "category": "monsters",
+      "name": "goblin_raider",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "opaque_pixels": 980,
+        "opaque_coverage_pct": 23.93,
+        "alpha_values": [
+          0,
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 40,
+        "off_palette_colors": 0,
+        "normal_mean_rgb": [
+          127.4,
+          127.6,
+          246.9
+        ],
+        "normal_xy_std": 0.488,
+        "normal_unit_mag_mean": 1.0001,
+        "normal_min_z": 0.741,
+        "normal_bg_neutral_ok": true
+      }
+    },
+    {
+      "category": "monsters",
+      "name": "kobold_spearman",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "opaque_pixels": 798,
+        "opaque_coverage_pct": 19.48,
+        "alpha_values": [
+          0,
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 30,
+        "off_palette_colors": 0,
+        "normal_mean_rgb": [
+          127.9,
+          127.2,
+          247.1
+        ],
+        "normal_xy_std": 0.483,
+        "normal_unit_mag_mean": 1.0003,
+        "normal_min_z": 0.757,
+        "normal_bg_neutral_ok": true
+      }
+    },
+    {
+      "category": "monsters",
+      "name": "giant_sewer_rat",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "opaque_pixels": 1168,
+        "opaque_coverage_pct": 28.52,
+        "alpha_values": [
+          0,
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 29,
+        "off_palette_colors": 0,
+        "normal_mean_rgb": [
+          127.4,
+          127.4,
+          249.2
+        ],
+        "normal_xy_std": 0.415,
+        "normal_unit_mag_mean": 1.0003,
+        "normal_min_z": 0.804,
+        "normal_bg_neutral_ok": true
+      }
+    },
+    {
+      "category": "monsters",
+      "name": "skeleton_warrior",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "opaque_pixels": 819,
+        "opaque_coverage_pct": 20.0,
+        "alpha_values": [
+          0,
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 40,
+        "off_palette_colors": 0,
+        "normal_mean_rgb": [
+          127.5,
+          127.1,
+          246.8
+        ],
+        "normal_xy_std": 0.49,
+        "normal_unit_mag_mean": 1.0002,
+        "normal_min_z": 0.725,
+        "normal_bg_neutral_ok": true
+      }
+    },
+    {
+      "category": "monsters",
+      "name": "bandit_cutthroat",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "opaque_pixels": 1556,
+        "opaque_coverage_pct": 37.99,
+        "alpha_values": [
+          0,
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 29,
+        "off_palette_colors": 0,
+        "normal_mean_rgb": [
+          127.8,
+          127.5,
+          249.4
+        ],
+        "normal_xy_std": 0.407,
+        "normal_unit_mag_mean": 1.0001,
+        "normal_min_z": 0.78,
+        "normal_bg_neutral_ok": true
+      }
+    },
+    {
+      "category": "tiles",
+      "name": "bywater_grass",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "opaque_pixels": 4096,
+        "opaque_coverage_pct": 100.0,
+        "alpha_values": [
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 11,
+        "off_palette_colors": 0,
+        "normal_mean_rgb": [
+          127.5,
+          127.6,
+          253.4
+        ],
+        "normal_xy_std": 0.222,
+        "normal_unit_mag_mean": 1.0002,
+        "normal_min_z": 0.922,
+        "normal_bg_neutral_ok": true,
+        "seam_ratio": 1.097
+      }
+    },
+    {
+      "category": "tiles",
+      "name": "cobblestone_road",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "opaque_pixels": 4096,
+        "opaque_coverage_pct": 100.0,
+        "alpha_values": [
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 19,
+        "off_palette_colors": 0,
+        "normal_mean_rgb": [
+          127.5,
+          127.5,
+          253.9
+        ],
+        "normal_xy_std": 0.185,
+        "normal_unit_mag_mean": 1.0003,
+        "normal_min_z": 0.929,
+        "normal_bg_neutral_ok": true,
+        "seam_ratio": 0.888
+      }
+    },
+    {
+      "category": "tiles",
+      "name": "dirt_path",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "opaque_pixels": 4096,
+        "opaque_coverage_pct": 100.0,
+        "alpha_values": [
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 22,
+        "off_palette_colors": 0,
+        "normal_mean_rgb": [
+          127.5,
+          127.6,
+          252.0
+        ],
+        "normal_xy_std": 0.304,
+        "normal_unit_mag_mean": 1.0001,
+        "normal_min_z": 0.882,
+        "normal_bg_neutral_ok": true,
+        "seam_ratio": 0.961
+      }
+    },
+    {
+      "category": "tiles",
+      "name": "dungeon_floor",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "opaque_pixels": 4096,
+        "opaque_coverage_pct": 100.0,
+        "alpha_values": [
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 12,
+        "off_palette_colors": 0,
+        "normal_mean_rgb": [
+          127.5,
+          127.5,
+          253.3
+        ],
+        "normal_xy_std": 0.226,
+        "normal_unit_mag_mean": 1.0002,
+        "normal_min_z": 0.929,
+        "normal_bg_neutral_ok": true,
+        "seam_ratio": 0.983
+      }
+    },
+    {
+      "category": "tiles",
+      "name": "dungeon_wall",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "opaque_pixels": 4096,
+        "opaque_coverage_pct": 100.0,
+        "alpha_values": [
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 8,
+        "off_palette_colors": 0,
+        "normal_mean_rgb": [
+          127.5,
+          127.6,
+          254.1
+        ],
+        "normal_xy_std": 0.157,
+        "normal_unit_mag_mean": 1.0004,
+        "normal_min_z": 0.953,
+        "normal_bg_neutral_ok": true,
+        "seam_ratio": 1.339
+      }
+    },
+    {
+      "category": "tiles",
+      "name": "shallow_water",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "opaque_pixels": 4096,
+        "opaque_coverage_pct": 100.0,
+        "alpha_values": [
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 10,
+        "off_palette_colors": 0,
+        "normal_mean_rgb": [
+          127.5,
+          127.5,
+          254.8
+        ],
+        "normal_xy_std": 0.08,
+        "normal_unit_mag_mean": 1.0004,
+        "normal_min_z": 0.976,
+        "normal_bg_neutral_ok": true,
+        "seam_ratio": 0.392
+      }
+    },
+    {
+      "category": "props",
+      "name": "torch",
+      "pass": true,
+      "issues": [],
+      "stats": {
+        "width": 64,
+        "height": 64,
+        "opaque_pixels": 836,
+        "opaque_coverage_pct": 20.41,
+        "alpha_values": [
+          0,
+          255
+        ],
+        "alpha_is_1bit": true,
+        "unique_palette_colors": 26,
+        "off_palette_colors": 0,
+        "normal_mean_rgb": [
+          128.0,
+          127.1,
+          247.2
+        ],
+        "normal_xy_std": 0.478,
+        "normal_unit_mag_mean": 1.0001,
+        "normal_min_z": 0.757,
+        "normal_bg_neutral_ok": true
+      }
+    }
+  ]
+}

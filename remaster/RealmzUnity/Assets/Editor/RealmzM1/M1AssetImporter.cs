@@ -1,0 +1,629 @@
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using Realmz.Data;
+using TMPro;
+using UnityEditor;
+using UnityEngine;
+using UnityEngine.Rendering;
+
+namespace Realmz.EditorTools
+{
+    /// <summary>
+    /// Configures M1 pixel/normal/portrait/tile texture imports, generates URP Lit/Unlit materials,
+    /// ensures a valid TMP_FontAsset, and populates Assets/Resources/BywaterAssetCatalog.asset.
+    /// </summary>
+    public static class M1AssetImporter
+    {
+        private const string M1ArtRoot = "Assets/Art/M1";
+        private const string HeroesDir = M1ArtRoot + "/Heroes";
+        private const string MonstersDir = M1ArtRoot + "/Monsters";
+        private const string PortraitsDir = M1ArtRoot + "/Portraits";
+        private const string PropsDir = M1ArtRoot + "/Props";
+        private const string TilesDir = M1ArtRoot + "/Tiles";
+        private const string MaterialsDir = M1ArtRoot + "/Materials";
+        private const string ResourcesDir = "Assets/Resources";
+        private const string CatalogAssetPath = ResourcesDir + "/BywaterAssetCatalog.asset";
+        private const string UiFontAssetPath = M1ArtRoot + "/RealmzUiFont.asset";
+
+        private struct HeroSpec
+        {
+            public string Key;
+            public string Id;
+            public string Archetype;
+            public int IconId;
+            public int PortraitId;
+        }
+
+        private struct MonsterSpec
+        {
+            public string Key;
+            public string DisplayName;
+        }
+
+        private static readonly HeroSpec[] HeroSpecs =
+        {
+            new HeroSpec { Key = "knight", Id = "hero_knight", Archetype = "Knight", IconId = 9018, PortraitId = 275 },
+            new HeroSpec { Key = "cleric", Id = "hero_cleric", Archetype = "Cleric", IconId = 9072, PortraitId = 329 },
+            new HeroSpec { Key = "ranger", Id = "hero_ranger", Archetype = "Ranger", IconId = 9047, PortraitId = 304 },
+            new HeroSpec { Key = "mage", Id = "hero_mage", Archetype = "Mage", IconId = 9084, PortraitId = 341 },
+            new HeroSpec { Key = "paladin", Id = "hero_paladin", Archetype = "Paladin", IconId = 9054, PortraitId = 311 },
+            new HeroSpec { Key = "rogue", Id = "hero_rogue", Archetype = "Rogue", IconId = 9106, PortraitId = 363 }
+        };
+
+        private static readonly MonsterSpec[] MonsterSpecs =
+        {
+            new MonsterSpec { Key = "giant_frog", DisplayName = "Giant Frog" },
+            new MonsterSpec { Key = "goblin_raider", DisplayName = "Goblin Raider" },
+            new MonsterSpec { Key = "kobold_spearman", DisplayName = "Kobold Spearman" },
+            new MonsterSpec { Key = "giant_sewer_rat", DisplayName = "Giant Sewer Rat" },
+            new MonsterSpec { Key = "skeleton_warrior", DisplayName = "Skeleton Warrior" },
+            new MonsterSpec { Key = "bandit_cutthroat", DisplayName = "Bandit Cutthroat" }
+        };
+
+        private static readonly string[] TileKeys =
+        {
+            "bywater_grass",
+            "cobblestone_road",
+            "dirt_path",
+            "dungeon_floor",
+            "dungeon_wall",
+            "shallow_water"
+        };
+
+        [MenuItem("Realmz/M1/Import & Build Art Catalog")]
+        public static BywaterAssetCatalog ImportAndBuildCatalog()
+        {
+            EnsureFolder(MaterialsDir);
+            EnsureFolder(ResourcesDir);
+
+            ConfigureAllTextures();
+            AssetDatabase.Refresh();
+
+            BywaterAssetCatalog catalog = AssetDatabase.LoadAssetAtPath<BywaterAssetCatalog>(CatalogAssetPath);
+            if (catalog == null)
+            {
+                catalog = ScriptableObject.CreateInstance<BywaterAssetCatalog>();
+                AssetDatabase.CreateAsset(catalog, CatalogAssetPath);
+            }
+
+            // 1. Heroes (albedo, normal, portrait, billboard material)
+            catalog.heroes = new List<BywaterAssetCatalog.HeroArtEntry>(HeroSpecs.Length);
+            for (int i = 0; i < HeroSpecs.Length; i++)
+            {
+                HeroSpec spec = HeroSpecs[i];
+                string albedoPath = HeroesDir + "/" + spec.Key + ".png";
+                string normalPath = HeroesDir + "/" + spec.Key + "_n.png";
+                string portraitPath = PortraitsDir + "/" + spec.Key + "_portrait.png";
+                string matPath = MaterialsDir + "/M1_Hero_" + spec.Key + ".mat";
+
+                Texture2D albedo = AssetDatabase.LoadAssetAtPath<Texture2D>(albedoPath);
+                Texture2D normal = AssetDatabase.LoadAssetAtPath<Texture2D>(normalPath);
+                Sprite sprite = AssetDatabase.LoadAssetAtPath<Sprite>(albedoPath);
+                Sprite portrait = AssetDatabase.LoadAssetAtPath<Sprite>(portraitPath);
+
+                Material mat = CreateOrUpdateBillboardMaterial(matPath, albedo, normal, 0.18f, subtleTorchEmission: false);
+                catalog.heroes.Add(new BywaterAssetCatalog.HeroArtEntry
+                {
+                    id = spec.Id,
+                    archetype = spec.Archetype,
+                    iconId = spec.IconId,
+                    portraitId = spec.PortraitId,
+                    billboardMaterial = mat,
+                    sprite = sprite,
+                    portrait = portrait
+                });
+            }
+
+            // 2. Monsters (albedo, normal, billboard material)
+            catalog.monsters = new List<BywaterAssetCatalog.MonsterArtEntry>(MonsterSpecs.Length);
+            for (int i = 0; i < MonsterSpecs.Length; i++)
+            {
+                MonsterSpec spec = MonsterSpecs[i];
+                string albedoPath = MonstersDir + "/" + spec.Key + ".png";
+                string normalPath = MonstersDir + "/" + spec.Key + "_n.png";
+                string matPath = MaterialsDir + "/M1_Monster_" + spec.Key + ".mat";
+
+                Texture2D albedo = AssetDatabase.LoadAssetAtPath<Texture2D>(albedoPath);
+                Texture2D normal = AssetDatabase.LoadAssetAtPath<Texture2D>(normalPath);
+                Sprite sprite = AssetDatabase.LoadAssetAtPath<Sprite>(albedoPath);
+
+                Material mat = CreateOrUpdateBillboardMaterial(matPath, albedo, normal, 0.18f, subtleTorchEmission: false);
+                catalog.monsters.Add(new BywaterAssetCatalog.MonsterArtEntry
+                {
+                    key = spec.Key,
+                    displayName = spec.DisplayName,
+                    billboardMaterial = mat,
+                    sprite = sprite
+                });
+            }
+
+            // 3. Props (torch billboard + ember + portal beacon)
+            string torchAlbedoPath = PropsDir + "/torch.png";
+            string torchNormalPath = PropsDir + "/torch_n.png";
+            Texture2D torchAlbedo = AssetDatabase.LoadAssetAtPath<Texture2D>(torchAlbedoPath);
+            Texture2D torchNormal = AssetDatabase.LoadAssetAtPath<Texture2D>(torchNormalPath);
+            catalog.torchSprite = AssetDatabase.LoadAssetAtPath<Sprite>(torchAlbedoPath);
+            catalog.torchPropMaterial = CreateOrUpdateBillboardMaterial(
+                MaterialsDir + "/M1_Prop_torch.mat",
+                torchAlbedo,
+                torchNormal,
+                0.18f,
+                subtleTorchEmission: true);
+
+            catalog.torchEmberMaterial = CreateOrUpdateEmissiveMaterial(
+                MaterialsDir + "/M1_Prop_torch_ember.mat",
+                ParseHexColor("#FF7A1A", new Color(1f, 0.478f, 0.102f, 1f)),
+                3.8f,
+                0.20f);
+
+            catalog.portalBeaconMaterial = CreateOrUpdateEmissiveMaterial(
+                MaterialsDir + "/M1_Prop_portal_beacon.mat",
+                ParseHexColor("#38BDF8", new Color(0.220f, 0.741f, 0.973f, 1f)),
+                2.6f,
+                0.35f);
+
+            // 4. Tiles & World Structure Materials
+            Texture2D grassTex = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/bywater_grass.png");
+            Texture2D grassNorm = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/bywater_grass_n.png");
+            Texture2D cobbleTex = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/cobblestone_road.png");
+            Texture2D cobbleNorm = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/cobblestone_road_n.png");
+            Texture2D dirtTex = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/dirt_path.png");
+            Texture2D dirtNorm = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/dirt_path_n.png");
+            Texture2D dFloorTex = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/dungeon_floor.png");
+            Texture2D dFloorNorm = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/dungeon_floor_n.png");
+            Texture2D dWallTex = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/dungeon_wall.png");
+            Texture2D dWallNorm = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/dungeon_wall_n.png");
+            Texture2D waterTex = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/shallow_water.png");
+            Texture2D waterNorm = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/shallow_water_n.png");
+
+            catalog.grassMaterial = CreateOrUpdateTileMaterial(
+                MaterialsDir + "/M1_Tile_bywater_grass.mat", grassTex, grassNorm, Color.white, 0.08f);
+            catalog.cobblestoneMaterial = CreateOrUpdateTileMaterial(
+                MaterialsDir + "/M1_Tile_cobblestone_road.mat", cobbleTex, cobbleNorm, Color.white, 0.08f);
+            catalog.dirtPathMaterial = CreateOrUpdateTileMaterial(
+                MaterialsDir + "/M1_Tile_dirt_path.mat", dirtTex, dirtNorm, Color.white, 0.08f);
+            catalog.dungeonFloorMaterial = CreateOrUpdateTileMaterial(
+                MaterialsDir + "/M1_Tile_dungeon_floor.mat", dFloorTex, dFloorNorm, Color.white, 0.08f);
+            catalog.dungeonWallMaterial = CreateOrUpdateTileMaterial(
+                MaterialsDir + "/M1_Tile_dungeon_wall.mat", dWallTex, dWallNorm, Color.white, 0.08f);
+            catalog.shallowWaterMaterial = CreateOrUpdateTileMaterial(
+                MaterialsDir + "/M1_Tile_shallow_water.mat", waterTex, waterNorm, Color.white, 0.45f);
+
+            catalog.buildingWallMaterial = CreateOrUpdateTileMaterial(
+                MaterialsDir + "/M1_World_BuildingWall.mat",
+                dWallTex,
+                dWallNorm,
+                new Color(0.86f, 0.78f, 0.66f, 1f),
+                0.08f);
+            catalog.doorArchMaterial = CreateOrUpdateTileMaterial(
+                MaterialsDir + "/M1_World_DoorArch.mat",
+                cobbleTex,
+                cobbleNorm,
+                new Color(0.74f, 0.55f, 0.34f, 1f),
+                0.08f);
+            catalog.treeCoverMaterial = CreateOrUpdateTileMaterial(
+                MaterialsDir + "/M1_World_TreeCover.mat",
+                grassTex,
+                grassNorm,
+                new Color(0.36f, 0.56f, 0.34f, 1f),
+                0.08f);
+
+            // 5. Transparent Overlay Material (URP Unlit)
+            catalog.overlayBaseMaterial = CreateOrUpdateOverlayBaseMaterial(
+                MaterialsDir + "/M1_Overlay_Base.mat");
+
+            // 6. UI Font Asset
+            catalog.uiFont = EnsureUiFontAsset();
+
+            EditorUtility.SetDirty(catalog);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            Debug.Log("[M1AssetImporter] Imported M1 assets and updated " + CatalogAssetPath);
+            return catalog;
+        }
+
+        private static void ConfigureAllTextures()
+        {
+            for (int i = 0; i < HeroSpecs.Length; i++)
+            {
+                string key = HeroSpecs[i].Key;
+                ConfigureBillboardSprite(HeroesDir + "/" + key + ".png");
+                ConfigureNormalMap(HeroesDir + "/" + key + "_n.png", TextureWrapMode.Clamp);
+                ConfigurePortraitSprite(PortraitsDir + "/" + key + "_portrait.png");
+            }
+
+            for (int i = 0; i < MonsterSpecs.Length; i++)
+            {
+                string key = MonsterSpecs[i].Key;
+                ConfigureBillboardSprite(MonstersDir + "/" + key + ".png");
+                ConfigureNormalMap(MonstersDir + "/" + key + "_n.png", TextureWrapMode.Clamp);
+            }
+
+            ConfigureBillboardSprite(PropsDir + "/torch.png");
+            ConfigureNormalMap(PropsDir + "/torch_n.png", TextureWrapMode.Clamp);
+
+            for (int i = 0; i < TileKeys.Length; i++)
+            {
+                string key = TileKeys[i];
+                ConfigureTileAlbedo(TilesDir + "/" + key + ".png");
+                ConfigureNormalMap(TilesDir + "/" + key + "_n.png", TextureWrapMode.Repeat);
+            }
+        }
+
+        private static void ConfigureBillboardSprite(string assetPath)
+        {
+            TextureImporter importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
+            if (importer == null)
+            {
+                return;
+            }
+
+            importer.textureType = TextureImporterType.Sprite;
+            importer.spriteImportMode = SpriteImportMode.Single;
+            importer.spritePixelsPerUnit = 64f;
+            importer.filterMode = FilterMode.Point;
+            importer.textureCompression = TextureImporterCompression.Uncompressed;
+            importer.mipmapEnabled = false;
+            importer.alphaIsTransparency = true;
+            importer.wrapMode = TextureWrapMode.Clamp;
+
+            TextureImporterSettings settings = new TextureImporterSettings();
+            importer.ReadTextureSettings(settings);
+            settings.spriteAlignment = (int)SpriteAlignment.BottomCenter;
+            settings.spritePivot = new Vector2(0.5f, 0f);
+            importer.SetTextureSettings(settings);
+            importer.SaveAndReimport();
+        }
+
+        private static void ConfigurePortraitSprite(string assetPath)
+        {
+            TextureImporter importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
+            if (importer == null)
+            {
+                return;
+            }
+
+            importer.textureType = TextureImporterType.Sprite;
+            importer.spriteImportMode = SpriteImportMode.Single;
+            importer.spritePixelsPerUnit = 64f;
+            importer.filterMode = FilterMode.Point;
+            importer.textureCompression = TextureImporterCompression.Uncompressed;
+            importer.mipmapEnabled = false;
+            importer.alphaIsTransparency = false;
+            importer.wrapMode = TextureWrapMode.Clamp;
+
+            TextureImporterSettings settings = new TextureImporterSettings();
+            importer.ReadTextureSettings(settings);
+            settings.spriteAlignment = (int)SpriteAlignment.Center;
+            settings.spritePivot = new Vector2(0.5f, 0.5f);
+            importer.SetTextureSettings(settings);
+            importer.SaveAndReimport();
+        }
+
+        private static void ConfigureTileAlbedo(string assetPath)
+        {
+            TextureImporter importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
+            if (importer == null)
+            {
+                return;
+            }
+
+            importer.textureType = TextureImporterType.Default;
+            importer.sRGBTexture = true;
+            importer.filterMode = FilterMode.Point;
+            importer.textureCompression = TextureImporterCompression.Uncompressed;
+            importer.mipmapEnabled = false;
+            importer.wrapMode = TextureWrapMode.Repeat;
+            importer.SaveAndReimport();
+        }
+
+        private static void ConfigureNormalMap(string assetPath, TextureWrapMode wrapMode)
+        {
+            TextureImporter importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
+            if (importer == null)
+            {
+                return;
+            }
+
+            importer.textureType = TextureImporterType.NormalMap;
+            importer.convertToNormalmap = false;
+            importer.sRGBTexture = false;
+            importer.filterMode = FilterMode.Point;
+            importer.textureCompression = TextureImporterCompression.Uncompressed;
+            importer.mipmapEnabled = false;
+            importer.wrapMode = wrapMode;
+            importer.SaveAndReimport();
+        }
+
+        private static Material CreateOrUpdateBillboardMaterial(
+            string matPath,
+            Texture2D albedo,
+            Texture2D normalMap,
+            float smoothness,
+            bool subtleTorchEmission)
+        {
+            Material mat = LoadOrCreateMaterial(matPath, "Universal Render Pipeline/Lit", "Standard");
+
+            mat.SetFloat("_Surface", 0f);
+            mat.SetColor("_BaseColor", Color.white);
+            if (albedo != null)
+            {
+                mat.SetTexture("_BaseMap", albedo);
+                mat.SetTextureScale("_BaseMap", Vector2.one);
+            }
+
+            mat.SetFloat("_AlphaClip", 1f);
+            mat.SetFloat("_Cutoff", 0.5f);
+            mat.EnableKeyword("_ALPHATEST_ON");
+            mat.SetOverrideTag("RenderType", "TransparentCutout");
+            mat.renderQueue = (int)RenderQueue.AlphaTest;
+
+            mat.SetFloat("_Cull", 0f);
+            mat.SetFloat("_Smoothness", smoothness);
+            mat.SetFloat("_Metallic", 0f);
+
+            ApplyNormalMap(mat, normalMap);
+
+            if (subtleTorchEmission)
+            {
+                mat.SetColor("_EmissionColor", new Color(1f, 0.5f, 0.15f, 1f) * 0.25f);
+                mat.EnableKeyword("_EMISSION");
+                mat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+            }
+            else
+            {
+                mat.SetColor("_EmissionColor", Color.black);
+                mat.DisableKeyword("_EMISSION");
+            }
+
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        private static Material CreateOrUpdateEmissiveMaterial(
+            string matPath,
+            Color baseColor,
+            float emissionMultiplier,
+            float smoothness)
+        {
+            Material mat = LoadOrCreateMaterial(matPath, "Universal Render Pipeline/Lit", "Universal Render Pipeline/Unlit");
+
+            mat.SetFloat("_Surface", 0f);
+            mat.SetFloat("_AlphaClip", 0f);
+            mat.DisableKeyword("_ALPHATEST_ON");
+            mat.SetOverrideTag("RenderType", "Opaque");
+            mat.renderQueue = (int)RenderQueue.Geometry;
+
+            mat.SetColor("_BaseColor", baseColor);
+            mat.SetColor("_EmissionColor", baseColor * emissionMultiplier);
+            mat.EnableKeyword("_EMISSION");
+            mat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+            mat.SetFloat("_Smoothness", smoothness);
+            mat.SetFloat("_Metallic", 0f);
+
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        private static Material CreateOrUpdateTileMaterial(
+            string matPath,
+            Texture2D albedo,
+            Texture2D normalMap,
+            Color baseColor,
+            float smoothness)
+        {
+            Material mat = LoadOrCreateMaterial(matPath, "Universal Render Pipeline/Lit", "Standard");
+
+            mat.SetFloat("_Surface", 0f);
+            mat.SetFloat("_AlphaClip", 0f);
+            mat.DisableKeyword("_ALPHATEST_ON");
+            mat.SetOverrideTag("RenderType", "Opaque");
+            mat.renderQueue = (int)RenderQueue.Geometry;
+
+            mat.SetColor("_BaseColor", baseColor);
+            if (albedo != null)
+            {
+                mat.SetTexture("_BaseMap", albedo);
+                mat.SetTextureScale("_BaseMap", Vector2.one);
+            }
+
+            mat.SetFloat("_Smoothness", smoothness);
+            mat.SetFloat("_Metallic", 0f);
+            ApplyNormalMap(mat, normalMap);
+
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        private static Material CreateOrUpdateOverlayBaseMaterial(string matPath)
+        {
+            Material mat = LoadOrCreateMaterial(matPath, "Universal Render Pipeline/Unlit", "Unlit/Transparent");
+
+            mat.SetFloat("_Surface", 1f);
+            mat.SetFloat("_Blend", 0f);
+            mat.SetFloat("_ZWrite", 0f);
+            mat.SetFloat("_Cull", 0f);
+            mat.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+            mat.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+            mat.SetColor("_BaseColor", Color.white);
+            mat.SetOverrideTag("RenderType", "Transparent");
+            mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            mat.DisableKeyword("_ALPHATEST_ON");
+            mat.renderQueue = (int)RenderQueue.Transparent;
+
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        private static void ApplyNormalMap(Material mat, Texture2D normalMap)
+        {
+            if (normalMap != null)
+            {
+                mat.SetTexture("_BumpMap", normalMap);
+                mat.SetFloat("_BumpScale", 1.0f);
+                mat.EnableKeyword("_NORMALMAP");
+            }
+            else
+            {
+                mat.SetTexture("_BumpMap", null);
+                mat.DisableKeyword("_NORMALMAP");
+            }
+        }
+
+        private static Material LoadOrCreateMaterial(string matPath, string primaryShaderName, string fallbackShaderName)
+        {
+            Shader shader = Shader.Find(primaryShaderName);
+            if (shader == null && !string.IsNullOrEmpty(fallbackShaderName))
+            {
+                shader = Shader.Find(fallbackShaderName);
+            }
+
+            Material mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
+            if (mat == null)
+            {
+                mat = new Material(shader);
+                AssetDatabase.CreateAsset(mat, matPath);
+            }
+            else if (shader != null && mat.shader != shader)
+            {
+                mat.shader = shader;
+            }
+
+            return mat;
+        }
+
+        private static TMP_FontAsset EnsureUiFontAsset()
+        {
+            const string liberationPath = "Assets/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF.asset";
+            TMP_FontAsset directFont = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(liberationPath);
+            if (directFont != null)
+            {
+                return directFont;
+            }
+
+            if (TMP_Settings.defaultFontAsset != null)
+            {
+                return TMP_Settings.defaultFontAsset;
+            }
+
+            // Ensure TMP Essential Resources are imported non-interactively if not present yet.
+            Type importerType = typeof(TMP_PackageResourceImporter);
+            MethodInfo importMethod = importerType.GetMethod(
+                "ImportResources",
+                BindingFlags.Public | BindingFlags.Static);
+            if (importMethod != null)
+            {
+                try
+                {
+                    importMethod.Invoke(null, new object[] { true, false, false });
+                    AssetDatabase.Refresh();
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning("[M1AssetImporter] TMP_PackageResourceImporter.ImportResources skipped: " + ex.Message);
+                }
+            }
+
+            directFont = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(liberationPath);
+            if (directFont != null)
+            {
+                return directFont;
+            }
+
+            string[] fontGuids = AssetDatabase.FindAssets("t:TMP_FontAsset");
+            if (fontGuids != null && fontGuids.Length > 0)
+            {
+                return AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(AssetDatabase.GUIDToAssetPath(fontGuids[0]));
+            }
+
+            TMP_FontAsset existing = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(UiFontAssetPath);
+            if (existing != null)
+            {
+                return existing;
+            }
+
+            Font osFont = Font.CreateDynamicFontFromOSFont("Segoe UI", 28);
+            if (osFont == null)
+            {
+                osFont = Font.CreateDynamicFontFromOSFont("Arial", 28);
+            }
+
+            if (osFont == null)
+            {
+                Debug.LogWarning("[M1AssetImporter] No OS font found for RealmzUiFont.");
+                return null;
+            }
+
+            TMP_FontAsset fontAsset = TMP_FontAsset.CreateFontAsset(osFont);
+            if (fontAsset == null)
+            {
+                Debug.LogWarning("[M1AssetImporter] TMP_FontAsset.CreateFontAsset returned null.");
+                return null;
+            }
+
+            fontAsset.name = "RealmzUiFont";
+            fontAsset.atlasPopulationMode = AtlasPopulationMode.Dynamic;
+
+            // Pre-bake printable ASCII so the saved atlas works reliably even in headless builds.
+            char[] asciiChars = new char[95];
+            for (int i = 0; i < asciiChars.Length; i++)
+            {
+                asciiChars[i] = (char)(32 + i);
+            }
+            fontAsset.TryAddCharacters(new string(asciiChars));
+
+            AssetDatabase.CreateAsset(fontAsset, UiFontAssetPath);
+
+            if (fontAsset.atlasTextures != null)
+            {
+                for (int i = 0; i < fontAsset.atlasTextures.Length; i++)
+                {
+                    Texture2D tex = fontAsset.atlasTextures[i];
+                    if (tex != null && !AssetDatabase.Contains(tex))
+                    {
+                        if (string.IsNullOrEmpty(tex.name))
+                        {
+                            tex.name = "RealmzUiFont Atlas " + i;
+                        }
+                        AssetDatabase.AddObjectToAsset(tex, fontAsset);
+                    }
+                }
+            }
+
+            if (fontAsset.material != null && !AssetDatabase.Contains(fontAsset.material))
+            {
+                if (string.IsNullOrEmpty(fontAsset.material.name))
+                {
+                    fontAsset.material.name = "RealmzUiFont Material";
+                }
+                AssetDatabase.AddObjectToAsset(fontAsset.material, fontAsset);
+            }
+
+            EditorUtility.SetDirty(fontAsset);
+            AssetDatabase.SaveAssets();
+            return fontAsset;
+        }
+
+        private static Color ParseHexColor(string hex, Color fallback)
+        {
+            return ColorUtility.TryParseHtmlString(hex, out Color parsed) ? parsed : fallback;
+        }
+
+        private static void EnsureFolder(string assetPath)
+        {
+            string[] parts = assetPath.Split('/');
+            string current = parts[0];
+            for (int i = 1; i < parts.Length; i++)
+            {
+                string next = current + "/" + parts[i];
+                if (!AssetDatabase.IsValidFolder(next))
+                {
+                    AssetDatabase.CreateFolder(current, parts[i]);
+                }
+                current = next;
+            }
+        }
+    }
+}
