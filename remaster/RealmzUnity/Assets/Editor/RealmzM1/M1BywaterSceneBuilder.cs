@@ -37,9 +37,12 @@ namespace Realmz.EditorTools
 
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
-            // 1. Songs-of-Conquest cool-indigo shadow fill
-            RenderSettings.ambientMode = AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.094f, 0.125f, 0.243f, 1f);
+            // 1. Sunlit golden-hour trilight ambient for City of Bywater
+            RenderSettings.ambientMode = AmbientMode.Trilight;
+            RenderSettings.ambientSkyColor = new Color(0.42f, 0.56f, 0.78f, 1f);
+            RenderSettings.ambientEquatorColor = new Color(0.36f, 0.38f, 0.35f, 1f);
+            RenderSettings.ambientGroundColor = new Color(0.22f, 0.21f, 0.18f, 1f);
+            RenderSettings.ambientIntensity = 0.90f;
             RenderSettings.fog = false;
 
             // 2. Perspective HD-2D Camera Rig with URP Post-Processing & HDR
@@ -47,7 +50,7 @@ namespace Realmz.EditorTools
             camGo.tag = "MainCamera";
             Camera cam = camGo.AddComponent<Camera>();
             cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = new Color(0.043f, 0.055f, 0.106f, 1f);
+            cam.backgroundColor = new Color(0.34f, 0.50f, 0.72f, 1f);
             cam.fieldOfView = 34f;
             cam.nearClipPlane = 0.3f;
             cam.farClipPlane = 140f;
@@ -66,13 +69,13 @@ namespace Realmz.EditorTools
             GameObject sunGo = new GameObject("Directional Sun");
             Light sun = sunGo.AddComponent<Light>();
             sun.type = LightType.Directional;
-            sun.color = new Color(1.0f, 0.941f, 0.839f, 1f);
-            sun.intensity = 1.15f;
+            sun.color = new Color(1.0f, 0.941f, 0.831f, 1f);
+            sun.intensity = 1.85f;
             sun.shadows = LightShadows.Soft;
-            sun.shadowStrength = 0.72f;
-            sunGo.transform.rotation = Quaternion.Euler(46f, -34f, 0f);
+            sun.shadowStrength = 0.65f;
+            sunGo.transform.rotation = Quaternion.Euler(44f, -36f, 0f);
 
-            // 4. Global URP Volume: ACES Tonemapping + Bloom + subtle Vignette
+            // 4. Global URP Volume: Neutral Tonemapping + ColorAdjustments + SplitToning + Bloom + Vignette
             VolumeProfile profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(VolumeProfilePath);
             if (profile == null)
             {
@@ -94,7 +97,37 @@ namespace Realmz.EditorTools
                 AssetDatabase.AddObjectToAsset(tonemapping, profile);
             }
             tonemapping.mode.overrideState = true;
-            tonemapping.mode.value = TonemappingMode.ACES;
+            tonemapping.mode.value = TonemappingMode.Neutral;
+
+            if (!profile.TryGet<ColorAdjustments>(out var colorAdjustments))
+            {
+                colorAdjustments = profile.Add<ColorAdjustments>(true);
+            }
+            if (!AssetDatabase.Contains(colorAdjustments))
+            {
+                AssetDatabase.AddObjectToAsset(colorAdjustments, profile);
+            }
+            colorAdjustments.postExposure.overrideState = true;
+            colorAdjustments.postExposure.value = -0.18f;
+            colorAdjustments.contrast.overrideState = true;
+            colorAdjustments.contrast.value = 15f;
+            colorAdjustments.saturation.overrideState = true;
+            colorAdjustments.saturation.value = 14f;
+
+            if (!profile.TryGet<SplitToning>(out var splitToning))
+            {
+                splitToning = profile.Add<SplitToning>(true);
+            }
+            if (!AssetDatabase.Contains(splitToning))
+            {
+                AssetDatabase.AddObjectToAsset(splitToning, profile);
+            }
+            splitToning.highlights.overrideState = true;
+            splitToning.highlights.value = new Color(1.0f, 0.95f, 0.84f, 1f);
+            splitToning.shadows.overrideState = true;
+            splitToning.shadows.value = new Color(0.84f, 0.90f, 1.0f, 1f);
+            splitToning.balance.overrideState = true;
+            splitToning.balance.value = 10f;
 
             if (!profile.TryGet<Bloom>(out var bloom))
             {
@@ -105,11 +138,11 @@ namespace Realmz.EditorTools
                 AssetDatabase.AddObjectToAsset(bloom, profile);
             }
             bloom.threshold.overrideState = true;
-            bloom.threshold.value = 1.02f;
+            bloom.threshold.value = 1.40f;
             bloom.intensity.overrideState = true;
-            bloom.intensity.value = 0.45f;
+            bloom.intensity.value = 0.26f;
             bloom.scatter.overrideState = true;
-            bloom.scatter.value = 0.68f;
+            bloom.scatter.value = 0.58f;
 
             if (!profile.TryGet<Vignette>(out var vignette))
             {
@@ -120,19 +153,26 @@ namespace Realmz.EditorTools
                 AssetDatabase.AddObjectToAsset(vignette, profile);
             }
             vignette.intensity.overrideState = true;
-            vignette.intensity.value = 0.22f;
+            vignette.intensity.value = 0.12f;
             vignette.smoothness.overrideState = true;
-            vignette.smoothness.value = 0.45f;
+            vignette.smoothness.value = 0.55f;
 
             EditorUtility.SetDirty(profile);
 
-            GameObject volGo = new GameObject("Global Volume (ACES + Bloom)");
+            GameObject volGo = new GameObject("Global Volume (Neutral + Bloom)");
             Volume vol = volGo.AddComponent<Volume>();
             vol.isGlobal = true;
             vol.priority = 1f;
             vol.sharedProfile = profile;
 
-            // 5. World, Overlays, HUD, InputSystem EventSystem, and Game Controller
+            // 5. Biome Atmosphere, World, Overlays, HUD, InputSystem EventSystem, and Game Controller
+            GameObject atmoGo = new GameObject("BywaterAtmosphere");
+            BywaterBiomeAtmosphere atmosphere = atmoGo.AddComponent<BywaterBiomeAtmosphere>();
+            atmosphere.directionalSun = sun;
+            atmosphere.globalVolume = vol;
+            atmosphere.targetCamera = cam;
+            EditorUtility.SetDirty(atmosphere);
+
             GameObject worldGo = new GameObject("BywaterWorld");
             BywaterWorldRenderer worldRenderer = worldGo.AddComponent<BywaterWorldRenderer>();
 
@@ -153,6 +193,7 @@ namespace Realmz.EditorTools
             controller.cameraRig = cameraRig;
             controller.gridOverlays = gridOverlays;
             controller.hudController = hudController;
+            controller.biomeAtmosphere = atmosphere;
             EditorUtility.SetDirty(controller);
 
             AssetDatabase.SaveAssets();

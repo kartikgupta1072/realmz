@@ -27,6 +27,48 @@ namespace Realmz.Data
         public Material overlayBaseMaterial;
         public Sprite torchSprite;
         public TMP_FontAsset uiFont;
+
+        [Header("M1.5 Tile Variant Materials")]
+        public Material[] grassVariantMaterials = new Material[3];
+        public Material[] cobblestoneVariantMaterials = new Material[3];
+        public Material[] dirtPathVariantMaterials = new Material[3];
+        public Material[] dungeonFloorVariantMaterials = new Material[3];
+        public Material[] dungeonWallVariantMaterials = new Material[3];
+
+        [Header("M1.5 2.5D Medieval Prop Materials")]
+        public Material cottageWallMaterial;
+        public Material cottageRoofTerracottaMaterial;
+        public Material cottageRoofSlateMaterial;
+        public Material cottageRoofThatchMaterial;
+        public Material timberTrimMaterial;
+        public Material warmWindowGlowMaterial;
+        public Material oakFoliageMaterial;
+        public Material pineFoliageMaterial;
+        public Material treeTrunkMaterial;
+        public Material boulderMaterial;
+        public Material stoneFenceMaterial;
+        public Material crateWoodMaterial;
+        public Material ironTrimMaterial;
+        public Material wildflowerMaterial;
+
+        [Header("M1.5 Incoming Hi-Bit Prop Billboards (W-222)")]
+        public Material cottageBillboardMaterial;
+        public Sprite cottageBillboardSprite;
+        public Material tavernBillboardMaterial;
+        public Sprite tavernBillboardSprite;
+        public Material oakTreeBillboardMaterial;
+        public Sprite oakTreeBillboardSprite;
+        public Material pineTreeBillboardMaterial;
+        public Sprite pineTreeBillboardSprite;
+        public Material stoneFenceBillboardMaterial;
+        public Sprite stoneFenceBillboardSprite;
+        public Material marketCratesBillboardMaterial;
+        public Sprite marketCratesBillboardSprite;
+        public Material wildflowerBushBillboardMaterial;
+        public Sprite wildflowerBushBillboardSprite;
+        public Material brazierBillboardMaterial;
+        public Sprite brazierBillboardSprite;
+
         public List<HeroArtEntry> heroes = new List<HeroArtEntry>();
         public List<MonsterArtEntry> monsters = new List<MonsterArtEntry>();
 
@@ -49,6 +91,36 @@ namespace Realmz.Data
             public string displayName;
             public Material billboardMaterial;
             public Sprite sprite;
+        }
+
+        /// <summary>
+        /// Safely resolves a tile variant material modulo variants.Length, returning the first non-null
+        /// slot or fallback if the array is null/empty or all slots are null.
+        /// </summary>
+        public Material GetTileVariantMaterial(Material fallback, Material[] variants, int variantIndex)
+        {
+            if (variants == null || variants.Length == 0)
+            {
+                return fallback;
+            }
+
+            int len = variants.Length;
+            int idx = ((variantIndex % len) + len) % len;
+            Material chosen = variants[idx];
+            if (chosen != null)
+            {
+                return chosen;
+            }
+
+            for (int i = 0; i < len; i++)
+            {
+                if (variants[i] != null)
+                {
+                    return variants[i];
+                }
+            }
+
+            return fallback;
         }
 
         /// <summary>

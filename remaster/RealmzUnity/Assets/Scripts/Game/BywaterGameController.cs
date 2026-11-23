@@ -33,6 +33,7 @@ namespace Realmz.Game
         public BywaterCameraRig cameraRig;
         public BywaterGridOverlays gridOverlays;
         public BywaterHudController hudController;
+        public BywaterBiomeAtmosphere biomeAtmosphere;
 
         private IDiceRoller _roller;
         private BywaterUnitView _exploreLeaderView;
@@ -347,6 +348,14 @@ namespace Realmz.Game
             if (cameraRig == null) cameraRig = FindFirstObjectByType<BywaterCameraRig>();
             if (gridOverlays == null) gridOverlays = FindFirstObjectByType<BywaterGridOverlays>();
             if (hudController == null) hudController = FindFirstObjectByType<BywaterHudController>();
+            if (biomeAtmosphere == null)
+            {
+                biomeAtmosphere = FindFirstObjectByType<BywaterBiomeAtmosphere>();
+                if (biomeAtmosphere == null)
+                {
+                    biomeAtmosphere = gameObject.AddComponent<BywaterBiomeAtmosphere>();
+                }
+            }
 
             if (_unitsContainer == null)
             {
@@ -487,6 +496,9 @@ namespace Realmz.Game
                 worldRenderer.SetPartyTorchPosition(leaderWorldPos, ExploreSession.CurrentMap.IsDungeon);
             }
 
+            biomeAtmosphere?.ApplyBiome(ExploreSession.CurrentMap.IsDungeon, immediate: true);
+            biomeAtmosphere?.UpdateFocusPosition(leaderWorldPos);
+
             if (cameraRig != null)
             {
                 cameraRig.SetCombatMode(false);
@@ -568,6 +580,7 @@ namespace Realmz.Game
                 Vector3 finalWorld = BywaterCameraRig.GridToWorld(res.FinalPosition);
                 worldRenderer?.UpdateFocusCenter(res.FinalPosition);
                 worldRenderer?.SetPartyTorchPosition(finalWorld, ExploreSession.CurrentMap.IsDungeon);
+                biomeAtmosphere?.UpdateFocusPosition(finalWorld);
                 cameraRig?.SetFollowTarget(finalWorld, immediate: false);
             }
             else if (res.HaltReason == ExplorationHaltReason.Blocked && worldCoord != prevPos)
@@ -1048,19 +1061,23 @@ namespace Realmz.Game
                 _exploreLeaderView.gameObject.SetActive(false);
             }
 
+            GridCoord mid = new GridCoord(_arenaOriginX + _arenaWidth / 2, _arenaOriginY + _arenaHeight / 2);
+            Vector3 midWorld = BywaterCameraRig.GridToWorld(mid);
+
             if (worldRenderer != null)
             {
-                GridCoord mid = new GridCoord(_arenaOriginX + _arenaWidth / 2, _arenaOriginY + _arenaHeight / 2);
                 worldRenderer.UpdateFocusCenter(mid);
                 worldRenderer.SetCombatArenaFrame(_arenaOriginX, _arenaOriginY, _arenaWidth, _arenaHeight, true);
-                worldRenderer.SetPartyTorchPosition(BywaterCameraRig.GridToWorld(mid), map.IsDungeon);
+                worldRenderer.SetPartyTorchPosition(midWorld, map.IsDungeon);
             }
+
+            biomeAtmosphere?.ApplyBiome(map.IsDungeon, immediate: true);
+            biomeAtmosphere?.UpdateFocusPosition(midWorld);
 
             if (cameraRig != null)
             {
                 cameraRig.SetCombatMode(true);
-                GridCoord mid = new GridCoord(_arenaOriginX + _arenaWidth / 2, _arenaOriginY + _arenaHeight / 2);
-                cameraRig.SetFollowTarget(BywaterCameraRig.GridToWorld(mid) + new Vector3(1.1f, 0f, -0.1f), immediate: true);
+                cameraRig.SetFollowTarget(midWorld + new Vector3(1.1f, 0f, -0.1f), immediate: true);
             }
 
             SpawnCombatUnitViews();

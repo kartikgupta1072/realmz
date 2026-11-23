@@ -13,22 +13,22 @@ namespace Realmz.Game
     /// </summary>
     public static class BywaterUiHelpers
     {
-        // Crisp dark-fantasy RPG palette
-        public static readonly Color PanelBg = new Color(0.055f, 0.078f, 0.141f, 0.94f);        // #0E1424
-        public static readonly Color PanelDarkBg = new Color(0.039f, 0.055f, 0.102f, 0.97f);    // #0A0E1A
-        public static readonly Color CardBg = new Color(0.082f, 0.114f, 0.200f, 0.95f);
-        public static readonly Color CardSelectedBg = new Color(0.180f, 0.155f, 0.090f, 0.96f);
-        public static readonly Color BrassAccent = new Color(0.784f, 0.608f, 0.235f, 1.0f);     // #C89B3C
-        public static readonly Color BrassHighlight = new Color(0.953f, 0.784f, 0.345f, 1.0f);
-        public static readonly Color ParchmentText = new Color(0.953f, 0.910f, 0.824f, 1.0f);   // #F3E8D2
-        public static readonly Color MutedSlate = new Color(0.620f, 0.680f, 0.760f, 1.0f);      // #9EAEC2
+        // Crisp dark-fantasy RPG palette (BG3 / DOS2 inspired dark slate + brushed bronze)
+        public static readonly Color PanelBg = new Color(0.047f, 0.067f, 0.118f, 0.94f);        // #0C111E
+        public static readonly Color PanelDarkBg = new Color(0.031f, 0.047f, 0.086f, 0.97f);    // #080C16
+        public static readonly Color CardBg = new Color(0.075f, 0.106f, 0.184f, 0.96f);
+        public static readonly Color CardSelectedBg = new Color(0.200f, 0.160f, 0.078f, 0.98f);
+        public static readonly Color BrassAccent = new Color(0.753f, 0.569f, 0.259f, 1.0f);     // #C09142 brushed bronze
+        public static readonly Color BrassHighlight = new Color(0.961f, 0.800f, 0.388f, 1.0f);  // #F5CC63
+        public static readonly Color ParchmentText = new Color(0.965f, 0.933f, 0.867f, 1.0f);   // #F6EEDD
+        public static readonly Color MutedSlate = new Color(0.710f, 0.765f, 0.840f, 1.0f);      // #B5C3D6
         public static readonly Color ButtonBg = new Color(0.106f, 0.149f, 0.251f, 0.96f);
         public static readonly Color ButtonActiveBg = new Color(0.275f, 0.215f, 0.090f, 0.98f);
         public static readonly Color InputBg = new Color(0.043f, 0.063f, 0.118f, 0.98f);
         public static readonly Color HpFillColor = new Color(0.130f, 0.510f, 0.240f, 1.0f);
         public static readonly Color HpLowColor = new Color(0.760f, 0.190f, 0.170f, 1.0f);
         public static readonly Color SpFillColor = new Color(0.110f, 0.450f, 0.660f, 1.0f);
-        public static readonly Color BarTrackColor = new Color(0.030f, 0.040f, 0.075f, 0.94f);
+        public static readonly Color BarTrackColor = new Color(0.024f, 0.035f, 0.065f, 0.96f);
         public static readonly Color DangerRed = new Color(0.920f, 0.320f, 0.280f, 1.0f);
         public static readonly Color SuccessGreen = new Color(0.280f, 0.850f, 0.450f, 1.0f);
         public static readonly Color InfoCyan = new Color(0.350f, 0.820f, 0.960f, 1.0f);
@@ -98,12 +98,71 @@ namespace Realmz.Game
             return rt;
         }
 
+        public static Shadow AddTextDropShadow(Graphic target)
+        {
+            if (target == null)
+            {
+                return null;
+            }
+
+            Shadow shadow = target.GetComponent<Shadow>();
+            if (shadow == null)
+            {
+                shadow = target.gameObject.AddComponent<Shadow>();
+            }
+
+            shadow.effectColor = new Color(0f, 0f, 0f, 0.82f);
+            shadow.effectDistance = new Vector2(1.2f, -1.2f);
+            shadow.useGraphicAlpha = true;
+            return shadow;
+        }
+
+        public static RectTransform CreatePortraitFrame(
+            Transform parent,
+            string name,
+            float sizePx,
+            out Image portraitImage,
+            Color? borderColor = null)
+        {
+            GameObject frameGo = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            frameGo.transform.SetParent(parent, false);
+
+            RectTransform frameRt = frameGo.GetComponent<RectTransform>();
+            frameRt.sizeDelta = new Vector2(sizePx, sizePx);
+
+            Image frameImg = frameGo.GetComponent<Image>();
+            frameImg.color = PanelDarkBg;
+            frameImg.raycastTarget = false;
+
+            LayoutElement frameLe = frameGo.GetComponent<LayoutElement>();
+            frameLe.preferredWidth = sizePx;
+            frameLe.preferredHeight = sizePx;
+            frameLe.minWidth = sizePx;
+            frameLe.minHeight = sizePx;
+
+            GameObject imgGo = new GameObject("Portrait", typeof(RectTransform), typeof(Image));
+            imgGo.transform.SetParent(frameGo.transform, false);
+            RectTransform imgRt = imgGo.GetComponent<RectTransform>();
+            imgRt.anchorMin = Vector2.zero;
+            imgRt.anchorMax = Vector2.one;
+            imgRt.offsetMin = new Vector2(3f, 3f);
+            imgRt.offsetMax = new Vector2(-3f, -3f);
+
+            portraitImage = imgGo.GetComponent<Image>();
+            portraitImage.color = Color.white;
+            portraitImage.preserveAspect = true;
+            portraitImage.raycastTarget = false;
+
+            AddBrassBorder(frameRt, borderColor ?? BrassAccent, 1.8f);
+            return frameRt;
+        }
+
         public static TextMeshProUGUI CreateLabel(
             Transform parent,
             string name,
             string text,
             TMP_FontAsset font,
-            float fontSize = 14f,
+            float fontSize = 16f,
             Color? color = null,
             TextAlignmentOptions alignment = TextAlignmentOptions.Left,
             FontStyles style = FontStyles.Normal,
@@ -135,7 +194,7 @@ namespace Realmz.Game
             string label,
             TMP_FontAsset font,
             UnityAction onClick = null,
-            float fontSize = 14f,
+            float fontSize = 16f,
             Color? bgColor = null,
             Color? outlineColor = null)
         {
@@ -172,6 +231,7 @@ namespace Realmz.Game
                 TextAlignmentOptions.Center,
                 FontStyles.Bold,
                 wrap: false);
+            AddTextDropShadow(tmp);
 
             RectTransform labelRt = tmp.rectTransform;
             labelRt.anchorMin = Vector2.zero;
@@ -187,7 +247,7 @@ namespace Realmz.Game
             string name,
             string placeholderText,
             TMP_FontAsset font,
-            float fontSize = 14f)
+            float fontSize = 16f)
         {
             GameObject root = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(TMP_InputField));
             root.transform.SetParent(parent, false);
@@ -248,7 +308,7 @@ namespace Realmz.Game
 
             input.pointSize = fontSize;
             input.caretColor = BrassHighlight;
-            input.selectionColor = new Color(0.784f, 0.608f, 0.235f, 0.35f);
+            input.selectionColor = new Color(BrassAccent.r, BrassAccent.g, BrassAccent.b, 0.35f);
             return input;
         }
 
@@ -280,9 +340,9 @@ namespace Realmz.Game
             root.transform.SetParent(parent, false);
 
             Image rootBg = root.GetComponent<Image>();
-            rootBg.color = new Color(0.035f, 0.048f, 0.090f, 0.88f);
+            rootBg.color = new Color(0.031f, 0.047f, 0.086f, 0.90f);
 
-            AddBrassBorder(root.GetComponent<RectTransform>(), new Color(0.784f, 0.608f, 0.235f, 0.65f), 1.0f);
+            AddBrassBorder(root.GetComponent<RectTransform>(), new Color(BrassAccent.r, BrassAccent.g, BrassAccent.b, 0.65f), 1.0f);
 
             GameObject viewport = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(Mask));
             viewport.transform.SetParent(root.transform, false);
@@ -344,6 +404,7 @@ namespace Realmz.Game
             barRoot = bgGo.GetComponent<RectTransform>();
             Image bgImg = bgGo.GetComponent<Image>();
             bgImg.color = BarTrackColor;
+            bgImg.raycastTarget = false;
 
             GameObject fillGo = new GameObject("Fill", typeof(RectTransform), typeof(Image));
             fillGo.transform.SetParent(bgGo.transform, false);
@@ -355,6 +416,9 @@ namespace Realmz.Game
 
             Image fillImg = fillGo.GetComponent<Image>();
             fillImg.color = fillColor;
+            fillImg.raycastTarget = false;
+
+            AddBrassBorder(barRoot, new Color(0.01f, 0.015f, 0.03f, 0.95f), 1f);
             return fillImg;
         }
 

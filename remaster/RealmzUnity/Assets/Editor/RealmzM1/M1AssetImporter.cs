@@ -71,6 +71,27 @@ namespace Realmz.EditorTools
             "shallow_water"
         };
 
+        private static readonly string[] VariantSuffixes = { "_a", "_b", "_c" };
+
+        private static readonly Color[] VariantTints =
+        {
+            Color.white,
+            new Color(0.95f, 0.99f, 0.94f, 1f),
+            new Color(1.03f, 0.98f, 0.92f, 1f)
+        };
+
+        private static readonly string[] OptionalPropKeys =
+        {
+            "cottage",
+            "tavern",
+            "oak_tree",
+            "pine_tree",
+            "stone_fence",
+            "market_crates",
+            "wildflower_bush",
+            "brazier"
+        };
+
         [MenuItem("Realmz/M1/Import & Build Art Catalog")]
         public static BywaterAssetCatalog ImportAndBuildCatalog()
         {
@@ -154,13 +175,13 @@ namespace Realmz.EditorTools
             catalog.torchEmberMaterial = CreateOrUpdateEmissiveMaterial(
                 MaterialsDir + "/M1_Prop_torch_ember.mat",
                 ParseHexColor("#FF7A1A", new Color(1f, 0.478f, 0.102f, 1f)),
-                3.8f,
+                3.2f,
                 0.20f);
 
             catalog.portalBeaconMaterial = CreateOrUpdateEmissiveMaterial(
                 MaterialsDir + "/M1_Prop_portal_beacon.mat",
                 ParseHexColor("#38BDF8", new Color(0.220f, 0.741f, 0.973f, 1f)),
-                2.6f,
+                2.4f,
                 0.35f);
 
             // 4. Tiles & World Structure Materials
@@ -187,8 +208,14 @@ namespace Realmz.EditorTools
                 MaterialsDir + "/M1_Tile_dungeon_floor.mat", dFloorTex, dFloorNorm, Color.white, 0.08f);
             catalog.dungeonWallMaterial = CreateOrUpdateTileMaterial(
                 MaterialsDir + "/M1_Tile_dungeon_wall.mat", dWallTex, dWallNorm, Color.white, 0.08f);
-            catalog.shallowWaterMaterial = CreateOrUpdateTileMaterial(
-                MaterialsDir + "/M1_Tile_shallow_water.mat", waterTex, waterNorm, Color.white, 0.45f);
+            catalog.shallowWaterMaterial = CreateOrUpdateShallowWaterMaterial(
+                MaterialsDir + "/M1_Tile_shallow_water.mat", waterTex, waterNorm);
+
+            catalog.grassVariantMaterials = CreateOrUpdateTileVariantMaterials("bywater_grass", grassTex, grassNorm);
+            catalog.cobblestoneVariantMaterials = CreateOrUpdateTileVariantMaterials("cobblestone_road", cobbleTex, cobbleNorm);
+            catalog.dirtPathVariantMaterials = CreateOrUpdateTileVariantMaterials("dirt_path", dirtTex, dirtNorm);
+            catalog.dungeonFloorVariantMaterials = CreateOrUpdateTileVariantMaterials("dungeon_floor", dFloorTex, dFloorNorm);
+            catalog.dungeonWallVariantMaterials = CreateOrUpdateTileVariantMaterials("dungeon_wall", dWallTex, dWallNorm);
 
             catalog.buildingWallMaterial = CreateOrUpdateTileMaterial(
                 MaterialsDir + "/M1_World_BuildingWall.mat",
@@ -208,6 +235,114 @@ namespace Realmz.EditorTools
                 grassNorm,
                 new Color(0.36f, 0.56f, 0.34f, 1f),
                 0.08f);
+
+            // 4b. M1.5 Modular 2.5D Medieval Prop Materials
+            catalog.cottageWallMaterial = CreateOrUpdateTileMaterial(
+                MaterialsDir + "/M1_Prop_cottage_wall.mat",
+                null,
+                dirtNorm,
+                new Color(0.76f, 0.70f, 0.58f, 1f),
+                0.06f,
+                metallic: 0f,
+                bumpScale: 0.35f);
+            catalog.cottageRoofTerracottaMaterial = CreateOrUpdateTileMaterial(
+                MaterialsDir + "/M1_Prop_roof_terracotta.mat",
+                null,
+                null,
+                new Color(0.58f, 0.22f, 0.15f, 1f),
+                0.10f);
+            catalog.cottageRoofSlateMaterial = CreateOrUpdateTileMaterial(
+                MaterialsDir + "/M1_Prop_roof_slate.mat",
+                null,
+                null,
+                new Color(0.22f, 0.28f, 0.38f, 1f),
+                0.14f);
+            catalog.cottageRoofThatchMaterial = CreateOrUpdateTileMaterial(
+                MaterialsDir + "/M1_Prop_roof_thatch.mat",
+                null,
+                null,
+                new Color(0.62f, 0.49f, 0.24f, 1f),
+                0.06f);
+            catalog.timberTrimMaterial = CreateOrUpdateTileMaterial(
+                MaterialsDir + "/M1_Prop_timber_trim.mat",
+                null,
+                null,
+                new Color(0.24f, 0.14f, 0.08f, 1f),
+                0.12f);
+            catalog.warmWindowGlowMaterial = CreateOrUpdateEmissiveMaterial(
+                MaterialsDir + "/M1_Prop_window_glow.mat",
+                new Color(1.0f, 0.78f, 0.35f, 1f),
+                new Color(1.0f, 0.72f, 0.28f, 1f) * 1.15f,
+                0.22f);
+            catalog.oakFoliageMaterial = CreateOrUpdateTileMaterial(
+                MaterialsDir + "/M1_Prop_oak_foliage.mat",
+                null,
+                grassNorm,
+                new Color(0.16f, 0.40f, 0.15f, 1f),
+                0.06f,
+                metallic: 0f,
+                bumpScale: 0.55f);
+            catalog.pineFoliageMaterial = CreateOrUpdateTileMaterial(
+                MaterialsDir + "/M1_Prop_pine_foliage.mat",
+                null,
+                grassNorm,
+                new Color(0.11f, 0.30f, 0.16f, 1f),
+                0.06f,
+                metallic: 0f,
+                bumpScale: 0.50f);
+            catalog.treeTrunkMaterial = CreateOrUpdateTileMaterial(
+                MaterialsDir + "/M1_Prop_tree_trunk.mat",
+                null,
+                dirtNorm,
+                new Color(0.28f, 0.17f, 0.10f, 1f),
+                0.08f,
+                metallic: 0f,
+                bumpScale: 0.50f);
+            catalog.boulderMaterial = CreateOrUpdateTileMaterial(
+                MaterialsDir + "/M1_Prop_boulder.mat",
+                null,
+                dWallNorm,
+                new Color(0.35f, 0.37f, 0.36f, 1f),
+                0.08f,
+                metallic: 0f,
+                bumpScale: 0.65f);
+            catalog.stoneFenceMaterial = CreateOrUpdateTileMaterial(
+                MaterialsDir + "/M1_Prop_stone_fence.mat",
+                cobbleTex,
+                cobbleNorm,
+                new Color(0.48f, 0.47f, 0.44f, 1f),
+                0.08f,
+                metallic: 0f,
+                bumpScale: 0.90f);
+            catalog.crateWoodMaterial = CreateOrUpdateTileMaterial(
+                MaterialsDir + "/M1_Prop_crate_wood.mat",
+                null,
+                null,
+                new Color(0.42f, 0.27f, 0.14f, 1f),
+                0.12f);
+            catalog.ironTrimMaterial = CreateOrUpdateTileMaterial(
+                MaterialsDir + "/M1_Prop_iron_trim.mat",
+                null,
+                null,
+                new Color(0.22f, 0.24f, 0.28f, 1f),
+                0.42f,
+                metallic: 0.45f);
+            catalog.wildflowerMaterial = CreateOrUpdateTileMaterial(
+                MaterialsDir + "/M1_Prop_wildflower.mat",
+                null,
+                null,
+                new Color(0.94f, 0.80f, 0.28f, 1f),
+                0.10f);
+
+            // 4c. Optional W-222 Hi-Bit Prop Billboards
+            TryLoadPropBillboard("cottage", out catalog.cottageBillboardMaterial, out catalog.cottageBillboardSprite);
+            TryLoadPropBillboard("tavern", out catalog.tavernBillboardMaterial, out catalog.tavernBillboardSprite);
+            TryLoadPropBillboard("oak_tree", out catalog.oakTreeBillboardMaterial, out catalog.oakTreeBillboardSprite);
+            TryLoadPropBillboard("pine_tree", out catalog.pineTreeBillboardMaterial, out catalog.pineTreeBillboardSprite);
+            TryLoadPropBillboard("stone_fence", out catalog.stoneFenceBillboardMaterial, out catalog.stoneFenceBillboardSprite);
+            TryLoadPropBillboard("market_crates", out catalog.marketCratesBillboardMaterial, out catalog.marketCratesBillboardSprite);
+            TryLoadPropBillboard("wildflower_bush", out catalog.wildflowerBushBillboardMaterial, out catalog.wildflowerBushBillboardSprite);
+            TryLoadPropBillboard("brazier", out catalog.brazierBillboardMaterial, out catalog.brazierBillboardSprite, subtleEmission: true);
 
             // 5. Transparent Overlay Material (URP Unlit)
             catalog.overlayBaseMaterial = CreateOrUpdateOverlayBaseMaterial(
@@ -249,6 +384,20 @@ namespace Realmz.EditorTools
                 string key = TileKeys[i];
                 ConfigureTileAlbedo(TilesDir + "/" + key + ".png");
                 ConfigureNormalMap(TilesDir + "/" + key + "_n.png", TextureWrapMode.Repeat);
+
+                for (int v = 0; v < VariantSuffixes.Length; v++)
+                {
+                    string suffix = VariantSuffixes[v];
+                    ConfigureTileAlbedo(TilesDir + "/" + key + suffix + ".png");
+                    ConfigureNormalMap(TilesDir + "/" + key + suffix + "_n.png", TextureWrapMode.Repeat);
+                }
+            }
+
+            for (int i = 0; i < OptionalPropKeys.Length; i++)
+            {
+                string propKey = OptionalPropKeys[i];
+                ConfigureBillboardSprite(PropsDir + "/" + propKey + ".png");
+                ConfigureNormalMap(PropsDir + "/" + propKey + "_n.png", TextureWrapMode.Clamp);
             }
         }
 
@@ -260,9 +409,10 @@ namespace Realmz.EditorTools
                 return;
             }
 
+            importer.GetSourceTextureWidthAndHeight(out int texW, out int texH);
             importer.textureType = TextureImporterType.Sprite;
             importer.spriteImportMode = SpriteImportMode.Single;
-            importer.spritePixelsPerUnit = 64f;
+            importer.spritePixelsPerUnit = texW >= 128 ? 128f : 64f;
             importer.filterMode = FilterMode.Point;
             importer.textureCompression = TextureImporterCompression.Uncompressed;
             importer.mipmapEnabled = false;
@@ -285,9 +435,10 @@ namespace Realmz.EditorTools
                 return;
             }
 
+            importer.GetSourceTextureWidthAndHeight(out int texW, out int texH);
             importer.textureType = TextureImporterType.Sprite;
             importer.spriteImportMode = SpriteImportMode.Single;
-            importer.spritePixelsPerUnit = 64f;
+            importer.spritePixelsPerUnit = texW >= 128 ? 128f : 64f;
             importer.filterMode = FilterMode.Point;
             importer.textureCompression = TextureImporterCompression.Uncompressed;
             importer.mipmapEnabled = false;
@@ -388,6 +539,19 @@ namespace Realmz.EditorTools
             float emissionMultiplier,
             float smoothness)
         {
+            return CreateOrUpdateEmissiveMaterial(
+                matPath,
+                baseColor,
+                baseColor * emissionMultiplier,
+                smoothness);
+        }
+
+        private static Material CreateOrUpdateEmissiveMaterial(
+            string matPath,
+            Color baseColor,
+            Color emissionColor,
+            float smoothness)
+        {
             Material mat = LoadOrCreateMaterial(matPath, "Universal Render Pipeline/Lit", "Universal Render Pipeline/Unlit");
 
             mat.SetFloat("_Surface", 0f);
@@ -397,7 +561,7 @@ namespace Realmz.EditorTools
             mat.renderQueue = (int)RenderQueue.Geometry;
 
             mat.SetColor("_BaseColor", baseColor);
-            mat.SetColor("_EmissionColor", baseColor * emissionMultiplier);
+            mat.SetColor("_EmissionColor", emissionColor);
             mat.EnableKeyword("_EMISSION");
             mat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
             mat.SetFloat("_Smoothness", smoothness);
@@ -412,7 +576,9 @@ namespace Realmz.EditorTools
             Texture2D albedo,
             Texture2D normalMap,
             Color baseColor,
-            float smoothness)
+            float smoothness,
+            float metallic = 0f,
+            float bumpScale = 1.0f)
         {
             Material mat = LoadOrCreateMaterial(matPath, "Universal Render Pipeline/Lit", "Standard");
 
@@ -428,13 +594,115 @@ namespace Realmz.EditorTools
                 mat.SetTexture("_BaseMap", albedo);
                 mat.SetTextureScale("_BaseMap", Vector2.one);
             }
+            else
+            {
+                mat.SetTexture("_BaseMap", null);
+            }
 
             mat.SetFloat("_Smoothness", smoothness);
-            mat.SetFloat("_Metallic", 0f);
-            ApplyNormalMap(mat, normalMap);
+            mat.SetFloat("_Metallic", metallic);
+            ApplyNormalMap(mat, normalMap, bumpScale);
 
             EditorUtility.SetDirty(mat);
             return mat;
+        }
+
+        private static Material CreateOrUpdateShallowWaterMaterial(
+            string matPath,
+            Texture2D albedo,
+            Texture2D normalMap)
+        {
+            Material mat = LoadOrCreateMaterial(matPath, "Realmz/BywaterShimmerWater", "Universal Render Pipeline/Lit");
+            bool isShimmerShader = mat.shader != null && mat.shader.name == "Realmz/BywaterShimmerWater";
+
+            mat.SetColor("_BaseColor", new Color(0.42f, 0.78f, 0.96f, 1f));
+            if (albedo != null)
+            {
+                mat.SetTexture("_BaseMap", albedo);
+                mat.SetTextureScale("_BaseMap", Vector2.one);
+            }
+            else
+            {
+                mat.SetTexture("_BaseMap", null);
+            }
+
+            if (isShimmerShader)
+            {
+                mat.SetTexture("_BumpMap", normalMap);
+                mat.SetTextureScale("_BumpMap", Vector2.one);
+                mat.SetFloat("_BumpScale", 0.85f);
+                mat.SetVector("_ScrollSpeedA", new Vector4(0.045f, 0.025f, 0f, 0f));
+                mat.SetVector("_ScrollSpeedB", new Vector4(-0.032f, 0.040f, 0f, 0f));
+                mat.SetColor("_ShimmerColor", new Color(0.95f, 0.99f, 1.0f, 1f));
+                mat.SetFloat("_ShimmerStrength", 0.72f);
+                mat.SetFloat("_WaveScale", 3.2f);
+                mat.SetFloat("_Smoothness", 0.72f);
+            }
+            else
+            {
+                mat.SetFloat("_Surface", 0f);
+                mat.SetFloat("_AlphaClip", 0f);
+                mat.DisableKeyword("_ALPHATEST_ON");
+                mat.SetFloat("_Smoothness", 0.72f);
+                mat.SetFloat("_Metallic", 0f);
+                ApplyNormalMap(mat, normalMap, 0.85f);
+            }
+
+            mat.SetOverrideTag("RenderType", "Opaque");
+            mat.renderQueue = (int)RenderQueue.Geometry;
+
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        private static Material[] CreateOrUpdateTileVariantMaterials(
+            string tileKey,
+            Texture2D baseTex,
+            Texture2D baseNorm)
+        {
+            Material[] variants = new Material[VariantSuffixes.Length];
+            for (int i = 0; i < VariantSuffixes.Length; i++)
+            {
+                string suffix = VariantSuffixes[i];
+                Texture2D varTex = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/" + tileKey + suffix + ".png");
+                Texture2D varNorm = AssetDatabase.LoadAssetAtPath<Texture2D>(TilesDir + "/" + tileKey + suffix + "_n.png");
+                Texture2D chosenTex = varTex != null ? varTex : baseTex;
+                Texture2D chosenNorm = varNorm != null ? varNorm : baseNorm;
+                Color tint = varTex != null ? Color.white : VariantTints[i];
+
+                variants[i] = CreateOrUpdateTileMaterial(
+                    MaterialsDir + "/M1_Tile_" + tileKey + suffix + ".mat",
+                    chosenTex,
+                    chosenNorm,
+                    tint,
+                    0.08f);
+            }
+            return variants;
+        }
+
+        private static void TryLoadPropBillboard(
+            string propKey,
+            out Material mat,
+            out Sprite sprite,
+            bool subtleEmission = false)
+        {
+            string albedoPath = PropsDir + "/" + propKey + ".png";
+            Texture2D albedo = AssetDatabase.LoadAssetAtPath<Texture2D>(albedoPath);
+            if (albedo == null)
+            {
+                mat = null;
+                sprite = null;
+                return;
+            }
+
+            Texture2D normal = AssetDatabase.LoadAssetAtPath<Texture2D>(PropsDir + "/" + propKey + "_n.png");
+            sprite = AssetDatabase.LoadAssetAtPath<Sprite>(albedoPath);
+            mat = CreateOrUpdateBillboardMaterial(
+                MaterialsDir + "/M1_Prop_bb_" + propKey + ".mat",
+                albedo,
+                normal,
+                0.18f,
+                subtleEmission);
         }
 
         private static Material CreateOrUpdateOverlayBaseMaterial(string matPath)
@@ -457,12 +725,12 @@ namespace Realmz.EditorTools
             return mat;
         }
 
-        private static void ApplyNormalMap(Material mat, Texture2D normalMap)
+        private static void ApplyNormalMap(Material mat, Texture2D normalMap, float bumpScale = 1.0f)
         {
             if (normalMap != null)
             {
                 mat.SetTexture("_BumpMap", normalMap);
-                mat.SetFloat("_BumpScale", 1.0f);
+                mat.SetFloat("_BumpScale", bumpScale);
                 mat.EnableKeyword("_NORMALMAP");
             }
             else

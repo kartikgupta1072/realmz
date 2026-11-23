@@ -393,6 +393,7 @@ namespace Realmz.Game
                     : null;
 
                 card.Portrait.sprite = art != null ? (art.portrait != null ? art.portrait : art.sprite) : null;
+                card.Portrait.preserveAspect = true;
                 card.Portrait.color = card.Portrait.sprite != null ? Color.white : new Color(0.2f, 0.25f, 0.35f, 1f);
                 card.NameText.text = m.Name;
                 card.ClassText.text = $"{m.Archetype} Lv{m.Level}";
@@ -488,6 +489,8 @@ namespace Realmz.Game
                 ? _catalog.GetHeroArt(hero.Id, hero.PortraitId, hero.Archetype)
                 : null;
             _drawerHeroPortrait.sprite = art != null ? (art.portrait != null ? art.portrait : art.sprite) : null;
+            _drawerHeroPortrait.preserveAspect = true;
+            _drawerHeroPortrait.color = _drawerHeroPortrait.sprite != null ? Color.white : new Color(0.2f, 0.25f, 0.35f, 1f);
             _drawerHeroTitle.text = $"{hero.Name} - Lv{hero.Level} {hero.RaceName} {hero.Archetype} ({hero.CasteName})";
 
             IReadOnlyDictionary<int, ItemDefinition> items = bundle != null ? bundle.Items : null;
@@ -563,10 +566,10 @@ namespace Realmz.Game
                     "EmptyStash",
                     "Party stash is empty.",
                     _font,
-                    14f,
+                    15.5f,
                     BywaterUiHelpers.MutedSlate);
                 LayoutElement le = empty.gameObject.AddComponent<LayoutElement>();
-                le.preferredHeight = 30f;
+                le.preferredHeight = 32f;
                 return;
             }
 
@@ -590,7 +593,7 @@ namespace Realmz.Game
                     BywaterUiHelpers.CardBg,
                     withBrassOutline: false);
                 LayoutElement rowLe = row.gameObject.AddComponent<LayoutElement>();
-                rowLe.preferredHeight = 46f;
+                rowLe.preferredHeight = 48f;
 
                 HorizontalLayoutGroup hlg = row.gameObject.AddComponent<HorizontalLayoutGroup>();
                 hlg.padding = new RectOffset(8, 8, 4, 4);
@@ -605,10 +608,11 @@ namespace Realmz.Game
                     "Info",
                     $"{itemName} x{entry.Quantity}  [{sellPrice}g]{(string.IsNullOrEmpty(stats) ? "" : " - " + stats)}",
                     _font,
-                    13.5f,
+                    15f,
                     BywaterUiHelpers.ParchmentText,
                     TextAlignmentOptions.MidlineLeft,
                     wrap: false);
+                info.overflowMode = TextOverflowModes.Truncate;
                 LayoutElement infoLe = info.gameObject.AddComponent<LayoutElement>();
                 infoLe.flexibleWidth = 1f;
 
@@ -621,9 +625,9 @@ namespace Realmz.Game
                         "Equip",
                         _font,
                         () => OnEquipFromStashRequested?.Invoke(_selectedHeroIndex, stashIdx),
-                        13f);
+                        15f);
                     LayoutElement eqLe = eqBtn.gameObject.AddComponent<LayoutElement>();
-                    eqLe.preferredWidth = 72f;
+                    eqLe.preferredWidth = 82f;
                 }
 
                 bool canUse = def != null && (!string.IsNullOrWhiteSpace(def.HealDice) ||
@@ -637,9 +641,9 @@ namespace Realmz.Game
                         "Use",
                         _font,
                         () => OnUseStashItemRequested?.Invoke(_selectedHeroIndex, stashIdx),
-                        13f);
+                        15f);
                     LayoutElement useLe = useBtn.gameObject.AddComponent<LayoutElement>();
-                    useLe.preferredWidth = 64f;
+                    useLe.preferredWidth = 72f;
                 }
             }
         }
@@ -698,10 +702,10 @@ namespace Realmz.Game
                     "EmptyStock",
                     "No items match the current filter.",
                     _font,
-                    14f,
+                    15f,
                     BywaterUiHelpers.MutedSlate);
                 LayoutElement le = empty.gameObject.AddComponent<LayoutElement>();
-                le.preferredHeight = 32f;
+                le.preferredHeight = 34f;
             }
             else
             {
@@ -717,7 +721,7 @@ namespace Realmz.Game
                         BywaterUiHelpers.CardBg,
                         withBrassOutline: false);
                     LayoutElement rowLe = row.gameObject.AddComponent<LayoutElement>();
-                    rowLe.preferredHeight = 48f;
+                    rowLe.preferredHeight = 50f;
 
                     HorizontalLayoutGroup hlg = row.gameObject.AddComponent<HorizontalLayoutGroup>();
                     hlg.padding = new RectOffset(8, 8, 4, 4);
@@ -732,10 +736,11 @@ namespace Realmz.Game
                         "Name",
                         $"{entry.Item.Name}{(string.IsNullOrEmpty(stats) ? "" : " (" + stats + ")")}",
                         _font,
-                        13.5f,
+                        15f,
                         entry.CanAfford ? BywaterUiHelpers.ParchmentText : BywaterUiHelpers.MutedSlate,
                         TextAlignmentOptions.MidlineLeft,
                         wrap: false);
+                    label.overflowMode = TextOverflowModes.Truncate;
                     LayoutElement labelLe = label.gameObject.AddComponent<LayoutElement>();
                     labelLe.flexibleWidth = 1f;
 
@@ -744,13 +749,13 @@ namespace Realmz.Game
                         "Price",
                         $"{entry.EffectivePrice}g",
                         _font,
-                        14f,
+                        15.5f,
                         entry.CanAfford ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.DangerRed,
                         TextAlignmentOptions.MidlineRight,
                         FontStyles.Bold,
                         wrap: false);
                     LayoutElement priceLe = priceLbl.gameObject.AddComponent<LayoutElement>();
-                    priceLe.preferredWidth = 68f;
+                    priceLe.preferredWidth = 76f;
 
                     Button buyBtn = BywaterUiHelpers.CreateButton(
                         row,
@@ -758,10 +763,10 @@ namespace Realmz.Game
                         "Buy",
                         _font,
                         () => OnBuyItemRequested?.Invoke(shop.ShopId, itemId),
-                        13f);
+                        15f);
                     buyBtn.interactable = entry.CanAfford;
                     LayoutElement buyLe = buyBtn.gameObject.AddComponent<LayoutElement>();
-                    buyLe.preferredWidth = 70f;
+                    buyLe.preferredWidth = 78f;
                 }
             }
 
@@ -774,10 +779,10 @@ namespace Realmz.Game
                     "EmptySell",
                     "Stash is empty.",
                     _font,
-                    14f,
+                    15f,
                     BywaterUiHelpers.MutedSlate);
                 LayoutElement le = empty.gameObject.AddComponent<LayoutElement>();
-                le.preferredHeight = 32f;
+                le.preferredHeight = 34f;
             }
             else
             {
@@ -796,7 +801,7 @@ namespace Realmz.Game
                         BywaterUiHelpers.CardBg,
                         withBrassOutline: false);
                     LayoutElement rowLe = row.gameObject.AddComponent<LayoutElement>();
-                    rowLe.preferredHeight = 46f;
+                    rowLe.preferredHeight = 48f;
 
                     HorizontalLayoutGroup hlg = row.gameObject.AddComponent<HorizontalLayoutGroup>();
                     hlg.padding = new RectOffset(8, 8, 4, 4);
@@ -811,10 +816,11 @@ namespace Realmz.Game
                         "Item",
                         $"{itemName} x{entry.Quantity}",
                         _font,
-                        13.5f,
+                        15f,
                         BywaterUiHelpers.ParchmentText,
                         TextAlignmentOptions.MidlineLeft,
                         wrap: false);
+                    lbl.overflowMode = TextOverflowModes.Truncate;
                     LayoutElement lblLe = lbl.gameObject.AddComponent<LayoutElement>();
                     lblLe.flexibleWidth = 1f;
 
@@ -823,13 +829,13 @@ namespace Realmz.Game
                         "Val",
                         $"+{sellPrice}g",
                         _font,
-                        13.5f,
+                        15.5f,
                         BywaterUiHelpers.SuccessGreen,
                         TextAlignmentOptions.MidlineRight,
                         FontStyles.Bold,
                         wrap: false);
                     LayoutElement valLe = valLbl.gameObject.AddComponent<LayoutElement>();
-                    valLe.preferredWidth = 62f;
+                    valLe.preferredWidth = 70f;
 
                     Button sellBtn = BywaterUiHelpers.CreateButton(
                         row,
@@ -837,9 +843,9 @@ namespace Realmz.Game
                         "Sell 1",
                         _font,
                         () => OnSellItemRequested?.Invoke(stashIdx),
-                        13f);
+                        15f);
                     LayoutElement sellLe = sellBtn.gameObject.AddComponent<LayoutElement>();
-                    sellLe.preferredWidth = 70f;
+                    sellLe.preferredWidth = 78f;
                 }
             }
         }
@@ -899,9 +905,10 @@ namespace Realmz.Game
                 }
 
                 card.Portrait.sprite = sprite;
+                card.Portrait.preserveAspect = true;
                 card.Portrait.color = sprite != null ? Color.white : new Color(0.25f, 0.25f, 0.35f, 1f);
                 card.NameText.text = entry.Name;
-                card.MetaText.text = $"R{entry.RoundNumber} | DEX {entry.EffectiveDexterity}";
+                card.MetaText.text = $"R{entry.RoundNumber} D{entry.EffectiveDexterity}";
 
                 if (entry.IsCurrentTurn)
                 {
@@ -943,6 +950,8 @@ namespace Realmz.Game
                 }
 
                 _combatActorPortrait.sprite = actorSprite;
+                _combatActorPortrait.preserveAspect = true;
+                _combatActorPortrait.color = actorSprite != null ? Color.white : new Color(0.25f, 0.25f, 0.35f, 1f);
                 _combatActorName.text = isHeroTurn ? actor.Name : $"{actor.Name} (AI)";
                 _combatActorVitals.text = $"HP {actor.Hp}/{actor.MaxHp}  |  SP {actor.Sp}/{actor.MaxSp}  |  AC {actor.EffectiveAc}";
 
@@ -1001,12 +1010,12 @@ namespace Realmz.Game
                         btnText,
                         _font,
                         () => OnSpellSelected?.Invoke(spell.Id),
-                        13f);
+                        15f);
                     spBtn.interactable = enoughSp;
                     BywaterUiHelpers.SetButtonColors(spBtn, spell.Id == selectedSpellId);
 
                     LayoutElement le = spBtn.gameObject.AddComponent<LayoutElement>();
-                    le.preferredWidth = Mathf.Max(148f, btnText.Length * 8.2f + 22f);
+                    le.preferredWidth = Mathf.Max(164f, btnText.Length * 9.5f + 24f);
                     le.preferredHeight = 36f;
                 }
             }
@@ -1122,7 +1131,7 @@ namespace Realmz.Game
                     $"Log_{i}",
                     $"[R{entry.RoundNumber}] {entry.Message}",
                     _font,
-                    13f,
+                    15f,
                     entryColor,
                     TextAlignmentOptions.TopLeft,
                     wrap: true);
@@ -1141,45 +1150,50 @@ namespace Realmz.Game
             bar.anchorMax = new Vector2(1f, 1f);
             bar.pivot = new Vector2(0.5f, 1f);
             bar.anchoredPosition = Vector2.zero;
-            bar.sizeDelta = new Vector2(0f, 52f);
+            bar.sizeDelta = new Vector2(0f, 46f);
 
             HorizontalLayoutGroup hlg = bar.gameObject.AddComponent<HorizontalLayoutGroup>();
-            hlg.padding = new RectOffset(16, 16, 6, 6);
-            hlg.spacing = 12f;
+            hlg.padding = new RectOffset(14, 14, 4, 4);
+            hlg.spacing = 10f;
             hlg.childControlWidth = true;
             hlg.childControlHeight = true;
             hlg.childForceExpandWidth = false;
             hlg.childForceExpandHeight = true;
 
-            _topMapText = BywaterUiHelpers.CreateLabel(bar, "MapNameText", "City of Bywater (2, 1)", _font, 16f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            _topMapText = BywaterUiHelpers.CreateLabel(bar, "MapNameText", "City of Bywater (2, 1)", _font, 18f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            _topMapText.overflowMode = TextOverflowModes.Truncate;
+            BywaterUiHelpers.AddTextDropShadow(_topMapText);
             LayoutElement mapLe = _topMapText.gameObject.AddComponent<LayoutElement>();
-            mapLe.preferredWidth = 310f;
+            mapLe.preferredWidth = 405f;
 
-            _topGoldText = BywaterUiHelpers.CreateLabel(bar, "GoldText", "Gold: 400g", _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            _topGoldText = BywaterUiHelpers.CreateLabel(bar, "GoldText", "Gold: 400g", _font, 16f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            BywaterUiHelpers.AddTextDropShadow(_topGoldText);
             LayoutElement goldLe = _topGoldText.gameObject.AddComponent<LayoutElement>();
-            goldLe.preferredWidth = 135f;
+            goldLe.preferredWidth = 115f;
 
-            _topTorchText = BywaterUiHelpers.CreateLabel(bar, "TorchText", "Torch: 0t", _font, 15f, new Color(1.0f, 0.72f, 0.32f, 1f), TextAlignmentOptions.MidlineLeft, wrap: false);
+            _topTorchText = BywaterUiHelpers.CreateLabel(bar, "TorchText", "Torch: 0t", _font, 16f, new Color(1.0f, 0.72f, 0.32f, 1f), TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            BywaterUiHelpers.AddTextDropShadow(_topTorchText);
             LayoutElement torchLe = _topTorchText.gameObject.AddComponent<LayoutElement>();
-            torchLe.preferredWidth = 120f;
+            torchLe.preferredWidth = 98f;
 
-            _topTurnText = BywaterUiHelpers.CreateLabel(bar, "TurnText", "Turn: 0", _font, 15f, BywaterUiHelpers.MutedSlate, TextAlignmentOptions.MidlineLeft, wrap: false);
+            _topTurnText = BywaterUiHelpers.CreateLabel(bar, "TurnText", "Turn: 0", _font, 15.5f, BywaterUiHelpers.MutedSlate, TextAlignmentOptions.MidlineLeft, wrap: false);
+            BywaterUiHelpers.AddTextDropShadow(_topTurnText);
             LayoutElement turnLe = _topTurnText.gameObject.AddComponent<LayoutElement>();
             turnLe.flexibleWidth = 1f;
 
-            _skirmishBtn = AddTopButton(bar, "SkirmishBtn", "Skirmish", 104f, () => OnSkirmishRequested?.Invoke());
-            _partyBtn = AddTopButton(bar, "PartyBtn", "Party (P)", 104f, () => OnTogglePartyRequested?.Invoke());
-            _shopBtn = AddTopButton(bar, "ShopBtn", "Shop (B)", 100f, () => OnToggleShopRequested?.Invoke());
-            _campBtn = AddTopButton(bar, "CampBtn", "Camp", 86f, () => OnCampButtonRequested?.Invoke());
-            _shrineBtn = AddTopButton(bar, "ShrineBtn", "Shrine", 90f, () => OnShrineRequested?.Invoke());
-            _warpBtn = AddTopButton(bar, "WarpBtn", "Warp Portal", 122f, () => OnWarpPortalRequested?.Invoke());
-            _saveBtn = AddTopButton(bar, "SaveBtn", "Save (F5)", 104f, () => OnSaveRequested?.Invoke());
-            _loadBtn = AddTopButton(bar, "LoadBtn", "Load (F9)", 104f, () => OnLoadRequested?.Invoke());
+            _skirmishBtn = AddTopButton(bar, "SkirmishBtn", "Skirmish", 108f, () => OnSkirmishRequested?.Invoke());
+            _partyBtn = AddTopButton(bar, "PartyBtn", "Party (P)", 108f, () => OnTogglePartyRequested?.Invoke());
+            _shopBtn = AddTopButton(bar, "ShopBtn", "Shop (B)", 104f, () => OnToggleShopRequested?.Invoke());
+            _campBtn = AddTopButton(bar, "CampBtn", "Camp", 84f, () => OnCampButtonRequested?.Invoke());
+            _shrineBtn = AddTopButton(bar, "ShrineBtn", "Shrine", 88f, () => OnShrineRequested?.Invoke());
+            _warpBtn = AddTopButton(bar, "WarpBtn", "Warp Portal", 126f, () => OnWarpPortalRequested?.Invoke());
+            _saveBtn = AddTopButton(bar, "SaveBtn", "Save (F5)", 108f, () => OnSaveRequested?.Invoke());
+            _loadBtn = AddTopButton(bar, "LoadBtn", "Load (F9)", 108f, () => OnLoadRequested?.Invoke());
         }
 
         private Button AddTopButton(Transform parent, string name, string label, float width, UnityEngine.Events.UnityAction onClick)
         {
-            Button btn = BywaterUiHelpers.CreateButton(parent, name, label, _font, onClick, 13.5f);
+            Button btn = BywaterUiHelpers.CreateButton(parent, name, label, _font, onClick, 15f);
             LayoutElement le = btn.gameObject.AddComponent<LayoutElement>();
             le.preferredWidth = width;
             return btn;
@@ -1200,8 +1214,8 @@ namespace Realmz.Game
             hoverChip.anchorMin = new Vector2(0f, 0f);
             hoverChip.anchorMax = new Vector2(0f, 0f);
             hoverChip.pivot = new Vector2(0f, 0f);
-            hoverChip.anchoredPosition = new Vector2(16f, 14f);
-            hoverChip.sizeDelta = new Vector2(410f, 84f);
+            hoverChip.anchoredPosition = new Vector2(12f, 10f);
+            hoverChip.sizeDelta = new Vector2(388f, 84f);
 
             VerticalLayoutGroup hoverVlg = hoverChip.gameObject.AddComponent<VerticalLayoutGroup>();
             hoverVlg.padding = new RectOffset(12, 12, 8, 8);
@@ -1209,20 +1223,23 @@ namespace Realmz.Game
             hoverVlg.childControlWidth = true;
             hoverVlg.childControlHeight = true;
 
-            _hoverCoordText = BywaterUiHelpers.CreateLabel(hoverChip, "HoverCoord", "Tile (2, 1) - Cobblestone", _font, 14.5f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
-            _hoverDetailText = BywaterUiHelpers.CreateLabel(hoverChip, "HoverDetail", "Click to move", _font, 13f, BywaterUiHelpers.MutedSlate, TextAlignmentOptions.MidlineLeft, wrap: true);
+            _hoverCoordText = BywaterUiHelpers.CreateLabel(hoverChip, "HoverCoord", "Tile (2, 1) - Cobblestone", _font, 16f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            _hoverCoordText.overflowMode = TextOverflowModes.Truncate;
+            BywaterUiHelpers.AddTextDropShadow(_hoverCoordText);
+            _hoverDetailText = BywaterUiHelpers.CreateLabel(hoverChip, "HoverDetail", "Click to move", _font, 15f, BywaterUiHelpers.MutedSlate, TextAlignmentOptions.MidlineLeft, wrap: true);
+            _hoverDetailText.overflowMode = TextOverflowModes.Truncate;
 
             // Explore Bottom Party Strip (6 Hero Cards)
             RectTransform strip = BywaterUiHelpers.CreatePanel(_exploreRoot.transform, "ExplorePartyStrip", BywaterUiHelpers.PanelBg, withBrassOutline: true, outlinePx: 1.5f);
             strip.anchorMin = new Vector2(0f, 0f);
             strip.anchorMax = new Vector2(1f, 0f);
             strip.pivot = new Vector2(0.5f, 0f);
-            strip.offsetMin = new Vector2(440f, 12f);
-            strip.offsetMax = new Vector2(-16f, 108f);
+            strip.offsetMin = new Vector2(412f, 10f);
+            strip.offsetMax = new Vector2(-12f, 102f);
 
             HorizontalLayoutGroup stripHlg = strip.gameObject.AddComponent<HorizontalLayoutGroup>();
-            stripHlg.padding = new RectOffset(8, 8, 6, 6);
-            stripHlg.spacing = 8f;
+            stripHlg.padding = new RectOffset(6, 6, 4, 4);
+            stripHlg.spacing = 6f;
             stripHlg.childControlWidth = true;
             stripHlg.childControlHeight = true;
             stripHlg.childForceExpandWidth = true;
@@ -1237,37 +1254,38 @@ namespace Realmz.Game
                 cardBtn.onClick.AddListener(() => OnHeroCardClicked?.Invoke(heroIdx));
 
                 HorizontalLayoutGroup cardHlg = cardRt.gameObject.AddComponent<HorizontalLayoutGroup>();
-                cardHlg.padding = new RectOffset(6, 6, 5, 5);
-                cardHlg.spacing = 8f;
+                cardHlg.padding = new RectOffset(6, 6, 4, 4);
+                cardHlg.spacing = 6f;
                 cardHlg.childControlWidth = true;
                 cardHlg.childControlHeight = true;
                 cardHlg.childForceExpandWidth = false;
                 cardHlg.childForceExpandHeight = false;
                 cardHlg.childAlignment = TextAnchor.MiddleLeft;
 
-                Image portrait = BywaterUiHelpers.CreateImage(cardRt, "Portrait");
-                LayoutElement portLe = portrait.gameObject.AddComponent<LayoutElement>();
-                portLe.preferredWidth = 64f;
-                portLe.preferredHeight = 64f;
+                BywaterUiHelpers.CreatePortraitFrame(cardRt, "PortraitFrame", 74f, out Image portrait);
 
                 GameObject infoCol = new GameObject("Info", typeof(RectTransform), typeof(VerticalLayoutGroup));
                 infoCol.transform.SetParent(cardRt, false);
                 LayoutElement infoLe = infoCol.AddComponent<LayoutElement>();
                 infoLe.flexibleWidth = 1f;
-                infoLe.preferredHeight = 72f;
+                infoLe.preferredHeight = 76f;
 
                 VerticalLayoutGroup infoVlg = infoCol.GetComponent<VerticalLayoutGroup>();
                 infoVlg.spacing = 2f;
                 infoVlg.childControlWidth = true;
                 infoVlg.childControlHeight = true;
 
-                TextMeshProUGUI nameTxt = BywaterUiHelpers.CreateLabel(infoCol.transform, "Name", $"Hero {i + 1}", _font, 14f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
-                TextMeshProUGUI classTxt = BywaterUiHelpers.CreateLabel(infoCol.transform, "Class", "Fighter", _font, 12.5f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, wrap: false);
+                TextMeshProUGUI nameTxt = BywaterUiHelpers.CreateLabel(infoCol.transform, "Name", $"Hero {i + 1}", _font, 16f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+                nameTxt.overflowMode = TextOverflowModes.Truncate;
+                BywaterUiHelpers.AddTextDropShadow(nameTxt);
+                TextMeshProUGUI classTxt = BywaterUiHelpers.CreateLabel(infoCol.transform, "Class", "Fighter", _font, 15f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, wrap: false);
+                classTxt.overflowMode = TextOverflowModes.Truncate;
 
                 Image hpFill = BywaterUiHelpers.CreateProgressBar(infoCol.transform, "HpBar", BywaterUiHelpers.HpFillColor, out RectTransform hpBarRt);
                 LayoutElement hpBarLe = hpBarRt.gameObject.AddComponent<LayoutElement>();
-                hpBarLe.preferredHeight = 14f;
-                TextMeshProUGUI hpTxt = BywaterUiHelpers.CreateLabel(hpBarRt, "HpText", "HP 10/10", _font, 11.5f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
+                hpBarLe.preferredHeight = 18f;
+                TextMeshProUGUI hpTxt = BywaterUiHelpers.CreateLabel(hpBarRt, "HpText", "HP 10/10", _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
+                BywaterUiHelpers.AddTextDropShadow(hpTxt);
                 hpTxt.rectTransform.anchorMin = Vector2.zero;
                 hpTxt.rectTransform.anchorMax = Vector2.one;
                 hpTxt.rectTransform.offsetMin = Vector2.zero;
@@ -1275,8 +1293,9 @@ namespace Realmz.Game
 
                 Image spFill = BywaterUiHelpers.CreateProgressBar(infoCol.transform, "SpBar", BywaterUiHelpers.SpFillColor, out RectTransform spBarRt);
                 LayoutElement spBarLe = spBarRt.gameObject.AddComponent<LayoutElement>();
-                spBarLe.preferredHeight = 13f;
-                TextMeshProUGUI spTxt = BywaterUiHelpers.CreateLabel(spBarRt, "SpText", "SP 0/0", _font, 11f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
+                spBarLe.preferredHeight = 17f;
+                TextMeshProUGUI spTxt = BywaterUiHelpers.CreateLabel(spBarRt, "SpText", "SP 0/0", _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
+                BywaterUiHelpers.AddTextDropShadow(spTxt);
                 spTxt.rectTransform.anchorMin = Vector2.zero;
                 spTxt.rectTransform.anchorMax = Vector2.one;
                 spTxt.rectTransform.offsetMin = Vector2.zero;
@@ -1304,7 +1323,7 @@ namespace Realmz.Game
             modal.anchorMax = new Vector2(0.5f, 0.5f);
             modal.pivot = new Vector2(0.5f, 0.5f);
             modal.anchoredPosition = new Vector2(0f, 8f);
-            modal.sizeDelta = new Vector2(1320f, 780f);
+            modal.sizeDelta = new Vector2(1320f, 820f);
             _partyDrawerRoot = modal.gameObject;
 
             VerticalLayoutGroup rootVlg = modal.gameObject.AddComponent<VerticalLayoutGroup>();
@@ -1318,26 +1337,27 @@ namespace Realmz.Game
             GameObject header = new GameObject("Header", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             header.transform.SetParent(modal, false);
             LayoutElement headerLe = header.AddComponent<LayoutElement>();
-            headerLe.preferredHeight = 38f;
+            headerLe.preferredHeight = 42f;
             HorizontalLayoutGroup headerHlg = header.GetComponent<HorizontalLayoutGroup>();
             headerHlg.spacing = 12f;
             headerHlg.childControlWidth = true;
             headerHlg.childControlHeight = true;
             headerHlg.childForceExpandWidth = false;
 
-            TextMeshProUGUI title = BywaterUiHelpers.CreateLabel(header.transform, "Title", "Vanguard Party, Equipment, Stash & Camp", _font, 18f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            TextMeshProUGUI title = BywaterUiHelpers.CreateLabel(header.transform, "Title", "Vanguard Party, Equipment, Stash & Camp", _font, 21f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            BywaterUiHelpers.AddTextDropShadow(title);
             title.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
 
-            _drawerGoldTorchLabel = BywaterUiHelpers.CreateLabel(header.transform, "GoldTorch", "Gold: 400g | Torch: 0 turns", _font, 14.5f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineRight, wrap: false);
-            _drawerGoldTorchLabel.gameObject.AddComponent<LayoutElement>().preferredWidth = 280f;
+            _drawerGoldTorchLabel = BywaterUiHelpers.CreateLabel(header.transform, "GoldTorch", "Gold: 400g | Torch: 0 turns", _font, 16f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineRight, wrap: false);
+            _drawerGoldTorchLabel.gameObject.AddComponent<LayoutElement>().preferredWidth = 310f;
 
-            Button closeBtn = BywaterUiHelpers.CreateButton(header.transform, "CloseBtn", "Close", _font, () => TogglePartyPanel(false), 14f);
-            closeBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 90f;
+            Button closeBtn = BywaterUiHelpers.CreateButton(header.transform, "CloseBtn", "Close", _font, () => TogglePartyPanel(false), 15.5f);
+            closeBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 96f;
 
             // Hero Selector Strip
             GameObject selectorRow = new GameObject("HeroSelectorRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             selectorRow.transform.SetParent(modal, false);
-            selectorRow.AddComponent<LayoutElement>().preferredHeight = 38f;
+            selectorRow.AddComponent<LayoutElement>().preferredHeight = 40f;
             HorizontalLayoutGroup selHlg = selectorRow.GetComponent<HorizontalLayoutGroup>();
             selHlg.spacing = 8f;
             selHlg.childControlWidth = true;
@@ -1347,7 +1367,7 @@ namespace Realmz.Game
             for (int i = 0; i < 6; i++)
             {
                 int idx = i;
-                Button btn = BywaterUiHelpers.CreateButton(selectorRow.transform, $"SelectHero_{i}", $"Hero {i + 1}", _font, () => OnPartyHeroSelected?.Invoke(idx), 14f);
+                Button btn = BywaterUiHelpers.CreateButton(selectorRow.transform, $"SelectHero_{i}", $"Hero {i + 1}", _font, () => OnPartyHeroSelected?.Invoke(idx), 15.5f);
                 _partyHeroSelectorBtns.Add(btn);
             }
 
@@ -1364,7 +1384,7 @@ namespace Realmz.Game
 
             // Left Column: Hero Sheet & Equipment
             RectTransform leftCol = BywaterUiHelpers.CreatePanel(body.transform, "HeroSheetCol", BywaterUiHelpers.PanelBg, withBrassOutline: true, outlinePx: 1f);
-            leftCol.gameObject.AddComponent<LayoutElement>().preferredWidth = 580f;
+            leftCol.gameObject.AddComponent<LayoutElement>().preferredWidth = 590f;
             VerticalLayoutGroup leftVlg = leftCol.gameObject.AddComponent<VerticalLayoutGroup>();
             leftVlg.padding = new RectOffset(12, 12, 12, 12);
             leftVlg.spacing = 8f;
@@ -1374,31 +1394,32 @@ namespace Realmz.Game
 
             GameObject heroTop = new GameObject("HeroTop", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             heroTop.transform.SetParent(leftCol, false);
-            heroTop.AddComponent<LayoutElement>().preferredHeight = 82f;
+            heroTop.AddComponent<LayoutElement>().preferredHeight = 132f;
             HorizontalLayoutGroup htHlg = heroTop.GetComponent<HorizontalLayoutGroup>();
-            htHlg.spacing = 12f;
+            htHlg.spacing = 14f;
             htHlg.childControlWidth = true;
             htHlg.childControlHeight = true;
             htHlg.childForceExpandWidth = false;
+            htHlg.childAlignment = TextAnchor.MiddleLeft;
 
-            _drawerHeroPortrait = BywaterUiHelpers.CreateImage(heroTop.transform, "Portrait");
-            LayoutElement hpLe = _drawerHeroPortrait.gameObject.AddComponent<LayoutElement>();
-            hpLe.preferredWidth = 80f;
-            hpLe.preferredHeight = 80f;
+            BywaterUiHelpers.CreatePortraitFrame(heroTop.transform, "DrawerPortraitFrame", 128f, out _drawerHeroPortrait);
 
-            _drawerHeroTitle = BywaterUiHelpers.CreateLabel(heroTop.transform, "HeroTitle", "Aldric", _font, 16f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold);
+            _drawerHeroTitle = BywaterUiHelpers.CreateLabel(heroTop.transform, "HeroTitle", "Aldric", _font, 18.5f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold);
+            BywaterUiHelpers.AddTextDropShadow(_drawerHeroTitle);
             _drawerHeroTitle.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
 
-            _drawerHeroStats = BywaterUiHelpers.CreateLabel(leftCol, "HeroStats", string.Empty, _font, 14f, BywaterUiHelpers.ParchmentText);
-            _drawerHeroStats.gameObject.AddComponent<LayoutElement>().preferredHeight = 64f;
+            _drawerHeroStats = BywaterUiHelpers.CreateLabel(leftCol, "HeroStats", string.Empty, _font, 15.5f, BywaterUiHelpers.ParchmentText);
+            _drawerHeroStats.gameObject.AddComponent<LayoutElement>().preferredHeight = 72f;
 
-            _drawerHeroConditions = BywaterUiHelpers.CreateLabel(leftCol, "HeroConditions", "Conditions: Healthy", _font, 13.5f, BywaterUiHelpers.InfoCyan);
-            _drawerHeroConditions.gameObject.AddComponent<LayoutElement>().preferredHeight = 26f;
+            _drawerHeroConditions = BywaterUiHelpers.CreateLabel(leftCol, "HeroConditions", "Conditions: Healthy", _font, 15f, BywaterUiHelpers.InfoCyan);
+            _drawerHeroConditions.gameObject.AddComponent<LayoutElement>().preferredHeight = 28f;
 
-            _drawerHeroSpells = BywaterUiHelpers.CreateLabel(leftCol, "HeroSpells", "Known Spells: None", _font, 13.5f, BywaterUiHelpers.MutedSlate);
-            _drawerHeroSpells.gameObject.AddComponent<LayoutElement>().preferredHeight = 46f;
+            _drawerHeroSpells = BywaterUiHelpers.CreateLabel(leftCol, "HeroSpells", "Known Spells: None", _font, 15f, BywaterUiHelpers.MutedSlate);
+            _drawerHeroSpells.gameObject.AddComponent<LayoutElement>().preferredHeight = 52f;
 
-            BywaterUiHelpers.CreateLabel(leftCol, "EquipHeader", "Equipped Gear (5 Slots)", _font, 15f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold).gameObject.AddComponent<LayoutElement>().preferredHeight = 26f;
+            TextMeshProUGUI equipHeader = BywaterUiHelpers.CreateLabel(leftCol, "EquipHeader", "Equipped Gear (5 Slots)", _font, 17f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold);
+            BywaterUiHelpers.AddTextDropShadow(equipHeader);
+            equipHeader.gameObject.AddComponent<LayoutElement>().preferredHeight = 28f;
 
             EquipmentSlot[] slots =
             {
@@ -1421,14 +1442,15 @@ namespace Realmz.Game
                 sHlg.childControlHeight = true;
                 sHlg.childForceExpandWidth = false;
 
-                TextMeshProUGUI slotTag = BywaterUiHelpers.CreateLabel(slotRow, "SlotName", slot.ToString(), _font, 13.5f, BywaterUiHelpers.BrassAccent, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
-                slotTag.gameObject.AddComponent<LayoutElement>().preferredWidth = 115f;
+                TextMeshProUGUI slotTag = BywaterUiHelpers.CreateLabel(slotRow, "SlotName", slot.ToString(), _font, 15f, BywaterUiHelpers.BrassAccent, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+                slotTag.gameObject.AddComponent<LayoutElement>().preferredWidth = 128f;
 
-                TextMeshProUGUI itemLbl = BywaterUiHelpers.CreateLabel(slotRow, "ItemName", "- Empty -", _font, 13.5f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, wrap: false);
+                TextMeshProUGUI itemLbl = BywaterUiHelpers.CreateLabel(slotRow, "ItemName", "- Empty -", _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, wrap: false);
+                itemLbl.overflowMode = TextOverflowModes.Truncate;
                 itemLbl.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
 
-                Button unequipBtn = BywaterUiHelpers.CreateButton(slotRow, "UnequipBtn", "Unequip", _font, () => OnUnequipRequested?.Invoke(_selectedHeroIndex, slot), 13f);
-                unequipBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 86f;
+                Button unequipBtn = BywaterUiHelpers.CreateButton(slotRow, "UnequipBtn", "Unequip", _font, () => OnUnequipRequested?.Invoke(_selectedHeroIndex, slot), 15f);
+                unequipBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 96f;
 
                 _equipSlots.Add(new EquipSlotRefs
                 {
@@ -1457,14 +1479,15 @@ namespace Realmz.Game
             campHlg.childControlHeight = true;
             campHlg.childForceExpandWidth = false;
 
-            TextMeshProUGUI stashTitle = BywaterUiHelpers.CreateLabel(campBar.transform, "StashTitle", "Shared Stash & Camp", _font, 15.5f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            TextMeshProUGUI stashTitle = BywaterUiHelpers.CreateLabel(campBar.transform, "StashTitle", "Shared Stash & Camp", _font, 17f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            BywaterUiHelpers.AddTextDropShadow(stashTitle);
             stashTitle.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
 
-            Button bandageBtn = BywaterUiHelpers.CreateButton(campBar.transform, "QuickBandageBtn", "Quick Bandage", _font, () => OnCampModeRequested?.Invoke(CampMode.QuickBandage), 13.5f);
-            bandageBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 148f;
+            Button bandageBtn = BywaterUiHelpers.CreateButton(campBar.transform, "QuickBandageBtn", "Quick Bandage", _font, () => OnCampModeRequested?.Invoke(CampMode.QuickBandage), 15f);
+            bandageBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 160f;
 
-            Button fullRestBtn = BywaterUiHelpers.CreateButton(campBar.transform, "FullRestBtn", "Full Rest", _font, () => OnCampModeRequested?.Invoke(CampMode.FullRest), 13.5f);
-            fullRestBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 120f;
+            Button fullRestBtn = BywaterUiHelpers.CreateButton(campBar.transform, "FullRestBtn", "Full Rest", _font, () => OnCampModeRequested?.Invoke(CampMode.FullRest), 15f);
+            fullRestBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 130f;
 
             _partyStashScroll = BywaterUiHelpers.CreateScrollView(rightCol, "StashScroll", _font, spacing: 5f);
             _partyStashScroll.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
@@ -1490,46 +1513,47 @@ namespace Realmz.Game
             // Header
             GameObject header = new GameObject("Header", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             header.transform.SetParent(modal, false);
-            header.AddComponent<LayoutElement>().preferredHeight = 40f;
+            header.AddComponent<LayoutElement>().preferredHeight = 44f;
             HorizontalLayoutGroup hHlg = header.GetComponent<HorizontalLayoutGroup>();
             hHlg.spacing = 10f;
             hHlg.childControlWidth = true;
             hHlg.childControlHeight = true;
             hHlg.childForceExpandWidth = false;
 
-            _shopHeaderTitle = BywaterUiHelpers.CreateLabel(header.transform, "ShopTitle", "Bywater Armory", _font, 18f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            _shopHeaderTitle = BywaterUiHelpers.CreateLabel(header.transform, "ShopTitle", "Bywater Armory", _font, 21f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            BywaterUiHelpers.AddTextDropShadow(_shopHeaderTitle);
             _shopHeaderTitle.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
 
-            _shopGoldLabel = BywaterUiHelpers.CreateLabel(header.transform, "ShopGold", "Party Gold: 400g", _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineRight, FontStyles.Bold, wrap: false);
-            _shopGoldLabel.gameObject.AddComponent<LayoutElement>().preferredWidth = 190f;
+            _shopGoldLabel = BywaterUiHelpers.CreateLabel(header.transform, "ShopGold", "Party Gold: 400g", _font, 16.5f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineRight, FontStyles.Bold, wrap: false);
+            _shopGoldLabel.gameObject.AddComponent<LayoutElement>().preferredWidth = 210f;
 
-            Button templeBtn = BywaterUiHelpers.CreateButton(header.transform, "TempleHealBtn", "Temple Heal (25g)", _font, () => OnTempleHealRequested?.Invoke(), 13.5f);
-            templeBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 165f;
+            Button templeBtn = BywaterUiHelpers.CreateButton(header.transform, "TempleHealBtn", "Temple Heal (25g)", _font, () => OnTempleHealRequested?.Invoke(), 15f);
+            templeBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 180f;
 
-            Button closeBtn = BywaterUiHelpers.CreateButton(header.transform, "CloseShopBtn", "Close", _font, CloseShopModal, 14f);
-            closeBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 88f;
+            Button closeBtn = BywaterUiHelpers.CreateButton(header.transform, "CloseShopBtn", "Close", _font, CloseShopModal, 15.5f);
+            closeBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 94f;
 
             // Shop Tabs
             GameObject tabsRow = new GameObject("ShopTabs", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             tabsRow.transform.SetParent(modal, false);
-            tabsRow.AddComponent<LayoutElement>().preferredHeight = 36f;
+            tabsRow.AddComponent<LayoutElement>().preferredHeight = 40f;
             HorizontalLayoutGroup tabsHlg = tabsRow.GetComponent<HorizontalLayoutGroup>();
             tabsHlg.spacing = 8f;
             tabsHlg.childControlWidth = true;
             tabsHlg.childControlHeight = true;
             tabsHlg.childForceExpandWidth = false;
 
-            _shopTabArmory = BywaterUiHelpers.CreateButton(tabsRow.transform, "TabArmory", "Armory #1", _font, () => SelectShop("1"), 14f);
-            _shopTabArmory.gameObject.AddComponent<LayoutElement>().preferredWidth = 150f;
-            _shopTabTannery = BywaterUiHelpers.CreateButton(tabsRow.transform, "TabTannery", "Tannery #4", _font, () => SelectShop("4"), 14f);
-            _shopTabTannery.gameObject.AddComponent<LayoutElement>().preferredWidth = 150f;
-            _shopTabApothecary = BywaterUiHelpers.CreateButton(tabsRow.transform, "TabApothecary", "Apothecary #10", _font, () => SelectShop("10"), 14f);
-            _shopTabApothecary.gameObject.AddComponent<LayoutElement>().preferredWidth = 170f;
+            _shopTabArmory = BywaterUiHelpers.CreateButton(tabsRow.transform, "TabArmory", "Armory #1", _font, () => SelectShop("1"), 15.5f);
+            _shopTabArmory.gameObject.AddComponent<LayoutElement>().preferredWidth = 160f;
+            _shopTabTannery = BywaterUiHelpers.CreateButton(tabsRow.transform, "TabTannery", "Tannery #4", _font, () => SelectShop("4"), 15.5f);
+            _shopTabTannery.gameObject.AddComponent<LayoutElement>().preferredWidth = 160f;
+            _shopTabApothecary = BywaterUiHelpers.CreateButton(tabsRow.transform, "TabApothecary", "Apothecary #10", _font, () => SelectShop("10"), 15.5f);
+            _shopTabApothecary.gameObject.AddComponent<LayoutElement>().preferredWidth = 185f;
 
             // Filter Bar
             GameObject filterRow = new GameObject("FilterRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             filterRow.transform.SetParent(modal, false);
-            filterRow.AddComponent<LayoutElement>().preferredHeight = 36f;
+            filterRow.AddComponent<LayoutElement>().preferredHeight = 40f;
             HorizontalLayoutGroup fHlg = filterRow.GetComponent<HorizontalLayoutGroup>();
             fHlg.spacing = 6f;
             fHlg.childControlWidth = true;
@@ -1544,16 +1568,16 @@ namespace Realmz.Game
                 {
                     _activeShopCategory = cat;
                     RefreshShopModal(_cachedParty, _cachedBundle);
-                }, 13f);
-                catBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 84f;
+                }, 15f);
+                catBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 92f;
                 _shopCategoryBtns[cat] = catBtn;
             }
 
             _shopAffordableToggle = CreateAffordableToggle(filterRow.transform);
-            _shopAffordableToggle.gameObject.AddComponent<LayoutElement>().preferredWidth = 148f;
+            _shopAffordableToggle.gameObject.AddComponent<LayoutElement>().preferredWidth = 160f;
             _shopAffordableToggle.onValueChanged.AddListener(_ => RefreshShopModal(_cachedParty, _cachedBundle));
 
-            _shopSearchInput = BywaterUiHelpers.CreateInputField(filterRow.transform, "ShopSearchInput", "Search items...", _font, 14f);
+            _shopSearchInput = BywaterUiHelpers.CreateInputField(filterRow.transform, "ShopSearchInput", "Search items...", _font, 15.5f);
             _shopSearchInput.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
             _shopSearchInput.onValueChanged.AddListener(_ => RefreshShopModal(_cachedParty, _cachedBundle));
 
@@ -1577,7 +1601,9 @@ namespace Realmz.Game
             buyVlg.childControlHeight = true;
             buyVlg.childForceExpandHeight = false;
 
-            BywaterUiHelpers.CreateLabel(buyCol, "BuyTitle", "Shop Stock", _font, 15f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold).gameObject.AddComponent<LayoutElement>().preferredHeight = 24f;
+            TextMeshProUGUI buyTitle = BywaterUiHelpers.CreateLabel(buyCol, "BuyTitle", "Shop Stock", _font, 17f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold);
+            BywaterUiHelpers.AddTextDropShadow(buyTitle);
+            buyTitle.gameObject.AddComponent<LayoutElement>().preferredHeight = 28f;
             _shopBuyScroll = BywaterUiHelpers.CreateScrollView(buyCol, "ShopBuyScroll", _font, spacing: 5f);
             _shopBuyScroll.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
 
@@ -1593,21 +1619,22 @@ namespace Realmz.Game
 
             GameObject sellHeader = new GameObject("SellHeader", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             sellHeader.transform.SetParent(sellCol, false);
-            sellHeader.AddComponent<LayoutElement>().preferredHeight = 32f;
+            sellHeader.AddComponent<LayoutElement>().preferredHeight = 36f;
             HorizontalLayoutGroup shHlg = sellHeader.GetComponent<HorizontalLayoutGroup>();
             shHlg.spacing = 8f;
             shHlg.childControlWidth = true;
             shHlg.childControlHeight = true;
             shHlg.childForceExpandWidth = false;
 
-            TextMeshProUGUI sellTitle = BywaterUiHelpers.CreateLabel(sellHeader.transform, "SellTitle", "Party Stash (Sell)", _font, 15f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            TextMeshProUGUI sellTitle = BywaterUiHelpers.CreateLabel(sellHeader.transform, "SellTitle", "Party Stash (Sell)", _font, 17f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            BywaterUiHelpers.AddTextDropShadow(sellTitle);
             sellTitle.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
 
-            Button junkBtn = BywaterUiHelpers.CreateButton(sellHeader.transform, "SellJunkBtn", "Sell All Junk", _font, () => OnSellAllJunkRequested?.Invoke(), 13f);
-            junkBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 118f;
+            Button junkBtn = BywaterUiHelpers.CreateButton(sellHeader.transform, "SellJunkBtn", "Sell All Junk", _font, () => OnSellAllJunkRequested?.Invoke(), 15f);
+            junkBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 132f;
 
-            Button idBtn = BywaterUiHelpers.CreateButton(sellHeader.transform, "IdentifyAllBtn", "Identify All", _font, () => OnIdentifyAllRequested?.Invoke(), 13f);
-            idBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 112f;
+            Button idBtn = BywaterUiHelpers.CreateButton(sellHeader.transform, "IdentifyAllBtn", "Identify All", _font, () => OnIdentifyAllRequested?.Invoke(), 15f);
+            idBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 126f;
 
             _shopSellScroll = BywaterUiHelpers.CreateScrollView(sellCol, "ShopSellScroll", _font, spacing: 5f);
             _shopSellScroll.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
@@ -1632,7 +1659,7 @@ namespace Realmz.Game
             checkMark.rectTransform.offsetMin = Vector2.zero;
             checkMark.rectTransform.offsetMax = Vector2.zero;
 
-            TextMeshProUGUI lbl = BywaterUiHelpers.CreateLabel(root, "Label", "Affordable", _font, 13.5f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            TextMeshProUGUI lbl = BywaterUiHelpers.CreateLabel(root, "Label", "Affordable", _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
             lbl.rectTransform.anchorMin = Vector2.zero;
             lbl.rectTransform.anchorMax = Vector2.one;
             lbl.rectTransform.offsetMin = new Vector2(36f, 0f);
@@ -1665,11 +1692,11 @@ namespace Realmz.Game
             ribbonPanel.anchorMin = new Vector2(0.5f, 1f);
             ribbonPanel.anchorMax = new Vector2(0.5f, 1f);
             ribbonPanel.pivot = new Vector2(0.5f, 1f);
-            ribbonPanel.anchoredPosition = new Vector2(-175f, -58f);
-            ribbonPanel.sizeDelta = new Vector2(1380f, 76f);
+            ribbonPanel.anchoredPosition = new Vector2(-188f, -52f);
+            ribbonPanel.sizeDelta = new Vector2(1360f, 68f);
 
             HorizontalLayoutGroup ribHlg = ribbonPanel.gameObject.AddComponent<HorizontalLayoutGroup>();
-            ribHlg.padding = new RectOffset(8, 8, 6, 6);
+            ribHlg.padding = new RectOffset(6, 6, 4, 4);
             ribHlg.spacing = 6f;
             ribHlg.childControlWidth = true;
             ribHlg.childControlHeight = true;
@@ -1688,21 +1715,21 @@ namespace Realmz.Game
                 ch.childForceExpandHeight = false;
                 ch.childAlignment = TextAnchor.MiddleLeft;
 
-                Image portrait = BywaterUiHelpers.CreateImage(cardRt, "Portrait");
-                LayoutElement pLe = portrait.gameObject.AddComponent<LayoutElement>();
-                pLe.preferredWidth = 46f;
-                pLe.preferredHeight = 46f;
+                BywaterUiHelpers.CreatePortraitFrame(cardRt, "PortraitFrame", 48f, out Image portrait);
 
                 GameObject txtCol = new GameObject("TextCol", typeof(RectTransform), typeof(VerticalLayoutGroup));
                 txtCol.transform.SetParent(cardRt, false);
                 txtCol.AddComponent<LayoutElement>().flexibleWidth = 1f;
                 VerticalLayoutGroup tv = txtCol.GetComponent<VerticalLayoutGroup>();
-                tv.spacing = 2f;
+                tv.spacing = 1f;
                 tv.childControlWidth = true;
                 tv.childControlHeight = true;
 
-                TextMeshProUGUI nameLbl = BywaterUiHelpers.CreateLabel(txtCol.transform, "Name", $"Unit {i + 1}", _font, 13f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
-                TextMeshProUGUI metaLbl = BywaterUiHelpers.CreateLabel(txtCol.transform, "Meta", "R1 | DEX 10", _font, 11.5f, BywaterUiHelpers.MutedSlate, TextAlignmentOptions.MidlineLeft, wrap: false);
+                TextMeshProUGUI nameLbl = BywaterUiHelpers.CreateLabel(txtCol.transform, "Name", $"Unit {i + 1}", _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+                nameLbl.overflowMode = TextOverflowModes.Truncate;
+                BywaterUiHelpers.AddTextDropShadow(nameLbl);
+                TextMeshProUGUI metaLbl = BywaterUiHelpers.CreateLabel(txtCol.transform, "Meta", "R1 D10", _font, 15f, BywaterUiHelpers.MutedSlate, TextAlignmentOptions.MidlineLeft, wrap: false);
+                metaLbl.overflowMode = TextOverflowModes.Truncate;
 
                 _initiativeCards.Add(new InitiativeCardRefs
                 {
@@ -1719,8 +1746,8 @@ namespace Realmz.Game
             tooltipPanel.anchorMin = new Vector2(1f, 1f);
             tooltipPanel.anchorMax = new Vector2(1f, 1f);
             tooltipPanel.pivot = new Vector2(1f, 1f);
-            tooltipPanel.anchoredPosition = new Vector2(-14f, -60f);
-            tooltipPanel.sizeDelta = new Vector2(335f, 290f);
+            tooltipPanel.anchoredPosition = new Vector2(-12f, -52f);
+            tooltipPanel.sizeDelta = new Vector2(368f, 252f);
 
             VerticalLayoutGroup ttVlg = tooltipPanel.gameObject.AddComponent<VerticalLayoutGroup>();
             ttVlg.padding = new RectOffset(12, 12, 10, 10);
@@ -1729,10 +1756,11 @@ namespace Realmz.Game
             ttVlg.childControlHeight = true;
             ttVlg.childForceExpandHeight = false;
 
-            _tooltipTitle = BywaterUiHelpers.CreateLabel(tooltipPanel, "TooltipTitle", "Tactical Preview", _font, 15.5f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
-            _tooltipTitle.gameObject.AddComponent<LayoutElement>().preferredHeight = 24f;
+            _tooltipTitle = BywaterUiHelpers.CreateLabel(tooltipPanel, "TooltipTitle", "Tactical Preview", _font, 18f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            BywaterUiHelpers.AddTextDropShadow(_tooltipTitle);
+            _tooltipTitle.gameObject.AddComponent<LayoutElement>().preferredHeight = 26f;
 
-            _tooltipBody = BywaterUiHelpers.CreateLabel(tooltipPanel, "TooltipBody", "Hover a tile or target to inspect tactical odds.", _font, 13.5f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.TopLeft, wrap: true);
+            _tooltipBody = BywaterUiHelpers.CreateLabel(tooltipPanel, "TooltipBody", "Hover a tile or target to inspect tactical odds.", _font, 15.5f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.TopLeft, wrap: true);
             _tooltipBody.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
 
             // 3. Right-Lower Scrollable Combat Log
@@ -1740,8 +1768,8 @@ namespace Realmz.Game
             logPanel.anchorMin = new Vector2(1f, 0f);
             logPanel.anchorMax = new Vector2(1f, 1f);
             logPanel.pivot = new Vector2(1f, 0.5f);
-            logPanel.offsetMin = new Vector2(-349f, 118f);
-            logPanel.offsetMax = new Vector2(-14f, -360f);
+            logPanel.offsetMin = new Vector2(-380f, 108f);
+            logPanel.offsetMax = new Vector2(-12f, -312f);
 
             VerticalLayoutGroup logVlg = logPanel.gameObject.AddComponent<VerticalLayoutGroup>();
             logVlg.padding = new RectOffset(10, 10, 8, 8);
@@ -1750,8 +1778,10 @@ namespace Realmz.Game
             logVlg.childControlHeight = true;
             logVlg.childForceExpandHeight = false;
 
-            BywaterUiHelpers.CreateLabel(logPanel, "LogHeader", "Combat Log", _font, 14.5f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false).gameObject.AddComponent<LayoutElement>().preferredHeight = 22f;
-            _combatLogScroll = BywaterUiHelpers.CreateScrollView(logPanel, "CombatLogScroll", _font, spacing: 4f);
+            TextMeshProUGUI logHeader = BywaterUiHelpers.CreateLabel(logPanel, "LogHeader", "Combat Log", _font, 17f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            BywaterUiHelpers.AddTextDropShadow(logHeader);
+            logHeader.gameObject.AddComponent<LayoutElement>().preferredHeight = 26f;
+            _combatLogScroll = BywaterUiHelpers.CreateScrollView(logPanel, "CombatLogScroll", _font, spacing: 5f);
             _combatLogScroll.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
 
             // 4. Compact Spell Picker Bar (above bottom action bar)
@@ -1759,12 +1789,12 @@ namespace Realmz.Game
             spellBar.anchorMin = new Vector2(0.5f, 0f);
             spellBar.anchorMax = new Vector2(0.5f, 0f);
             spellBar.pivot = new Vector2(0.5f, 0f);
-            spellBar.anchoredPosition = new Vector2(-175f, 116f);
-            spellBar.sizeDelta = new Vector2(1260f, 48f);
+            spellBar.anchoredPosition = new Vector2(-188f, 106f);
+            spellBar.sizeDelta = new Vector2(1300f, 46f);
             _spellPickerBar = spellBar.gameObject;
 
             HorizontalLayoutGroup spHlg = spellBar.gameObject.AddComponent<HorizontalLayoutGroup>();
-            spHlg.padding = new RectOffset(8, 8, 5, 5);
+            spHlg.padding = new RectOffset(8, 8, 4, 4);
             spHlg.spacing = 8f;
             spHlg.childControlWidth = true;
             spHlg.childControlHeight = true;
@@ -1778,32 +1808,32 @@ namespace Realmz.Game
             actionBar.anchorMin = new Vector2(0.5f, 0f);
             actionBar.anchorMax = new Vector2(0.5f, 0f);
             actionBar.pivot = new Vector2(0.5f, 0f);
-            actionBar.anchoredPosition = new Vector2(-175f, 14f);
-            actionBar.sizeDelta = new Vector2(1420f, 94f);
+            actionBar.anchoredPosition = new Vector2(-188f, 10f);
+            actionBar.sizeDelta = new Vector2(1480f, 88f);
 
             HorizontalLayoutGroup abHlg = actionBar.gameObject.AddComponent<HorizontalLayoutGroup>();
-            abHlg.padding = new RectOffset(10, 10, 8, 8);
+            abHlg.padding = new RectOffset(10, 10, 6, 6);
             abHlg.spacing = 8f;
             abHlg.childControlWidth = true;
             abHlg.childControlHeight = true;
             abHlg.childForceExpandWidth = false;
             abHlg.childAlignment = TextAnchor.MiddleLeft;
 
-            _combatActorPortrait = BywaterUiHelpers.CreateImage(actionBar, "ActorPortrait");
-            LayoutElement apLe = _combatActorPortrait.gameObject.AddComponent<LayoutElement>();
-            apLe.preferredWidth = 72f;
-            apLe.preferredHeight = 72f;
+            BywaterUiHelpers.CreatePortraitFrame(actionBar, "ActorPortraitFrame", 74f, out _combatActorPortrait);
 
             GameObject actorInfo = new GameObject("ActorInfo", typeof(RectTransform), typeof(VerticalLayoutGroup));
             actorInfo.transform.SetParent(actionBar, false);
-            actorInfo.AddComponent<LayoutElement>().preferredWidth = 250f;
+            actorInfo.AddComponent<LayoutElement>().preferredWidth = 285f;
             VerticalLayoutGroup aiVlg = actorInfo.GetComponent<VerticalLayoutGroup>();
             aiVlg.spacing = 2f;
             aiVlg.childControlWidth = true;
             aiVlg.childControlHeight = true;
 
-            _combatActorName = BywaterUiHelpers.CreateLabel(actorInfo.transform, "ActorName", "Aldric", _font, 16f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
-            _combatActorVitals = BywaterUiHelpers.CreateLabel(actorInfo.transform, "ActorVitals", "HP 17/17 | SP 0/0 | AC 29", _font, 13.5f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, wrap: false);
+            _combatActorName = BywaterUiHelpers.CreateLabel(actorInfo.transform, "ActorName", "Aldric", _font, 18f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            _combatActorName.overflowMode = TextOverflowModes.Truncate;
+            BywaterUiHelpers.AddTextDropShadow(_combatActorName);
+            _combatActorVitals = BywaterUiHelpers.CreateLabel(actorInfo.transform, "ActorVitals", "HP 17/17 | SP 0/0 | AC 29", _font, 15.5f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, wrap: false);
+            _combatActorVitals.overflowMode = TextOverflowModes.Truncate;
 
             GameObject pipsRow = new GameObject("PipsRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             pipsRow.transform.SetParent(actorInfo.transform, false);
@@ -1812,17 +1842,20 @@ namespace Realmz.Game
             pHlg.childControlWidth = true;
             pHlg.childControlHeight = true;
 
-            _combatMovePip = BywaterUiHelpers.CreateLabel(pipsRow.transform, "MovePip", "Move: 6", _font, 12.5f, BywaterUiHelpers.InfoCyan, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
-            _combatStdPip = BywaterUiHelpers.CreateLabel(pipsRow.transform, "StdPip", "Std: READY", _font, 12.5f, BywaterUiHelpers.SuccessGreen, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
-            _combatSwiftPip = BywaterUiHelpers.CreateLabel(pipsRow.transform, "SwiftPip", "Swift: READY", _font, 12.5f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            _combatMovePip = BywaterUiHelpers.CreateLabel(pipsRow.transform, "MovePip", "Move: 6", _font, 15f, BywaterUiHelpers.InfoCyan, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            BywaterUiHelpers.AddTextDropShadow(_combatMovePip);
+            _combatStdPip = BywaterUiHelpers.CreateLabel(pipsRow.transform, "StdPip", "Std: READY", _font, 15f, BywaterUiHelpers.SuccessGreen, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            BywaterUiHelpers.AddTextDropShadow(_combatStdPip);
+            _combatSwiftPip = BywaterUiHelpers.CreateLabel(pipsRow.transform, "SwiftPip", "Swift: READY", _font, 15f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            BywaterUiHelpers.AddTextDropShadow(_combatSwiftPip);
 
-            _combatMoveBtn = AddCombatButton(actionBar, "MoveBtn", "Move", 88f, () => OnCombatModeSelected?.Invoke(CombatActionMode.Move));
+            _combatMoveBtn = AddCombatButton(actionBar, "MoveBtn", "Move", 84f, () => OnCombatModeSelected?.Invoke(CombatActionMode.Move));
             _combatUndoBtn = AddCombatButton(actionBar, "UndoMoveBtn", "Undo Move", 108f, () => OnUndoMoveRequested?.Invoke());
-            _combatMeleeBtn = AddCombatButton(actionBar, "MeleeBtn", "Melee", 88f, () => OnCombatModeSelected?.Invoke(CombatActionMode.Melee));
-            _combatRangedBtn = AddCombatButton(actionBar, "RangedBtn", "Ranged", 94f, () => OnCombatModeSelected?.Invoke(CombatActionMode.Ranged));
-            _combatSpellBtn = AddCombatButton(actionBar, "SpellBtn", "Spell", 88f, () => OnCombatModeSelected?.Invoke(CombatActionMode.Spell));
-            _combatPotionBtn = AddCombatButton(actionBar, "PotionBtn", "Potion", 90f, () => OnCombatModeSelected?.Invoke(CombatActionMode.Potion));
-            _combatGuardBtn = AddCombatButton(actionBar, "GuardBtn", "Guard", 88f, () => OnGuardRequested?.Invoke());
+            _combatMeleeBtn = AddCombatButton(actionBar, "MeleeBtn", "Melee", 84f, () => OnCombatModeSelected?.Invoke(CombatActionMode.Melee));
+            _combatRangedBtn = AddCombatButton(actionBar, "RangedBtn", "Ranged", 92f, () => OnCombatModeSelected?.Invoke(CombatActionMode.Ranged));
+            _combatSpellBtn = AddCombatButton(actionBar, "SpellBtn", "Spell", 82f, () => OnCombatModeSelected?.Invoke(CombatActionMode.Spell));
+            _combatPotionBtn = AddCombatButton(actionBar, "PotionBtn", "Potion", 88f, () => OnCombatModeSelected?.Invoke(CombatActionMode.Potion));
+            _combatGuardBtn = AddCombatButton(actionBar, "GuardBtn", "Guard", 84f, () => OnGuardRequested?.Invoke());
             _combatEndTurnBtn = AddCombatButton(actionBar, "EndTurnBtn", "End Turn", 104f, () => OnEndTurnRequested?.Invoke());
 
             _combatSpeedBtn = AddCombatButton(actionBar, "SpeedBtn", "Speed: 1x", 122f, () => OnCycleSpeedRequested?.Invoke());
@@ -1831,10 +1864,10 @@ namespace Realmz.Game
 
         private Button AddCombatButton(Transform parent, string name, string label, float width, UnityEngine.Events.UnityAction onClick)
         {
-            Button btn = BywaterUiHelpers.CreateButton(parent, name, label, _font, onClick, 14f);
+            Button btn = BywaterUiHelpers.CreateButton(parent, name, label, _font, onClick, 15f);
             LayoutElement le = btn.gameObject.AddComponent<LayoutElement>();
             le.preferredWidth = width;
-            le.preferredHeight = 58f;
+            le.preferredHeight = 56f;
             return btn;
         }
 
@@ -1845,7 +1878,7 @@ namespace Realmz.Game
             modal.anchorMax = new Vector2(0.5f, 0.5f);
             modal.pivot = new Vector2(0.5f, 0.5f);
             modal.anchoredPosition = Vector2.zero;
-            modal.sizeDelta = new Vector2(540f, 320f);
+            modal.sizeDelta = new Vector2(560f, 340f);
             _outcomeModalRoot = modal.gameObject;
 
             VerticalLayoutGroup vlg = modal.gameObject.AddComponent<VerticalLayoutGroup>();
@@ -1855,24 +1888,25 @@ namespace Realmz.Game
             vlg.childControlHeight = true;
             vlg.childForceExpandHeight = false;
 
-            _outcomeTitle = BywaterUiHelpers.CreateLabel(modal, "OutcomeTitle", "VICTORY!", _font, 26f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.Center, FontStyles.Bold);
-            _outcomeTitle.gameObject.AddComponent<LayoutElement>().preferredHeight = 40f;
+            _outcomeTitle = BywaterUiHelpers.CreateLabel(modal, "OutcomeTitle", "VICTORY!", _font, 28f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.Center, FontStyles.Bold);
+            BywaterUiHelpers.AddTextDropShadow(_outcomeTitle);
+            _outcomeTitle.gameObject.AddComponent<LayoutElement>().preferredHeight = 44f;
 
-            _outcomeSummary = BywaterUiHelpers.CreateLabel(modal, "OutcomeSummary", string.Empty, _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.Center, wrap: true);
+            _outcomeSummary = BywaterUiHelpers.CreateLabel(modal, "OutcomeSummary", string.Empty, _font, 17f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.Center, wrap: true);
             _outcomeSummary.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
 
             GameObject btnRow = new GameObject("OutcomeButtons", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             btnRow.transform.SetParent(modal, false);
-            btnRow.AddComponent<LayoutElement>().preferredHeight = 46f;
+            btnRow.AddComponent<LayoutElement>().preferredHeight = 48f;
             HorizontalLayoutGroup bHlg = btnRow.GetComponent<HorizontalLayoutGroup>();
             bHlg.spacing = 14f;
             bHlg.childControlWidth = true;
             bHlg.childControlHeight = true;
             bHlg.childForceExpandWidth = true;
 
-            _outcomeContinueBtn = BywaterUiHelpers.CreateButton(btnRow.transform, "ContinueBtn", "Continue Exploring", _font, () => OnContinueAfterVictoryRequested?.Invoke(), 15f);
-            _outcomeRetryBtn = BywaterUiHelpers.CreateButton(btnRow.transform, "RetryBtn", "Retry Skirmish", _font, () => OnRetrySkirmishRequested?.Invoke(), 15f);
-            _outcomeReviveBtn = BywaterUiHelpers.CreateButton(btnRow.transform, "ReviveBtn", "Revive at Shrine", _font, () => OnReviveAtShrineRequested?.Invoke(), 15f);
+            _outcomeContinueBtn = BywaterUiHelpers.CreateButton(btnRow.transform, "ContinueBtn", "Continue Exploring", _font, () => OnContinueAfterVictoryRequested?.Invoke(), 16f);
+            _outcomeRetryBtn = BywaterUiHelpers.CreateButton(btnRow.transform, "RetryBtn", "Retry Skirmish", _font, () => OnRetrySkirmishRequested?.Invoke(), 16f);
+            _outcomeReviveBtn = BywaterUiHelpers.CreateButton(btnRow.transform, "ReviveBtn", "Revive at Shrine", _font, () => OnReviveAtShrineRequested?.Invoke(), 16f);
         }
 
         private void BuildToastBanner(Transform parent)
@@ -1881,8 +1915,8 @@ namespace Realmz.Game
             toast.anchorMin = new Vector2(0.5f, 1f);
             toast.anchorMax = new Vector2(0.5f, 1f);
             toast.pivot = new Vector2(0.5f, 1f);
-            toast.anchoredPosition = new Vector2(0f, -144f);
-            toast.sizeDelta = new Vector2(640f, 44f);
+            toast.anchoredPosition = new Vector2(0f, -126f);
+            toast.sizeDelta = new Vector2(720f, 48f);
 
             Image bg = toast.GetComponent<Image>();
             bg.raycastTarget = false;
@@ -1891,7 +1925,8 @@ namespace Realmz.Game
             _toastCanvasGroup.blocksRaycasts = false;
             _toastCanvasGroup.interactable = false;
 
-            _toastText = BywaterUiHelpers.CreateLabel(toast, "ToastText", string.Empty, _font, 15f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
+            _toastText = BywaterUiHelpers.CreateLabel(toast, "ToastText", string.Empty, _font, 16.5f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
+            BywaterUiHelpers.AddTextDropShadow(_toastText);
             _toastText.rectTransform.anchorMin = Vector2.zero;
             _toastText.rectTransform.anchorMax = Vector2.one;
             _toastText.rectTransform.offsetMin = new Vector2(12f, 4f);

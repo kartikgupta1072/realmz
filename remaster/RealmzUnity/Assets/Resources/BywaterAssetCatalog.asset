@@ -27,6 +27,56 @@ MonoBehaviour:
   overlayBaseMaterial: {fileID: 2100000, guid: fa025c0a0b1c7c147bd3f9e5a48a8376, type: 2}
   torchSprite: {fileID: 21300000, guid: 0cc27bd5cafe137429f21c682c0ac0e5, type: 3}
   uiFont: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  grassVariantMaterials:
+  - {fileID: 2100000, guid: 2c57f8586e7eac24fad9cab0d9946ca4, type: 2}
+  - {fileID: 2100000, guid: 473f38f1deede46499409edf7d64c259, type: 2}
+  - {fileID: 2100000, guid: 9d3f7c622260b0b4f973454b6e5a3c62, type: 2}
+  cobblestoneVariantMaterials:
+  - {fileID: 2100000, guid: 52e3d88f94ba1574d93bd73c2415daeb, type: 2}
+  - {fileID: 2100000, guid: 089ba9d256db3e14da632f94b59e3869, type: 2}
+  - {fileID: 2100000, guid: e963edb86bb2b40438840d6c90eae745, type: 2}
+  dirtPathVariantMaterials:
+  - {fileID: 2100000, guid: 59a8f8e586a6e5143953e2b53b71e4b4, type: 2}
+  - {fileID: 2100000, guid: d216ce0f3e28dba48b7c87f51ae1ea93, type: 2}
+  - {fileID: 2100000, guid: 4edb56cfe898d86499abce222f2254aa, type: 2}
+  dungeonFloorVariantMaterials:
+  - {fileID: 2100000, guid: 49b1c93c2a13c8d408240ab44632422e, type: 2}
+  - {fileID: 2100000, guid: 886849a3c4be94f4fb0898ec254e3d70, type: 2}
+  - {fileID: 2100000, guid: 2e3427768af8fde489e92b7d87fdd3d8, type: 2}
+  dungeonWallVariantMaterials:
+  - {fileID: 2100000, guid: 202a246f4bd97b44db42e8c02778b8df, type: 2}
+  - {fileID: 2100000, guid: 71de26b3bd512384c9ffbb3462f0b346, type: 2}
+  - {fileID: 2100000, guid: effe1a76ad5563a43b64ba9d56ba020a, type: 2}
+  cottageWallMaterial: {fileID: 2100000, guid: b79d037dda0c76544b193c3c3b31305c, type: 2}
+  cottageRoofTerracottaMaterial: {fileID: 2100000, guid: d62ff951c76a3314da1544c1d443ab39, type: 2}
+  cottageRoofSlateMaterial: {fileID: 2100000, guid: 4cb5b0a653f75824f9a1466f650abdea, type: 2}
+  cottageRoofThatchMaterial: {fileID: 2100000, guid: 1ad5dea8d07703b4a888c0e6b08facf6, type: 2}
+  timberTrimMaterial: {fileID: 2100000, guid: 232dc7ceeda83ea43bf750281f31d8a2, type: 2}
+  warmWindowGlowMaterial: {fileID: 2100000, guid: 987f1e3f17dd172419fbaef03896ca07, type: 2}
+  oakFoliageMaterial: {fileID: 2100000, guid: e67588172ddf392469a06aa1b2e6e296, type: 2}
+  pineFoliageMaterial: {fileID: 2100000, guid: 8247097c578f4404097ce0e42bba069e, type: 2}
+  treeTrunkMaterial: {fileID: 2100000, guid: dd8af5f5cc66a90468dbfb607553dbd7, type: 2}
+  boulderMaterial: {fileID: 2100000, guid: f5d2454cdaadbbb4584b974ccf3f411c, type: 2}
+  stoneFenceMaterial: {fileID: 2100000, guid: a523147f55764ea44994a94d034c0224, type: 2}
+  crateWoodMaterial: {fileID: 2100000, guid: a4b47e294235ddf4a9c464e2ba57df6e, type: 2}
+  ironTrimMaterial: {fileID: 2100000, guid: 848a002e7024e934abcc5588efe62607, type: 2}
+  wildflowerMaterial: {fileID: 2100000, guid: 4194e10c90adefa4eb5d3abeb6fd4b5d, type: 2}
+  cottageBillboardMaterial: {fileID: 0}
+  cottageBillboardSprite: {fileID: 0}
+  tavernBillboardMaterial: {fileID: 0}
+  tavernBillboardSprite: {fileID: 0}
+  oakTreeBillboardMaterial: {fileID: 0}
+  oakTreeBillboardSprite: {fileID: 0}
+  pineTreeBillboardMaterial: {fileID: 0}
+  pineTreeBillboardSprite: {fileID: 0}
+  stoneFenceBillboardMaterial: {fileID: 0}
+  stoneFenceBillboardSprite: {fileID: 0}
+  marketCratesBillboardMaterial: {fileID: 0}
+  marketCratesBillboardSprite: {fileID: 0}
+  wildflowerBushBillboardMaterial: {fileID: 0}
+  wildflowerBushBillboardSprite: {fileID: 0}
+  brazierBillboardMaterial: {fileID: 0}
+  brazierBillboardSprite: {fileID: 0}
   heroes:
   - id: hero_knight
     archetype: Knight

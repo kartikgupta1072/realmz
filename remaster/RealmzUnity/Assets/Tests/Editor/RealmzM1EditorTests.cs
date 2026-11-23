@@ -8,6 +8,7 @@ using Realmz.World;
 using RealmzCore.Data;
 using RealmzCore.Exploration;
 using RealmzCore.Rules;
+using TMPro;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -75,7 +76,9 @@ namespace Realmz.EditorTests
                 else
                 {
                     Assert.That(importer.textureType, Is.EqualTo(TextureImporterType.Sprite), "Expected Sprite textureType on " + rel);
-                    Assert.That(importer.spritePixelsPerUnit, Is.EqualTo(64f), "Expected 64 PPU on " + rel);
+                    Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>(rel);
+                    float expectedPpu = (tex != null && tex.width >= 128) ? 128f : 64f;
+                    Assert.That(importer.spritePixelsPerUnit, Is.EqualTo(expectedPpu), "Expected " + expectedPpu + " PPU on " + rel);
                 }
             }
         }
@@ -188,6 +191,292 @@ namespace Realmz.EditorTests
                     File.Delete(tempPath);
                 }
             }
+        }
+
+        [Test]
+        public void DualBiomeAtmosphere_SwapsDaylightAndDungeonSettings()
+        {
+            AmbientMode prevMode = RenderSettings.ambientMode;
+            Color prevAmbient = RenderSettings.ambientLight;
+            Color prevSky = RenderSettings.ambientSkyColor;
+            Color prevEquator = RenderSettings.ambientEquatorColor;
+            Color prevGround = RenderSettings.ambientGroundColor;
+
+            GameObject camGo = null;
+            GameObject sunGo = null;
+            GameObject volGo = null;
+            GameObject atmoGo = null;
+            VolumeProfile tempProfile = null;
+
+            try
+            {
+                camGo = new GameObject("TempMainCamera", typeof(Camera));
+                camGo.tag = "MainCamera";
+                Camera cam = camGo.GetComponent<Camera>();
+                cam.allowHDR = true;
+                UniversalAdditionalCameraData camData = cam.GetUniversalAdditionalCameraData();
+                if (camData != null)
+                {
+                    camData.renderPostProcessing = true;
+                }
+
+                sunGo = new GameObject("TempDirectionalSun", typeof(Light));
+                Light sun = sunGo.GetComponent<Light>();
+                sun.type = LightType.Directional;
+
+                tempProfile = ScriptableObject.CreateInstance<VolumeProfile>();
+                Tonemapping tonemapping = tempProfile.Add<Tonemapping>(true);
+                tonemapping.mode.overrideState = true;
+                tonemapping.mode.value = TonemappingMode.ACES;
+                Bloom bloom = tempProfile.Add<Bloom>(true);
+                bloom.intensity.overrideState = true;
+                bloom.intensity.value = 0.45f;
+
+                volGo = new GameObject("TempGlobalVolume", typeof(Volume));
+                Volume vol = volGo.GetComponent<Volume>();
+                vol.isGlobal = true;
+                vol.sharedProfile = tempProfile;
+
+                atmoGo = new GameObject("TempBiomeAtmosphere");
+                BywaterBiomeAtmosphere atmo = atmoGo.AddComponent<BywaterBiomeAtmosphere>();
+                atmo.targetCamera = cam;
+                atmo.directionalSun = sun;
+                atmo.globalVolume = vol;
+
+                // 1. Daylight (land_0)
+                atmo.ApplyBiome(false, true);
+                Assert.That(sun.intensity, Is.InRange(1.8f, 2.2f), "Daylight sun intensity should be in [1.8, 2.2].");
+                Assert.That(RenderSettings.ambientMode, Is.EqualTo(AmbientMode.Trilight), "Daylight should use Trilight ambient.");
+                Assert.That(RenderSettings.ambientSkyColor.b, Is.GreaterThan(0.7f), "Daylight ambientSkyColor.b should be > 0.7.");
+                Assert.That(tonemapping.mode.value, Is.EqualTo(TonemappingMode.Neutral), "Daylight tonemapping should be Neutral.");
+                Assert.That(atmo.sunMoteParticles, Is.Not.Null, "sunMoteParticles ParticleSystem missing.");
+                Assert.That(atmo.sunMoteParticles.isPlaying, Is.True, "sunMoteParticles should be playing in daylight.");
+
+                // 2. Dungeon (dungeon_0)
+                atmo.ApplyBiome(true, true);
+                Assert.That(sun.intensity, Is.LessThan(0.5f), "Dungeon sun intensity should be < 0.5.");
+                Assert.That(RenderSettings.ambientSkyColor.r, Is.LessThan(0.25f), "Dungeon ambientSkyColor.r should be < 0.25.");
+                Assert.That(tonemapping.mode.value, Is.EqualTo(TonemappingMode.ACES), "Dungeon tonemapping should be ACES.");
+                Assert.That(atmo.sunMoteParticles.isPlaying, Is.False, "sunMoteParticles should stop playing in dungeon.");
+            }
+            finally
+            {
+                if (atmoGo != null) Object.DestroyImmediate(atmoGo);
+                if (volGo != null) Object.DestroyImmediate(volGo);
+                if (sunGo != null) Object.DestroyImmediate(sunGo);
+                if (camGo != null) Object.DestroyImmediate(camGo);
+                if (tempProfile != null) Object.DestroyImmediate(tempProfile);
+
+                RenderSettings.ambientMode = prevMode;
+                RenderSettings.ambientLight = prevAmbient;
+                RenderSettings.ambientSkyColor = prevSky;
+                RenderSettings.ambientEquatorColor = prevEquator;
+                RenderSettings.ambientGroundColor = prevGround;
+            }
+        }
+
+        [Test]
+        public void TileClassifier_DeterministicVariantsAndPropKinds_KillOutdoorGrayCubes()
+        {
+            string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
+
+            HashSet<int> variants = new HashSet<int>();
+            for (int x = 0; x <= 25; x++)
+            {
+                for (int y = 0; y <= 25; y++)
+                {
+                    int first = BywaterTileClassifier.GetTileVariantIndex(x, y, 3);
+                    int second = BywaterTileClassifier.GetTileVariantIndex(x, y, 3);
+                    Assert.That(first, Is.EqualTo(second), $"Variant not deterministic at ({x}, {y}).");
+                    Assert.That(first, Is.InRange(0, 2), $"Variant index out of range at ({x}, {y}).");
+                    variants.Add(first);
+                }
+            }
+
+            Assert.That(variants.Count, Is.GreaterThan(1), "Expected multiple tile variants across town coordinates.");
+
+            int checkedSolidWalls = 0;
+            int checkedCottages = 0;
+            for (int x = 0; x < bundle.Land0.Width; x++)
+            {
+                for (int y = 0; y < bundle.Land0.Height; y++)
+                {
+                    BywaterTileKind kind = BywaterTileClassifier.Classify(bundle.Land0, x, y);
+                    if (kind == BywaterTileKind.TownBuildingSolid || kind == BywaterTileKind.WallBlock)
+                    {
+                        BywaterOutdoorPropKind propKind = BywaterTileClassifier.ClassifyOutdoorProp(bundle.Land0, x, y, out _);
+                        Assert.That(propKind, Is.Not.EqualTo(BywaterOutdoorPropKind.None), $"Outdoor wall/building at ({x}, {y}) should map to a 2.5D prop instead of a gray cube.");
+                        checkedSolidWalls++;
+                        if (propKind == BywaterOutdoorPropKind.CottageFacade)
+                        {
+                            checkedCottages++;
+                        }
+                    }
+                }
+            }
+
+            Assert.That(checkedSolidWalls, Is.GreaterThan(0), "Expected outdoor WallBlock or TownBuildingSolid tiles on land_0.");
+            Assert.That(checkedCottages, Is.GreaterThan(0), "Expected town building/wall tiles on land_0 to map to CottageFacade.");
+            Assert.That(BywaterTileClassifier.ClassifyOutdoorProp(bundle.Land0, 0, 4, out _), Is.EqualTo(BywaterOutdoorPropKind.CottageFacade), "Town gate tile (0, 4) should map to CottageFacade.");
+            Assert.That(BywaterTileClassifier.ClassifyOutdoorProp(bundle.Land0, 12, 12, out _), Is.EqualTo(BywaterOutdoorPropKind.StoneFence), "Perimeter wall (12, 12) should map to StoneFence.");
+
+            BywaterOutdoorPropKind forestProp = BywaterTileClassifier.ClassifyOutdoorProp(bundle.Land0, 14, 9, out _);
+            Assert.That(forestProp == BywaterOutdoorPropKind.OakTree || forestProp == BywaterOutdoorPropKind.PineTree, Is.True, "Contiguous forest (14, 9) should map to OakTree or PineTree, got: " + forestProp);
+            Assert.That(BywaterTileClassifier.ClassifyOutdoorProp(bundle.Land0, 6, 8, out _), Is.EqualTo(BywaterOutdoorPropKind.WildflowerBush), "Isolated town shrub (6, 8) should map to low WildflowerBush.");
+
+            Assert.That(BywaterTileClassifier.ClassifyOutdoorProp(bundle.Dungeon0, 30, 70, out _), Is.EqualTo(BywaterOutdoorPropKind.None), "Dungeon wall should return None to preserve stone blocks.");
+        }
+
+        [Test]
+        public void AssetCatalog_HasTileVariantsWaterShaderAndPropSlots()
+        {
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            Assert.That(catalog, Is.Not.Null, "BywaterAssetCatalog asset missing from Assets/Resources.");
+
+            AssertVariantArray(catalog.grassVariantMaterials, nameof(catalog.grassVariantMaterials));
+            AssertVariantArray(catalog.cobblestoneVariantMaterials, nameof(catalog.cobblestoneVariantMaterials));
+            AssertVariantArray(catalog.dirtPathVariantMaterials, nameof(catalog.dirtPathVariantMaterials));
+            AssertVariantArray(catalog.dungeonFloorVariantMaterials, nameof(catalog.dungeonFloorVariantMaterials));
+            AssertVariantArray(catalog.dungeonWallVariantMaterials, nameof(catalog.dungeonWallVariantMaterials));
+
+            Assert.That(catalog.shallowWaterMaterial, Is.Not.Null);
+            Assert.That(catalog.shallowWaterMaterial.shader, Is.Not.Null);
+            Assert.That(catalog.shallowWaterMaterial.shader.name, Is.EqualTo("Realmz/BywaterShimmerWater"));
+
+            Material[] propMaterials =
+            {
+                catalog.cottageWallMaterial,
+                catalog.cottageRoofTerracottaMaterial,
+                catalog.cottageRoofSlateMaterial,
+                catalog.cottageRoofThatchMaterial,
+                catalog.timberTrimMaterial,
+                catalog.warmWindowGlowMaterial,
+                catalog.oakFoliageMaterial,
+                catalog.pineFoliageMaterial,
+                catalog.treeTrunkMaterial,
+                catalog.boulderMaterial,
+                catalog.stoneFenceMaterial,
+                catalog.crateWoodMaterial,
+                catalog.ironTrimMaterial,
+                catalog.wildflowerMaterial
+            };
+
+            Assert.That(propMaterials.Length, Is.EqualTo(14));
+            for (int i = 0; i < propMaterials.Length; i++)
+            {
+                Assert.That(propMaterials[i], Is.Not.Null, $"M1.5 modular prop material at index {i} is null.");
+            }
+        }
+
+        [Test]
+        public void HudOverhaul_EnforcesReadable15PtFloorAndPortraitFrames()
+        {
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            bool hadEventSystem = Object.FindFirstObjectByType<EventSystem>() != null;
+            GameObject tempGo = new GameObject("TempBywaterHudHost");
+
+            try
+            {
+                BywaterHudController hud = tempGo.AddComponent<BywaterHudController>();
+                hud.BuildUi(catalog);
+                Canvas.ForceUpdateCanvases();
+
+                Canvas canvas = tempGo.GetComponentInChildren<Canvas>(true);
+                Assert.That(canvas, Is.Not.Null, "BywaterHudCanvas was not created by BuildUi.");
+
+                TextMeshProUGUI[] labels = canvas.GetComponentsInChildren<TextMeshProUGUI>(true);
+                Assert.That(labels.Length, Is.GreaterThan(0), "Expected TextMeshProUGUI components under BywaterHudCanvas.");
+
+                for (int i = 0; i < labels.Length; i++)
+                {
+                    TextMeshProUGUI tmp = labels[i];
+                    Assert.That(tmp.fontSize, Is.GreaterThanOrEqualTo(15f), $"Label '{tmp.gameObject.name}' has sub-15pt fontSize ({tmp.fontSize}).");
+                }
+
+                Transform heroPortraitFrame = FindDescendantByPathSuffix(canvas.transform, "HeroCard_0/PortraitFrame");
+                Assert.That(heroPortraitFrame, Is.Not.Null, "HeroCard_0/PortraitFrame not found under Canvas.");
+                AssertPortraitFrameSize(heroPortraitFrame, 74f);
+
+                Transform drawerPortraitFrame = FindDescendantByName(canvas.transform, "DrawerPortraitFrame");
+                Assert.That(drawerPortraitFrame, Is.Not.Null, "DrawerPortraitFrame not found under Canvas.");
+                AssertPortraitFrameSize(drawerPortraitFrame, 128f);
+            }
+            finally
+            {
+                Object.DestroyImmediate(tempGo);
+                if (!hadEventSystem)
+                {
+                    EventSystem createdEs = Object.FindFirstObjectByType<EventSystem>();
+                    if (createdEs != null)
+                    {
+                        Object.DestroyImmediate(createdEs.gameObject);
+                    }
+                }
+            }
+        }
+
+        private static void AssertVariantArray(Material[] mats, string fieldName)
+        {
+            Assert.That(mats, Is.Not.Null, fieldName + " is null.");
+            Assert.That(mats.Length, Is.EqualTo(3), fieldName + " should have exactly 3 materials.");
+            for (int i = 0; i < mats.Length; i++)
+            {
+                Assert.That(mats[i], Is.Not.Null, $"{fieldName}[{i}] is null.");
+            }
+        }
+
+        private static Transform FindDescendantByName(Transform root, string name)
+        {
+            if (root == null) return null;
+            if (root.name == name) return root;
+            for (int i = 0; i < root.childCount; i++)
+            {
+                Transform found = FindDescendantByName(root.GetChild(i), name);
+                if (found != null) return found;
+            }
+
+            return null;
+        }
+
+        private static Transform FindDescendantByPathSuffix(Transform root, string pathSuffix)
+        {
+            Transform[] all = root.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < all.Length; i++)
+            {
+                string path = GetRelativePath(root, all[i]);
+                if (path.EndsWith(pathSuffix, System.StringComparison.Ordinal))
+                {
+                    return all[i];
+                }
+            }
+
+            return null;
+        }
+
+        private static string GetRelativePath(Transform root, Transform node)
+        {
+            List<string> parts = new List<string>();
+            Transform cur = node;
+            while (cur != null && cur != root)
+            {
+                parts.Add(cur.name);
+                cur = cur.parent;
+            }
+
+            parts.Reverse();
+            return string.Join("/", parts);
+        }
+
+        private static void AssertPortraitFrameSize(Transform frame, float minSize)
+        {
+            RectTransform rt = frame.GetComponent<RectTransform>();
+            Assert.That(rt, Is.Not.Null);
+            UnityEngine.UI.LayoutElement le = frame.GetComponent<UnityEngine.UI.LayoutElement>();
+            float w = Mathf.Max(rt.rect.width, le != null ? le.preferredWidth : 0f, rt.sizeDelta.x);
+            float h = Mathf.Max(rt.rect.height, le != null ? le.preferredHeight : 0f, rt.sizeDelta.y);
+            Assert.That(w, Is.GreaterThanOrEqualTo(minSize), $"{frame.name} width {w} < {minSize}.");
+            Assert.That(h, Is.GreaterThanOrEqualTo(minSize), $"{frame.name} height {h} < {minSize}.");
         }
     }
 }
