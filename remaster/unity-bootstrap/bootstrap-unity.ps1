@@ -119,14 +119,14 @@ if ($LASTEXITCODE -ne 0) {
     throw "Editor did not become ready (exit code $LASTEXITCODE)."
 }
 
-Write-Host "[6/6] Installing UPM packages (com.unity.cinemachine, com.unity.textmeshpro, com.unity.ugui)..."
-$packages = @("com.unity.cinemachine", "com.unity.textmeshpro", "com.unity.ugui")
+Write-Host "[6/6] Ensuring UPM packages (com.unity.cinemachine, com.unity.ugui)..."
+$packages = @("com.unity.cinemachine", "com.unity.ugui")
 $schemaCheck = unity command --query package --format json --project-path $ProjectPath 2>$null
 if ($LASTEXITCODE -eq 0 -and $schemaCheck) {
     foreach ($pkg in $packages) {
-        unity command package add --project-path $ProjectPath --id $pkg --caller plugin --skill unity-package-management
+        unity command package add --project-path $ProjectPath --name $pkg --confirm --wait --caller plugin --skill unity-package-management
         if ($LASTEXITCODE -ne 0) {
-            Write-Warning "unity command package add failed for $pkg; run ProjectBootstrap.PackageInstaller.Install in batchmode without -quit if needed."
+            Write-Warning "unity command package add returned non-zero for $pkg; verify in Packages/manifest.json."
         }
     }
     unity command package list --project-path $ProjectPath --caller plugin --skill unity-package-management

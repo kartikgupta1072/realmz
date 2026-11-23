@@ -57,7 +57,7 @@ namespace ProjectBootstrap
             camGo.transform.position = new Vector3(0f, 3.6f, -5.0f);
             camGo.transform.LookAt(new Vector3(0f, 0.75f, 0f), Vector3.up);
 
-            UniversalAdditionalCameraData camData = camGo.AddComponent<UniversalAdditionalCameraData>();
+            UniversalAdditionalCameraData camData = cam.GetUniversalAdditionalCameraData();
             camData.renderPostProcessing = true;
             camData.volumeLayerMask = ~0;
             camData.antialiasing = AntialiasingMode.None;
@@ -132,6 +132,18 @@ namespace ProjectBootstrap
             post.transform.SetParent(torchRoot.transform, false);
             post.transform.localPosition = new Vector3(0f, 0.55f, 0f);
             post.transform.localScale = new Vector3(0.12f, 0.55f, 0.12f);
+            Material postMat = CreateOrUpdateUrpLitMaterial(
+                MaterialsDir + "/M0_TorchPostIron.mat",
+                null,
+                null,
+                alphaClip: false,
+                smoothness: 0.35f,
+                tiling: Vector2.one,
+                doubleSided: false
+            );
+            postMat.SetColor("_BaseColor", new Color(0.22f, 0.17f, 0.14f, 1f));
+            EditorUtility.SetDirty(postMat);
+            post.GetComponent<MeshRenderer>().sharedMaterial = postMat;
 
             GameObject ember = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             ember.name = "TorchFlameEmber";
@@ -140,8 +152,8 @@ namespace ProjectBootstrap
             ember.transform.localScale = new Vector3(0.18f, 0.22f, 0.18f);
             Material emberMat = CreateEmissiveMaterial(
                 MaterialsDir + "/M0_TorchEmber.mat",
-                new Color(1.0f, 0.62f, 0.27f, 1f),
-                3.2f
+                new Color(1.0f, 0.42f, 0.08f, 1f),
+                4.2f
             );
             ember.GetComponent<MeshRenderer>().sharedMaterial = emberMat;
             ember.GetComponent<MeshRenderer>().shadowCastingMode = ShadowCastingMode.Off;
@@ -177,11 +189,11 @@ namespace ProjectBootstrap
                 bloom = profile.Add<Bloom>(true);
             }
             bloom.threshold.overrideState = true;
-            bloom.threshold.value = 1.1f;
+            bloom.threshold.value = 1.05f;
             bloom.intensity.overrideState = true;
-            bloom.intensity.value = 0.30f;
+            bloom.intensity.value = 0.42f;
             bloom.scatter.overrideState = true;
-            bloom.scatter.value = 0.65f;
+            bloom.scatter.value = 0.68f;
             EditorUtility.SetDirty(profile);
 
             GameObject volGo = new GameObject("Global Volume (ACES + Bloom)");
@@ -189,6 +201,9 @@ namespace ProjectBootstrap
             vol.isGlobal = true;
             vol.priority = 1f;
             vol.sharedProfile = profile;
+
+            // Align billboards immediately for edit-mode preview and screenshots
+            AlignBillboardsToCamera(cam);
 
             AssetDatabase.SaveAssets();
             EditorSceneManager.SaveScene(scene, SmokeScenePath);
@@ -205,9 +220,12 @@ namespace ProjectBootstrap
                 return;
             }
 
+            AlignBillboardsToCamera(cam);
+
             const int width = 1280;
             const int height = 720;
-            RenderTexture rt = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32);
+            RenderTexture rt = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            rt.Create();
             RenderTexture prevTarget = cam.targetTexture;
             RenderTexture prevActive = RenderTexture.active;
 
@@ -221,12 +239,29 @@ namespace ProjectBootstrap
 
             cam.targetTexture = prevTarget;
             RenderTexture.active = prevActive;
+            rt.Release();
             Object.DestroyImmediate(rt);
 
             string outPath = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "M0_SmokeScene_Preview.png"));
             File.WriteAllBytes(outPath, tex.EncodeToPNG());
             Object.DestroyImmediate(tex);
             Debug.Log("[M0SmokeSceneBuilder] Captured preview screenshot: " + outPath);
+        }
+
+        private static void AlignBillboardsToCamera(Camera cam)
+        {
+            Vector3 forward = cam.transform.forward;
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.0001f)
+            {
+                return;
+            }
+            Quaternion rot = Quaternion.LookRotation(forward.normalized, Vector3.up);
+            PixelBillboard[] billboards = Object.FindObjectsByType<PixelBillboard>(FindObjectsSortMode.None);
+            foreach (PixelBillboard bb in billboards)
+            {
+                bb.transform.rotation = rot;
+            }
         }
 
         public static void ConfigurePixelTextures()
@@ -396,10 +431,10 @@ namespace ProjectBootstrap
 
         private static Material CreateEmissiveMaterial(string matPath, Color color, float intensity)
         {
-            Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+            Shader shader = Shader.Find("Universal Render Pipeline/Lit");
             if (shader == null)
             {
-                shader = Shader.Find("Unlit/Color");
+                shader = Shader.Find("Universal Render Pipeline/Unlit");
             }
 
             Material mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
@@ -413,7 +448,9 @@ namespace ProjectBootstrap
                 mat.shader = shader;
             }
 
-            mat.SetColor("_BaseColor", color * intensity);
+            mat.SetColor("_BaseColor", color);
+            mat.SetColor("_EmissionColor", color * intensity);
+            mat.EnableKeyword("_EMISSION");
             EditorUtility.SetDirty(mat);
             return mat;
         }
