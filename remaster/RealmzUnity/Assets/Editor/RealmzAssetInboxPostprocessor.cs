@@ -4,6 +4,7 @@ using System.IO;
 using System.Text;
 using Realmz.Foundry;
 using Realmz.Rendering;
+using Realmz.World;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEditor.SceneManagement;
@@ -15,7 +16,7 @@ namespace Realmz.EditorTools
 {
     /// <summary>
     /// Processes dropped Realmz Asset Foundry bundles under Assets/Inbox/<id>/ into
-    /// URP Stylized3D / HD-2D materials, AnimatorControllers, grounded prefabs, and import receipts.
+    /// URP Stylized3D / HD-2D / PBR Terrain materials, AnimatorControllers, grounded prefabs, and import receipts.
     /// </summary>
     public sealed class RealmzAssetInboxPostprocessor : AssetPostprocessor
     {
@@ -23,6 +24,8 @@ namespace Realmz.EditorTools
         public const string MaterialsFoundryRoot = "Assets/Materials/Foundry";
         public const string PrefabsFoundryRoot = "Assets/Prefabs/Foundry";
         public const string Stylized3DShaderName = "Realmz/Stylized3D";
+        public const string TerrainBlendShaderName = "Realmz/TerrainBlend";
+        public const string GrassTuftShaderName = "Realmz/GrassTuft";
 
         private static readonly UTF8Encoding Utf8NoBom = new UTF8Encoding(false);
         private static bool _isProcessing;
@@ -61,15 +64,23 @@ namespace Realmz.EditorTools
                 }
 
                 string fileName = remainder.Substring(slashIdx + 1);
-                if (fileName.EndsWith(".import_receipt.json", StringComparison.OrdinalIgnoreCase))
+                if (fileName.EndsWith(".import_receipt.json", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(fileName, "import_receipt.json", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
 
                 if (fileName.EndsWith(".asset.json", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(fileName, "terrain.asset.json", StringComparison.OrdinalIgnoreCase)
                     || fileName.EndsWith(".glb", StringComparison.OrdinalIgnoreCase)
                     || fileName.EndsWith("_sheet.png", StringComparison.OrdinalIgnoreCase)
-                    || fileName.EndsWith("_sheet_n.png", StringComparison.OrdinalIgnoreCase))
+                    || fileName.EndsWith("_sheet_n.png", StringComparison.OrdinalIgnoreCase)
+                    || fileName.EndsWith("_albedo.png", StringComparison.OrdinalIgnoreCase)
+                    || fileName.EndsWith("_normal.png", StringComparison.OrdinalIgnoreCase)
+                    || fileName.EndsWith("_height.png", StringComparison.OrdinalIgnoreCase)
+                    || fileName.EndsWith("_mask.png", StringComparison.OrdinalIgnoreCase)
+                    || fileName.EndsWith("_roughness.png", StringComparison.OrdinalIgnoreCase)
+                    || fileName.EndsWith("_ao.png", StringComparison.OrdinalIgnoreCase))
                 {
                     candidateIds.Add(assetId);
                 }
@@ -82,8 +93,7 @@ namespace Realmz.EditorTools
 
             foreach (string assetId in candidateIds)
             {
-                string manifestPath = InboxRoot + "/" + assetId + "/" + assetId + ".asset.json";
-                if (File.Exists(ToAbsolutePath(manifestPath)))
+                if (!string.IsNullOrEmpty(ResolveManifestAssetPath(assetId)))
                 {
                     ProcessAsset(assetId);
                 }
@@ -110,8 +120,7 @@ namespace Realmz.EditorTools
                     continue;
                 }
 
-                string manifestAbs = Path.Combine(dirs[i], assetId + ".asset.json");
-                if (!File.Exists(manifestAbs))
+                if (string.IsNullOrEmpty(ResolveManifestAssetPath(assetId)))
                 {
                     continue;
                 }
@@ -143,19 +152,20 @@ namespace Realmz.EditorTools
             try
             {
                 string assetFolder = InboxRoot + "/" + assetId;
-                string manifestAssetPath = assetFolder + "/" + assetId + ".asset.json";
-                string manifestAbsPath = ToAbsolutePath(manifestAssetPath);
-                if (!File.Exists(manifestAbsPath))
+                string manifestAssetPath = ResolveManifestAssetPath(assetId);
+                if (string.IsNullOrEmpty(manifestAssetPath))
                 {
-                    Debug.LogError("[RealmzAssetInbox] Missing manifest: " + manifestAssetPath);
+                    string expectedPath = assetFolder + "/" + assetId + ".asset.json";
+                    Debug.LogError("[RealmzAssetInbox] Missing manifest: " + expectedPath);
                     return new FoundryImportReceipt
                     {
                         id = assetId,
                         success = false,
-                        notes = "Missing manifest: " + manifestAssetPath
+                        notes = "Missing manifest: " + expectedPath
                     };
                 }
 
+                string manifestAbsPath = ToAbsolutePath(manifestAssetPath);
                 string jsonText = File.ReadAllText(manifestAbsPath, Encoding.UTF8);
                 FoundryAssetManifestData manifest = JsonUtility.FromJson<FoundryAssetManifestData>(jsonText);
                 if (manifest == null)
@@ -168,6 +178,9 @@ namespace Realmz.EditorTools
                     manifest.id = assetId;
                 }
 
+                bool isTerrain = string.Equals(manifest.asset_kind, "terrain", StringComparison.OrdinalIgnoreCase)
+                    || manifestAssetPath.EndsWith("/terrain.asset.json", StringComparison.OrdinalIgnoreCase);
+
                 EnsureFolder("Assets/Materials");
                 EnsureFolder(MaterialsFoundryRoot);
                 EnsureFolder("Assets/Prefabs");
@@ -178,7 +191,8 @@ namespace Realmz.EditorTools
                     schema_version = "1.0",
                     id = manifest.id,
                     name = string.IsNullOrEmpty(manifest.name) ? manifest.id : manifest.name,
-                    category = string.IsNullOrEmpty(manifest.category) ? "Prop" : manifest.category,
+                    category = string.IsNullOrEmpty(manifest.category) ? (isTerrain ? "Terrain" : "Prop") : manifest.category,
+                    asset_kind = isTerrain ? "terrain" : (string.IsNullOrEmpty(manifest.asset_kind) ? "unit" : manifest.asset_kind),
                     rig_profile = string.IsNullOrEmpty(manifest.rig_profile) ? "Static" : manifest.rig_profile,
                     preferred_mode = string.IsNullOrEmpty(manifest.preferred_mode) ? "Both" : manifest.preferred_mode,
                     shader_name = Stylized3DShaderName,
@@ -186,40 +200,49 @@ namespace Realmz.EditorTools
                     success = true
                 };
 
-                // 1. Configure HD-2D textures if present
-                string sheetPath = assetFolder + "/" + assetId + "_sheet.png";
-                string sheetNormalPath = assetFolder + "/" + assetId + "_sheet_n.png";
-                int cols = 1;
-                int rows = 1;
-                int spriteCount = 0;
-
-                if (File.Exists(ToAbsolutePath(sheetPath)))
+                if (isTerrain)
                 {
-                    spriteCount = ConfigureFoundrySpriteSheet(sheetPath, manifest, out cols, out rows);
-                    receipt.hd2d_sprite_count = spriteCount;
+                    ProcessTerrainAsset(assetId, assetFolder, manifest, receipt);
                 }
-
-                if (File.Exists(ToAbsolutePath(sheetNormalPath)))
+                else
                 {
-                    ConfigureFoundryNormalMap(sheetNormalPath);
-                }
+                    // 1. Configure HD-2D textures if present
+                    string sheetPath = assetFolder + "/" + assetId + "_sheet.png";
+                    string sheetNormalPath = assetFolder + "/" + assetId + "_sheet_n.png";
+                    int cols = 1;
+                    int rows = 1;
+                    int spriteCount = 0;
 
-                // 2. Process 3D GLB if present
-                string glbPath = assetFolder + "/" + assetId + ".glb";
-                if (File.Exists(ToAbsolutePath(glbPath)))
-                {
-                    ProcessGlbAsset(assetId, glbPath, manifest, receipt);
-                }
+                    if (File.Exists(ToAbsolutePath(sheetPath)))
+                    {
+                        spriteCount = ConfigureFoundrySpriteSheet(sheetPath, manifest, out cols, out rows);
+                        receipt.hd2d_sprite_count = spriteCount;
+                    }
 
-                // 3. Process HD-2D billboard prefab if sheet exists
-                if (File.Exists(ToAbsolutePath(sheetPath)))
-                {
-                    ProcessHd2dAsset(assetId, sheetPath, sheetNormalPath, manifest, cols, rows, receipt);
+                    if (File.Exists(ToAbsolutePath(sheetNormalPath)))
+                    {
+                        ConfigureFoundryNormalMap(sheetNormalPath);
+                    }
+
+                    // 2. Process 3D GLB if present
+                    string glbPath = assetFolder + "/" + assetId + ".glb";
+                    if (File.Exists(ToAbsolutePath(glbPath)))
+                    {
+                        ProcessGlbAsset(assetId, glbPath, manifest, receipt);
+                    }
+
+                    // 3. Process HD-2D billboard prefab if sheet exists
+                    if (File.Exists(ToAbsolutePath(sheetPath)))
+                    {
+                        ProcessHd2dAsset(assetId, sheetPath, sheetNormalPath, manifest, cols, rows, receipt);
+                    }
                 }
 
                 AssetDatabase.SaveAssets();
 
-                string receiptAssetPath = assetFolder + "/" + assetId + ".import_receipt.json";
+                string receiptAssetPath = isTerrain
+                    ? (assetFolder + "/import_receipt.json")
+                    : (assetFolder + "/" + assetId + ".import_receipt.json");
                 string receiptJson = JsonUtility.ToJson(receipt, true);
                 File.WriteAllText(ToAbsolutePath(receiptAssetPath), receiptJson, Utf8NoBom);
                 AssetDatabase.ImportAsset(receiptAssetPath, ImportAssetOptions.ForceUpdate);
@@ -259,12 +282,19 @@ namespace Realmz.EditorTools
             foreach (string d in dirs)
             {
                 string id = Path.GetFileName(d);
-                if (!string.IsNullOrEmpty(id)
-                    && !id.StartsWith(".", StringComparison.Ordinal)
-                    && !id.StartsWith("__", StringComparison.Ordinal))
+                if (string.IsNullOrEmpty(id)
+                    || id.StartsWith(".", StringComparison.Ordinal)
+                    || id.StartsWith("__", StringComparison.Ordinal))
                 {
-                    ids.Add(id);
+                    continue;
                 }
+
+                if (IsTerrainBundleFolder(id))
+                {
+                    continue;
+                }
+
+                ids.Add(id);
             }
 
             ids.Sort(StringComparer.Ordinal);
@@ -292,6 +322,7 @@ namespace Realmz.EditorTools
 
             Scene previewScene = EditorSceneManager.NewPreviewScene();
             List<GameObject> spawned = new List<GameObject>();
+            List<UnityEngine.Object> tempPreviewObjects = new List<UnityEngine.Object>();
             RenderTexture rt = null;
             Texture2D readTex = null;
 
@@ -303,6 +334,8 @@ namespace Realmz.EditorTools
                 const float groupSpacing = 2.6f;
                 Bounds overallBounds = new Bounds(Vector3.zero, Vector3.one);
                 bool hasBounds = false;
+                List<Vector3> unitClearanceCenters = new List<Vector3>();
+                List<float> unitClearanceRadii = new List<float>();
 
                 for (int i = 0; i < assetIds.Length; i++)
                 {
@@ -324,6 +357,7 @@ namespace Realmz.EditorTools
                         inst3d.transform.position = new Vector3(cursorX, 0f, 0f);
                         spawned.Add(inst3d);
                         AccumulateBounds(inst3d, ref overallBounds, ref hasBounds);
+                        RecordClearance(inst3d, unitClearanceCenters, unitClearanceRadii);
                         cursorX += pairSpacing;
                     }
 
@@ -333,6 +367,7 @@ namespace Realmz.EditorTools
                         inst2d.transform.position = new Vector3(cursorX, 0f, 0f);
                         spawned.Add(inst2d);
                         AccumulateBounds(inst2d, ref overallBounds, ref hasBounds);
+                        RecordClearance(inst2d, unitClearanceCenters, unitClearanceRadii);
                         cursorX += pairSpacing;
                     }
 
@@ -350,30 +385,100 @@ namespace Realmz.EditorTools
                         spawned[i].transform.position = p;
                     }
 
+                    for (int i = 0; i < unitClearanceCenters.Count; i++)
+                    {
+                        Vector3 c = unitClearanceCenters[i];
+                        c.x += offsetX;
+                        unitClearanceCenters[i] = c;
+                    }
+
                     overallBounds.center += new Vector3(offsetX, 0f, 0f);
                 }
 
-                // Sunlit Bywater ground plane
+                // Sunlit Bywater ground plane (upgrades to Realmz/TerrainBlend when Inbox terrain textures exist)
                 GameObject floorGo = GameObject.CreatePrimitive(PrimitiveType.Plane);
                 floorGo.name = "PreviewBywaterGround";
                 SceneManager.MoveGameObjectToScene(floorGo, previewScene);
                 float span = hasBounds ? Mathf.Max(12f, overallBounds.size.x * 2.5f) : 12f;
+                float planeScale = span * 0.12f;
+                float planeWorldExtent = 10f * planeScale;
                 floorGo.transform.position = new Vector3(0f, 0f, 0f);
-                floorGo.transform.localScale = new Vector3(span * 0.12f, 1f, span * 0.12f);
+                floorGo.transform.localScale = new Vector3(planeScale, 1f, planeScale);
                 MeshRenderer floorRenderer = floorGo.GetComponent<MeshRenderer>();
-                Material grassMat = AssetDatabase.LoadAssetAtPath<Material>("Assets/Art/M1/Materials/M1_Tile_bywater_grass.mat");
-                if (grassMat != null)
+
+                Material terrainBlendMat = BuildPreviewTerrainBlendMaterial(planeWorldExtent, tempPreviewObjects);
+                if (terrainBlendMat != null)
                 {
-                    floorRenderer.sharedMaterial = grassMat;
+                    floorRenderer.sharedMaterial = terrainBlendMat;
                 }
                 else
                 {
-                    Shader lit = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-                    Material fallbackFloor = new Material(lit);
-                    fallbackFloor.color = new Color(0.28f, 0.48f, 0.24f, 1f);
-                    floorRenderer.sharedMaterial = fallbackFloor;
+                    Material grassMat = AssetDatabase.LoadAssetAtPath<Material>("Assets/Art/M1/Materials/M1_Tile_bywater_grass.mat");
+                    if (grassMat != null)
+                    {
+                        floorRenderer.sharedMaterial = grassMat;
+                    }
+                    else
+                    {
+                        Shader lit = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                        Material fallbackFloor = new Material(lit);
+                        fallbackFloor.color = new Color(0.28f, 0.48f, 0.24f, 1f);
+                        tempPreviewObjects.Add(fallbackFloor);
+                        floorRenderer.sharedMaterial = fallbackFloor;
+                    }
                 }
                 spawned.Add(floorGo);
+
+                // Attach living 3D grass tufts, wildflowers, and pebbles around the models
+                Material previewGrassMat = BywaterGroundScatter.CreateDefaultGrassTuftMaterial();
+                Material previewFlowerMat = BywaterGroundScatter.CreateDefaultFlowerMaterial();
+                Material previewPebbleMat = BywaterGroundScatter.CreateDefaultPebbleMaterial();
+                tempPreviewObjects.Add(previewGrassMat);
+                tempPreviewObjects.Add(previewFlowerMat);
+                tempPreviewObjects.Add(previewPebbleMat);
+
+                float scatterHalfSpan = Mathf.Min(planeWorldExtent * 0.44f, 10.5f);
+                GameObject scatterRoot = BywaterGroundScatter.CreatePreviewScatterRoot(
+                    null,
+                    new Vector2(-scatterHalfSpan, -scatterHalfSpan),
+                    new Vector2(scatterHalfSpan, scatterHalfSpan),
+                    previewGrassMat,
+                    previewFlowerMat,
+                    previewPebbleMat,
+                    pos =>
+                    {
+                        float trailCenterZ = Mathf.Sin(pos.x * 0.28f) * 0.85f + 0.15f;
+                        if (Mathf.Abs(pos.z - trailCenterZ) < 1.30f)
+                        {
+                            return true;
+                        }
+
+                        for (int c = 0; c < unitClearanceCenters.Count; c++)
+                        {
+                            float dx = pos.x - unitClearanceCenters[c].x;
+                            float dz = pos.z - unitClearanceCenters[c].z;
+                            float r = unitClearanceRadii[c];
+                            if ((dx * dx + dz * dz) < (r * r))
+                            {
+                                return true;
+                            }
+                        }
+                        return false;
+                    });
+
+                if (scatterRoot != null)
+                {
+                    SceneManager.MoveGameObjectToScene(scatterRoot, previewScene);
+                    MeshFilter[] scatterFilters = scatterRoot.GetComponentsInChildren<MeshFilter>(true);
+                    for (int f = 0; f < scatterFilters.Length; f++)
+                    {
+                        if (scatterFilters[f].sharedMesh != null)
+                        {
+                            tempPreviewObjects.Add(scatterFilters[f].sharedMesh);
+                        }
+                    }
+                    spawned.Add(scatterRoot);
+                }
 
                 // Warm M1.5 Bywater Directional Sun (calibrated for LDR preview without HDR tonemapping blowout)
                 RenderSettings.ambientMode = AmbientMode.Trilight;
@@ -483,6 +588,14 @@ namespace Realmz.EditorTools
                     if (spawned[i] != null)
                     {
                         UnityEngine.Object.DestroyImmediate(spawned[i]);
+                    }
+                }
+
+                for (int i = 0; i < tempPreviewObjects.Count; i++)
+                {
+                    if (tempPreviewObjects[i] != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(tempPreviewObjects[i]);
                     }
                 }
 
@@ -1148,6 +1261,430 @@ namespace Realmz.EditorTools
             }
 
             return null;
+        }
+
+        private static string ResolveManifestAssetPath(string assetId)
+        {
+            string assetFolder = InboxRoot + "/" + assetId;
+            string namedManifest = assetFolder + "/" + assetId + ".asset.json";
+            if (File.Exists(ToAbsolutePath(namedManifest)))
+            {
+                return namedManifest;
+            }
+
+            string terrainManifest = assetFolder + "/terrain.asset.json";
+            if (File.Exists(ToAbsolutePath(terrainManifest)))
+            {
+                return terrainManifest;
+            }
+
+            return null;
+        }
+
+        private static bool IsTerrainBundleFolder(string assetId)
+        {
+            string manifestPath = ResolveManifestAssetPath(assetId);
+            if (string.IsNullOrEmpty(manifestPath))
+            {
+                return false;
+            }
+
+            if (manifestPath.EndsWith("/terrain.asset.json", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            try
+            {
+                string jsonText = File.ReadAllText(ToAbsolutePath(manifestPath), Encoding.UTF8);
+                FoundryAssetManifestData manifest = JsonUtility.FromJson<FoundryAssetManifestData>(jsonText);
+                return manifest != null && string.Equals(manifest.asset_kind, "terrain", StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void ProcessTerrainAsset(
+            string assetId,
+            string assetFolder,
+            FoundryAssetManifestData manifest,
+            FoundryImportReceipt receipt)
+        {
+            List<string> importedTexPaths = new List<string>(6);
+
+            string albedoPath = ResolveTerrainMapAssetPath(assetFolder, manifest, manifest.maps != null ? manifest.maps.albedo : null, "_albedo.png");
+            string normalPath = ResolveTerrainMapAssetPath(assetFolder, manifest, manifest.maps != null ? manifest.maps.normal : null, "_normal.png");
+            string heightPath = ResolveTerrainMapAssetPath(assetFolder, manifest, manifest.maps != null ? manifest.maps.height : null, "_height.png");
+            string roughnessPath = ResolveTerrainMapAssetPath(assetFolder, manifest, manifest.maps != null ? manifest.maps.roughness : null, "_roughness.png");
+            string aoPath = ResolveTerrainMapAssetPath(assetFolder, manifest, manifest.maps != null ? manifest.maps.ao : null, "_ao.png");
+            string maskPath = ResolveTerrainMapAssetPath(assetFolder, manifest, manifest.maps != null ? manifest.maps.mask : null, "_mask.png");
+
+            Texture2D albedoTex = ConfigureTerrainTexture(albedoPath, isSrgb: true, isNormal: false, importedTexPaths);
+            Texture2D normalTex = ConfigureTerrainTexture(normalPath, isSrgb: false, isNormal: true, importedTexPaths);
+            Texture2D heightTex = ConfigureTerrainTexture(heightPath, isSrgb: false, isNormal: false, importedTexPaths);
+            ConfigureTerrainTexture(roughnessPath, isSrgb: false, isNormal: false, importedTexPaths);
+            Texture2D aoTex = ConfigureTerrainTexture(aoPath, isSrgb: false, isNormal: false, importedTexPaths);
+            Texture2D maskTex = ConfigureTerrainTexture(maskPath, isSrgb: false, isNormal: false, importedTexPaths);
+
+            Shader litShader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            string matPath = MaterialsFoundryRoot + "/" + manifest.id + ".mat";
+            Material mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
+            if (mat == null)
+            {
+                mat = new Material(litShader);
+                AssetDatabase.CreateAsset(mat, matPath);
+            }
+            else if (litShader != null && mat.shader != litShader)
+            {
+                mat.shader = litShader;
+            }
+
+            float tiling = manifest.tile_scale_m > 0.001f ? (1f / manifest.tile_scale_m) : 1f;
+            Vector2 tilingVec = new Vector2(tiling, tiling);
+
+            mat.SetFloat("_Surface", 0f);
+            mat.SetFloat("_WorkflowMode", 1f);
+            mat.SetColor("_BaseColor", Color.white);
+            mat.SetFloat("_Metallic", 0f);
+            mat.SetFloat("_Smoothness", 0.85f);
+
+            if (albedoTex != null)
+            {
+                mat.SetTexture("_BaseMap", albedoTex);
+                mat.SetTextureScale("_BaseMap", tilingVec);
+            }
+
+            if (normalTex != null)
+            {
+                mat.SetTexture("_BumpMap", normalTex);
+                mat.SetTextureScale("_BumpMap", tilingVec);
+                mat.SetFloat("_BumpScale", 1.0f);
+                mat.EnableKeyword("_NORMALMAP");
+            }
+            else
+            {
+                mat.SetTexture("_BumpMap", null);
+                mat.DisableKeyword("_NORMALMAP");
+            }
+
+            if (maskTex != null)
+            {
+                mat.SetTexture("_MetallicGlossMap", maskTex);
+                mat.SetTextureScale("_MetallicGlossMap", tilingVec);
+                mat.EnableKeyword("_METALLICSPECGLOSSMAP");
+            }
+            else
+            {
+                mat.SetTexture("_MetallicGlossMap", null);
+                mat.DisableKeyword("_METALLICSPECGLOSSMAP");
+            }
+
+            if (aoTex != null)
+            {
+                mat.SetTexture("_OcclusionMap", aoTex);
+                mat.SetTextureScale("_OcclusionMap", tilingVec);
+                mat.SetFloat("_OcclusionStrength", 1.0f);
+            }
+            else
+            {
+                mat.SetTexture("_OcclusionMap", null);
+            }
+
+            if (heightTex != null)
+            {
+                mat.SetTexture("_ParallaxMap", heightTex);
+                mat.SetTextureScale("_ParallaxMap", tilingVec);
+                mat.SetFloat("_Parallax", 0.02f);
+                mat.EnableKeyword("_PARALLAXMAP");
+            }
+            else
+            {
+                mat.SetTexture("_ParallaxMap", null);
+                mat.DisableKeyword("_PARALLAXMAP");
+            }
+
+            EditorUtility.SetDirty(mat);
+
+            receipt.asset_kind = "terrain";
+            receipt.terrain_material_path = matPath;
+            receipt.shader_name = litShader != null ? litShader.name : "Universal Render Pipeline/Lit";
+            receipt.texture_paths = importedTexPaths.ToArray();
+        }
+
+        private static string ResolveTerrainMapAssetPath(
+            string assetFolder,
+            FoundryAssetManifestData manifest,
+            string explicitFileName,
+            string suffix)
+        {
+            if (!string.IsNullOrEmpty(explicitFileName))
+            {
+                string explicitPath = assetFolder + "/" + explicitFileName;
+                if (File.Exists(ToAbsolutePath(explicitPath)))
+                {
+                    return explicitPath;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(manifest.id))
+            {
+                string byId = assetFolder + "/" + manifest.id + suffix;
+                if (File.Exists(ToAbsolutePath(byId)))
+                {
+                    return byId;
+                }
+            }
+
+            string absFolder = ToAbsolutePath(assetFolder);
+            if (Directory.Exists(absFolder))
+            {
+                string[] matches = Directory.GetFiles(absFolder, "*" + suffix);
+                if (matches.Length > 0)
+                {
+                    return assetFolder + "/" + Path.GetFileName(matches[0]);
+                }
+            }
+
+            return null;
+        }
+
+        private static Texture2D ConfigureTerrainTexture(
+            string assetPath,
+            bool isSrgb,
+            bool isNormal,
+            List<string> importedTexPaths)
+        {
+            if (string.IsNullOrEmpty(assetPath) || !File.Exists(ToAbsolutePath(assetPath)))
+            {
+                return null;
+            }
+
+            AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceSynchronousImport);
+            TextureImporter importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
+            if (importer != null)
+            {
+                importer.textureType = isNormal ? TextureImporterType.NormalMap : TextureImporterType.Default;
+                if (isNormal)
+                {
+                    importer.convertToNormalmap = false;
+                }
+                importer.sRGBTexture = isSrgb;
+                importer.filterMode = FilterMode.Trilinear;
+                importer.anisoLevel = 8;
+                importer.wrapMode = TextureWrapMode.Repeat;
+                importer.mipmapEnabled = true;
+                importer.textureCompression = TextureImporterCompression.CompressedHQ;
+                importer.SaveAndReimport();
+            }
+
+            importedTexPaths.Add(assetPath);
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+        }
+
+        private static void RecordClearance(
+            GameObject go,
+            List<Vector3> centers,
+            List<float> radii)
+        {
+            if (go == null)
+            {
+                return;
+            }
+
+            Renderer[] renderers = go.GetComponentsInChildren<Renderer>(true);
+            if (renderers.Length == 0)
+            {
+                centers.Add(go.transform.position);
+                radii.Add(0.95f);
+                return;
+            }
+
+            Bounds b = MeasureCombinedRendererBounds(renderers);
+            float xzRadius = Mathf.Max(0.85f, Mathf.Max(b.extents.x, b.extents.z) + 0.35f);
+            centers.Add(new Vector3(b.center.x, 0f, b.center.z));
+            radii.Add(xzRadius);
+        }
+
+        private static Material BuildPreviewTerrainBlendMaterial(
+            float planeWorldExtent,
+            List<UnityEngine.Object> tempObjects)
+        {
+            Shader terrainShader = Shader.Find(TerrainBlendShaderName);
+            if (terrainShader == null)
+            {
+                return null;
+            }
+
+            string grassFolder = FindTerrainInboxFolder("bywater_meadow_grass");
+            if (string.IsNullOrEmpty(grassFolder))
+            {
+                return null;
+            }
+
+            string dirtFolder = FindTerrainInboxFolder("bywater_dirt_trail");
+            string cobbleFolder = FindTerrainInboxFolder("bywater_cobblestone_road");
+
+            if (!TryLoadTerrainLayerTextures(grassFolder, out Texture2D grassAlb, out Texture2D grassNrm, out Texture2D grassMask))
+            {
+                return null;
+            }
+
+            TryLoadTerrainLayerTextures(dirtFolder, out Texture2D dirtAlb, out Texture2D dirtNrm, out Texture2D dirtMask);
+            TryLoadTerrainLayerTextures(cobbleFolder, out Texture2D cobbleAlb, out Texture2D cobbleNrm, out Texture2D cobbleMask);
+
+            // Synthetic bilinear splat map: meadow grass base + soft curving dirt trail + subtle cobblestone accents
+            const int splatRes = 128;
+            Texture2D splatTex = new Texture2D(splatRes, splatRes, TextureFormat.RGBA32, false, true)
+            {
+                name = "PreviewTerrainSplatMap",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp
+            };
+
+            Color[] pixels = new Color[splatRes * splatRes];
+            for (int y = 0; y < splatRes; y++)
+            {
+                float v = y / (float)(splatRes - 1);
+                float worldZ = (v - 0.5f) * planeWorldExtent;
+                for (int x = 0; x < splatRes; x++)
+                {
+                    float u = x / (float)(splatRes - 1);
+                    float worldX = (u - 0.5f) * planeWorldExtent;
+
+                    float trailCenterZ = Mathf.Sin(worldX * 0.28f) * 0.85f + 0.15f;
+                    float distTrail = Mathf.Abs(worldZ - trailCenterZ);
+                    float dirtWeight = Mathf.Clamp01(1.0f - (distTrail - 0.65f) / 1.45f) * 0.85f;
+                    float cobbleWeight = Mathf.Clamp01(1.0f - Mathf.Abs(worldZ + 2.6f) / 1.15f)
+                        * Mathf.Clamp01(1.0f - Mathf.Abs(worldX) / 5.5f) * 0.72f;
+                    float grassWeight = Mathf.Max(0.12f, 1.0f - dirtWeight - cobbleWeight);
+
+                    float sum = grassWeight + dirtWeight + cobbleWeight;
+                    pixels[y * splatRes + x] = new Color(
+                        grassWeight / sum,
+                        dirtWeight / sum,
+                        cobbleWeight / sum,
+                        0f);
+                }
+            }
+            splatTex.SetPixels(pixels);
+            splatTex.Apply(false, false);
+            tempObjects.Add(splatTex);
+
+            Material mat = new Material(terrainShader)
+            {
+                name = "PreviewBywaterTerrainBlend"
+            };
+            tempObjects.Add(mat);
+
+            float halfExtent = planeWorldExtent * 0.5f;
+            float invExtent = planeWorldExtent > 0.001f ? (1f / planeWorldExtent) : 0.05f;
+            mat.SetTexture("_SplatMap", splatTex);
+            mat.SetVector("_WorldBounds", new Vector4(-halfExtent, -halfExtent, invExtent, invExtent));
+            mat.SetFloat("_WorldTileScale", 0.5f);
+            mat.SetFloat("_BlendContrast", 0.16f);
+            mat.SetFloat("_BumpScale", 1.0f);
+            mat.SetFloat("_Smoothness", 0.85f);
+            mat.SetFloat("_MacroScale", 0.085f);
+            mat.SetFloat("_MacroStrength", 0.15f);
+            mat.SetFloat("_GridHintStrength", 0.0f);
+
+            BindTerrainBlendLayer(mat, 0, grassAlb, grassNrm, grassMask);
+            BindTerrainBlendLayer(mat, 1, dirtAlb ?? grassAlb, dirtNrm ?? grassNrm, dirtMask ?? grassMask);
+            BindTerrainBlendLayer(mat, 2, cobbleAlb ?? grassAlb, cobbleNrm ?? grassNrm, cobbleMask ?? grassMask);
+            BindTerrainBlendLayer(mat, 3, grassAlb, grassNrm, grassMask);
+
+            return mat;
+        }
+
+        private static void BindTerrainBlendLayer(
+            Material mat,
+            int layerIdx,
+            Texture2D albedo,
+            Texture2D normal,
+            Texture2D mask)
+        {
+            string prefix = "_Layer" + layerIdx;
+            if (albedo != null)
+            {
+                mat.SetTexture(prefix + "Albedo", albedo);
+            }
+            if (normal != null)
+            {
+                mat.SetTexture(prefix + "Normal", normal);
+            }
+            if (mask != null)
+            {
+                mat.SetTexture(prefix + "Mask", mask);
+            }
+            mat.SetColor(prefix + "Color", Color.white);
+        }
+
+        private static string FindTerrainInboxFolder(string key)
+        {
+            string absInbox = ToAbsolutePath(InboxRoot);
+            if (!Directory.Exists(absInbox))
+            {
+                return null;
+            }
+
+            string[] dirs = Directory.GetDirectories(absInbox);
+            for (int i = 0; i < dirs.Length; i++)
+            {
+                string folderName = Path.GetFileName(dirs[i]);
+                if (string.IsNullOrEmpty(folderName) || !folderName.StartsWith("terrain_", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (folderName.IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return InboxRoot + "/" + folderName;
+                }
+            }
+
+            return null;
+        }
+
+        private static bool TryLoadTerrainLayerTextures(
+            string folderAssetPath,
+            out Texture2D albedo,
+            out Texture2D normal,
+            out Texture2D mask)
+        {
+            albedo = null;
+            normal = null;
+            mask = null;
+            if (string.IsNullOrEmpty(folderAssetPath))
+            {
+                return false;
+            }
+
+            string absFolder = ToAbsolutePath(folderAssetPath);
+            if (!Directory.Exists(absFolder))
+            {
+                return false;
+            }
+
+            string[] albedos = Directory.GetFiles(absFolder, "*_albedo.png");
+            string[] normals = Directory.GetFiles(absFolder, "*_normal.png");
+            string[] masks = Directory.GetFiles(absFolder, "*_mask.png");
+
+            if (albedos.Length > 0)
+            {
+                albedo = AssetDatabase.LoadAssetAtPath<Texture2D>(folderAssetPath + "/" + Path.GetFileName(albedos[0]));
+            }
+            if (normals.Length > 0)
+            {
+                normal = AssetDatabase.LoadAssetAtPath<Texture2D>(folderAssetPath + "/" + Path.GetFileName(normals[0]));
+            }
+            if (masks.Length > 0)
+            {
+                mask = AssetDatabase.LoadAssetAtPath<Texture2D>(folderAssetPath + "/" + Path.GetFileName(masks[0]));
+            }
+
+            return albedo != null;
         }
 
         private static Bounds MeasureCombinedRendererBounds(Renderer[] renderers)

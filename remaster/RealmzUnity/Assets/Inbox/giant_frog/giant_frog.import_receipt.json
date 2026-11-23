@@ -3,12 +3,15 @@
     "id": "giant_frog",
     "name": "Giant Frog",
     "category": "Monster",
+    "asset_kind": "unit",
     "rig_profile": "Quadruped",
     "preferred_mode": "Both",
     "prefab_3d_path": "Assets/Prefabs/Foundry/giant_frog_3D.prefab",
     "prefab_hd2d_path": "Assets/Prefabs/Foundry/giant_frog_HD2D.prefab",
     "material_3d_path": "Assets/Materials/Foundry/giant_frog_Stylized3D.mat",
     "material_hd2d_path": "Assets/Materials/Foundry/giant_frog_HD2D.mat",
+    "terrain_material_path": "",
+    "texture_paths": [],
     "animator_controller_path": "Assets/Prefabs/Foundry/giant_frog_Controller.controller",
     "shader_name": "Realmz/Stylized3D",
     "mesh_count": 1,
@@ -20,7 +23,7 @@
         "Move"
     ],
     "hd2d_sprite_count": 1,
-    "imported_timestamp": "2026-11-23T19:26:35Z",
+    "imported_timestamp": "2026-11-23T21:21:51Z",
     "success": true,
     "notes": ""
 }

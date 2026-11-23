@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0",
+  "asset_kind": "terrain",
+  "id": "dungeon_flagstone_floor",
+  "name": "Dungeon Flagstone Floor",
+  "category": "Tile",
+  "material_profile": "dungeon",
+  "resolution": 512,
+  "style": "painterly-pbr",
+  "tile_scale_m": 2.0,
+  "maps": {
+    "albedo": "dungeon_flagstone_floor_albedo.png",
+    "normal": "dungeon_flagstone_floor_normal.png",
+    "height": "dungeon_flagstone_floor_height.png",
+    "roughness": "dungeon_flagstone_floor_roughness.png",
+    "ao": "dungeon_flagstone_floor_ao.png",
+    "mask": "dungeon_flagstone_floor_mask.png"
+  },
+  "seamless_metrics": {
+    "albedo": {
+      "seam_h_delta": 12.728,
+      "seam_v_delta": 11.684,
+      "mean_border_delta": 12.206,
+      "interior_delta": 11.93,
+      "lowfreq_border_delta": 14.886,
+      "lowfreq_ratio": 1.0472,
+      "seam_ratio": 1.0231
+    },
+    "normal": {
+      "seam_h_delta": 15.185,
+      "seam_v_delta": 16.775,
+      "mean_border_delta": 15.98,
+      "interior_delta": 12.942,
+      "lowfreq_border_delta": 19.345,
+      "lowfreq_ratio": 1.1503,
+      "seam_ratio": 1.2347
+    },
+    "height": {
+      "seam_h_delta": 13.684,
+      "seam_v_delta": 13.91,
+      "mean_border_delta": 13.797,
+      "interior_delta": 14.816,
+      "lowfreq_border_delta": 26.746,
+      "lowfreq_ratio": 0.9535,
+      "seam_ratio": 0.9312
+    },
+    "mask": {
+      "seam_h_delta": 21.49,
+      "seam_v_delta": 23.495,
+      "mean_border_delta": 22.493,
+      "interior_delta": 24.596,
+      "lowfreq_border_delta": 37.299,
+      "lowfreq_ratio": 0.9488,
+      "seam_ratio": 0.9145
+    }
+  },
+  "normal_qa": {
+    "mean_B": 251.76,
+    "min_B": 204,
+    "unit_mag_mean": 1.0002,
+    "xy_std": 0.313
+  },
+  "luma_contrast_qa": {
+    "mean_L": 30.58,
+    "std_L": 7.42,
+    "p05_L": 18.04,
+    "p95_L": 42.75
+  },
+  "engine": "comfy-zit",
+  "seed": 2026825,
+  "peak_vram_mib": 7652,
+  "idle_vram_mib": 4324,
+  "elapsed_sec": 40.72,
+  "timestamp": "2026-11-23T21:02:13Z",
+  "qa_passed": true,
+  "qa_failures": []
+}

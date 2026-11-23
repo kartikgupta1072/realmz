@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0",
+  "asset_kind": "terrain",
+  "id": "dungeon_stone_wall",
+  "name": "Dungeon Stone Wall",
+  "category": "Tile",
+  "material_profile": "dungeon",
+  "resolution": 512,
+  "style": "painterly-pbr",
+  "tile_scale_m": 2.0,
+  "maps": {
+    "albedo": "dungeon_stone_wall_albedo.png",
+    "normal": "dungeon_stone_wall_normal.png",
+    "height": "dungeon_stone_wall_height.png",
+    "roughness": "dungeon_stone_wall_roughness.png",
+    "ao": "dungeon_stone_wall_ao.png",
+    "mask": "dungeon_stone_wall_mask.png"
+  },
+  "seamless_metrics": {
+    "albedo": {
+      "seam_h_delta": 19.392,
+      "seam_v_delta": 46.297,
+      "mean_border_delta": 32.844,
+      "interior_delta": 26.873,
+      "lowfreq_border_delta": 51.704,
+      "lowfreq_ratio": 1.692,
+      "seam_ratio": 1.2222
+    },
+    "normal": {
+      "seam_h_delta": 16.095,
+      "seam_v_delta": 32.929,
+      "mean_border_delta": 24.512,
+      "interior_delta": 17.04,
+      "lowfreq_border_delta": 32.731,
+      "lowfreq_ratio": 1.5479,
+      "seam_ratio": 1.4385
+    },
+    "height": {
+      "seam_h_delta": 14.654,
+      "seam_v_delta": 39.533,
+      "mean_border_delta": 27.094,
+      "interior_delta": 19.649,
+      "lowfreq_border_delta": 52.674,
+      "lowfreq_ratio": 1.5012,
+      "seam_ratio": 1.3789
+    },
+    "mask": {
+      "seam_h_delta": 25.078,
+      "seam_v_delta": 64.472,
+      "mean_border_delta": 44.775,
+      "interior_delta": 31.842,
+      "lowfreq_border_delta": 72.86,
+      "lowfreq_ratio": 1.4975,
+      "seam_ratio": 1.4062
+    }
+  },
+  "normal_qa": {
+    "mean_B": 249.48,
+    "min_B": 206,
+    "unit_mag_mean": 1.0001,
+    "xy_std": 0.3965
+  },
+  "luma_contrast_qa": {
+    "mean_L": 41.0,
+    "std_L": 14.36,
+    "p05_L": 16.86,
+    "p95_L": 64.71
+  },
+  "engine": "comfy-zit",
+  "seed": 2026826,
+  "peak_vram_mib": 7652,
+  "idle_vram_mib": 481,
+  "elapsed_sec": 40.81,
+  "timestamp": "2026-11-23T21:02:54Z",
+  "qa_passed": true,
+  "qa_failures": []
+}

@@ -1,0 +1,32 @@
+{
+    "schema_version": "1.0",
+    "id": "dungeon_stone_wall",
+    "name": "Dungeon Stone Wall",
+    "category": "Tile",
+    "asset_kind": "terrain",
+    "rig_profile": "Static",
+    "preferred_mode": "Both",
+    "prefab_3d_path": "",
+    "prefab_hd2d_path": "",
+    "material_3d_path": "",
+    "material_hd2d_path": "",
+    "terrain_material_path": "Assets/Materials/Foundry/dungeon_stone_wall.mat",
+    "texture_paths": [
+        "Assets/Inbox/terrain_dungeon_stone_wall/dungeon_stone_wall_albedo.png",
+        "Assets/Inbox/terrain_dungeon_stone_wall/dungeon_stone_wall_normal.png",
+        "Assets/Inbox/terrain_dungeon_stone_wall/dungeon_stone_wall_height.png",
+        "Assets/Inbox/terrain_dungeon_stone_wall/dungeon_stone_wall_roughness.png",
+        "Assets/Inbox/terrain_dungeon_stone_wall/dungeon_stone_wall_ao.png",
+        "Assets/Inbox/terrain_dungeon_stone_wall/dungeon_stone_wall_mask.png"
+    ],
+    "animator_controller_path": "",
+    "shader_name": "Universal Render Pipeline/Lit",
+    "mesh_count": 0,
+    "triangle_count": 0,
+    "bone_count": 0,
+    "animation_clips": [],
+    "hd2d_sprite_count": 0,
+    "imported_timestamp": "2026-11-23T21:21:54Z",
+    "success": true,
+    "notes": ""
+}

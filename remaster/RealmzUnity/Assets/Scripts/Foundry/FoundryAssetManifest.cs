@@ -23,12 +23,28 @@ namespace Realmz.Foundry
     }
 
     [Serializable]
+    public sealed class FoundryTerrainMapsData
+    {
+        public string albedo = string.Empty;
+        public string normal = string.Empty;
+        public string height = string.Empty;
+        public string roughness = string.Empty;
+        public string ao = string.Empty;
+        public string mask = string.Empty;
+    }
+
+    [Serializable]
     public sealed class FoundryAssetManifestData
     {
         public string schema_version = "1.0";
         public string id = string.Empty;
         public string name = string.Empty;
         public string category = "Prop";
+        public string asset_kind = string.Empty;
+        public int resolution;
+        public string style = string.Empty;
+        public float tile_scale_m = 1.0f;
+        public FoundryTerrainMapsData maps = new FoundryTerrainMapsData();
         public string rig_profile = "Static";
         public bool rigged;
         public string rig_source = "none";
@@ -55,12 +71,15 @@ namespace Realmz.Foundry
         public string id = string.Empty;
         public string name = string.Empty;
         public string category = string.Empty;
+        public string asset_kind = string.Empty;
         public string rig_profile = string.Empty;
         public string preferred_mode = string.Empty;
         public string prefab_3d_path = string.Empty;
         public string prefab_hd2d_path = string.Empty;
         public string material_3d_path = string.Empty;
         public string material_hd2d_path = string.Empty;
+        public string terrain_material_path = string.Empty;
+        public string[] texture_paths = Array.Empty<string>();
         public string animator_controller_path = string.Empty;
         public string shader_name = "Realmz/Stylized3D";
         public int mesh_count;

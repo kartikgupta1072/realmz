@@ -3,12 +3,15 @@
     "id": "test_fish",
     "name": "Test Fish",
     "category": "Monster",
+    "asset_kind": "unit",
     "rig_profile": "Aquatic",
     "preferred_mode": "Both",
     "prefab_3d_path": "Assets/Prefabs/Foundry/test_fish_3D.prefab",
     "prefab_hd2d_path": "Assets/Prefabs/Foundry/test_fish_HD2D.prefab",
     "material_3d_path": "Assets/Materials/Foundry/test_fish_Stylized3D.mat",
     "material_hd2d_path": "Assets/Materials/Foundry/test_fish_HD2D.mat",
+    "terrain_material_path": "",
+    "texture_paths": [],
     "animator_controller_path": "Assets/Prefabs/Foundry/test_fish_Controller.controller",
     "shader_name": "Realmz/Stylized3D",
     "mesh_count": 1,
@@ -20,7 +23,7 @@
         "Move"
     ],
     "hd2d_sprite_count": 4,
-    "imported_timestamp": "2026-11-23T19:26:36Z",
+    "imported_timestamp": "2026-11-23T21:21:54Z",
     "success": true,
     "notes": ""
 }

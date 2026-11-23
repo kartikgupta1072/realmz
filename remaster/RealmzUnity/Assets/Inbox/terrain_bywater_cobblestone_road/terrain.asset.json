@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0",
+  "asset_kind": "terrain",
+  "id": "bywater_cobblestone_road",
+  "name": "Bywater Cobblestone Road",
+  "category": "Tile",
+  "material_profile": "cobble",
+  "resolution": 512,
+  "style": "painterly-pbr",
+  "tile_scale_m": 2.0,
+  "maps": {
+    "albedo": "bywater_cobblestone_road_albedo.png",
+    "normal": "bywater_cobblestone_road_normal.png",
+    "height": "bywater_cobblestone_road_height.png",
+    "roughness": "bywater_cobblestone_road_roughness.png",
+    "ao": "bywater_cobblestone_road_ao.png",
+    "mask": "bywater_cobblestone_road_mask.png"
+  },
+  "seamless_metrics": {
+    "albedo": {
+      "seam_h_delta": 23.128,
+      "seam_v_delta": 23.203,
+      "mean_border_delta": 23.166,
+      "interior_delta": 25.391,
+      "lowfreq_border_delta": 27.633,
+      "lowfreq_ratio": 0.9582,
+      "seam_ratio": 0.9124
+    },
+    "normal": {
+      "seam_h_delta": 15.899,
+      "seam_v_delta": 18.327,
+      "mean_border_delta": 17.113,
+      "interior_delta": 14.883,
+      "lowfreq_border_delta": 20.43,
+      "lowfreq_ratio": 1.0587,
+      "seam_ratio": 1.1498
+    },
+    "height": {
+      "seam_h_delta": 15.945,
+      "seam_v_delta": 15.205,
+      "mean_border_delta": 15.575,
+      "interior_delta": 18.318,
+      "lowfreq_border_delta": 28.941,
+      "lowfreq_ratio": 0.8525,
+      "seam_ratio": 0.8502
+    },
+    "mask": {
+      "seam_h_delta": 25.766,
+      "seam_v_delta": 25.294,
+      "mean_border_delta": 25.53,
+      "interior_delta": 30.455,
+      "lowfreq_border_delta": 40.958,
+      "lowfreq_ratio": 0.8921,
+      "seam_ratio": 0.8383
+    }
+  },
+  "normal_qa": {
+    "mean_B": 250.81,
+    "min_B": 209,
+    "unit_mag_mean": 1.0002,
+    "xy_std": 0.3555
+  },
+  "luma_contrast_qa": {
+    "mean_L": 49.49,
+    "std_L": 13.0,
+    "p05_L": 29.8,
+    "p95_L": 72.16
+  },
+  "engine": "comfy-zit",
+  "seed": 2026822,
+  "peak_vram_mib": 7659,
+  "idle_vram_mib": 4260,
+  "elapsed_sec": 57.74,
+  "timestamp": "2026-11-23T21:00:09Z",
+  "qa_passed": true,
+  "qa_failures": []
+}

@@ -13,11 +13,16 @@ from typing import Any
 from .config import (
     BLENDER_EXE,
     CATEGORY_DEFAULTS,
+    COMFY_XL_CKPT,
+    COMFY_ZIT_UNET,
     CREATE_NO_WINDOW,
     FOUNDRY_VENV_PY,
     HF_CACHE_DIR,
     JOBS_DIR,
     PALETTE_SOC_128,
+    TERRAIN_DEFAULT_RES,
+    TERRAIN_DEFAULT_STYLE,
+    TERRAIN_DEFAULT_TILE_SCALE_M,
     UNITY_CLI_EXE,
     UNITY_INBOX_DIR,
     UNITY_PREFABS_DIR,
@@ -38,6 +43,7 @@ from .rig_normalize import (
     render_views_with_blender,
     try_unirig_skeleton,
 )
+from .terrain_gen import generate_terrain_asset
 
 NOTIFY_SCRIPT = Path(r"C:\Users\karti\LifeTwin\.agent\scripts\notify-main-twin.py")
 
@@ -269,10 +275,106 @@ def _resolve_job_dir(asset_dir_or_id: str | Path) -> Path:
     p = Path(asset_dir_or_id)
     if p.exists() and p.is_dir():
         return p.resolve()
-    candidate = JOBS_DIR / sanitize_asset_id(str(asset_dir_or_id))
+    clean_id = sanitize_asset_id(str(asset_dir_or_id))
+    candidate = JOBS_DIR / clean_id
     if candidate.exists() and candidate.is_dir():
         return candidate.resolve()
+    terrain_candidate = JOBS_DIR / (clean_id if clean_id.startswith("terrain_") else f"terrain_{clean_id}")
+    if terrain_candidate.exists() and terrain_candidate.is_dir():
+        return terrain_candidate.resolve()
     raise FileNotFoundError(f"Asset job directory or ID not found: {asset_dir_or_id}")
+
+
+def _deliver_notification(
+    notify_msg: str,
+    notify: bool,
+    dry_run_notify: bool,
+    notify_target: str | None,
+) -> dict[str, Any]:
+    notify_result: dict[str, Any] = {"sent": False, "message": notify_msg}
+    if dry_run_notify:
+        notify_result["dry_run"] = True
+    elif notify and NOTIFY_SCRIPT.exists():
+        cmd = ["python", str(NOTIFY_SCRIPT), "--stdin"]
+        if notify_target:
+            cmd.extend(["--target", notify_target])
+        proc = subprocess.run(
+            cmd,
+            input=notify_msg,
+            capture_output=True,
+            text=True,
+            timeout=20,
+            creationflags=CREATE_NO_WINDOW,
+        )
+        notify_result["sent"] = proc.returncode == 0
+        notify_result["returncode"] = proc.returncode
+        if proc.returncode != 0:
+            notify_result["error"] = (proc.stderr or proc.stdout).strip()[:300]
+    return notify_result
+
+
+def _ship_terrain_bundle(
+    src_dir: Path,
+    manifest_src: Path,
+    manifest: dict[str, Any],
+    notify: bool,
+    dry_run_notify: bool,
+    run_unity_import: bool,
+    notify_target: str | None,
+) -> dict[str, Any]:
+    asset_id = sanitize_asset_id(str(manifest.get("id") or src_dir.name))
+    folder_name = asset_id if asset_id.startswith("terrain_") else f"terrain_{asset_id}"
+    inbox_dir = UNITY_INBOX_DIR / folder_name
+    inbox_dir.mkdir(parents=True, exist_ok=True)
+
+    required_files = [
+        "terrain.asset.json",
+        f"{asset_id}_albedo.png",
+        f"{asset_id}_normal.png",
+        f"{asset_id}_height.png",
+        f"{asset_id}_roughness.png",
+        f"{asset_id}_ao.png",
+        f"{asset_id}_mask.png",
+    ]
+    copied_files: list[str] = []
+    for fname in required_files:
+        src_file = manifest_src if fname == "terrain.asset.json" else (src_dir / fname)
+        if not src_file.exists():
+            raise FileNotFoundError(f"Required terrain file missing in {src_dir}: {fname}")
+        dst_file = inbox_dir / fname
+        shutil.copy2(src_file, dst_file)
+        copied_files.append(str(dst_file))
+
+    unity_status = "skipped"
+    unity_receipt = None
+    if run_unity_import and UNITY_CLI_EXE.exists():
+        unity_status = _trigger_unity_inbox_import(folder_name)
+        for r_name in (f"{folder_name}.import_receipt.json", "terrain.import_receipt.json"):
+            receipt_path = inbox_dir / r_name
+            if receipt_path.exists():
+                unity_receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+                break
+
+    res = int(manifest.get("resolution", TERRAIN_DEFAULT_RES))
+    style = str(manifest.get("style", TERRAIN_DEFAULT_STYLE))
+    tile_scale = float(manifest.get("tile_scale_m", TERRAIN_DEFAULT_TILE_SCALE_M))
+    notify_msg = sanitize_ascii(
+        f"[Realmz Asset Foundry] Shipped terrain '{asset_id}' ({res}x{res}, {style}, "
+        f"tile_scale={tile_scale}m) to Assets/Inbox/{folder_name}/."
+    )
+    notify_result = _deliver_notification(notify_msg, notify, dry_run_notify, notify_target)
+
+    return {
+        "status": "shipped",
+        "asset_kind": "terrain",
+        "id": asset_id,
+        "folder_name": folder_name,
+        "inbox_dir": str(inbox_dir),
+        "copied_files": [Path(p).name for p in copied_files],
+        "unity_import": unity_status,
+        "unity_receipt": unity_receipt,
+        "notify": notify_result,
+    }
 
 
 def ship_to_realmz(
@@ -282,19 +384,44 @@ def ship_to_realmz(
     run_unity_import: bool = False,
     notify_target: str | None = None,
 ) -> dict[str, Any]:
-    """Copy a Foundry asset bundle into RealmzUnity Assets/Inbox/<id>/ and optionally trigger import & notify."""
+    """Copy a Foundry asset or terrain bundle into RealmzUnity Assets/Inbox/ and optionally trigger import & notify."""
     src_dir = _resolve_job_dir(asset_dir_or_id)
+    terrain_manifest = src_dir / "terrain.asset.json"
+    if terrain_manifest.exists():
+        manifest = json.loads(terrain_manifest.read_text(encoding="utf-8"))
+        if manifest.get("asset_kind") == "terrain":
+            return _ship_terrain_bundle(
+                src_dir=src_dir,
+                manifest_src=terrain_manifest,
+                manifest=manifest,
+                notify=notify,
+                dry_run_notify=dry_run_notify,
+                run_unity_import=run_unity_import,
+                notify_target=notify_target,
+            )
+
     asset_id = src_dir.name
     manifest_src = src_dir / f"{asset_id}.asset.json"
     if not manifest_src.exists():
-        # Search for any *.asset.json inside src_dir
         matches = list(src_dir.glob("*.asset.json"))
         if not matches:
             raise FileNotFoundError(f"No .asset.json found in {src_dir}")
         manifest_src = matches[0]
-        asset_id = manifest_src.name[: -len(".asset.json")]
+        if manifest_src.name != "terrain.asset.json":
+            asset_id = manifest_src.name[: -len(".asset.json")]
 
     manifest = json.loads(manifest_src.read_text(encoding="utf-8"))
+    if manifest.get("asset_kind") == "terrain":
+        return _ship_terrain_bundle(
+            src_dir=src_dir,
+            manifest_src=manifest_src,
+            manifest=manifest,
+            notify=notify,
+            dry_run_notify=dry_run_notify,
+            run_unity_import=run_unity_import,
+            notify_target=notify_target,
+        )
+
     mode = normalize_mode(manifest.get("preferred_mode", "Both"))
 
     inbox_dir = UNITY_INBOX_DIR / asset_id
@@ -334,26 +461,7 @@ def ship_to_realmz(
         f"{manifest.get('rig_profile', 'Static')}, {manifest.get('triangle_count', 0)} tris, "
         f"mode={mode}) to Assets/Inbox/{asset_id}/ and Prefabs/Foundry/."
     )
-
-    notify_result: dict[str, Any] = {"sent": False, "message": notify_msg}
-    if dry_run_notify:
-        notify_result["dry_run"] = True
-    elif notify and NOTIFY_SCRIPT.exists():
-        cmd = ["python", str(NOTIFY_SCRIPT), "--stdin"]
-        if notify_target:
-            cmd.extend(["--target", notify_target])
-        proc = subprocess.run(
-            cmd,
-            input=notify_msg,
-            capture_output=True,
-            text=True,
-            timeout=20,
-            creationflags=CREATE_NO_WINDOW,
-        )
-        notify_result["sent"] = proc.returncode == 0
-        notify_result["returncode"] = proc.returncode
-        if proc.returncode != 0:
-            notify_result["error"] = (proc.stderr or proc.stdout).strip()[:300]
+    notify_result = _deliver_notification(notify_msg, notify, dry_run_notify, notify_target)
 
     return {
         "status": "shipped",
@@ -431,25 +539,53 @@ def batch_convert(
 
     results: list[dict[str, Any]] = []
     for item in items:
-        res = convert_asset(
-            image_path=item["image"],
-            name=item.get("name"),
-            category=item.get("category", "Prop"),
-            rig=item.get("rig", "Auto"),
-            scale_m=item.get("scale"),
-            mode=item.get("mode", "Both"),
-            target_tris=item.get("target_tris"),
-            hd2d_size=item.get("hd2d_size"),
-            frames=item.get("frames", 1),
-            quantize=item.get("quantize", True),
-            steps=item.get("steps", 5),
-            octree_res=item.get("octree_res", 256),
-            seed=item.get("seed", 42),
-            use_unirig_ar=item.get("use_unirig_ar", True),
-            ship=ship or bool(item.get("ship", False)),
-            notify=notify,
-            run_unity_import=run_unity_import,
-        )
+        kind = str(item.get("kind") or item.get("asset_kind") or "asset").strip().lower()
+        item_ship = ship or bool(item.get("ship", False))
+        if kind == "terrain":
+            source_val = (
+                item.get("image_or_prompt")
+                or item.get("prompt_or_image")
+                or item.get("image")
+                or item.get("prompt")
+            )
+            if not source_val:
+                raise ValueError("Terrain batch item must specify 'image_or_prompt', 'image', or 'prompt'.")
+            hint_val = item.get("prompt_hint") or (item.get("prompt") if item.get("image") else "") or ""
+            res = generate_terrain_asset(
+                image_or_prompt=source_val,
+                name=item.get("name") or item.get("id"),
+                res=int(item.get("res", item.get("resolution", TERRAIN_DEFAULT_RES))),
+                style=str(item.get("style", TERRAIN_DEFAULT_STYLE)),
+                tile_scale=float(item.get("tile_scale", item.get("tile_scale_m", TERRAIN_DEFAULT_TILE_SCALE_M))),
+                prompt_hint=str(hint_val),
+                seed=int(item.get("seed", 42)),
+                steps=int(item.get("steps", 8)),
+                engine=str(item.get("engine", "auto")),
+                keep_comfy=bool(item.get("keep_comfy", False)),
+                ship=item_ship,
+                notify=notify,
+                run_unity_import=run_unity_import,
+            )
+        else:
+            res = convert_asset(
+                image_path=item["image"],
+                name=item.get("name"),
+                category=item.get("category", "Prop"),
+                rig=item.get("rig", "Auto"),
+                scale_m=item.get("scale"),
+                mode=item.get("mode", "Both"),
+                target_tris=item.get("target_tris"),
+                hd2d_size=item.get("hd2d_size"),
+                frames=item.get("frames", 1),
+                quantize=item.get("quantize", True),
+                steps=item.get("steps", 5),
+                octree_res=item.get("octree_res", 256),
+                seed=item.get("seed", 42),
+                use_unirig_ar=item.get("use_unirig_ar", True),
+                ship=item_ship,
+                notify=notify,
+                run_unity_import=run_unity_import,
+            )
         results.append(res)
 
     return {
@@ -459,9 +595,10 @@ def batch_convert(
         "assets": [
             {
                 "id": r["id"],
-                "category": r["category"],
-                "rig": r["rig_profile"],
-                "tris": r["triangle_count"],
+                "asset_kind": r.get("asset_kind", "asset"),
+                "category": r.get("category", "Tile"),
+                "rig": r.get("rig_profile", "Static"),
+                "tris": r.get("triangle_count", 0),
                 "peak_vram_mib": r["peak_vram_mib"],
                 "elapsed_sec": r["elapsed_sec"],
             }
@@ -477,11 +614,20 @@ def get_status() -> dict[str, Any]:
     inbox = sorted(p.name for p in UNITY_INBOX_DIR.iterdir() if p.is_dir() and not p.name.startswith("__")) if UNITY_INBOX_DIR.exists() else []
     prefabs = sorted(p.name for p in UNITY_PREFABS_DIR.glob("*.prefab")) if UNITY_PREFABS_DIR.exists() else []
 
+    terrain_jobs = [
+        j for j in jobs if j.startswith("terrain_") or (JOBS_DIR / j / "terrain.asset.json").exists()
+    ]
+    terrain_inbox = [
+        i for i in inbox if i.startswith("terrain_") or (UNITY_INBOX_DIR / i / "terrain.asset.json").exists()
+    ]
+
     hf_hub = HF_CACHE_DIR / "hub"
     models_cached = {
         "hunyuan3d_2mini": (hf_hub / "models--tencent--Hunyuan3D-2mini").exists(),
         "hunyuan3d_2_paint": (hf_hub / "models--tencent--Hunyuan3D-2").exists(),
         "unirig": (hf_hub / "models--VAST-AI--UniRig").exists(),
+        "comfy_zit": COMFY_ZIT_UNET.exists(),
+        "comfy_xl": COMFY_XL_CKPT.exists(),
     }
 
     return {
@@ -494,6 +640,8 @@ def get_status() -> dict[str, Any]:
         "models_cached": models_cached,
         "unirig_probe": probe_unirig_native_blockers(),
         "jobs": jobs,
+        "terrain_jobs": terrain_jobs,
         "unity_inbox": inbox,
+        "terrain_inbox": terrain_inbox,
         "unity_prefabs_count": len(prefabs),
     }

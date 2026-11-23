@@ -77,6 +77,17 @@ MonoBehaviour:
   wildflowerBushBillboardSprite: {fileID: 21300000, guid: b23daccadb2ad0a4fa0f74bcf85b7c52, type: 3}
   brazierBillboardMaterial: {fileID: 2100000, guid: 236a057e9fecfa549b31a4c47e4103d9, type: 2}
   brazierBillboardSprite: {fileID: 21300000, guid: c5802bc7df1bac945b0c79b7a256a33d, type: 3}
+  terrainBlendOverworldMaterial: {fileID: 2100000, guid: aef4d75cf3781ca4a80c73efd5943a82, type: 2}
+  terrainBlendDungeonMaterial: {fileID: 2100000, guid: 377458b22f768e24085cefcef84d928f, type: 2}
+  painterlyGrassMaterial: {fileID: 2100000, guid: aff93921a2fe0754381144c7435ed5a6, type: 2}
+  painterlyCobbleMaterial: {fileID: 2100000, guid: 40b86c0acd8292346b17e7f44a945137, type: 2}
+  painterlyDirtMaterial: {fileID: 2100000, guid: 5aef7c3c80c50b34ab0caa08a196e65c, type: 2}
+  painterlyRiverbankMaterial: {fileID: 2100000, guid: 8439146a6ace20d4eb6b1d8c20360177, type: 2}
+  painterlyDungeonFloorMaterial: {fileID: 2100000, guid: dc75fa8c08ff6664f9010459b6c4ae50, type: 2}
+  painterlyDungeonWallMaterial: {fileID: 2100000, guid: 5a72165621322f04a99fe6aaeb020f89, type: 2}
+  grassTuftMaterial: {fileID: 2100000, guid: b05ff0144c17e77468141c20dd727db9, type: 2}
+  wildflowerTuftMaterial: {fileID: 2100000, guid: 44beae4fbf4b0ff42a220b8986c0418b, type: 2}
+  pebbleScatterMaterial: {fileID: 2100000, guid: da2fa45bd0a3bf04295b74171d451184, type: 2}
   heroes:
   - id: hero_knight
     archetype: Knight

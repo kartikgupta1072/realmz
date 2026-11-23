@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0",
+  "asset_kind": "terrain",
+  "id": "bywater_dirt_trail",
+  "name": "Bywater Dirt Trail",
+  "category": "Tile",
+  "material_profile": "grass",
+  "resolution": 512,
+  "style": "painterly-pbr",
+  "tile_scale_m": 2.0,
+  "maps": {
+    "albedo": "bywater_dirt_trail_albedo.png",
+    "normal": "bywater_dirt_trail_normal.png",
+    "height": "bywater_dirt_trail_height.png",
+    "roughness": "bywater_dirt_trail_roughness.png",
+    "ao": "bywater_dirt_trail_ao.png",
+    "mask": "bywater_dirt_trail_mask.png"
+  },
+  "seamless_metrics": {
+    "albedo": {
+      "seam_h_delta": 14.523,
+      "seam_v_delta": 14.31,
+      "mean_border_delta": 14.417,
+      "interior_delta": 14.326,
+      "lowfreq_border_delta": 11.117,
+      "lowfreq_ratio": 0.9446,
+      "seam_ratio": 1.0064
+    },
+    "normal": {
+      "seam_h_delta": 14.171,
+      "seam_v_delta": 13.054,
+      "mean_border_delta": 13.613,
+      "interior_delta": 12.151,
+      "lowfreq_border_delta": 14.311,
+      "lowfreq_ratio": 1.1223,
+      "seam_ratio": 1.1202
+    },
+    "height": {
+      "seam_h_delta": 17.191,
+      "seam_v_delta": 16.855,
+      "mean_border_delta": 17.023,
+      "interior_delta": 18.305,
+      "lowfreq_border_delta": 23.856,
+      "lowfreq_ratio": 0.9036,
+      "seam_ratio": 0.93
+    },
+    "mask": {
+      "seam_h_delta": 27.838,
+      "seam_v_delta": 26.875,
+      "mean_border_delta": 27.357,
+      "interior_delta": 29.526,
+      "lowfreq_border_delta": 32.847,
+      "lowfreq_ratio": 0.9461,
+      "seam_ratio": 0.9265
+    }
+  },
+  "normal_qa": {
+    "mean_B": 253.0,
+    "min_B": 217,
+    "unit_mag_mean": 1.0002,
+    "xy_std": 0.2493
+  },
+  "luma_contrast_qa": {
+    "mean_L": 70.69,
+    "std_L": 6.42,
+    "p05_L": 59.61,
+    "p95_L": 80.39
+  },
+  "engine": "comfy-zit",
+  "seed": 2026823,
+  "peak_vram_mib": 7652,
+  "idle_vram_mib": 4902,
+  "elapsed_sec": 40.7,
+  "timestamp": "2026-11-23T21:00:50Z",
+  "qa_passed": true,
+  "qa_failures": []
+}

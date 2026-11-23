@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using Realmz.Data;
+using Realmz.World;
 using TMPro;
 using UnityEditor;
 using UnityEngine;
@@ -22,6 +23,9 @@ namespace Realmz.EditorTools
         private const string PropsDir = M1ArtRoot + "/Props";
         private const string TilesDir = M1ArtRoot + "/Tiles";
         private const string MaterialsDir = M1ArtRoot + "/Materials";
+        private const string InboxRoot = "Assets/Inbox";
+        private const string FoundryMaterialsDir = "Assets/Materials/Foundry";
+        private const string TerrainBlendShaderName = "Realmz/TerrainBlend";
         private const string ResourcesDir = "Assets/Resources";
         private const string CatalogAssetPath = ResourcesDir + "/BywaterAssetCatalog.asset";
         private const string UiFontAssetPath = M1ArtRoot + "/RealmzUiFont.asset";
@@ -348,6 +352,9 @@ namespace Realmz.EditorTools
 
             // 6. UI Font Asset
             catalog.uiFont = EnsureUiFontAsset();
+
+            // 7. M1.5 Option A Painterly PBR Terrain & Scatter Materials
+            PopulatePainterlyTerrainCatalog(catalog);
 
             EditorUtility.SetDirty(catalog);
             AssetDatabase.SaveAssets();
@@ -784,6 +791,200 @@ namespace Realmz.EditorTools
 
             EditorUtility.SetDirty(mat);
             return mat;
+        }
+
+        public static void PopulatePainterlyTerrainCatalog(BywaterAssetCatalog catalog)
+        {
+            if (catalog == null)
+            {
+                return;
+            }
+
+            EnsureFolder(MaterialsDir);
+
+            Material pGrass = LoadFoundryTerrainMaterial("bywater_meadow_grass");
+            Material pCobble = LoadFoundryTerrainMaterial("bywater_cobblestone_road");
+            Material pDirt = LoadFoundryTerrainMaterial("bywater_dirt_trail");
+            Material pRiverbank = LoadFoundryTerrainMaterial("bywater_riverbank_mud");
+            Material pDungeonFloor = LoadFoundryTerrainMaterial("dungeon_flagstone_floor");
+            Material pDungeonWall = LoadFoundryTerrainMaterial("dungeon_stone_wall");
+
+            if (pGrass != null) catalog.painterlyGrassMaterial = pGrass;
+            if (pCobble != null) catalog.painterlyCobbleMaterial = pCobble;
+            if (pDirt != null) catalog.painterlyDirtMaterial = pDirt;
+            if (pRiverbank != null) catalog.painterlyRiverbankMaterial = pRiverbank;
+            if (pDungeonFloor != null) catalog.painterlyDungeonFloorMaterial = pDungeonFloor;
+            if (pDungeonWall != null) catalog.painterlyDungeonWallMaterial = pDungeonWall;
+
+            LoadTileBaseTextures("bywater_grass", out Texture2D fallbackGrassTex, out _);
+            LoadTileBaseTextures("dungeon_floor", out Texture2D fallbackDungeonTex, out _);
+
+            string[] overworldLayers =
+            {
+                "bywater_meadow_grass",
+                "bywater_cobblestone_road",
+                "bywater_dirt_trail",
+                "bywater_riverbank_mud"
+            };
+            catalog.terrainBlendOverworldMaterial = CreateOrUpdateTerrainBlendMaterial(
+                MaterialsDir + "/M1_Terrain_OverworldBlend.mat",
+                overworldLayers,
+                fallbackGrassTex);
+
+            string[] dungeonLayers =
+            {
+                "dungeon_flagstone_floor",
+                "dungeon_stone_wall",
+                "bywater_dirt_trail",
+                "bywater_riverbank_mud"
+            };
+            catalog.terrainBlendDungeonMaterial = CreateOrUpdateTerrainBlendMaterial(
+                MaterialsDir + "/M1_Terrain_DungeonBlend.mat",
+                dungeonLayers,
+                fallbackDungeonTex);
+
+            catalog.grassTuftMaterial = CreateOrUpdateScatterMaterial(
+                MaterialsDir + "/M1_GrassTuft.mat",
+                BywaterGroundScatter.CreateDefaultGrassTuftMaterial);
+            catalog.wildflowerTuftMaterial = CreateOrUpdateScatterMaterial(
+                MaterialsDir + "/M1_WildflowerTuft.mat",
+                BywaterGroundScatter.CreateDefaultFlowerMaterial);
+            catalog.pebbleScatterMaterial = CreateOrUpdateScatterMaterial(
+                MaterialsDir + "/M1_PebbleScatter.mat",
+                BywaterGroundScatter.CreateDefaultPebbleMaterial);
+        }
+
+        private static Material LoadFoundryTerrainMaterial(string terrainId)
+        {
+            return AssetDatabase.LoadAssetAtPath<Material>(FoundryMaterialsDir + "/" + terrainId + ".mat");
+        }
+
+        private static void LoadPainterlyTerrainTextures(
+            string terrainId,
+            out Texture2D albedo,
+            out Texture2D normal,
+            out Texture2D mask)
+        {
+            string folder = InboxRoot + "/terrain_" + terrainId;
+            albedo = AssetDatabase.LoadAssetAtPath<Texture2D>(folder + "/" + terrainId + "_albedo.png");
+            normal = AssetDatabase.LoadAssetAtPath<Texture2D>(folder + "/" + terrainId + "_normal.png");
+            mask = AssetDatabase.LoadAssetAtPath<Texture2D>(folder + "/" + terrainId + "_mask.png");
+
+            Material foundryMat = LoadFoundryTerrainMaterial(terrainId);
+            if (foundryMat != null)
+            {
+                if (albedo == null && foundryMat.HasProperty("_BaseMap"))
+                {
+                    albedo = foundryMat.GetTexture("_BaseMap") as Texture2D;
+                }
+                if (normal == null && foundryMat.HasProperty("_BumpMap"))
+                {
+                    normal = foundryMat.GetTexture("_BumpMap") as Texture2D;
+                }
+                if (mask == null && foundryMat.HasProperty("_MaskMap"))
+                {
+                    mask = foundryMat.GetTexture("_MaskMap") as Texture2D;
+                }
+            }
+        }
+
+        private static Material CreateOrUpdateTerrainBlendMaterial(
+            string matPath,
+            string[] layerIds,
+            Texture2D fallbackBaseTex)
+        {
+            Material mat = LoadOrCreateMaterial(matPath, TerrainBlendShaderName, "Universal Render Pipeline/Lit");
+            bool isTerrainBlend = mat.shader != null && mat.shader.name == TerrainBlendShaderName;
+
+            if (!isTerrainBlend)
+            {
+                mat.SetColor("_BaseColor", Color.white);
+                if (mat.HasProperty("_BaseMap"))
+                {
+                    mat.SetTexture("_BaseMap", fallbackBaseTex);
+                }
+                if (mat.HasProperty("_Smoothness"))
+                {
+                    mat.SetFloat("_Smoothness", 0.08f);
+                }
+                EditorUtility.SetDirty(mat);
+                return mat;
+            }
+
+            if (mat.HasProperty("_WorldTileScale")) mat.SetFloat("_WorldTileScale", 0.5f);
+            if (mat.HasProperty("_BlendContrast")) mat.SetFloat("_BlendContrast", 0.16f);
+            if (mat.HasProperty("_BumpScale")) mat.SetFloat("_BumpScale", 1.0f);
+            if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 1.0f);
+            if (mat.HasProperty("_MacroScale")) mat.SetFloat("_MacroScale", 0.085f);
+            if (mat.HasProperty("_MacroStrength")) mat.SetFloat("_MacroStrength", 0.15f);
+            if (mat.HasProperty("_GridHintStrength")) mat.SetFloat("_GridHintStrength", 0.0f);
+
+            LoadPainterlyTerrainTextures(layerIds[0], out Texture2D layer0Albedo, out _, out _);
+            bool hasLayer0 = layer0Albedo != null;
+
+            for (int i = 0; i < 4 && i < layerIds.Length; i++)
+            {
+                string albedoProp = "_Layer" + i + "Albedo";
+                string normalProp = "_Layer" + i + "Normal";
+                string maskProp = "_Layer" + i + "Mask";
+                string colorProp = "_Layer" + i + "Color";
+
+                if (mat.HasProperty(colorProp))
+                {
+                    mat.SetColor(colorProp, Color.white);
+                }
+
+                if (!hasLayer0)
+                {
+                    if (mat.HasProperty(albedoProp)) mat.SetTexture(albedoProp, null);
+                    if (mat.HasProperty(normalProp)) mat.SetTexture(normalProp, null);
+                    if (mat.HasProperty(maskProp)) mat.SetTexture(maskProp, null);
+                    continue;
+                }
+
+                LoadPainterlyTerrainTextures(layerIds[i], out Texture2D albedo, out Texture2D normal, out Texture2D mask);
+                if (mat.HasProperty(albedoProp)) mat.SetTexture(albedoProp, albedo);
+                if (mat.HasProperty(normalProp)) mat.SetTexture(normalProp, normal);
+                if (mat.HasProperty(maskProp)) mat.SetTexture(maskProp, mask);
+            }
+
+            if (mat.HasProperty("_BaseMap"))
+            {
+                mat.SetTexture("_BaseMap", hasLayer0 ? null : fallbackBaseTex);
+            }
+
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        private static Material CreateOrUpdateScatterMaterial(string matPath, Func<Material> createDefault)
+        {
+            Material template = createDefault != null ? createDefault() : null;
+            if (template == null)
+            {
+                return LoadOrCreateMaterial(matPath, "Realmz/GrassTuft", "Universal Render Pipeline/Lit");
+            }
+
+            try
+            {
+                Material existing = AssetDatabase.LoadAssetAtPath<Material>(matPath);
+                if (existing == null)
+                {
+                    Material assetMat = new Material(template);
+                    AssetDatabase.CreateAsset(assetMat, matPath);
+                    EditorUtility.SetDirty(assetMat);
+                    return assetMat;
+                }
+
+                existing.shader = template.shader;
+                existing.CopyPropertiesFromMaterial(template);
+                EditorUtility.SetDirty(existing);
+                return existing;
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(template);
+            }
         }
 
         private static void ApplyNormalMap(Material mat, Texture2D normalMap, float bumpScale = 1.0f)

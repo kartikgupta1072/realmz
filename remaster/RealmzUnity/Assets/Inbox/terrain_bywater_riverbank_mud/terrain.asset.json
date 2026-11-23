@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0",
+  "asset_kind": "terrain",
+  "id": "bywater_riverbank_mud",
+  "name": "Bywater Riverbank Mud",
+  "category": "Tile",
+  "material_profile": "mud",
+  "resolution": 512,
+  "style": "painterly-pbr",
+  "tile_scale_m": 2.0,
+  "maps": {
+    "albedo": "bywater_riverbank_mud_albedo.png",
+    "normal": "bywater_riverbank_mud_normal.png",
+    "height": "bywater_riverbank_mud_height.png",
+    "roughness": "bywater_riverbank_mud_roughness.png",
+    "ao": "bywater_riverbank_mud_ao.png",
+    "mask": "bywater_riverbank_mud_mask.png"
+  },
+  "seamless_metrics": {
+    "albedo": {
+      "seam_h_delta": 12.949,
+      "seam_v_delta": 13.945,
+      "mean_border_delta": 13.447,
+      "interior_delta": 11.823,
+      "lowfreq_border_delta": 10.4,
+      "lowfreq_ratio": 1.0436,
+      "seam_ratio": 1.1373
+    },
+    "normal": {
+      "seam_h_delta": 13.343,
+      "seam_v_delta": 13.58,
+      "mean_border_delta": 13.462,
+      "interior_delta": 10.195,
+      "lowfreq_border_delta": 13.956,
+      "lowfreq_ratio": 1.3252,
+      "seam_ratio": 1.3204
+    },
+    "height": {
+      "seam_h_delta": 14.98,
+      "seam_v_delta": 17.199,
+      "mean_border_delta": 16.09,
+      "interior_delta": 16.047,
+      "lowfreq_border_delta": 20.574,
+      "lowfreq_ratio": 0.8742,
+      "seam_ratio": 1.0026
+    },
+    "mask": {
+      "seam_h_delta": 24.55,
+      "seam_v_delta": 26.369,
+      "mean_border_delta": 25.46,
+      "interior_delta": 26.137,
+      "lowfreq_border_delta": 27.966,
+      "lowfreq_ratio": 0.9103,
+      "seam_ratio": 0.9741
+    }
+  },
+  "normal_qa": {
+    "mean_B": 253.53,
+    "min_B": 217,
+    "unit_mag_mean": 1.0003,
+    "xy_std": 0.2157
+  },
+  "luma_contrast_qa": {
+    "mean_L": 46.88,
+    "std_L": 6.18,
+    "p05_L": 36.86,
+    "p95_L": 56.08
+  },
+  "engine": "comfy-zit",
+  "seed": 2026824,
+  "peak_vram_mib": 7652,
+  "idle_vram_mib": 4260,
+  "elapsed_sec": 41.5,
+  "timestamp": "2026-11-23T21:01:32Z",
+  "qa_passed": true,
+  "qa_failures": []
+}

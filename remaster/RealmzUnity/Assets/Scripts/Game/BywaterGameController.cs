@@ -480,6 +480,7 @@ namespace Realmz.Game
             if (worldRenderer != null)
             {
                 worldRenderer.SetCombatArenaFrame(0, 0, 0, 0, false);
+                worldRenderer.SetTerrainGridHint(0.0f);
                 worldRenderer.RenderMap(ExploreSession.CurrentMap, ExploreSession.Position, forceRebuild: true);
             }
 
@@ -1068,6 +1069,7 @@ namespace Realmz.Game
             {
                 worldRenderer.UpdateFocusCenter(mid);
                 worldRenderer.SetCombatArenaFrame(_arenaOriginX, _arenaOriginY, _arenaWidth, _arenaHeight, true);
+                worldRenderer.SetTerrainGridHint(0.08f);
                 worldRenderer.SetPartyTorchPosition(midWorld, map.IsDungeon);
             }
 

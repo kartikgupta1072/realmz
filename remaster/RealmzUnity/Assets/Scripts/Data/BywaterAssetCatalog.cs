@@ -69,6 +69,19 @@ namespace Realmz.Data
         public Material brazierBillboardMaterial;
         public Sprite brazierBillboardSprite;
 
+        [Header("M1.5 Option A Painterly PBR Terrain")]
+        public Material terrainBlendOverworldMaterial;
+        public Material terrainBlendDungeonMaterial;
+        public Material painterlyGrassMaterial;
+        public Material painterlyCobbleMaterial;
+        public Material painterlyDirtMaterial;
+        public Material painterlyRiverbankMaterial;
+        public Material painterlyDungeonFloorMaterial;
+        public Material painterlyDungeonWallMaterial;
+        public Material grassTuftMaterial;
+        public Material wildflowerTuftMaterial;
+        public Material pebbleScatterMaterial;
+
         public List<HeroArtEntry> heroes = new List<HeroArtEntry>();
         public List<MonsterArtEntry> monsters = new List<MonsterArtEntry>();
 

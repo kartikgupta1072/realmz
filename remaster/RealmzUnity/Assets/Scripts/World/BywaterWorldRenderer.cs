@@ -17,6 +17,10 @@ namespace Realmz.World
         private const int MaxActiveTorchLights = 8;
 
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        private static readonly int SplatMapId = Shader.PropertyToID("_SplatMap");
+        private static readonly int WorldBoundsId = Shader.PropertyToID("_WorldBounds");
+        private static readonly int Layer0AlbedoId = Shader.PropertyToID("_Layer0Albedo");
+        private static readonly int GridHintStrengthId = Shader.PropertyToID("_GridHintStrength");
 
         private static readonly GridCoord[] LandTorchHints =
         {
@@ -163,11 +167,33 @@ namespace Realmz.World
 
         private Light _partyLantern;
 
+        private BywaterGroundScatter _groundScatter;
+        private MeshFilter _terrainMeshFilter;
+        private MeshRenderer _terrainMeshRenderer;
+        private Mesh _terrainMesh;
+        private Texture2D _splatTexture;
+        private Material _activeTerrainMat;
+        private TileMapData _splatBuiltForMap;
+        private MaterialPropertyBlock _terrainPropBlock;
+        private Material _fallbackGrassTuftMat;
+        private Material _fallbackFlowerTuftMat;
+        private Material _fallbackPebbleScatterMat;
+        private bool _combatScatterSuppressed;
+        private GridCoord _combatOrigin;
+        private int _combatW;
+        private int _combatH;
+        private float _terrainGridHintStrength;
+
+        private readonly List<Vector3> _terrainVertices = new List<Vector3>(5100);
+        private readonly List<Vector2> _terrainUvs = new List<Vector2>(5100);
+        private readonly List<int> _terrainTriangles = new List<int>(30000);
+
         public void Initialize(BywaterAssetCatalog catalog)
         {
             _catalog = catalog;
             EnsureContainers();
             EnsurePartyLantern();
+            SyncScatterMaterials();
             WarmupPools();
         }
 
@@ -238,9 +264,32 @@ namespace Realmz.World
             }
         }
 
+        public void SetTerrainGridHint(float strength)
+        {
+            _terrainGridHintStrength = Mathf.Max(0f, strength);
+            ApplyTerrainPropertyBlock();
+        }
+
         public void SetCombatArenaFrame(int originX, int originY, int width, int height, bool active)
         {
             EnsureContainers();
+
+            _combatScatterSuppressed = active && width > 0 && height > 0;
+            _combatOrigin = new GridCoord(originX, originY);
+            _combatW = width;
+            _combatH = height;
+
+            if (_currentMap != null && _hasRendered && _groundScatter != null)
+            {
+                _groundScatter.RebuildForMap(
+                    _currentMap,
+                    _focusCenter,
+                    WindowRadius,
+                    _combatScatterSuppressed,
+                    _combatOrigin,
+                    _combatW,
+                    _combatH);
+            }
 
             if (!active || width <= 0 || height <= 0)
             {
@@ -314,6 +363,25 @@ namespace Realmz.World
             int crateIdx = 0;
 
             bool isDungeon = map.IsDungeon;
+            Material terrainMat = ResolveTerrainBlendMaterial(map);
+            bool useTerrainBlend = terrainMat != null;
+            _activeTerrainMat = terrainMat;
+
+            if (useTerrainBlend)
+            {
+                EnsureSplatTexture(map);
+                UpdateTerrainMesh(map, minX, maxX, minY, maxY);
+                if (_terrainMeshRenderer != null)
+                {
+                    _terrainMeshRenderer.sharedMaterial = terrainMat;
+                    _terrainMeshRenderer.gameObject.SetActive(true);
+                    ApplyTerrainPropertyBlock();
+                }
+            }
+            else if (_terrainMeshRenderer != null)
+            {
+                _terrainMeshRenderer.gameObject.SetActive(false);
+            }
 
             for (int y = minY; y <= maxY; y++)
             {
@@ -323,14 +391,19 @@ namespace Realmz.World
                     int tileHash = BywaterTileClassifier.DeterministicTileHash(x, y);
                     int variantIdx = ResolveWeightedTileVariant(kind, isDungeon, x, y, tileHash);
 
-                    // Floor quad with multi-variant material, deterministic yaw, and subtle per-tile tint
-                    float floorY = kind == BywaterTileKind.ShallowWater ? -0.12f : 0f;
-                    MeshRenderer floorQuad = GetFloorQuad(floorIdx++);
-                    floorQuad.transform.position = new Vector3(x, floorY, -y);
-                    floorQuad.transform.rotation = Quaternion.Euler(90f, ResolveFloorYaw(kind, tileHash), 0f);
-                    floorQuad.sharedMaterial = ResolveFloorMaterial(kind, isDungeon, variantIdx);
-                    ApplyFloorTint(floorQuad, kind, tileHash);
-                    floorQuad.gameObject.SetActive(true);
+                    // Floor quad: when height-blended terrain mesh is active, only keep animated water quads
+                    if (!useTerrainBlend || kind == BywaterTileKind.ShallowWater)
+                    {
+                        float floorY = kind == BywaterTileKind.ShallowWater
+                            ? (useTerrainBlend ? -0.10f : -0.12f)
+                            : 0f;
+                        MeshRenderer floorQuad = GetFloorQuad(floorIdx++);
+                        floorQuad.transform.position = new Vector3(x, floorY, -y);
+                        floorQuad.transform.rotation = Quaternion.Euler(90f, ResolveFloorYaw(kind, tileHash), 0f);
+                        floorQuad.sharedMaterial = ResolveFloorMaterial(kind, isDungeon, variantIdx);
+                        ApplyFloorTint(floorQuad, kind, tileHash);
+                        floorQuad.gameObject.SetActive(true);
+                    }
 
                     if (isDungeon)
                     {
@@ -339,8 +412,11 @@ namespace Realmz.World
                             case BywaterTileKind.DungeonWall:
                             case BywaterTileKind.WallBlock:
                             {
-                                Material wallMat = _catalog != null
+                                Material fallbackWallMat = _catalog != null
                                     ? _catalog.GetTileVariantMaterial(_catalog.dungeonWallMaterial, _catalog.dungeonWallVariantMaterials, variantIdx)
+                                    : null;
+                                Material wallMat = _catalog != null
+                                    ? FirstNonNull(_catalog.painterlyDungeonWallMaterial, fallbackWallMat)
                                     : null;
                                 MeshRenderer wallCube = GetBlockCube(blockIdx++);
                                 wallCube.transform.position = new Vector3(x, 0.675f, -y);
@@ -351,7 +427,7 @@ namespace Realmz.World
                                 MeshRenderer trimCap = GetBlockCube(blockIdx++);
                                 trimCap.transform.position = new Vector3(x, 1.385f, -y);
                                 trimCap.transform.localScale = new Vector3(1.05f, 0.07f, 1.05f);
-                                trimCap.sharedMaterial = FirstNonNull(_catalog != null ? _catalog.stoneFenceMaterial : null, _catalog != null ? _catalog.doorArchMaterial : null, wallMat);
+                                trimCap.sharedMaterial = FirstNonNull(_catalog != null ? _catalog.painterlyDungeonWallMaterial : null, _catalog != null ? _catalog.stoneFenceMaterial : null, wallMat);
                                 trimCap.gameObject.SetActive(true);
                                 break;
                             }
@@ -435,6 +511,19 @@ namespace Realmz.World
 
             UpdateWindowPortals(map, minX, maxX, minY, maxY);
             UpdateWindowTorches(center, minX, maxX, minY, maxY, isDungeon);
+
+            if (_groundScatter != null)
+            {
+                SyncScatterMaterials();
+                _groundScatter.RebuildForMap(
+                    map,
+                    center,
+                    WindowRadius,
+                    _combatScatterSuppressed,
+                    _combatOrigin,
+                    _combatW,
+                    _combatH);
+            }
         }
 
         private void ApplyFloorTint(MeshRenderer floorQuad, BywaterTileKind kind, int tileHash)
@@ -1665,6 +1754,442 @@ namespace Realmz.World
             if (_torchContainer == null) _torchContainer = CreateChildContainer("Torches");
             if (_portalContainer == null) _portalContainer = CreateChildContainer("Portals");
             if (_arenaContainer == null) _arenaContainer = CreateChildContainer("CombatArenaFrame");
+
+            if (_terrainMeshFilter == null || _terrainMeshRenderer == null)
+            {
+                Transform terrainTransform = CreateChildContainer("TerrainGround");
+                _terrainMeshFilter = terrainTransform.GetComponent<MeshFilter>();
+                if (_terrainMeshFilter == null)
+                {
+                    _terrainMeshFilter = terrainTransform.gameObject.AddComponent<MeshFilter>();
+                }
+
+                _terrainMeshRenderer = terrainTransform.GetComponent<MeshRenderer>();
+                if (_terrainMeshRenderer == null)
+                {
+                    _terrainMeshRenderer = terrainTransform.gameObject.AddComponent<MeshRenderer>();
+                }
+
+                _terrainMeshRenderer.shadowCastingMode = ShadowCastingMode.Off;
+                _terrainMeshRenderer.receiveShadows = true;
+                terrainTransform.gameObject.SetActive(false);
+            }
+
+            if (_groundScatter == null)
+            {
+                Transform scatterTransform = CreateChildContainer("GroundScatter");
+                _groundScatter = scatterTransform.GetComponent<BywaterGroundScatter>();
+                if (_groundScatter == null)
+                {
+                    _groundScatter = scatterTransform.gameObject.AddComponent<BywaterGroundScatter>();
+                }
+            }
+        }
+
+        private void SyncScatterMaterials()
+        {
+            if (_groundScatter == null)
+            {
+                return;
+            }
+
+            Material grassMat = _catalog != null && _catalog.grassTuftMaterial != null
+                ? _catalog.grassTuftMaterial
+                : (_fallbackGrassTuftMat ??= BywaterGroundScatter.CreateDefaultGrassTuftMaterial());
+
+            Material flowerMat = _catalog != null && _catalog.wildflowerTuftMaterial != null
+                ? _catalog.wildflowerTuftMaterial
+                : (_fallbackFlowerTuftMat ??= BywaterGroundScatter.CreateDefaultFlowerMaterial());
+
+            Material pebbleMat = _catalog != null && _catalog.pebbleScatterMaterial != null
+                ? _catalog.pebbleScatterMaterial
+                : (_fallbackPebbleScatterMat ??= BywaterGroundScatter.CreateDefaultPebbleMaterial());
+
+            _groundScatter.SetMaterials(grassMat, flowerMat, pebbleMat);
+        }
+
+        private Material ResolveTerrainBlendMaterial(TileMapData map)
+        {
+            if (_catalog == null || map == null)
+            {
+                return null;
+            }
+
+            Material mat = map.IsDungeon
+                ? _catalog.terrainBlendDungeonMaterial
+                : _catalog.terrainBlendOverworldMaterial;
+            if (mat == null || !mat.HasProperty(Layer0AlbedoId) || mat.GetTexture(Layer0AlbedoId) == null)
+            {
+                return null;
+            }
+
+            return mat;
+        }
+
+        private void ApplyTerrainPropertyBlock()
+        {
+            if (_terrainMeshRenderer == null || _currentMap == null || _splatTexture == null)
+            {
+                return;
+            }
+
+            _terrainPropBlock ??= new MaterialPropertyBlock();
+            _terrainPropBlock.Clear();
+            _terrainPropBlock.SetTexture(SplatMapId, _splatTexture);
+            _terrainPropBlock.SetVector(WorldBoundsId, new Vector4(
+                -0.5f,
+                -(_currentMap.Height - 0.5f),
+                1.0f / Mathf.Max(1, _currentMap.Width),
+                1.0f / Mathf.Max(1, _currentMap.Height)));
+            _terrainPropBlock.SetFloat(GridHintStrengthId, _terrainGridHintStrength);
+            _terrainMeshRenderer.SetPropertyBlock(_terrainPropBlock);
+        }
+
+        private void EnsureSplatTexture(TileMapData map)
+        {
+            if (map == null || map.Width <= 0 || map.Height <= 0)
+            {
+                return;
+            }
+
+            int texW = map.Width * 2;
+            int texH = map.Height * 2;
+            if (_splatTexture != null &&
+                ReferenceEquals(_splatBuiltForMap, map) &&
+                _splatTexture.width == texW &&
+                _splatTexture.height == texH)
+            {
+                return;
+            }
+
+            if (_splatTexture == null || _splatTexture.width != texW || _splatTexture.height != texH)
+            {
+                DestroyResource(_splatTexture);
+                _splatTexture = new Texture2D(texW, texH, TextureFormat.RGBA32, mipChain: false, linear: true);
+                _splatTexture.name = "BywaterTerrainSplat";
+                _splatTexture.filterMode = FilterMode.Bilinear;
+                _splatTexture.wrapMode = TextureWrapMode.Clamp;
+            }
+
+            int count = texW * texH;
+            Color[] raw = new Color[count];
+            bool isDungeon = map.IsDungeon;
+
+            for (int sy = 0; sy < texH; sy++)
+            {
+                int y = sy >> 1;
+                int subY = sy & 1;
+                for (int sx = 0; sx < texW; sx++)
+                {
+                    int x = sx >> 1;
+                    int subX = sx & 1;
+                    BywaterTileKind kind = BywaterTileClassifier.Classify(map, x, y);
+
+                    Color w;
+                    if (isDungeon)
+                    {
+                        if (kind == BywaterTileKind.DungeonWall || kind == BywaterTileKind.WallBlock)
+                        {
+                            w = new Color(0f, 1f, 0f, 0f);
+                        }
+                        else
+                        {
+                            int edgeNx = subX == 0 ? x - 1 : x + 1;
+                            int edgeNy = subY == 0 ? y - 1 : y + 1;
+                            bool subAdjacentWall = IsDungeonWallTile(map, edgeNx, y)
+                                || IsDungeonWallTile(map, x, edgeNy)
+                                || IsDungeonWallTile(map, edgeNx, edgeNy);
+
+                            if (subAdjacentWall)
+                            {
+                                w = new Color(0.54f, 0.28f, 0.18f, 0f);
+                            }
+                            else if (IsDungeonWallTile(map, x - 1, y)
+                                || IsDungeonWallTile(map, x + 1, y)
+                                || IsDungeonWallTile(map, x, y - 1)
+                                || IsDungeonWallTile(map, x, y + 1))
+                            {
+                                w = new Color(0.78f, 0.14f, 0.08f, 0f);
+                            }
+                            else
+                            {
+                                w = new Color(1f, 0f, 0f, 0f);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        if (kind == BywaterTileKind.ShallowWater)
+                        {
+                            w = new Color(0f, 0f, 0f, 1f);
+                        }
+                        else
+                        {
+                            switch (kind)
+                            {
+                                case BywaterTileKind.Cobblestone:
+                                case BywaterTileKind.TownBuildingDoor:
+                                case BywaterTileKind.TownBuildingSolid:
+                                    w = new Color(0f, 1f, 0f, 0f);
+                                    break;
+                                case BywaterTileKind.DirtPath:
+                                    w = new Color(0f, 0f, 1f, 0f);
+                                    break;
+                                case BywaterTileKind.WallBlock:
+                                {
+                                    BywaterOutdoorPropKind prop = BywaterTileClassifier.ClassifyOutdoorProp(map, x, y, out _);
+                                    w = (prop == BywaterOutdoorPropKind.CottageFacade || prop == BywaterOutdoorPropKind.StoneFence)
+                                        ? new Color(0.25f, 0.75f, 0f, 0f)
+                                        : new Color(1f, 0f, 0f, 0f);
+                                    break;
+                                }
+                                default:
+                                    w = new Color(1f, 0f, 0f, 0f);
+                                    break;
+                            }
+
+                            // Smooth shoreline transition within 1.5 tiles of ShallowWater
+                            float subWorldX = x + (subX == 0 ? -0.25f : 0.25f);
+                            float subTileY = y + (subY == 0 ? -0.25f : 0.25f);
+                            float minDistSq = float.MaxValue;
+                            for (int dy = -2; dy <= 2; dy++)
+                            {
+                                int wy = y + dy;
+                                if (wy < 0 || wy >= map.Height) continue;
+                                for (int dx = -2; dx <= 2; dx++)
+                                {
+                                    int wx = x + dx;
+                                    if (wx < 0 || wx >= map.Width) continue;
+                                    if (BywaterTileClassifier.Classify(map, wx, wy) == BywaterTileKind.ShallowWater)
+                                    {
+                                        float ddx = wx - subWorldX;
+                                        float ddy = wy - subTileY;
+                                        float distSq = ddx * ddx + ddy * ddy;
+                                        if (distSq < minDistSq)
+                                        {
+                                            minDistSq = distSq;
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (minDistSq <= 1.55f * 1.55f)
+                            {
+                                float dist = Mathf.Sqrt(minDistSq);
+                                float bank = Mathf.Lerp(0.80f, 0.45f, Mathf.Clamp01((dist - 0.70f) / 0.85f));
+                                if (kind == BywaterTileKind.Cobblestone)
+                                {
+                                    bank *= 0.45f;
+                                }
+
+                                float landScale = 1f - bank;
+                                w.r *= landScale;
+                                w.g *= landScale;
+                                w.b *= landScale;
+                                w.a = Mathf.Max(w.a, bank);
+                            }
+                        }
+                    }
+
+                    raw[sy * texW + sx] = w;
+                }
+            }
+
+            // Gentle 3x3 smoothing while keeping tile centers crisp; flip Y so row 0 maps to top (world Z = 0)
+            Color[] finalPixels = new Color[count];
+            for (int sy = 0; sy < texH; sy++)
+            {
+                int py = (texH - 1) - sy;
+                for (int sx = 0; sx < texW; sx++)
+                {
+                    Color acc = raw[sy * texW + sx] * 0.56f;
+                    for (int oy = -1; oy <= 1; oy++)
+                    {
+                        int ny = Mathf.Clamp(sy + oy, 0, texH - 1);
+                        for (int ox = -1; ox <= 1; ox++)
+                        {
+                            if (ox == 0 && oy == 0) continue;
+                            int nx = Mathf.Clamp(sx + ox, 0, texW - 1);
+                            float weight = (ox == 0 || oy == 0) ? 0.08f : 0.03f;
+                            acc += raw[ny * texW + nx] * weight;
+                        }
+                    }
+
+                    float sum = acc.r + acc.g + acc.b + acc.a;
+                    if (sum > 0.0001f)
+                    {
+                        float inv = 1f / sum;
+                        acc.r *= inv;
+                        acc.g *= inv;
+                        acc.b *= inv;
+                        acc.a *= inv;
+                    }
+                    else
+                    {
+                        acc = new Color(1f, 0f, 0f, 0f);
+                    }
+
+                    finalPixels[py * texW + sx] = acc;
+                }
+            }
+
+            _splatTexture.SetPixels(finalPixels);
+            _splatTexture.Apply(updateMipmaps: false, makeNoLongerReadable: false);
+            _splatBuiltForMap = map;
+        }
+
+        private static bool IsDungeonWallTile(TileMapData map, int x, int y)
+        {
+            if (!map.InBounds(x, y))
+            {
+                return true;
+            }
+
+            BywaterTileKind kind = BywaterTileClassifier.Classify(map, x, y);
+            return kind == BywaterTileKind.DungeonWall || kind == BywaterTileKind.WallBlock;
+        }
+
+        private void UpdateTerrainMesh(TileMapData map, int minX, int maxX, int minY, int maxY)
+        {
+            if (_terrainMeshFilter == null)
+            {
+                return;
+            }
+
+            if (_terrainMesh == null)
+            {
+                _terrainMesh = new Mesh
+                {
+                    name = "BywaterTerrainWindowMesh"
+                };
+                _terrainMesh.MarkDynamic();
+            }
+
+            int gMinX = Mathf.Max(0, minX - 1);
+            int gMaxX = Mathf.Min(map.Width - 1, maxX + 1);
+            int gMinY = Mathf.Max(0, minY - 1);
+            int gMaxY = Mathf.Min(map.Height - 1, maxY + 1);
+
+            int quadsX = (gMaxX - gMinX + 1) * 2;
+            int quadsZ = (gMaxY - gMinY + 1) * 2;
+            int vertsX = quadsX + 1;
+            int vertsZ = quadsZ + 1;
+
+            _terrainVertices.Clear();
+            _terrainUvs.Clear();
+            _terrainTriangles.Clear();
+
+            for (int iz = 0; iz < vertsZ; iz++)
+            {
+                float vz = -(gMinY - 0.5f) - iz * 0.5f;
+                for (int ix = 0; ix < vertsX; ix++)
+                {
+                    float vx = (gMinX - 0.5f) + ix * 0.5f;
+                    float vy = ComputeTerrainVertexHeight(map, gMinX, gMinY, ix, iz);
+                    _terrainVertices.Add(new Vector3(vx, vy, vz));
+                    _terrainUvs.Add(new Vector2(vx, -vz));
+                }
+            }
+
+            for (int qz = 0; qz < quadsZ; qz++)
+            {
+                int row0 = qz * vertsX;
+                int row1 = (qz + 1) * vertsX;
+                for (int qx = 0; qx < quadsX; qx++)
+                {
+                    int v00 = row0 + qx;
+                    int v10 = v00 + 1;
+                    int v01 = row1 + qx;
+                    int v11 = v01 + 1;
+
+                    _terrainTriangles.Add(v00);
+                    _terrainTriangles.Add(v10);
+                    _terrainTriangles.Add(v11);
+
+                    _terrainTriangles.Add(v00);
+                    _terrainTriangles.Add(v11);
+                    _terrainTriangles.Add(v01);
+                }
+            }
+
+            _terrainMesh.Clear();
+            _terrainMesh.SetVertices(_terrainVertices);
+            _terrainMesh.SetUVs(0, _terrainUvs);
+            _terrainMesh.SetTriangles(_terrainTriangles, 0, true);
+            _terrainMesh.RecalculateNormals();
+            _terrainMesh.RecalculateTangents();
+            _terrainMesh.RecalculateBounds();
+            _terrainMeshFilter.sharedMesh = _terrainMesh;
+        }
+
+        private static float ComputeTerrainVertexHeight(TileMapData map, int gMinX, int gMinY, int ix, int iz)
+        {
+            int txStart = (ix & 1) == 1 ? gMinX + (ix >> 1) : gMinX + (ix >> 1) - 1;
+            int txEnd = (ix & 1) == 1 ? txStart : txStart + 1;
+            int tyStart = (iz & 1) == 1 ? gMinY + (iz >> 1) : gMinY + (iz >> 1) - 1;
+            int tyEnd = (iz & 1) == 1 ? tyStart : tyStart + 1;
+
+            int totalTiles = 0;
+            int waterTiles = 0;
+            for (int ty = tyStart; ty <= tyEnd; ty++)
+            {
+                for (int tx = txStart; tx <= txEnd; tx++)
+                {
+                    totalTiles++;
+                    if (map.InBounds(tx, ty) && BywaterTileClassifier.Classify(map, tx, ty) == BywaterTileKind.ShallowWater)
+                    {
+                        waterTiles++;
+                    }
+                }
+            }
+
+            if (waterTiles == 0)
+            {
+                return 0f;
+            }
+
+            if (waterTiles == totalTiles)
+            {
+                return -0.24f;
+            }
+
+            float ratio = waterTiles / (float)totalTiles;
+            return Mathf.Lerp(-0.01f, -0.07f, ratio);
+        }
+
+        private void OnDestroy()
+        {
+            DestroyResource(_terrainMesh);
+            _terrainMesh = null;
+
+            DestroyResource(_splatTexture);
+            _splatTexture = null;
+
+            DestroyResource(_fallbackGrassTuftMat);
+            _fallbackGrassTuftMat = null;
+
+            DestroyResource(_fallbackFlowerTuftMat);
+            _fallbackFlowerTuftMat = null;
+
+            DestroyResource(_fallbackPebbleScatterMat);
+            _fallbackPebbleScatterMat = null;
+        }
+
+        private static void DestroyResource(Object obj)
+        {
+            if (obj == null)
+            {
+                return;
+            }
+
+            if (Application.isPlaying)
+            {
+                Destroy(obj);
+            }
+            else
+            {
+                DestroyImmediate(obj);
+            }
         }
 
         private Transform CreateChildContainer(string containerName)

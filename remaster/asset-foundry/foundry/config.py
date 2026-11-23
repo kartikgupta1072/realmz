@@ -35,6 +35,20 @@ UNITY_CLI_EXE = Path(r"C:\Users\karti\AppData\Local\Unity\bin\unity.exe")
 PALETTE_SOC_128 = REALMZ_ROOT / "remaster" / "art-pipeline" / "palette_soc_sunlit_128.json"
 LAIGTER_EXE = Path(r"C:\ComfyUI\tools\laigter\laigter-windows\laigter.exe")
 
+COMFY_ROOT = Path(os.environ.get("REALMZ_COMFY_ROOT", r"C:\ComfyUI"))
+COMFY_PYTHON = COMFY_ROOT / ".venv" / "Scripts" / "python.exe"
+COMFY_MAIN = COMFY_ROOT / "main.py"
+COMFY_URL_DEFAULT = os.environ.get("REALMZ_COMFY_URL", "http://127.0.0.1:8188")
+COMFY_ZIT_UNET = COMFY_ROOT / "models" / "diffusion_models" / "z-image-turbo_fp8_scaled_e4m3fn_KJ.safetensors"
+COMFY_ZIT_CLIP = "qwen_3_4b_fp4_mixed.safetensors"
+COMFY_ZIT_VAE = "ae.safetensors"
+COMFY_XL_CKPT = COMFY_ROOT / "models" / "checkpoints" / "Illustrious-XL-v2.0.safetensors"
+
+VALID_TERRAIN_ENGINES = ("auto", "comfy-zit", "comfy-xl", "image")
+TERRAIN_DEFAULT_RES = 512
+TERRAIN_DEFAULT_STYLE = "painterly-pbr"
+TERRAIN_DEFAULT_TILE_SCALE_M = 2.0
+
 VALID_CATEGORIES = ("Hero", "Monster", "Prop", "Building", "Tile")
 VALID_RIG_PROFILES = ("Auto", "Humanoid", "Quadruped", "Aquatic", "Static")
 VALID_MODES = ("Both", "3D", "HD2D")

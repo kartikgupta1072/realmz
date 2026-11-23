@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0",
+  "asset_kind": "terrain",
+  "id": "bywater_meadow_grass",
+  "name": "Bywater Meadow Grass",
+  "category": "Tile",
+  "material_profile": "grass",
+  "resolution": 512,
+  "style": "painterly-pbr",
+  "tile_scale_m": 2.0,
+  "maps": {
+    "albedo": "bywater_meadow_grass_albedo.png",
+    "normal": "bywater_meadow_grass_normal.png",
+    "height": "bywater_meadow_grass_height.png",
+    "roughness": "bywater_meadow_grass_roughness.png",
+    "ao": "bywater_meadow_grass_ao.png",
+    "mask": "bywater_meadow_grass_mask.png"
+  },
+  "seamless_metrics": {
+    "albedo": {
+      "seam_h_delta": 28.291,
+      "seam_v_delta": 30.916,
+      "mean_border_delta": 29.603,
+      "interior_delta": 28.515,
+      "lowfreq_border_delta": 27.712,
+      "lowfreq_ratio": 1.3097,
+      "seam_ratio": 1.0382
+    },
+    "normal": {
+      "seam_h_delta": 19.572,
+      "seam_v_delta": 19.846,
+      "mean_border_delta": 19.709,
+      "interior_delta": 15.401,
+      "lowfreq_border_delta": 22.382,
+      "lowfreq_ratio": 1.5445,
+      "seam_ratio": 1.2797
+    },
+    "height": {
+      "seam_h_delta": 22.158,
+      "seam_v_delta": 25.82,
+      "mean_border_delta": 23.989,
+      "interior_delta": 22.855,
+      "lowfreq_border_delta": 34.573,
+      "lowfreq_ratio": 1.2225,
+      "seam_ratio": 1.0496
+    },
+    "mask": {
+      "seam_h_delta": 35.044,
+      "seam_v_delta": 39.897,
+      "mean_border_delta": 37.47,
+      "interior_delta": 35.973,
+      "lowfreq_border_delta": 46.379,
+      "lowfreq_ratio": 1.2565,
+      "seam_ratio": 1.0416
+    }
+  },
+  "normal_qa": {
+    "mean_B": 252.03,
+    "min_B": 216,
+    "unit_mag_mean": 1.0002,
+    "xy_std": 0.3012
+  },
+  "luma_contrast_qa": {
+    "mean_L": 45.14,
+    "std_L": 13.16,
+    "p05_L": 21.18,
+    "p95_L": 65.49
+  },
+  "engine": "comfy-zit",
+  "seed": 2026811,
+  "peak_vram_mib": 7652,
+  "idle_vram_mib": 4324,
+  "elapsed_sec": 57.4,
+  "timestamp": "2026-11-23T20:59:11Z",
+  "qa_passed": true,
+  "qa_failures": []
+}
