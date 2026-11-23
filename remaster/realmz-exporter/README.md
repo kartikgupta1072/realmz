@@ -33,6 +33,11 @@ python C:\realmz\remaster\realmz-exporter\export_realmz.py `
 - `terrain_bywater_tilesheet_300.png` - `640x320` RGBA terrain tilesheet (`The Family Jewels.rsrc` `PICT 300`).
 - `terrain_bywater_tile_grass.png` - `32x32` most common Land 0 terrain tile (`tile_id=156`).
 - `portrait_bywater_npc_257.png` - `44x44` RGBA NPC portrait (`Portraits.rsrc` `cicn 257`).
+- `bywater_m1/land_0.json` - `90x90` M1 Land 0 grid, `Data P BD` tile rules, town POIs, `Dungeon 0` portal `(89,48)->(33,72)`, and encounter zones.
+- `bywater_m1/dungeon_0.json` - `90x90` row-major M1 Dungeon 0 grid, bitflag passability/LOS rules, exit portal `(32,72)->(88,48)`, and encounter zones.
+- `bywater_m1/party_m1.json` - Starter 6-hero Level-1 party (`Knight`, `Cleric`, `Ranger`, `Mage`, `Paladin`, `Rogue`) with Realmz-authentic stats, gear, spells, and shared stash.
+- `bywater_m1/monsters_bywater_m1.json` - 12 authentic early Bywater monsters extracted from `Data MD` & `Data BD`.
+- `bywater_m1/spells_items_m1.json` - All 18 `Data AD` `spellarea` footprints, starter spells, starter equipment/potions (`Data ID`/`Data NI`), and Bywater town shops (`Data SD`).
 - `manifest.json` - SHA-256 checksums, dimensions, byte sizes, and source resource IDs for all extracted files.
 
 ## Tests

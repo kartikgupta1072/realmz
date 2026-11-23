@@ -66,12 +66,24 @@ namespace RealmzCore.Rules
                 int turnsRemaining,
                 int baseRecoveryChancePercent,
                 bool canRecoverBySave)
+                : this(id, magnitude, turnsRemaining, baseRecoveryChancePercent, canRecoverBySave, 10)
+            {
+            }
+
+            public ConditionEntry(
+                CharConditionId id,
+                int magnitude,
+                int turnsRemaining,
+                int baseRecoveryChancePercent,
+                bool canRecoverBySave,
+                int escalationStepPercent)
             {
                 Id = id;
                 Magnitude = magnitude;
                 TurnsRemaining = turnsRemaining;
                 BaseRecoveryChancePercent = baseRecoveryChancePercent;
                 CanRecoverBySave = canRecoverBySave;
+                EscalationStepPercent = escalationStepPercent;
                 ElapsedRounds = 0;
             }
 
@@ -80,6 +92,7 @@ namespace RealmzCore.Rules
             public int TurnsRemaining { get; set; }
             public int BaseRecoveryChancePercent { get; set; }
             public bool CanRecoverBySave { get; set; }
+            public int EscalationStepPercent { get; set; }
             public int ElapsedRounds { get; set; }
         }
 
@@ -95,9 +108,31 @@ namespace RealmzCore.Rules
             int baseRecoveryChancePercent = 20,
             bool canRecoverBySave = true)
         {
+            Apply(
+                condition,
+                magnitude,
+                turnsRemaining,
+                baseRecoveryChancePercent,
+                canRecoverBySave,
+                escalationStepPercent: 10);
+        }
+
+        public void Apply(
+            CharConditionId condition,
+            int magnitude,
+            int turnsRemaining,
+            int baseRecoveryChancePercent,
+            bool canRecoverBySave,
+            int escalationStepPercent)
+        {
             if (baseRecoveryChancePercent < 0 || baseRecoveryChancePercent > 100)
             {
                 throw new ArgumentOutOfRangeException(nameof(baseRecoveryChancePercent));
+            }
+
+            if (escalationStepPercent < 0 || escalationStepPercent > 100)
+            {
+                throw new ArgumentOutOfRangeException(nameof(escalationStepPercent));
             }
 
             if (_entries.TryGetValue(condition, out ConditionEntry? existing))
@@ -106,6 +141,7 @@ namespace RealmzCore.Rules
                 existing.TurnsRemaining = turnsRemaining;
                 existing.BaseRecoveryChancePercent = baseRecoveryChancePercent;
                 existing.CanRecoverBySave = canRecoverBySave;
+                existing.EscalationStepPercent = escalationStepPercent;
                 existing.ElapsedRounds = 0;
             }
             else
@@ -115,7 +151,8 @@ namespace RealmzCore.Rules
                     magnitude,
                     turnsRemaining,
                     baseRecoveryChancePercent,
-                    canRecoverBySave);
+                    canRecoverBySave,
+                    escalationStepPercent);
             }
         }
 
@@ -156,9 +193,38 @@ namespace RealmzCore.Rules
                 return Math.Clamp(entry.BaseRecoveryChancePercent, 0, 100);
             }
 
-            // ModernBalanced adds +10% per elapsed round to avoid indefinite stunlocks.
-            int escalated = entry.BaseRecoveryChancePercent + (entry.ElapsedRounds * 10);
+            // ModernBalanced adds EscalationStepPercent per elapsed round to avoid indefinite stunlocks.
+            int escalated = entry.BaseRecoveryChancePercent + (entry.ElapsedRounds * entry.EscalationStepPercent);
             return Math.Clamp(escalated, 0, 95);
+        }
+
+        public IReadOnlyList<ConditionDisplayEffect> GetDisplayEffects()
+        {
+            if (_entries.Count == 0)
+            {
+                return Array.Empty<ConditionDisplayEffect>();
+            }
+
+            List<CharConditionId> sortedIds = new List<CharConditionId>(_entries.Keys);
+            sortedIds.Sort();
+
+            List<ConditionDisplayEffect> effects = new List<ConditionDisplayEffect>(sortedIds.Count);
+            for (int i = 0; i < sortedIds.Count; i++)
+            {
+                ConditionEntry entry = _entries[sortedIds[i]];
+                ConditionDescriptor desc = ConditionEffects.GetDescriptor(entry.Id);
+                effects.Add(new ConditionDisplayEffect(
+                    condition: entry.Id,
+                    code: desc.Code,
+                    displayName: desc.DisplayName,
+                    description: desc.Description,
+                    statSummary: desc.StatSummary,
+                    magnitude: entry.Magnitude,
+                    turnsRemaining: entry.TurnsRemaining,
+                    isBeneficial: desc.IsBeneficial));
+            }
+
+            return effects;
         }
 
         public IReadOnlyList<CharConditionId> TickEndOfTurn(IDiceRoller roller, RulesetMode mode)

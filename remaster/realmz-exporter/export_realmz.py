@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from PIL import Image
 
+from bywater_m1 import build_bywater_m1_payloads
 from formats import (
     parse_character,
     parse_doors,
@@ -287,10 +288,28 @@ def export_scenario(realmz_base: Path, scenario_name: str, out_dir: Path) -> Dic
     }
     record_json("scenario.json", scenario_payload, "City of Bywater + Data MD2 + Scenario.rsrc")
 
+    # 7b. Milestone 1 Bywater vertical-slice bundle (extracted/bywater_m1/).
+    if scenario_name == "City of Bywater":
+        m1_dir = out_dir / "bywater_m1"
+        m1_dir.mkdir(parents=True, exist_ok=True)
+        m1_payloads = build_bywater_m1_payloads(base)
+        for fname, payload in m1_payloads.items():
+            rel = f"bywater_m1/{fname}"
+            p = write_json(m1_dir / fname, payload)
+            artifacts.append(
+                {
+                    "file": rel,
+                    "kind": "json",
+                    "bytes": p.stat().st_size,
+                    "sha256": sha256_file(p),
+                    "source": "City of Bywater M1 vertical slice",
+                }
+            )
+
     # 8. Manifest JSON (includes SHA-256 of every prior artifact).
     manifest_payload = {
         "exporter": "realmz-exporter",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "scenario": sanitize_text(scenario_name),
         "realmz_base": str(base),
         "output_dir": str(out_dir),

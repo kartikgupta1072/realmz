@@ -1,0 +1,251 @@
+{
+  "party_name": "Bywater Vanguard",
+  "initial_gold": 400,
+  "stash_item_ids": [
+    611,
+    611,
+    611,
+    611,
+    612,
+    602,
+    805,
+    805,
+    803,
+    1
+  ],
+  "heroes": [
+    {
+      "id": "hero_knight",
+      "name": "Aldric",
+      "archetype": "Knight",
+      "race_id": 1,
+      "race_name": "Human",
+      "caste_id": 1,
+      "caste_name": "Fighter",
+      "level": 1,
+      "hp": 17,
+      "max_hp": 17,
+      "sp": 0,
+      "max_sp": 0,
+      "ac": 29,
+      "to_hit": 18,
+      "dodge": 7,
+      "missile": 7,
+      "movement_max": 14,
+      "attacks_per_round": 2.0,
+      "icon_id": 9018,
+      "portrait_id": 275,
+      "attributes": {
+        "brawn": 18,
+        "knowledge": 8,
+        "judgment": 9,
+        "agility": 14,
+        "vitality": 16,
+        "luck": 11
+      },
+      "equipped_ids": [
+        20,
+        209,
+        418,
+        400
+      ],
+      "known_spell_ids": []
+    },
+    {
+      "id": "hero_cleric",
+      "name": "Liora",
+      "archetype": "Cleric",
+      "race_id": 7,
+      "race_name": "Dwarf",
+      "caste_id": 7,
+      "caste_name": "Priest",
+      "level": 1,
+      "hp": 13,
+      "max_hp": 13,
+      "sp": 21,
+      "max_sp": 21,
+      "ac": 34,
+      "to_hit": 14,
+      "dodge": 4,
+      "missile": 3,
+      "movement_max": 20,
+      "attacks_per_round": 49.0,
+      "icon_id": 9072,
+      "portrait_id": 329,
+      "attributes": {
+        "brawn": 13,
+        "knowledge": 14,
+        "judgment": 19,
+        "agility": 10,
+        "vitality": 14,
+        "luck": 12
+      },
+      "equipped_ids": [
+        37,
+        215,
+        418,
+        400
+      ],
+      "known_spell_ids": [
+        2105,
+        2207,
+        2106,
+        2103,
+        2310
+      ]
+    },
+    {
+      "id": "hero_ranger",
+      "name": "Kaelen",
+      "archetype": "Ranger",
+      "race_id": 8,
+      "race_name": "Half Elf",
+      "caste_id": 4,
+      "caste_name": "Archer",
+      "level": 1,
+      "hp": 12,
+      "max_hp": 12,
+      "sp": 0,
+      "max_sp": 0,
+      "ac": 19,
+      "to_hit": 18,
+      "dodge": 6,
+      "missile": 15,
+      "movement_max": 8,
+      "attacks_per_round": 1.0,
+      "icon_id": 9047,
+      "portrait_id": 304,
+      "attributes": {
+        "brawn": 20,
+        "knowledge": 20,
+        "judgment": 20,
+        "agility": 6,
+        "vitality": 6,
+        "luck": 6
+      },
+      "equipped_ids": [
+        75,
+        104,
+        209
+      ],
+      "known_spell_ids": []
+    },
+    {
+      "id": "hero_mage",
+      "name": "Theron",
+      "archetype": "Mage",
+      "race_id": 3,
+      "race_name": "Elf",
+      "caste_id": 6,
+      "caste_name": "Sorcerer",
+      "level": 1,
+      "hp": 8,
+      "max_hp": 8,
+      "sp": 23,
+      "max_sp": 23,
+      "ac": 14,
+      "to_hit": 12,
+      "dodge": 6,
+      "missile": 6,
+      "movement_max": 9,
+      "attacks_per_round": 4.0,
+      "icon_id": 9084,
+      "portrait_id": 341,
+      "attributes": {
+        "brawn": 7,
+        "knowledge": 19,
+        "judgment": 14,
+        "agility": 15,
+        "vitality": 9,
+        "luck": 13
+      },
+      "equipped_ids": [
+        1,
+        200
+      ],
+      "known_spell_ids": [
+        1108,
+        1104,
+        1306,
+        1102,
+        1111,
+        3202
+      ]
+    },
+    {
+      "id": "hero_paladin",
+      "name": "Seraphina",
+      "archetype": "Paladin",
+      "race_id": 1,
+      "race_name": "Human",
+      "caste_id": 3,
+      "caste_name": "Crusader",
+      "level": 1,
+      "hp": 17,
+      "max_hp": 17,
+      "sp": 12,
+      "max_sp": 12,
+      "ac": 34,
+      "to_hit": 17,
+      "dodge": 5,
+      "missile": 0,
+      "movement_max": 13,
+      "attacks_per_round": 2.0,
+      "icon_id": 9054,
+      "portrait_id": 311,
+      "attributes": {
+        "brawn": 17,
+        "knowledge": 11,
+        "judgment": 16,
+        "agility": 11,
+        "vitality": 16,
+        "luck": 11
+      },
+      "equipped_ids": [
+        10,
+        215,
+        418,
+        400
+      ],
+      "known_spell_ids": [
+        2105,
+        2106
+      ]
+    },
+    {
+      "id": "hero_rogue",
+      "name": "Vex",
+      "archetype": "Rogue",
+      "race_id": 5,
+      "race_name": "Furfoot",
+      "caste_id": 5,
+      "caste_name": "Rogue",
+      "level": 1,
+      "hp": 14,
+      "max_hp": 14,
+      "sp": 0,
+      "max_sp": 0,
+      "ac": 23,
+      "to_hit": 19,
+      "dodge": 13,
+      "missile": 11,
+      "movement_max": 8,
+      "attacks_per_round": 1.0,
+      "icon_id": 9106,
+      "portrait_id": 363,
+      "attributes": {
+        "brawn": 20,
+        "knowledge": 20,
+        "judgment": 20,
+        "agility": 20,
+        "vitality": 20,
+        "luck": 20
+      },
+      "equipped_ids": [
+        75,
+        209
+      ],
+      "known_spell_ids": []
+    }
+  ]
+}

@@ -1,10 +1,10 @@
 {
   "exporter": "realmz-exporter",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "scenario": "City of Bywater",
   "realmz_base": "C:\\realmz\\base\\Realmz",
   "output_dir": "C:\\realmz\\remaster\\extracted",
-  "artifact_count": 11,
+  "artifact_count": 16,
   "artifacts": [
     {
       "file": "bywater_land_0.json",
@@ -95,8 +95,8 @@
     {
       "file": "monsters.json",
       "kind": "json",
-      "bytes": 78352,
-      "sha256": "508754484b6bafde509a11143d5d5e8660a355dabbf08db01356fc01056b4fb7",
+      "bytes": 245672,
+      "sha256": "b05dbcf9ce471e6df4b4165008d20fe3fd5b39f19dd677245b30698f2f3c20b6",
       "source": "Data MD"
     },
     {
@@ -134,6 +134,41 @@
       "bytes": 9034,
       "sha256": "316c6f0ae02e42c16a5ced94d99a0340ea2279dd8ebdb71e719f8663a33ab3c5",
       "source": "City of Bywater + Data MD2 + Scenario.rsrc"
+    },
+    {
+      "file": "bywater_m1/land_0.json",
+      "kind": "json",
+      "bytes": 169980,
+      "sha256": "bae39bd0d2cf2254f15acf3f4856caa83cb8816c17b5f26fc72dc3b582be59bb",
+      "source": "City of Bywater M1 vertical slice"
+    },
+    {
+      "file": "bywater_m1/dungeon_0.json",
+      "kind": "json",
+      "bytes": 106648,
+      "sha256": "52afcd5d0d314112c4b6ae5670c6df2b4fe3300cd825ff05e6c9b6fba19fa6e2",
+      "source": "City of Bywater M1 vertical slice"
+    },
+    {
+      "file": "bywater_m1/party_m1.json",
+      "kind": "json",
+      "bytes": 5013,
+      "sha256": "16e359973b039060cf671913741d9704334e049c29105bb74ffaa1cc336ad780",
+      "source": "City of Bywater M1 vertical slice"
+    },
+    {
+      "file": "bywater_m1/monsters_bywater_m1.json",
+      "kind": "json",
+      "bytes": 12219,
+      "sha256": "3046c9e2b286b6129a2ab6950d8cfc7cabb55928cdc3879938a8b7cb5abe060f",
+      "source": "City of Bywater M1 vertical slice"
+    },
+    {
+      "file": "bywater_m1/spells_items_m1.json",
+      "kind": "json",
+      "bytes": 79785,
+      "sha256": "ac354278d5cf2e750a8c24d1304f56c0dab148e3c56f7b9a9247f5c591edd36e",
+      "source": "City of Bywater M1 vertical slice"
     }
   ]
 }
