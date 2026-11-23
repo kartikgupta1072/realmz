@@ -1,0 +1,125 @@
+{
+  "1": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "Illustrious-XL-v2.0.safetensors"
+    }
+  },
+  "2": {
+    "class_type": "LoraLoader",
+    "inputs": {
+      "model": ["1", 0],
+      "clip": ["1", 1],
+      "lora_name": "pixel-art-style-illustrious-by-skormino.safetensors",
+      "strength_model": 0.9,
+      "strength_clip": 0.9
+    }
+  },
+  "3": {
+    "class_type": "CLIPSetLastLayer",
+    "inputs": {
+      "clip": ["2", 1],
+      "stop_at_clip_layer": -2
+    }
+  },
+  "4": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["3", 0],
+      "text": "pixpix, pixel_art, 16-bit, masterpiece, best quality, single solo dark fantasy RPG tactical sprite, full body centered, 3/4 isometric game sprite, crisp dark pixel outlines, warm upper-left torchlight, cool deep indigo shadow side, Songs of Conquest style, flat solid bright magenta #FF00FF chroma key background, no floor, no shadow, no text"
+    }
+  },
+  "5": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["3", 0],
+      "text": "blurry, anti-aliased, 3d render, photorealistic, smooth gradient, multiple characters, sprite sheet, floor, cast shadow, background scenery, text, watermark, cropped, worst quality"
+    }
+  },
+  "6": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "realmz_32x32_input.png"
+    }
+  },
+  "7": {
+    "class_type": "ImageScale",
+    "inputs": {
+      "image": ["6", 0],
+      "upscale_method": "nearest-exact",
+      "width": 1024,
+      "height": 1024,
+      "crop": "disabled"
+    }
+  },
+  "8": {
+    "class_type": "Canny",
+    "inputs": {
+      "image": ["7", 0],
+      "low_threshold": 0.25,
+      "high_threshold": 0.65
+    }
+  },
+  "9": {
+    "class_type": "ControlNetLoader",
+    "inputs": {
+      "control_net_name": "xinsir-controlnet-union-sdxl-1.0-promax.safetensors"
+    }
+  },
+  "10": {
+    "class_type": "SetUnionControlNetType",
+    "inputs": {
+      "control_net": ["9", 0],
+      "type": "canny"
+    }
+  },
+  "11": {
+    "class_type": "ControlNetApplyAdvanced",
+    "inputs": {
+      "positive": ["4", 0],
+      "negative": ["5", 0],
+      "control_net": ["10", 0],
+      "image": ["8", 0],
+      "strength": 0.78,
+      "start_percent": 0.0,
+      "end_percent": 0.85,
+      "vae": ["1", 2]
+    }
+  },
+  "12": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": ["7", 0],
+      "vae": ["1", 2]
+    }
+  },
+  "13": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["2", 0],
+      "positive": ["11", 0],
+      "negative": ["11", 1],
+      "latent_image": ["12", 0],
+      "seed": 1994064,
+      "steps": 28,
+      "cfg": 6.5,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "karras",
+      "denoise": 0.62
+    }
+  },
+  "14": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["13", 0],
+      "vae": ["1", 2]
+    }
+  },
+  "15": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["14", 0],
+      "filename_prefix": "realmz_silhouette_raw"
+    }
+  }
+}

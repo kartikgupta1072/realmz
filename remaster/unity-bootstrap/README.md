@@ -36,3 +36,8 @@ What `bootstrap-unity.ps1` does:
 3. Opens the Unity Editor and waits until `unity status --until-ready` reports `ready`.
 4. Installs `com.unity.cinemachine`, `com.unity.textmeshpro`, and `com.unity.ugui` (using `unity command package add`, or copying `PackageInstaller.cs` for headless `Client.AddAndRemove` fallback).
 5. Builds `RealmzCore.csproj` (`netstandard2.1`, Release) and copies `RealmzCore.dll` to `C:\realmz\remaster\RealmzUnity\Assets\Plugins\RealmzCore\RealmzCore.dll`.
+6. Stages the verified `knight_hero_64x64.png` + `knight_hero_64x64_n.png` sprites and extracted City of Bywater assets (`terrain_bywater_tile_grass.png`, `monster_giant_frog_392.png`, `hero_kevlar_tactical_9018.png`) plus `PixelBillboard.cs` and `M0SmokeSceneBuilder.cs`.
+
+## Build M0 HD-2D Smoke Scene
+
+Once the Editor is ready, run `Realmz > M0 > Build HD-2D Smoke Scene` (or invoke `ProjectBootstrap.M0SmokeSceneBuilder.BuildSmokeScene()` via `unity command script eval`) to configure crisp Point/uncompressed Sprite and Normal-Map imports, generate `Assets/Scenes/M0_HD2D_SmokeScene.unity` (URP 3D camera, Bywater grass floor, foot-anchored normal-mapped Knight Hero + Giant Frog billboards, warm torch Point Light, directional shadow, Global Volume ACES + Bloom), and capture `M0_SmokeScene_Preview.png` via `Realmz > M0 > Capture Smoke Scene Preview`.

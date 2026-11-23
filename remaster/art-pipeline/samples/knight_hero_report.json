@@ -1,0 +1,39 @@
+{
+  "asset": "knight_hero",
+  "seed": 1994064,
+  "comfy_output_file": "realmz_knight_hero_raw_00001_.png",
+  "raw_path": "c:\\Users\\karti\\LifeTwin\\scratch\\realmz_pixel_pipeline\\samples\\knight_hero_raw_1024.png",
+  "vram_before_mib": 753,
+  "vram_peak_mib": 7363,
+  "vram_budget_mib": 8151,
+  "vram_ok": true,
+  "comfy_gen_sec": 17.49,
+  "postprocess_sec": 2.11,
+  "total_sec": 19.6,
+  "stats": {
+    "width": 64,
+    "height": 64,
+    "opaque_pixels": 1394,
+    "opaque_coverage_pct": 34.03,
+    "alpha_values": [
+      0,
+      255
+    ],
+    "alpha_is_1bit": true,
+    "unique_palette_colors": 31,
+    "off_palette_colors": 0,
+    "normal_mean_rgb": [
+      128.0,
+      127.2,
+      250.3
+    ],
+    "normal_xy_std": 0.373,
+    "normal_unit_mag_mean": 1.0002,
+    "normal_min_z": 0.733,
+    "normal_bg_neutral_ok": true,
+    "normal_backend": "python",
+    "albedo_path": "c:\\Users\\karti\\LifeTwin\\scratch\\realmz_pixel_pipeline\\samples\\knight_hero_64x64.png",
+    "normal_path": "c:\\Users\\karti\\LifeTwin\\scratch\\realmz_pixel_pipeline\\samples\\knight_hero_64x64_n.png",
+    "preview_path": "c:\\Users\\karti\\LifeTwin\\scratch\\realmz_pixel_pipeline\\samples\\knight_hero_qa_8x.png"
+  }
+}

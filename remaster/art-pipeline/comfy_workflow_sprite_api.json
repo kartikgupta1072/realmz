@@ -1,0 +1,76 @@
+{
+  "1": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "Illustrious-XL-v2.0.safetensors"
+    }
+  },
+  "2": {
+    "class_type": "LoraLoader",
+    "inputs": {
+      "model": ["1", 0],
+      "clip": ["1", 1],
+      "lora_name": "pixel-art-style-illustrious-by-skormino.safetensors",
+      "strength_model": 0.9,
+      "strength_clip": 0.9
+    }
+  },
+  "3": {
+    "class_type": "CLIPSetLastLayer",
+    "inputs": {
+      "clip": ["2", 1],
+      "stop_at_clip_layer": -2
+    }
+  },
+  "4": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["3", 0],
+      "text": "pixpix, pixel_art, 16-bit, masterpiece, best quality, single solo dark fantasy armored knight hero sprite, full body head to boots centered, 3/4 isometric tactical RPG game sprite, weathered steel plate armor, crimson cloak, kite shield and steel broadsword, crisp dark ink pixel outlines, warm upper-left torchlight rim highlight, cool deep indigo shadow side, Songs of Conquest style, standing on flat solid bright magenta #FF00FF chroma key background, no floor, no cast shadow, no text, no UI"
+    }
+  },
+  "5": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["3", 0],
+      "text": "blurry, anti-aliased, 3d render, photorealistic, smooth gradient, painterly, chibi, multiple characters, sprite sheet, grid, ground, floor, cast shadow, background scenery, dungeon wall, text, watermark, signature, cropped weapon, cut off feet, lowres, worst quality"
+    }
+  },
+  "6": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    }
+  },
+  "7": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["2", 0],
+      "positive": ["4", 0],
+      "negative": ["5", 0],
+      "latent_image": ["6", 0],
+      "seed": 1994064,
+      "steps": 28,
+      "cfg": 6.5,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "karras",
+      "denoise": 1.0
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["7", 0],
+      "vae": ["1", 2]
+    }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["8", 0],
+      "filename_prefix": "realmz_knight_raw"
+    }
+  }
+}

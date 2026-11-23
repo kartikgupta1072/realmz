@@ -13,7 +13,14 @@ $CoreCsproj = Join-Path $RemasterRoot "RealmzCore\RealmzCore.csproj"
 $CoreDllSource = Join-Path $RemasterRoot "RealmzCore\bin\Release\netstandard2.1\RealmzCore.dll"
 $PluginDestDir = Join-Path $ProjectPath "Assets\Plugins\RealmzCore"
 $InstallerSource = Join-Path $PSScriptRoot "PackageInstaller.cs"
+$SmokeBuilderSource = Join-Path $PSScriptRoot "M0SmokeSceneBuilder.cs"
+$BillboardSource = Join-Path $PSScriptRoot "PixelBillboard.cs"
 $InstallerDestDir = Join-Path $ProjectPath "Assets\Editor\ProjectBootstrap"
+$RenderScriptsDestDir = Join-Path $ProjectPath "Assets\Scripts\Rendering"
+$SpritesDestDir = Join-Path $ProjectPath "Assets\Art\Sprites"
+$TilesDestDir = Join-Path $ProjectPath "Assets\Art\Tiles"
+$ArtPipelineSamplesDir = Join-Path $RemasterRoot "art-pipeline\samples"
+$ExtractedDir = Join-Path $RemasterRoot "extracted"
 
 function Require-Command($Name) {
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
@@ -77,6 +84,33 @@ Copy-Item -Path $CoreDllSource -Destination (Join-Path $PluginDestDir "RealmzCor
 
 New-Item -ItemType Directory -Path $InstallerDestDir -Force | Out-Null
 Copy-Item -Path $InstallerSource -Destination (Join-Path $InstallerDestDir "PackageInstaller.cs") -Force
+if (Test-Path $SmokeBuilderSource) {
+    Copy-Item -Path $SmokeBuilderSource -Destination (Join-Path $InstallerDestDir "M0SmokeSceneBuilder.cs") -Force
+}
+
+New-Item -ItemType Directory -Path $RenderScriptsDestDir -Force | Out-Null
+if (Test-Path $BillboardSource) {
+    Copy-Item -Path $BillboardSource -Destination (Join-Path $RenderScriptsDestDir "PixelBillboard.cs") -Force
+}
+
+New-Item -ItemType Directory -Path $SpritesDestDir -Force | Out-Null
+New-Item -ItemType Directory -Path $TilesDestDir -Force | Out-Null
+foreach ($sprite in @("knight_hero_64x64.png", "knight_hero_64x64_n.png")) {
+    $srcPath = Join-Path $ArtPipelineSamplesDir $sprite
+    if (Test-Path $srcPath) {
+        Copy-Item -Path $srcPath -Destination (Join-Path $SpritesDestDir $sprite) -Force
+    }
+}
+foreach ($sprite in @("monster_giant_frog_392.png", "hero_kevlar_tactical_9018.png")) {
+    $srcPath = Join-Path $ExtractedDir $sprite
+    if (Test-Path $srcPath) {
+        Copy-Item -Path $srcPath -Destination (Join-Path $SpritesDestDir $sprite) -Force
+    }
+}
+$grassSrc = Join-Path $ExtractedDir "terrain_bywater_tile_grass.png"
+if (Test-Path $grassSrc) {
+    Copy-Item -Path $grassSrc -Destination (Join-Path $TilesDestDir "terrain_bywater_tile_grass.png") -Force
+}
 
 Write-Host "[5/6] Opening Unity Editor and waiting for ready state..."
 unity open $ProjectPath
