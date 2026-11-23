@@ -28,3 +28,59 @@ Makefile
 # Other stuff
 divinity.out
 realmz.out
+
+# Unity generated folders and artifacts (repo-wide and under remaster/RealmzUnity/)
+**/[Ll]ibrary/
+**/[Tt]emp/
+**/[Ll]ogs/
+**/[Oo]bj/
+**/[Bb]in/
+**/[Bb]uild/
+**/[Bb]uilds/
+**/[Uu]ser[Ss]ettings/
+**/[Mm]emory[Cc]aptures/
+**/[Rr]ecordings/
+**/.utmp/
+**/.vs/
+**/.idea/
+*.unityproj
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+*.apk
+*.aab
+*.unitypackage
+sysinfo.txt
+crashlytics-build.properties
+tools/
+
+# Unity-generated IDE solutions/projects (preserve remaster/RealmzCore/**/*.csproj, remaster/RealmzCore.Tests/**/*.csproj, and remaster/*.sln)
+remaster/RealmzUnity/*.csproj
+remaster/RealmzUnity/*.sln
+remaster/RealmzUnity/*.slnx
+*.Unity.*.csproj
+
+# .NET / C++ / Python / local tool caches
+.dotnet/
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+**/__pycache__/
+*.py[cod]
+
+# License, secret, and environment files
+*.ulf
+*.alf
+*.lic
+.env
+.env.*
+*secret*
+*token*
+*.key

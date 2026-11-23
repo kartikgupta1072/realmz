@@ -1,0 +1,139 @@
+{
+  "exporter": "realmz-exporter",
+  "version": "1.0.0",
+  "scenario": "City of Bywater",
+  "realmz_base": "C:\\realmz\\base\\Realmz",
+  "output_dir": "C:\\realmz\\remaster\\extracted",
+  "artifact_count": 11,
+  "artifacts": [
+    {
+      "file": "bywater_land_0.json",
+      "kind": "json",
+      "bytes": 144119,
+      "sha256": "f64a8b8f6b43a9950b5fa6ac28a169b9ed204946703b4dcd88220bb4aff111c4",
+      "source": "Data LD + Data RD + Data DD + Data MD2"
+    },
+    {
+      "file": "terrain_bywater_tilesheet_300.png",
+      "kind": "png",
+      "bytes": 206674,
+      "sha256": "1b432623247ad7ab2ed34ab27d949d64a663d6e8f3fc7fd133ad9f1aab11fba0",
+      "source_rsrc": "The Family Jewels.rsrc",
+      "source_type": "PICT",
+      "source_id": 300,
+      "width": 640,
+      "height": 320,
+      "mode": "RGBA",
+      "opaque_pixels": 204800,
+      "transparent_pixels": 0
+    },
+    {
+      "file": "terrain_bywater_tile_grass.png",
+      "kind": "png",
+      "bytes": 1102,
+      "sha256": "550fbdf3f0d5e68eb99250b1893a65584ec8fedcb35e2eb253d16346c03014cf",
+      "source_rsrc": "The Family Jewels.rsrc",
+      "source_type": "PICT_TILE",
+      "source_id": "300#tile_156",
+      "width": 32,
+      "height": 32,
+      "mode": "RGBA",
+      "opaque_pixels": 1024,
+      "transparent_pixels": 0,
+      "note": "Most common Land 0 terrain tile (tile_id=156, count=1570)"
+    },
+    {
+      "file": "bywater_land_0_preview.png",
+      "kind": "png",
+      "bytes": 12595,
+      "sha256": "d3e895751d87dff4ed2ecae115b3ae20f38ca1e2be229da1af6d91d5a074e445",
+      "source_rsrc": "Data LD + Data DD + PICT 300",
+      "source_type": "MINIMAP",
+      "source_id": 0,
+      "width": 90,
+      "height": 90,
+      "mode": "RGBA",
+      "opaque_pixels": 8100,
+      "transparent_pixels": 0,
+      "note": "90x90 pixel color minimap of Land 0"
+    },
+    {
+      "file": "heroes.json",
+      "kind": "json",
+      "bytes": 6239,
+      "sha256": "06847b7eadac3c26bf42bf092a8db6dd39590930054229ff70fbd36b73432af6",
+      "source": "Character Files/* + The Family Jewels.rsrc STR# 129,131"
+    },
+    {
+      "file": "hero_kevlar_tactical_9018.png",
+      "kind": "png",
+      "bytes": 823,
+      "sha256": "d6c1d8b0e17e118294c268b7912b632c0c8998203a9c0b620ce652e2b46df6a6",
+      "source_rsrc": "Tacticals.rsrc",
+      "source_type": "cicn",
+      "source_id": 9018,
+      "width": 32,
+      "height": 32,
+      "mode": "RGBA",
+      "opaque_pixels": 366,
+      "transparent_pixels": 658
+    },
+    {
+      "file": "hero_kevlar_portrait_275.png",
+      "kind": "png",
+      "bytes": 1789,
+      "sha256": "5a92f813e4c15d6fe57159f9ddfdaa7150e8e17de1cb0f21f84b378b999037b7",
+      "source_rsrc": "Portraits.rsrc",
+      "source_type": "cicn",
+      "source_id": 275,
+      "width": 44,
+      "height": 44,
+      "mode": "RGBA",
+      "opaque_pixels": 1936,
+      "transparent_pixels": 0
+    },
+    {
+      "file": "monsters.json",
+      "kind": "json",
+      "bytes": 78352,
+      "sha256": "508754484b6bafde509a11143d5d5e8660a355dabbf08db01356fc01056b4fb7",
+      "source": "Data MD"
+    },
+    {
+      "file": "monster_giant_frog_392.png",
+      "kind": "png",
+      "bytes": 1499,
+      "sha256": "7877bc591baea5ccf861a0fcbf144c246dc7cced076f6ef99cb18599eece56b2",
+      "source_rsrc": "The Family Jewels.rsrc",
+      "source_type": "cicn",
+      "source_id": 392,
+      "width": 64,
+      "height": 32,
+      "mode": "RGBA",
+      "opaque_pixels": 750,
+      "transparent_pixels": 1298
+    },
+    {
+      "file": "portrait_bywater_npc_257.png",
+      "kind": "png",
+      "bytes": 2424,
+      "sha256": "4ea55b00008b66c79fc133eab356ce9c6e00678f752d6c20e5e4273f6b9aa7df",
+      "source_rsrc": "Portraits.rsrc",
+      "source_type": "cicn",
+      "source_id": 257,
+      "width": 44,
+      "height": 44,
+      "mode": "RGBA",
+      "opaque_pixels": 1936,
+      "transparent_pixels": 0,
+      "note": "Native 44x44 portrait cicn 257 from Portraits.rsrc"
+    },
+    {
+      "file": "scenario.json",
+      "kind": "json",
+      "bytes": 9034,
+      "sha256": "316c6f0ae02e42c16a5ced94d99a0340ea2279dd8ebdb71e719f8663a33ab3c5",
+      "source": "City of Bywater + Data MD2 + Scenario.rsrc"
+    }
+  ]
+}
