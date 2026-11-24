@@ -61,6 +61,16 @@ namespace Realmz.Game
             public TextMeshProUGUI HpText;
             public Image SpFill;
             public TextMeshProUGUI SpText;
+            public bool LastVisible;
+            public string LastMemberId;
+            public int LastLevel = -1;
+            public int LastHp = -1;
+            public int LastMaxHp = -1;
+            public int LastSp = -1;
+            public int LastMaxSp = -1;
+            public int LastCondCount = -1;
+            public bool LastSelected;
+            public bool HasCachedState;
         }
 
         private sealed class InitiativeCardRefs
@@ -188,6 +198,7 @@ namespace Realmz.Game
         private Button _campBtn;
         private Button _shrineBtn;
         private Button _warpBtn;
+        private TextMeshProUGUI _warpBtnLabel;
         private Button _contextPoiBtn;
         private TextMeshProUGUI _contextPoiBtnLabel;
         private Button _saveBtn;
@@ -283,6 +294,28 @@ namespace Realmz.Game
         private bool _pulseEndTurn;
         private GameObject _spellPickerBar;
         private readonly List<SpellRowRefs> _spellRowPool = new List<SpellRowRefs>(12);
+        private GameObject _targetingBannerRoot;
+        private Image _targetingBannerBg;
+        private TextMeshProUGUI _targetingBannerText;
+
+        // Dirty-check caches for zero-hitch exploration HUD updates
+        private bool _hasAppliedHudActive;
+        private bool _hasAppliedTopBar;
+        private bool _appliedTopBarCombat;
+        private bool _appliedTopBarDev;
+        private bool _appliedTopBarHasPoi;
+        private int _lastExploreX = int.MinValue;
+        private int _lastExploreY = int.MinValue;
+        private bool _lastExploreIsDungeon;
+        private int _lastExploreGold = int.MinValue;
+        private int _lastExploreTorch = int.MinValue;
+        private int _lastExploreTurn = int.MinValue;
+        private bool _hasLastExploreHover;
+        private GridCoord _lastExploreHoverCoord;
+        private BywaterTileKind _lastExploreHoverKind;
+        private int _lastExploreHoverSteps = int.MinValue;
+        private string _lastExploreHoverPoi = string.Empty;
+        private bool _lastExploreHoverReachable;
 
         // Cursor-Following Floating Tooltip
         private GameObject _cursorTooltipRoot;
@@ -576,6 +609,9 @@ namespace Realmz.Game
                 _toastRoot.SetActive(false);
             }
         }
+
+        public bool IsTargetingBannerVisible => _targetingBannerRoot != null && _targetingBannerRoot.activeSelf;
+        public string TargetingBannerText => _targetingBannerText != null ? _targetingBannerText.text : string.Empty;
 
         public void SetDevToolsVisible(bool visible)
         {
@@ -1029,33 +1065,86 @@ namespace Realmz.Game
             SetCombatHudActive(false);
 
             string mapTitle = session.CurrentMap.IsDungeon ? "Bywater Cavern (Dungeon 0)" : "City of Bywater";
-            _topMapText.text = $"{mapTitle} ({session.Position.X}, {session.Position.Y})";
-            _topGoldText.text = $"Gold: {session.Party.Gold}g";
-            _topTorchText.text = $"Torch: {session.Party.TorchTurnsRemaining}t";
-            _topTurnText.text = $"Turn: {session.TurnCount}";
-
-            if (_warpBtn != null)
+            if (_lastExploreX != session.Position.X || _lastExploreY != session.Position.Y || _lastExploreIsDungeon != session.CurrentMap.IsDungeon)
             {
-                TextMeshProUGUI warpLabel = _warpBtn.GetComponentInChildren<TextMeshProUGUI>();
-                if (warpLabel != null)
+                _lastExploreX = session.Position.X;
+                _lastExploreY = session.Position.Y;
+                _lastExploreIsDungeon = session.CurrentMap.IsDungeon;
+                _topMapText.text = $"{mapTitle} ({session.Position.X}, {session.Position.Y})";
+                if (_warpBtnLabel != null)
                 {
-                    warpLabel.text = session.CurrentMap.IsDungeon ? "Exit Cavern" : "Warp Portal";
+                    _warpBtnLabel.text = session.CurrentMap.IsDungeon ? "Exit Cavern" : "Warp Portal";
                 }
             }
 
-            // Update 6 party strip cards
+            if (_lastExploreGold != session.Party.Gold)
+            {
+                _lastExploreGold = session.Party.Gold;
+                _topGoldText.text = $"Gold: {session.Party.Gold}g";
+            }
+
+            if (_lastExploreTorch != session.Party.TorchTurnsRemaining)
+            {
+                _lastExploreTorch = session.Party.TorchTurnsRemaining;
+                _topTorchText.text = $"Torch: {session.Party.TorchTurnsRemaining}t";
+            }
+
+            if (_lastExploreTurn != session.TurnCount)
+            {
+                _lastExploreTurn = session.TurnCount;
+                _topTurnText.text = $"Turn: {session.TurnCount}";
+            }
+
+            // Update 6 party strip cards (only touch TMP/RectTransform when stats/selection changed)
             IReadOnlyList<PartyMemberState> members = session.Party.Members;
+            bool partyDrawerOpen = IsPartyOpen;
             for (int i = 0; i < _heroCards.Count; i++)
             {
                 HeroCardRefs card = _heroCards[i];
                 if (i >= members.Count)
                 {
-                    card.Root.gameObject.SetActive(false);
+                    if (!card.HasCachedState || card.LastVisible)
+                    {
+                        card.Root.gameObject.SetActive(false);
+                        card.LastVisible = false;
+                        card.HasCachedState = true;
+                    }
                     continue;
                 }
 
-                card.Root.gameObject.SetActive(true);
                 PartyMemberState m = members[i];
+                bool selected = partyDrawerOpen && i == _selectedHeroIndex;
+                int condCount = m.Conditions.Count;
+
+                if (card.HasCachedState &&
+                    card.LastVisible &&
+                    string.Equals(card.LastMemberId, m.Id, StringComparison.Ordinal) &&
+                    card.LastLevel == m.Level &&
+                    card.LastHp == m.Hp &&
+                    card.LastMaxHp == m.MaxHp &&
+                    card.LastSp == m.Sp &&
+                    card.LastMaxSp == m.MaxSp &&
+                    card.LastCondCount == condCount &&
+                    card.LastSelected == selected)
+                {
+                    continue;
+                }
+
+                if (!card.HasCachedState || !card.LastVisible)
+                {
+                    card.Root.gameObject.SetActive(true);
+                }
+
+                card.LastVisible = true;
+                card.LastMemberId = m.Id;
+                card.LastLevel = m.Level;
+                card.LastHp = m.Hp;
+                card.LastMaxHp = m.MaxHp;
+                card.LastSp = m.Sp;
+                card.LastMaxSp = m.MaxSp;
+                card.LastCondCount = condCount;
+                card.LastSelected = selected;
+                card.HasCachedState = true;
 
                 card.Portrait.sprite = ResolveHeroPortrait(m.Id, m.PortraitId, m.Archetype);
                 card.Portrait.preserveAspect = true;
@@ -1081,21 +1170,43 @@ namespace Realmz.Game
                     card.SpText.text = "SP -";
                 }
 
-                bool selected = IsPartyOpen && i == _selectedHeroIndex;
                 card.Background.color = selected ? BywaterUiHelpers.CardSelectedBg : BywaterUiHelpers.CardBg;
                 BywaterUiHelpers.SetBorderColor(card.Root, selected ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.BrassAccent);
             }
 
             // Hover footer chip
-            if (hoveredCoord.HasValue && hoveredKind.HasValue)
+            bool hasHover = hoveredCoord.HasValue && hoveredKind.HasValue;
+            GridCoord hCoord = hasHover ? hoveredCoord.Value : default;
+            BywaterTileKind hKind = hasHover ? hoveredKind.Value : BywaterTileKind.Grass;
+            string safePoi = poiHint ?? string.Empty;
+
+            if (_hasLastExploreHover == hasHover &&
+                (!hasHover ||
+                 (hCoord == _lastExploreHoverCoord &&
+                  hKind == _lastExploreHoverKind &&
+                  hoverSteps == _lastExploreHoverSteps &&
+                  isReachable == _lastExploreHoverReachable &&
+                  string.Equals(safePoi, _lastExploreHoverPoi, StringComparison.Ordinal))))
             {
-                string terrainLabel = FormatTileKind(hoveredKind.Value);
-                _hoverCoordText.text = $"Tile ({hoveredCoord.Value.X}, {hoveredCoord.Value.Y}) - {terrainLabel}";
-                if (!string.IsNullOrEmpty(poiHint))
+                return;
+            }
+
+            _hasLastExploreHover = hasHover;
+            _lastExploreHoverCoord = hCoord;
+            _lastExploreHoverKind = hKind;
+            _lastExploreHoverSteps = hoverSteps;
+            _lastExploreHoverPoi = safePoi;
+            _lastExploreHoverReachable = isReachable;
+
+            if (hasHover)
+            {
+                string terrainLabel = FormatTileKind(hKind);
+                _hoverCoordText.text = $"Tile ({hCoord.X}, {hCoord.Y}) - {terrainLabel}";
+                if (!string.IsNullOrEmpty(safePoi))
                 {
                     _hoverDetailText.text = isReachable
-                        ? $"{poiHint} | {hoverSteps} step(s) (Click to move)"
-                        : $"{poiHint} | Blocked";
+                        ? $"{safePoi} | {hoverSteps} step(s) (Click to move)"
+                        : $"{safePoi} | Blocked";
                     _hoverDetailText.color = isReachable ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.DangerRed;
                 }
                 else
@@ -1109,7 +1220,7 @@ namespace Realmz.Game
             else
             {
                 _hoverCoordText.text = "Hover map to inspect terrain";
-                _hoverDetailText.text = "Left-Click: Walk | Right-Drag / WASD: Pan | Scroll: Zoom | C: Recenter";
+                _hoverDetailText.text = "Left-Click: Walk | WASD/Arrows: Move | Right-Drag: Pan | Scroll: Zoom";
                 _hoverDetailText.color = BywaterUiHelpers.MutedSlate;
             }
         }
@@ -1851,6 +1962,17 @@ namespace Realmz.Game
             {
                 _spellPickerBar.SetActive(false);
             }
+
+            string selectedSpellName = null;
+            if (activeMode == CombatActionMode.Spell &&
+                selectedSpellId >= 0 &&
+                bundle != null &&
+                bundle.Spells != null &&
+                bundle.Spells.TryGetValue(selectedSpellId, out SpellDefinition activeSpellDef))
+            {
+                selectedSpellName = activeSpellDef.Name;
+            }
+            SetCombatTargetingBanner(isHeroTurn ? activeMode : CombatActionMode.Smart, selectedSpellName);
 
             // 4. Bottom-Right 3-Line Ticker + Expandable 40-Row History Drawer
             if (_lastLogSession != combat || combat.Log.Count != _lastLogCount)
@@ -2664,6 +2786,27 @@ namespace Realmz.Game
                 Mathf.Clamp(y, Mathf.Min(yMin, yMax), yMax));
         }
 
+        public void ClampTooltipToActiveCanvas()
+        {
+            if (!_uiBuilt || _tooltipPanel == null || _canvasRect == null || _cursorTooltipRoot == null || !_cursorTooltipRoot.activeSelf)
+            {
+                return;
+            }
+
+            Rect canvasBounds = _canvasRect.rect;
+            float tipWidth = Mathf.Max(260f, _tooltipPanel.sizeDelta.x);
+            float tipHeight = Mathf.Max(110f, LayoutUtility.GetPreferredHeight(_tooltipPanel));
+            float xMin = canvasBounds.xMin + 12f;
+            float xMax = canvasBounds.xMax - tipWidth - 12f;
+            float yMin = canvasBounds.yMin + tipHeight + 12f;
+            float yMax = canvasBounds.yMax - 56f;
+
+            Vector2 pos = _tooltipPanel.anchoredPosition;
+            _tooltipPanel.anchoredPosition = new Vector2(
+                Mathf.Clamp(pos.x, xMin, Mathf.Max(xMin, xMax)),
+                Mathf.Clamp(pos.y, Mathf.Min(yMin, yMax), yMax));
+        }
+
         private void ApplyCombatTooltipStyling(string title, string rawDetails, string explicitBadge)
         {
             string combined = string.Concat(title ?? string.Empty, " ", rawDetails ?? string.Empty, " ", explicitBadge ?? string.Empty);
@@ -2893,44 +3036,108 @@ namespace Realmz.Game
             }
         }
 
+        public void SetCombatTargetingBanner(CombatActionMode mode, string spellName = null)
+        {
+            if (!_uiBuilt || _targetingBannerRoot == null || _targetingBannerText == null)
+            {
+                return;
+            }
+
+            if (!_isCombatHudActive || mode == CombatActionMode.Smart)
+            {
+                if (_targetingBannerRoot.activeSelf)
+                {
+                    _targetingBannerRoot.SetActive(false);
+                }
+                return;
+            }
+
+            string msg;
+            Color accent = BywaterUiHelpers.BrassHighlight;
+            switch (mode)
+            {
+                case CombatActionMode.Melee:
+                    msg = "Melee Mode - Click enemy, or click tile / Right-Click / [Esc] to Move";
+                    accent = BywaterUiHelpers.DangerRed;
+                    break;
+                case CombatActionMode.Ranged:
+                    msg = "Ranged Mode - Click enemy in LOS, or Right-Click / [Esc] to Move";
+                    accent = BywaterUiHelpers.BrassHighlight;
+                    break;
+                case CombatActionMode.Spell:
+                    string label = string.IsNullOrWhiteSpace(spellName) ? "Spell" : spellName;
+                    msg = $"Spell Mode ({label}) - Click target, or Right-Click / [Esc] to Move";
+                    accent = BywaterUiHelpers.InfoCyan;
+                    break;
+                case CombatActionMode.Shove:
+                    msg = "Shove Mode [Swift] - Click adjacent unit, or Right-Click / [Esc] to Move";
+                    accent = BywaterUiHelpers.BrassHighlight;
+                    break;
+                case CombatActionMode.Potion:
+                    msg = "Potion Mode [Swift] - Click ally to heal, or Right-Click / [Esc] to Move";
+                    accent = BywaterUiHelpers.SuccessGreen;
+                    break;
+                default:
+                    _targetingBannerRoot.SetActive(false);
+                    return;
+            }
+
+            _targetingBannerText.text = msg;
+            _targetingBannerText.color = accent;
+            BywaterUiHelpers.SetBorderColor(_targetingBannerRoot.transform, accent);
+            if (!_targetingBannerRoot.activeSelf)
+            {
+                _targetingBannerRoot.SetActive(true);
+            }
+        }
+
         private void SetCombatHudActive(bool active)
         {
+            bool changed = !_hasAppliedHudActive || _isCombatHudActive != active;
+            _hasAppliedHudActive = true;
             _isCombatHudActive = active;
 
-            if (_exploreRoot != null)
+            if (changed)
             {
-                _exploreRoot.SetActive(!active);
-            }
-
-            if (_combatRoot != null)
-            {
-                _combatRoot.SetActive(active);
-            }
-
-            if (active)
-            {
-                if (_partyDrawerRoot != null) _partyDrawerRoot.SetActive(false);
-                if (_shopModalRoot != null) _shopModalRoot.SetActive(false);
-                if (_templeModalRoot != null) _templeModalRoot.SetActive(false);
-                if (_quickResolveModalRoot != null) _quickResolveModalRoot.SetActive(false);
-            }
-            else
-            {
-                _lastLogCount = -1;
-                _lastLogSession = null;
-                _pulseEndTurn = false;
-                ClearCombatHoverPreview();
-                if (_combatLogDrawerRoot != null)
+                if (_exploreRoot != null)
                 {
-                    _combatLogDrawerRoot.SetActive(false);
+                    _exploreRoot.SetActive(!active);
                 }
-                if (_tickerToggleBadge != null)
+
+                if (_combatRoot != null)
                 {
-                    _tickerToggleBadge.text = "[+]";
+                    _combatRoot.SetActive(active);
                 }
-                for (int i = 0; i < _tickerLines.Count; i++)
+
+                if (active)
                 {
-                    _tickerLines[i].text = string.Empty;
+                    if (_partyDrawerRoot != null) _partyDrawerRoot.SetActive(false);
+                    if (_shopModalRoot != null) _shopModalRoot.SetActive(false);
+                    if (_templeModalRoot != null) _templeModalRoot.SetActive(false);
+                    if (_quickResolveModalRoot != null) _quickResolveModalRoot.SetActive(false);
+                }
+                else
+                {
+                    _lastLogCount = -1;
+                    _lastLogSession = null;
+                    _pulseEndTurn = false;
+                    ClearCombatHoverPreview();
+                    if (_targetingBannerRoot != null)
+                    {
+                        _targetingBannerRoot.SetActive(false);
+                    }
+                    if (_combatLogDrawerRoot != null)
+                    {
+                        _combatLogDrawerRoot.SetActive(false);
+                    }
+                    if (_tickerToggleBadge != null)
+                    {
+                        _tickerToggleBadge.text = "[+]";
+                    }
+                    for (int i = 0; i < _tickerLines.Count; i++)
+                    {
+                        _tickerLines[i].text = string.Empty;
+                    }
                 }
             }
 
@@ -2945,6 +3152,19 @@ namespace Realmz.Game
             }
 
             bool inCombat = _isCombatHudActive;
+            bool hasContextPoi = !string.IsNullOrWhiteSpace(_contextPoiLabel);
+            if (_hasAppliedTopBar &&
+                _appliedTopBarCombat == inCombat &&
+                _appliedTopBarDev == _isDevToolsVisible &&
+                _appliedTopBarHasPoi == hasContextPoi)
+            {
+                return;
+            }
+
+            _hasAppliedTopBar = true;
+            _appliedTopBarCombat = inCombat;
+            _appliedTopBarDev = _isDevToolsVisible;
+            _appliedTopBarHasPoi = hasContextPoi;
 
             if (_topGoldText != null) _topGoldText.gameObject.SetActive(!inCombat);
             if (_topTorchText != null) _topTorchText.gameObject.SetActive(!inCombat);
@@ -2956,7 +3176,7 @@ namespace Realmz.Game
             if (_warpBtn != null) _warpBtn.gameObject.SetActive(!inCombat && _isDevToolsVisible);
             if (_shopBtn != null) _shopBtn.gameObject.SetActive(false);
             if (_shrineBtn != null) _shrineBtn.gameObject.SetActive(false);
-            if (_contextPoiBtn != null) _contextPoiBtn.gameObject.SetActive(!inCombat && !string.IsNullOrWhiteSpace(_contextPoiLabel));
+            if (_contextPoiBtn != null) _contextPoiBtn.gameObject.SetActive(!inCombat && hasContextPoi);
             if (_partyBtn != null) _partyBtn.gameObject.SetActive(!inCombat);
             if (_campBtn != null) _campBtn.gameObject.SetActive(!inCombat);
             if (_saveBtn != null) _saveBtn.gameObject.SetActive(!inCombat);
@@ -3123,6 +3343,7 @@ namespace Realmz.Game
             // Explore buttons
             _skirmishBtn = AddTopButton(bar, "SkirmishBtn", "Skirmish", 104f, () => OnSkirmishRequested?.Invoke());
             _warpBtn = AddTopButton(bar, "WarpBtn", "Warp Portal", 122f, () => OnWarpPortalRequested?.Invoke());
+            _warpBtnLabel = _warpBtn.GetComponentInChildren<TextMeshProUGUI>(true);
             _shopBtn = AddTopButton(bar, "ShopBtn", "Shop (B)", 98f, () => OnToggleShopRequested?.Invoke());
             _shrineBtn = AddTopButton(bar, "ShrineBtn", "Shrine", 84f, () => OnShrineRequested?.Invoke());
             _contextPoiBtn = AddTopButton(bar, "ContextPoiBtn", "Enter Shop", 196f, () =>
@@ -4529,6 +4750,35 @@ namespace Realmz.Game
 
             _combatEndTurnBtn = AddCombatSkillButton(actionBar, "EndTurnBtn", "end_turn", "End Turn", 104f, () => OnEndTurnRequested?.Invoke(), out _combatEndTurnBtnIcon);
             AttachHoverTooltip(_combatEndTurnBtn.gameObject, "end_turn", "End Turn [Space]", "Finish the current hero's turn and advance initiative.");
+
+            // Compact non-blocking targeting banner above action bar when in Melee / Ranged / Spell / Shove / Potion mode
+            RectTransform bannerRt = BywaterUiHelpers.CreatePanel(_combatRoot.transform, "TargetingModeBanner", BywaterUiHelpers.PanelDarkBg, withBrassOutline: true, outlinePx: 1.4f);
+            bannerRt.anchorMin = new Vector2(0.5f, 0f);
+            bannerRt.anchorMax = new Vector2(0.5f, 0f);
+            bannerRt.pivot = new Vector2(0.5f, 0f);
+            bannerRt.anchoredPosition = new Vector2(-180f, 104f);
+            bannerRt.sizeDelta = new Vector2(680f, 34f);
+            _targetingBannerRoot = bannerRt.gameObject;
+            _targetingBannerBg = bannerRt.GetComponent<Image>();
+
+            _targetingBannerText = BywaterUiHelpers.CreateLabel(
+                bannerRt,
+                "BannerText",
+                string.Empty,
+                _font,
+                15f,
+                BywaterUiHelpers.BrassHighlight,
+                TextAlignmentOptions.Center,
+                FontStyles.Bold,
+                wrap: false);
+            _targetingBannerText.overflowMode = TextOverflowModes.Truncate;
+            _targetingBannerText.rectTransform.anchorMin = Vector2.zero;
+            _targetingBannerText.rectTransform.anchorMax = Vector2.one;
+            _targetingBannerText.rectTransform.offsetMin = new Vector2(12f, 2f);
+            _targetingBannerText.rectTransform.offsetMax = new Vector2(-12f, -2f);
+            BywaterUiHelpers.AddTextDropShadow(_targetingBannerText);
+            BywaterUiHelpers.SetRaycastTargetRecursive(bannerRt, false);
+            _targetingBannerRoot.SetActive(false);
         }
 
         private HotbarSlotRefs CreateHotbarSlot(Transform parent, int index)

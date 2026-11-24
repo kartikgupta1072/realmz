@@ -56,8 +56,8 @@ namespace Realmz.World
         private static readonly Color ShoveCrushCrimson = new Color(0.96f, 0.36f, 0.12f, 0.84f);
         private static readonly Color ShoveInvalidRed = new Color(0.84f, 0.20f, 0.20f, 0.52f);
 
-        private static readonly Color IntentMeleeColor = new Color(0.937f, 0.267f, 0.267f, 0.92f); // #EF4444
-        private static readonly Color IntentSpellColor = new Color(0.976f, 0.451f, 0.086f, 0.94f); // #F97316
+        private static readonly Color IntentMeleeColor = new Color(0.95f, 0.16f, 0.28f, 0.96f); // Threat crimson-magenta
+        private static readonly Color IntentSpellColor = new Color(0.98f, 0.45f, 0.08f, 0.96f); // Threat amber-orange
 
         private sealed class OverlayLayer
         {
@@ -94,6 +94,11 @@ namespace Realmz.World
 
         private Transform _intentArcContainer;
         private readonly List<LineRenderer> _intentArcPool = new List<LineRenderer>(16);
+        private readonly List<MeshRenderer> _intentArrowheadPool = new List<MeshRenderer>(16);
+        private readonly List<MeshRenderer> _intentThreatRingPool = new List<MeshRenderer>(16);
+        private readonly List<Vector3> _intentArrowheadTips = new List<Vector3>(16);
+        private readonly List<Vector3> _intentArrowheadTangents = new List<Vector3>(16);
+        private readonly List<Color> _intentThreatRingBaseColors = new List<Color>(16);
         private readonly Vector3[] _arcPointScratch = new Vector3[IntentArcSegments + 1];
         private int _activeIntentArcCount;
 
@@ -137,14 +142,35 @@ namespace Realmz.World
         private Texture2D _shoveChevronTexture;
         private Material _intentMeleeMaterial;
         private Material _intentSpellMaterial;
-        private Texture2D _intentDashTexture;
+        private Texture2D _intentChevronTexture;
+        private Material _intentArrowheadMaterial;
+        private Texture2D _intentArrowheadTexture;
+        private Material _intentThreatRingMaterial;
+        private Texture2D _intentThreatRingTexture;
         private Material _bracketMaterial;
         private Texture2D _cornerBracketTexture;
         private Material _aoeFillMaterial;
         private Texture2D _outlineFillTexture;
         private Material _fallbackOverlayMaterial;
         private float _intentScrollOffset;
+        private float _intentSpellScrollOffset;
         private float _gridOpacity = 1.0f;
+
+        public int ActiveIntentArrowheadCount
+        {
+            get
+            {
+                int count = 0;
+                for (int i = 0; i < _intentArrowheadPool.Count; i++)
+                {
+                    if (_intentArrowheadPool[i] != null && _intentArrowheadPool[i].gameObject.activeSelf)
+                    {
+                        count++;
+                    }
+                }
+                return count;
+            }
+        }
 
         public void SetGridOpacity(float opacity)
         {
@@ -191,15 +217,20 @@ namespace Realmz.World
 
             if (_activeIntentArcCount > 0 && Application.isPlaying)
             {
-                _intentScrollOffset = Mathf.Repeat(_intentScrollOffset - dt * 1.65f, 1f);
+                // Decreasing U offset shifts repeating +U chevrons forward along the line from From toward To.
+                _intentScrollOffset = Mathf.Repeat(_intentScrollOffset - dt * 1.9f, 1f);
+                _intentSpellScrollOffset = Mathf.Repeat(_intentSpellScrollOffset - dt * 2.35f, 1f);
                 if (_intentMeleeMaterial != null)
                 {
                     SetMaterialTextureOffset(_intentMeleeMaterial, new Vector2(_intentScrollOffset, 0f));
                 }
                 if (_intentSpellMaterial != null)
                 {
-                    SetMaterialTextureOffset(_intentSpellMaterial, new Vector2(_intentScrollOffset * 1.25f, 0f));
+                    SetMaterialTextureOffset(_intentSpellMaterial, new Vector2(_intentSpellScrollOffset, 0f));
                 }
+
+                RefreshIntentArrowheadOrientations();
+                StepIntentThreatRingPulse(t);
             }
         }
 
@@ -220,8 +251,16 @@ namespace Realmz.World
             _intentMeleeMaterial = null;
             DestroySafe(_intentSpellMaterial);
             _intentSpellMaterial = null;
-            DestroySafe(_intentDashTexture);
-            _intentDashTexture = null;
+            DestroySafe(_intentChevronTexture);
+            _intentChevronTexture = null;
+            DestroySafe(_intentArrowheadMaterial);
+            _intentArrowheadMaterial = null;
+            DestroySafe(_intentArrowheadTexture);
+            _intentArrowheadTexture = null;
+            DestroySafe(_intentThreatRingMaterial);
+            _intentThreatRingMaterial = null;
+            DestroySafe(_intentThreatRingTexture);
+            _intentThreatRingTexture = null;
 
             DestroySafe(_bracketMaterial);
             _bracketMaterial = null;
@@ -448,9 +487,14 @@ namespace Realmz.World
         {
             EnsureLayers();
             _activeIntentArcCount = 0;
+            _intentArrowheadTips.Clear();
+            _intentArrowheadTangents.Clear();
+            _intentThreatRingBaseColors.Clear();
 
             if (arcs != null)
             {
+                _propBlock ??= new MaterialPropertyBlock();
+
                 for (int i = 0; i < arcs.Count; i++)
                 {
                     EnemyIntentArcData arc = arcs[i];
@@ -459,7 +503,8 @@ namespace Realmz.World
                         continue;
                     }
 
-                    LineRenderer lr = GetOrCreateIntentArc(_activeIntentArcCount++);
+                    int arcIndex = _activeIntentArcCount++;
+                    LineRenderer lr = GetOrCreateIntentArc(arcIndex);
                     float startY = GetTileElevation(arc.From.X, arc.From.Y) + 0.65f;
                     float endY = GetTileElevation(arc.To.X, arc.To.Y) + 0.65f;
 
@@ -480,34 +525,97 @@ namespace Realmz.World
                             (u * u) * p2;
                     }
 
+                    Vector3 tangent = p2 - _arcPointScratch[IntentArcSegments - 1];
+                    if (tangent.sqrMagnitude < 0.0001f)
+                    {
+                        tangent = p2 - p0;
+                    }
+                    tangent = tangent.sqrMagnitude > 0.0001f ? tangent.normalized : Vector3.forward;
+
+                    // End the line shaft inside the arrowhead base so the sharp tip reaches p2 cleanly.
+                    _arcPointScratch[IntentArcSegments] = p2 - tangent * 0.14f;
+
                     Color col = arc.IsSpell ? IntentSpellColor : IntentMeleeColor;
                     lr.sharedMaterial = GetOrCreateIntentArcMaterial(arc.IsSpell);
                     lr.startColor = col;
                     lr.endColor = col;
-                    lr.startWidth = arc.IsSpell ? 0.130f : 0.115f;
-                    lr.endWidth = arc.IsSpell ? 0.095f : 0.085f;
+                    lr.startWidth = arc.IsSpell ? 0.165f : 0.150f;
+                    lr.endWidth = arc.IsSpell ? 0.110f : 0.100f;
                     lr.textureMode = LineTextureMode.Tile;
 
                     float approxDist = Vector3.Distance(p0, p2);
-                    lr.textureScale = new Vector2(Mathf.Max(1.5f, approxDist * 1.4f), 1f);
+                    lr.textureScale = new Vector2(Mathf.Max(1.8f, approxDist * 1.5f), 1f);
                     lr.positionCount = IntentArcSegments + 1;
                     lr.SetPositions(_arcPointScratch);
                     lr.gameObject.SetActive(true);
+
+                    Vector3 arrowPos = p2 - tangent * 0.18f;
+                    _intentArrowheadTips.Add(arrowPos);
+                    _intentArrowheadTangents.Add(tangent);
+
+                    MeshRenderer arrowMr = GetOrCreateIntentArrowhead(arcIndex);
+                    OrientIntentArrowhead(arrowMr.transform, arrowPos, tangent);
+                    arrowMr.transform.localScale = arc.IsSpell
+                        ? new Vector3(0.44f, 0.50f, 1f)
+                        : new Vector3(0.40f, 0.46f, 1f);
+                    arrowMr.sharedMaterial = GetOrCreateIntentArrowheadMaterial();
+                    _propBlock.Clear();
+                    _propBlock.SetColor(BaseColorId, col);
+                    _propBlock.SetColor(ColorId, col);
+                    arrowMr.SetPropertyBlock(_propBlock);
+                    arrowMr.gameObject.SetActive(true);
+
+                    MeshRenderer ringMr = GetOrCreateIntentThreatRing(arcIndex);
+                    float ringY = GetTileElevation(arc.To.X, arc.To.Y) + 0.042f;
+                    ringMr.transform.position = new Vector3(arc.To.X + 0.5f, ringY, -(arc.To.Y + 0.5f));
+                    ringMr.transform.rotation = Quaternion.Euler(90f, 45f, 0f);
+                    ringMr.transform.localScale = new Vector3(0.92f, 0.92f, 1f);
+                    ringMr.sharedMaterial = GetOrCreateIntentThreatRingMaterial();
+                    _intentThreatRingBaseColors.Add(col);
+                    _propBlock.Clear();
+                    _propBlock.SetColor(BaseColorId, col);
+                    _propBlock.SetColor(ColorId, col);
+                    ringMr.SetPropertyBlock(_propBlock);
+                    ringMr.gameObject.SetActive(true);
                 }
             }
 
-            for (int i = _activeIntentArcCount; i < _intentArcPool.Count; i++)
-            {
-                _intentArcPool[i].gameObject.SetActive(false);
-            }
+            DisableUnusedIntentArcItems();
         }
 
         public void ClearEnemyIntentArcs()
         {
             _activeIntentArcCount = 0;
-            for (int i = 0; i < _intentArcPool.Count; i++)
+            _intentArrowheadTips.Clear();
+            _intentArrowheadTangents.Clear();
+            _intentThreatRingBaseColors.Clear();
+            DisableUnusedIntentArcItems();
+        }
+
+        private void DisableUnusedIntentArcItems()
+        {
+            for (int i = _activeIntentArcCount; i < _intentArcPool.Count; i++)
             {
-                _intentArcPool[i].gameObject.SetActive(false);
+                if (_intentArcPool[i] != null)
+                {
+                    _intentArcPool[i].gameObject.SetActive(false);
+                }
+            }
+
+            for (int i = _activeIntentArcCount; i < _intentArrowheadPool.Count; i++)
+            {
+                if (_intentArrowheadPool[i] != null)
+                {
+                    _intentArrowheadPool[i].gameObject.SetActive(false);
+                }
+            }
+
+            for (int i = _activeIntentArcCount; i < _intentThreatRingPool.Count; i++)
+            {
+                if (_intentThreatRingPool[i] != null)
+                {
+                    _intentThreatRingPool[i].gameObject.SetActive(false);
+                }
             }
         }
 
@@ -1016,6 +1124,125 @@ namespace Realmz.World
             return _intentArcPool[index];
         }
 
+        private MeshRenderer GetOrCreateIntentArrowhead(int index)
+        {
+            while (_intentArrowheadPool.Count <= index)
+            {
+                GameObject go = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                go.name = "IntentArrowhead_" + _intentArrowheadPool.Count;
+                go.transform.SetParent(_intentArcContainer, false);
+
+                Collider col = go.GetComponent<Collider>();
+                if (col != null)
+                {
+                    DestroySafe(col);
+                }
+
+                MeshRenderer mr = go.GetComponent<MeshRenderer>();
+                mr.shadowCastingMode = ShadowCastingMode.Off;
+                mr.receiveShadows = false;
+                go.SetActive(false);
+                _intentArrowheadPool.Add(mr);
+            }
+
+            return _intentArrowheadPool[index];
+        }
+
+        private MeshRenderer GetOrCreateIntentThreatRing(int index)
+        {
+            while (_intentThreatRingPool.Count <= index)
+            {
+                GameObject go = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                go.name = "IntentThreatRing_" + _intentThreatRingPool.Count;
+                go.transform.SetParent(_intentArcContainer, false);
+
+                Collider col = go.GetComponent<Collider>();
+                if (col != null)
+                {
+                    DestroySafe(col);
+                }
+
+                MeshRenderer mr = go.GetComponent<MeshRenderer>();
+                mr.shadowCastingMode = ShadowCastingMode.Off;
+                mr.receiveShadows = false;
+                go.SetActive(false);
+                _intentThreatRingPool.Add(mr);
+            }
+
+            return _intentThreatRingPool[index];
+        }
+
+        private static void OrientIntentArrowhead(Transform arrowTf, Vector3 worldPos, Vector3 tangent)
+        {
+            arrowTf.position = worldPos;
+            Vector3 dir = tangent.sqrMagnitude > 0.0001f ? tangent.normalized : Vector3.forward;
+
+            Camera cam = Camera.main;
+            Vector3 toCam = cam != null ? (cam.transform.position - worldPos) : Vector3.up;
+            if (toCam.sqrMagnitude < 0.0001f)
+            {
+                toCam = Vector3.up;
+            }
+
+            Vector3 right = Vector3.Cross(toCam.normalized, dir);
+            if (right.sqrMagnitude < 0.0001f)
+            {
+                right = Vector3.Cross(Vector3.up, dir);
+                if (right.sqrMagnitude < 0.0001f)
+                {
+                    right = Vector3.right;
+                }
+            }
+            right.Normalize();
+
+            Vector3 faceNormal = Vector3.Cross(dir, right).normalized;
+            arrowTf.rotation = Quaternion.LookRotation(-faceNormal, dir);
+        }
+
+        private void RefreshIntentArrowheadOrientations()
+        {
+            int limit = Mathf.Min(_activeIntentArcCount, _intentArrowheadPool.Count, _intentArrowheadTips.Count, _intentArrowheadTangents.Count);
+            for (int i = 0; i < limit; i++)
+            {
+                MeshRenderer mr = _intentArrowheadPool[i];
+                if (mr != null && mr.gameObject.activeSelf)
+                {
+                    OrientIntentArrowhead(mr.transform, _intentArrowheadTips[i], _intentArrowheadTangents[i]);
+                }
+            }
+        }
+
+        private void StepIntentThreatRingPulse(float timeSec)
+        {
+            int limit = Mathf.Min(_activeIntentArcCount, _intentThreatRingPool.Count, _intentThreatRingBaseColors.Count);
+            if (limit <= 0)
+            {
+                return;
+            }
+
+            _propBlock ??= new MaterialPropertyBlock();
+            float wave = 0.5f + 0.5f * Mathf.Sin(timeSec * 5.5f);
+            float scale = Mathf.Lerp(0.88f, 0.98f, wave);
+            float alphaMul = Mathf.Lerp(0.76f, 1.00f, wave);
+
+            for (int i = 0; i < limit; i++)
+            {
+                MeshRenderer ringMr = _intentThreatRingPool[i];
+                if (ringMr == null || !ringMr.gameObject.activeSelf)
+                {
+                    continue;
+                }
+
+                ringMr.transform.localScale = new Vector3(scale, scale, 1f);
+                Color c = _intentThreatRingBaseColors[i];
+                c.a *= alphaMul;
+                _propBlock.Clear();
+                _propBlock.SetColor(BaseColorId, c);
+                _propBlock.SetColor(ColorId, c);
+                ringMr.SetPropertyBlock(_propBlock);
+            }
+        }
+
         private void StepSurfaceAnimations(float timeSec)
         {
             for (int i = 0; i < _animatedSurfaceTypes.Length; i++)
@@ -1203,25 +1430,49 @@ namespace Realmz.World
 
         private Material GetOrCreateIntentArcMaterial(bool isSpell)
         {
-            if (_intentDashTexture == null)
+            if (_intentChevronTexture == null)
             {
-                _intentDashTexture = BuildDashedLineTexture();
+                _intentChevronTexture = BuildDirectionalChevronArcTexture();
             }
 
             if (isSpell)
             {
                 if (_intentSpellMaterial == null)
                 {
-                    _intentSpellMaterial = CreateTransparentOverlayMaterial("IntentArcSpell", _intentDashTexture, IntentSpellColor);
+                    _intentSpellMaterial = CreateTransparentOverlayMaterial("IntentArcSpell", _intentChevronTexture, IntentSpellColor);
                 }
                 return _intentSpellMaterial;
             }
 
             if (_intentMeleeMaterial == null)
             {
-                _intentMeleeMaterial = CreateTransparentOverlayMaterial("IntentArcMelee", _intentDashTexture, IntentMeleeColor);
+                _intentMeleeMaterial = CreateTransparentOverlayMaterial("IntentArcMelee", _intentChevronTexture, IntentMeleeColor);
             }
             return _intentMeleeMaterial;
+        }
+
+        private Material GetOrCreateIntentArrowheadMaterial()
+        {
+            if (_intentArrowheadMaterial != null)
+            {
+                return _intentArrowheadMaterial;
+            }
+
+            _intentArrowheadTexture = BuildIntentArrowheadTexture();
+            _intentArrowheadMaterial = CreateTransparentOverlayMaterial("IntentArrowhead", _intentArrowheadTexture, Color.white);
+            return _intentArrowheadMaterial;
+        }
+
+        private Material GetOrCreateIntentThreatRingMaterial()
+        {
+            if (_intentThreatRingMaterial != null)
+            {
+                return _intentThreatRingMaterial;
+            }
+
+            _intentThreatRingTexture = BuildIntentThreatRingTexture();
+            _intentThreatRingMaterial = CreateTransparentOverlayMaterial("IntentThreatRing", _intentThreatRingTexture, Color.white);
+            return _intentThreatRingMaterial;
         }
 
         private Material GetOrCreateBracketMaterial()
@@ -1556,28 +1807,148 @@ namespace Realmz.World
             return tex;
         }
 
-        private static Texture2D BuildDashedLineTexture()
+        private static Texture2D BuildDirectionalChevronArcTexture()
         {
             const int w = 32;
-            const int h = 8;
+            const int h = 16;
             Texture2D tex = new Texture2D(w, h, TextureFormat.RGBA32, false)
             {
-                name = "IntentDashTex",
-                filterMode = FilterMode.Point,
+                name = "IntentDirectionalChevronTex",
+                filterMode = FilterMode.Bilinear,
                 wrapMode = TextureWrapMode.Repeat,
                 hideFlags = HideFlags.HideAndDontSave
             };
 
             Color32[] pixels = new Color32[w * h];
-            Color32 dash = new Color32(255, 255, 255, 255);
-            Color32 gap = new Color32(255, 255, 255, 28);
+            Color32 chevronCore = new Color32(255, 255, 255, 255);
+            Color32 chevronEdge = new Color32(42, 14, 20, 195);
+            Color32 ribbon = new Color32(255, 255, 255, 44);
+            Color32 clear = new Color32(0, 0, 0, 0);
 
             for (int y = 0; y < h; y++)
             {
+                float ny = Mathf.Abs(((y + 0.5f) / h) - 0.5f) * 2f; // 0 = centerline, 1 = edge
                 for (int x = 0; x < w; x++)
                 {
-                    bool isDash = x < 20 && y >= 1 && y <= h - 2;
-                    pixels[y * w + x] = isDash ? dash : gap;
+                    float nx = (x + 0.5f) / w; // 0 = tail (-U), 1 = forward apex (+U)
+                    float chevronCenter = 0.78f - ny * 0.42f;
+                    float dist = Mathf.Abs(nx - chevronCenter);
+
+                    if (ny <= 0.86f && dist <= 0.145f)
+                    {
+                        pixels[y * w + x] = chevronCore;
+                    }
+                    else if (ny <= 0.94f && dist <= 0.21f)
+                    {
+                        pixels[y * w + x] = chevronEdge;
+                    }
+                    else if (ny <= 0.52f)
+                    {
+                        pixels[y * w + x] = ribbon;
+                    }
+                    else
+                    {
+                        pixels[y * w + x] = clear;
+                    }
+                }
+            }
+
+            tex.SetPixels32(pixels);
+            tex.Apply(false, false);
+            return tex;
+        }
+
+        private static Texture2D BuildIntentArrowheadTexture()
+        {
+            const int size = SurfaceTextureSize;
+            Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                name = "IntentArrowheadTex",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave
+            };
+
+            Color32[] pixels = new Color32[size * size];
+            Color32 core = new Color32(255, 255, 255, 255);
+            Color32 edge = new Color32(28, 10, 14, 230);
+            Color32 clear = new Color32(0, 0, 0, 0);
+
+            for (int y = 0; y < size; y++)
+            {
+                float ny = (y + 0.5f) / size; // 0 = back base, 1 = sharp tip (+Y)
+                for (int x = 0; x < size; x++)
+                {
+                    float nx = Mathf.Abs(((x + 0.5f) / size) - 0.5f) * 2f; // 0 = centerline, 1 = side
+                    float notchBase = 0.14f + (1f - nx) * 0.18f;
+                    bool inCore = ny >= notchBase && ny <= 0.93f && nx <= (0.93f - ny) * 1.15f;
+                    float edgeNotchBase = notchBase - 0.045f;
+                    bool inEdge = ny >= edgeNotchBase && ny <= 0.98f && nx <= (0.98f - ny) * 1.24f;
+
+                    if (inCore)
+                    {
+                        pixels[y * size + x] = core;
+                    }
+                    else if (inEdge)
+                    {
+                        pixels[y * size + x] = edge;
+                    }
+                    else
+                    {
+                        pixels[y * size + x] = clear;
+                    }
+                }
+            }
+
+            tex.SetPixels32(pixels);
+            tex.Apply(false, false);
+            return tex;
+        }
+
+        private static Texture2D BuildIntentThreatRingTexture()
+        {
+            const int size = SurfaceTextureSize;
+            Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                name = "IntentThreatRingTex",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave
+            };
+
+            Color32[] pixels = new Color32[size * size];
+            Color32 ring = new Color32(255, 255, 255, 235);
+            Color32 edge = new Color32(30, 10, 14, 185);
+            Color32 innerTint = new Color32(255, 255, 255, 26);
+            Color32 clear = new Color32(0, 0, 0, 0);
+
+            for (int y = 0; y < size; y++)
+            {
+                float dy = (((y + 0.5f) / size) - 0.5f) * 2f;
+                for (int x = 0; x < size; x++)
+                {
+                    float dx = (((x + 0.5f) / size) - 0.5f) * 2f;
+                    float r = Mathf.Sqrt(dx * dx + dy * dy);
+                    bool isNotch = (Mathf.Abs(dx) <= 0.09f || Mathf.Abs(dy) <= 0.09f) && r >= 0.56f && r <= 0.95f;
+                    bool inRing = (r >= 0.72f && r <= 0.88f) || isNotch;
+                    bool inEdge = (r >= 0.68f && r <= 0.92f) || ((Mathf.Abs(dx) <= 0.13f || Mathf.Abs(dy) <= 0.13f) && r >= 0.52f && r <= 0.98f);
+
+                    if (inRing)
+                    {
+                        pixels[y * size + x] = ring;
+                    }
+                    else if (inEdge)
+                    {
+                        pixels[y * size + x] = edge;
+                    }
+                    else if (r < 0.68f)
+                    {
+                        pixels[y * size + x] = innerTint;
+                    }
+                    else
+                    {
+                        pixels[y * size + x] = clear;
+                    }
                 }
             }
 

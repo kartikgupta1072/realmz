@@ -2424,5 +2424,195 @@ namespace Realmz.EditorTests
             Assert.That(w, Is.GreaterThanOrEqualTo(minSize), $"{frame.name} width {w} < {minSize}.");
             Assert.That(h, Is.GreaterThanOrEqualTo(minSize), $"{frame.name} height {h} < {minSize}.");
         }
+
+        [Test]
+        public void Bugs1To6_TownNpcCombatHide_SpeedConstants_DirectionalIntent_FlatCorpse_TargetingCancel_AndHoverCache()
+        {
+            string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            PartyState party = PartyState.FromBundle(bundle);
+
+            bool hadEs = Object.FindFirstObjectByType<EventSystem>() != null;
+            GameObject worldGo = new GameObject("TempBugPassWorld");
+            GameObject ctrlGo = new GameObject("TempBugPassCtrl");
+            GameObject hudGo = new GameObject("TempBugPassHud");
+            GameObject camGo = new GameObject("TempBugPassCam");
+            GameObject overlaysGo = new GameObject("TempBugPassOverlays");
+            try
+            {
+                BywaterWorldRenderer renderer = worldGo.AddComponent<BywaterWorldRenderer>();
+                renderer.Initialize(catalog);
+                Camera cam = camGo.AddComponent<Camera>();
+                cam.tag = "MainCamera";
+                BywaterCameraRig rig = camGo.AddComponent<BywaterCameraRig>();
+                BywaterHudController hud = hudGo.AddComponent<BywaterHudController>();
+                hud.BuildUi(catalog);
+                BywaterGridOverlays overlays = overlaysGo.AddComponent<BywaterGridOverlays>();
+                overlays.Initialize(catalog);
+
+                ExplorationSession session = new ExplorationSession(bundle.Maps, "land_0", party, new DeterministicDiceRoller(777UL), new GridCoord(10, 9));
+                BywaterGameController ctrl = ctrlGo.AddComponent<BywaterGameController>();
+                ctrl.assetCatalog = catalog;
+                ctrl.worldRenderer = renderer;
+                ctrl.hudController = hud;
+                ctrl.cameraRig = rig;
+                ctrl.gridOverlays = overlays;
+                ctrl.InitializeForTests(bundle, session, 777UL);
+                typeof(BywaterGameController).GetMethod("EnterExplorationView", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.Invoke(ctrl, new object[] { true });
+
+                // Bug #6: Overland hover A* cache + non-rebuilding step pathing
+                var hoverM = typeof(BywaterGameController).GetMethod("UpdateExplorationHoverVisuals", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                var pathField = typeof(BywaterGameController).GetField("_explorePathfinder", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                AStarPathfinder pathfinder = pathField?.GetValue(ctrl) as AStarPathfinder;
+                Assert.That(pathfinder, Is.Not.Null);
+                hoverM?.Invoke(ctrl, new object[] { new GridCoord(12, 9) });
+                long searchesAfterFirst = pathfinder.SearchCount;
+                hoverM?.Invoke(ctrl, new object[] { new GridCoord(12, 9) });
+                hoverM?.Invoke(ctrl, new object[] { new GridCoord(12, 9) });
+                Assert.That(pathfinder.SearchCount, Is.EqualTo(searchesAfterFirst), "Identical hover tile must reuse cached path without re-running A*.");
+
+                // Bug #1: Enter combat in town square -> all 4 town NPCs & prompts hidden; exit -> restored
+                Assert.That(renderer.ActiveNpcCount, Is.EqualTo(4));
+                Assert.That(renderer.VisibleTownNpcCount, Is.EqualTo(4));
+                ctrl.TriggerDemoSkirmish();
+                Assert.That(ctrl.IsInCombat, Is.True);
+                Assert.That(renderer.AreTownNpcsHiddenForCombat, Is.True);
+                Assert.That(renderer.VisibleTownNpcCount, Is.EqualTo(0));
+                for (int i = 0; i < 4; i++)
+                {
+                    Transform npcTf = renderer.transform.Find($"TownNpcs/TownNpc_{i}");
+                    if (npcTf != null)
+                    {
+                        Assert.That(npcTf.gameObject.activeInHierarchy, Is.False, $"TownNpc_{i} must remain hidden during combat.");
+                    }
+                }
+
+                // Bug #2: Combat speed timing checks (1x, 2x, Instant)
+                Assert.That(ctrl.SpeedIndex, Is.EqualTo(0));
+                Assert.That(ctrl.GetCombatMoveTileDuration(), Is.InRange(0.22f, 0.28f));
+                Assert.That(ctrl.GetCombatAttackDuration(), Is.InRange(0.35f, 0.45f));
+                typeof(BywaterGameController).GetMethod("HandleCycleSpeed", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.Invoke(ctrl, null);
+                Assert.That(ctrl.GetCombatMoveTileDuration(), Is.InRange(0.11f, 0.14f));
+                Assert.That(ctrl.GetCombatAttackDuration(), Is.InRange(0.17f, 0.23f));
+                typeof(BywaterGameController).GetMethod("HandleCycleSpeed", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.Invoke(ctrl, null);
+                Assert.That(ctrl.GetCombatMoveTileDuration(), Is.EqualTo(0.0f));
+                Assert.That(ctrl.GetCombatAttackDuration(), Is.EqualTo(0.0f));
+                typeof(BywaterGameController).GetMethod("HandleCycleSpeed", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.Invoke(ctrl, null);
+                Assert.That(ctrl.SpeedIndex, Is.EqualTo(0));
+
+                // Bug #3: Enemy intent arc directional arrowheads + unambiguous enemy intent tooltip on active hero turn
+                CombatantState activeHero = ctrl.CombatSession.CurrentActor;
+                CombatantState firstMonster = null;
+                for (int i = 0; i < ctrl.CombatSession.Combatants.Count; i++)
+                {
+                    if (ctrl.CombatSession.Combatants[i].Side == CombatSide.Monster && ctrl.CombatSession.Combatants[i].IsAlive)
+                    {
+                        firstMonster = ctrl.CombatSession.Combatants[i];
+                        break;
+                    }
+                }
+                Assert.That(activeHero, Is.Not.Null);
+                Assert.That(firstMonster, Is.Not.Null);
+                string intentSummary = ctrl.FormatEnemyIntentSummary(firstMonster);
+                Assert.That(intentSummary, Does.StartWith("Next Enemy Intent:"));
+                typeof(BywaterGameController).GetMethod("UpdateCombatHoverVisuals", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                    ?.Invoke(ctrl, new object[] { firstMonster.Position });
+                Assert.That(overlays.ActiveIntentArrowheadCount, Is.GreaterThanOrEqualTo(1), "Enemy intent arc must render a directional arrowhead.");
+
+                // Bug #4: Dead combatant flat fallen corpse with ZWrite Off & renderQueue strictly beneath living units
+                var viewsField = typeof(BywaterGameController).GetField("_combatUnitViews", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                var viewDict = viewsField?.GetValue(ctrl) as Dictionary<string, BywaterUnitView>;
+                Assert.That(viewDict, Is.Not.Null);
+                Assert.That(viewDict.TryGetValue(firstMonster.Id, out BywaterUnitView monView), Is.True);
+                firstMonster.Hp = 0;
+                typeof(BywaterGameController).GetMethod("SyncAllCombatUnitViews", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.Invoke(ctrl, null);
+                Assert.That(monView.IsCorpseSettled, Is.True);
+                Assert.That(monView.SpriteMeshRenderer.shadowCastingMode, Is.EqualTo(ShadowCastingMode.Off));
+                Assert.That(monView.SpriteMeshRenderer.sortingOrder, Is.LessThan(0));
+                Assert.That(monView.DeadCorpseRenderQueue, Is.EqualTo((int)RenderQueue.Transparent - 50), "Fallen corpse must render cleanly after Terrain with ZWrite Off.");
+                Assert.That(monView.SpriteMeshRenderer.sharedMaterial.GetFloat("_ZWrite"), Is.EqualTo(0f));
+                Transform sq = monView.transform.Find("SpriteBillboard/SpriteQuad");
+                Assert.That(sq, Is.Not.Null);
+                Assert.That(sq.localEulerAngles.x, Is.InRange(85f, 95f), "Fallen corpse quad must lie horizontally on the ground.");
+                Assert.That(monView.transform.Find("SpriteBillboard").GetComponent<Realmz.Rendering.PixelBillboard>().enabled, Is.False);
+
+                // Verify clean restoration if unit view returns to alive state
+                monView.UpdateStats(firstMonster.MaxHp, firstMonster.MaxHp, 0, 0, string.Empty, false, isAlive: true);
+                Assert.That(monView.SpriteMeshRenderer.shadowCastingMode, Is.EqualTo(ShadowCastingMode.On));
+                Assert.That(monView.SpriteMeshRenderer.sortingOrder, Is.EqualTo(0));
+                Assert.That(monView.transform.Find("SpriteBillboard").GetComponent<Realmz.Rendering.PixelBillboard>().enabled, Is.True);
+
+                // Bug #5: Melee toggle OFF, [Esc] cancel without pause menu, cancel method, and smart click empty tile to move
+                if (ctrl.CombatSession.CurrentActor.Side != CombatSide.Hero)
+                {
+                    ctrl.CombatSession.EndTurn();
+                }
+                CombatantState heroActor = ctrl.CombatSession.CurrentActor;
+                Assert.That(heroActor.Side, Is.EqualTo(CombatSide.Hero));
+                ctrl.SelectCombatModeForUi(CombatActionMode.Melee);
+                Assert.That(ctrl.ActiveCombatMode, Is.EqualTo(CombatActionMode.Melee));
+                Assert.That(hud.IsTargetingBannerVisible, Is.True);
+                Assert.That(hud.TargetingBannerText, Does.Contain("Melee Mode"));
+                ctrl.SelectCombatModeForUi(CombatActionMode.Melee);
+                Assert.That(ctrl.ActiveCombatMode, Is.EqualTo(CombatActionMode.Smart));
+                Assert.That(hud.IsTargetingBannerVisible, Is.False);
+
+                ctrl.SelectCombatModeForUi(CombatActionMode.Melee);
+                ctrl.EscapeKeyForTest();
+                Assert.That(ctrl.ActiveCombatMode, Is.EqualTo(CombatActionMode.Smart));
+                Assert.That(hud.IsSettingsOpen, Is.False, "[Esc] from Melee mode must cancel targeting instead of opening Pause menu.");
+
+                ctrl.SelectCombatModeForUi(CombatActionMode.Melee);
+                ctrl.CancelCombatTargetingMode();
+                Assert.That(ctrl.ActiveCombatMode, Is.EqualTo(CombatActionMode.Smart));
+
+                IReadOnlyList<ReachableTileInfo> heroReach = ctrl.CombatSession.GetReachableTiles(heroActor.Id);
+                GridCoord emptyReachable = heroActor.Position;
+                for (int r = 0; r < heroReach.Count; r++)
+                {
+                    GridCoord candidate = heroReach[r].Coord;
+                    bool occupied = false;
+                    for (int c = 0; c < ctrl.CombatSession.Combatants.Count; c++)
+                    {
+                        CombatantState unit = ctrl.CombatSession.Combatants[c];
+                        if (unit.IsAlive && unit.Position == candidate)
+                        {
+                            occupied = true;
+                            break;
+                        }
+                    }
+                    if (candidate != heroActor.Position && !occupied)
+                    {
+                        emptyReachable = candidate;
+                        break;
+                    }
+                }
+                Assert.That(emptyReachable, Is.Not.EqualTo(heroActor.Position));
+                ctrl.SelectCombatModeForUi(CombatActionMode.Melee);
+                ctrl.ClickCombatCoordForTest(emptyReachable);
+                Assert.That(heroActor.Position, Is.EqualTo(emptyReachable), "Smart-clicking an empty reachable tile in Melee mode must move the hero.");
+                Assert.That(ctrl.ActiveCombatMode, Is.EqualTo(CombatActionMode.Smart), "Smart-clicking an empty reachable tile in Melee mode must auto-exit Melee mode.");
+
+                // Bug #1 exit combat -> Town NPCs cleanly restored
+                typeof(BywaterGameController).GetMethod("ExitCombatToExploration", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.Invoke(ctrl, new object[] { false });
+                Assert.That(ctrl.IsInCombat, Is.False);
+                Assert.That(renderer.AreTownNpcsHiddenForCombat, Is.False);
+                Assert.That(renderer.VisibleTownNpcCount, Is.EqualTo(4));
+            }
+            finally
+            {
+                Object.DestroyImmediate(worldGo);
+                Object.DestroyImmediate(ctrlGo);
+                Object.DestroyImmediate(hudGo);
+                Object.DestroyImmediate(camGo);
+                Object.DestroyImmediate(overlaysGo);
+                if (!hadEs)
+                {
+                    EventSystem created = Object.FindFirstObjectByType<EventSystem>();
+                    if (created != null) Object.DestroyImmediate(created.gameObject);
+                }
+            }
+        }
     }
 }

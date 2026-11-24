@@ -21,6 +21,9 @@ namespace Realmz.Cartography
 
         private static readonly int SimTimeId = Shader.PropertyToID("_SimTime");
         private static readonly int WorldSizeId = Shader.PropertyToID("_WorldSize");
+        private static readonly int CloudShadowColorId = Shader.PropertyToID("_CloudShadowColor");
+        private static readonly int CanopyShadowColorId = Shader.PropertyToID("_CanopyShadowColor");
+        private static readonly int CloudStrengthId = Shader.PropertyToID("_CloudStrength");
 
         [Header("Appearance")]
         public Color cloudShadowColor = new Color(0.56f, 0.62f, 0.74f, 1f);
@@ -34,6 +37,13 @@ namespace Realmz.Cartography
         private bool _configured;
         private int _worldWidth = CartographyWorldData.GridWidth;
         private int _worldHeight = CartographyWorldData.GridHeight;
+        private bool _lastBlitValid;
+        private float _lastBlitSimTime;
+        private Color _lastBlitCloudColor;
+        private Color _lastBlitCanopyColor;
+        private float _lastBlitCloudStrength;
+        private int _lastBlitWorldWidth;
+        private int _lastBlitWorldHeight;
 
         public RenderTexture LightmapRT => _lightmapRT;
         public Texture2D WorldStaticMap => _worldStaticMap;
@@ -265,6 +275,7 @@ namespace Realmz.Cartography
             _worldStaticMap.SetPixels(pixels);
             _worldStaticMap.Apply(false, false);
             _configured = true;
+            _lastBlitValid = false;
         }
 
         public void UpdateLightmap(float simTimeSeconds)
@@ -282,20 +293,44 @@ namespace Realmz.Cartography
             if (hasGpu && EnsureGeneratorMaterial())
             {
                 EnsureRenderTexture();
+
+                if (_lastBlitValid &&
+                    _lightmapRT != null &&
+                    _lightmapRT.IsCreated() &&
+                    Mathf.Approximately(_lastBlitSimTime, simTimeSeconds) &&
+                    _lastBlitCloudColor == cloudShadowColor &&
+                    _lastBlitCanopyColor == canopyShadowColor &&
+                    Mathf.Approximately(_lastBlitCloudStrength, cloudStrength) &&
+                    _lastBlitWorldWidth == _worldWidth &&
+                    _lastBlitWorldHeight == _worldHeight)
+                {
+                    Shader.SetGlobalTexture(TopDownLightmapTexId, _lightmapRT);
+                    return;
+                }
+
                 _generatorMaterial.SetFloat(SimTimeId, simTimeSeconds);
                 _generatorMaterial.SetVector(WorldSizeId, new Vector4(_worldWidth, _worldHeight, 0f, 0f));
-                _generatorMaterial.SetColor("_CloudShadowColor", cloudShadowColor);
-                _generatorMaterial.SetColor("_CanopyShadowColor", canopyShadowColor);
-                _generatorMaterial.SetFloat("_CloudStrength", cloudStrength);
+                _generatorMaterial.SetColor(CloudShadowColorId, cloudShadowColor);
+                _generatorMaterial.SetColor(CanopyShadowColorId, canopyShadowColor);
+                _generatorMaterial.SetFloat(CloudStrengthId, cloudStrength);
                 _generatorMaterial.SetTexture(WorldStaticMapId, _worldStaticMap);
 
                 RenderTexture prevActive = RenderTexture.active;
                 Graphics.Blit(null, _lightmapRT, _generatorMaterial, 0);
                 RenderTexture.active = prevActive;
                 Shader.SetGlobalTexture(TopDownLightmapTexId, _lightmapRT);
+
+                _lastBlitValid = true;
+                _lastBlitSimTime = simTimeSeconds;
+                _lastBlitCloudColor = cloudShadowColor;
+                _lastBlitCanopyColor = canopyShadowColor;
+                _lastBlitCloudStrength = cloudStrength;
+                _lastBlitWorldWidth = _worldWidth;
+                _lastBlitWorldHeight = _worldHeight;
             }
             else
             {
+                _lastBlitValid = false;
                 EnsureCpuFallbackTexture();
                 Shader.SetGlobalTexture(TopDownLightmapTexId, _fallbackTexture);
             }
@@ -486,6 +521,7 @@ namespace Realmz.Cartography
             }
 
             _configured = false;
+            _lastBlitValid = false;
         }
 
         private static void DestroySafe(UnityEngine.Object obj)

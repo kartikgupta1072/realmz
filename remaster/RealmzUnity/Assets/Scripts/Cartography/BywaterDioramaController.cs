@@ -20,6 +20,8 @@ namespace Realmz.Cartography
         public Transform heroTransform;
         public Camera targetCamera;
 
+        private const float LightmapUpdateIntervalSeconds = 0.05f;
+
         [Header("PlayMode Demo Patrol")]
         public bool enableDemoPatrol = true;
         public Vector3 patrolCenter = new Vector3(8.5f, 0f, -10.5f);
@@ -27,17 +29,36 @@ namespace Realmz.Cartography
         public float patrolRadiusZ = 1.1f;
         public float patrolSpeed = 0.55f;
 
+        private float _nextLightmapUpdateTime;
+        private Vector4 _lastCamFwd;
+        private Vector4 _lastHeroPos;
+        private float _lastTimeOffset;
+        private bool _hasSyncedGlobals;
+
         private void OnEnable()
         {
-            ResolveReferences();
+            _hasSyncedGlobals = false;
+            _nextLightmapUpdateTime = 0f;
+            ResolveReferencesIfNeeded();
             SyncGlobals(Application.isPlaying ? Time.time : 0f);
+        }
+
+        private void OnDisable()
+        {
+            _hasSyncedGlobals = false;
         }
 
         private void Update()
         {
-            float simTime = Application.isPlaying ? Time.time : 0f;
+            if (!Application.isPlaying)
+            {
+                SyncGlobals(0f);
+                return;
+            }
 
-            if (Application.isPlaying && enableDemoPatrol && heroTransform != null)
+            float simTime = Time.time;
+
+            if (enableDemoPatrol && heroTransform != null)
             {
                 float angle = simTime * patrolSpeed;
                 Vector3 pos = patrolCenter + new Vector3(
@@ -47,14 +68,32 @@ namespace Realmz.Cartography
                 heroTransform.position = pos;
             }
 
-            SyncGlobals(simTime);
+            float unscaledNow = Time.unscaledTime;
+            bool shouldUpdateLightmap = unscaledNow >= _nextLightmapUpdateTime;
+            if (shouldUpdateLightmap)
+            {
+                _nextLightmapUpdateTime = unscaledNow + LightmapUpdateIntervalSeconds;
+            }
+
+            SyncGlobalsInternal(simTime, 0f, shouldUpdateLightmap);
         }
 
         public void SyncGlobals(float simTimeSeconds, float timeOffset = 0f)
         {
-            ResolveReferences();
+            if (Application.isPlaying)
+            {
+                _nextLightmapUpdateTime = Time.unscaledTime + LightmapUpdateIntervalSeconds;
+            }
+
+            SyncGlobalsInternal(simTimeSeconds, timeOffset, updateLightmap: true);
+        }
+
+        private void SyncGlobalsInternal(float simTimeSeconds, float timeOffset, bool updateLightmap)
+        {
+            ResolveReferencesIfNeeded();
 
             Camera cam = targetCamera != null ? targetCamera : Camera.main;
+            Vector4 camFwdVec = new Vector4(0f, 0f, 1f, 1f);
             if (cam != null)
             {
                 Vector3 fwd = cam.transform.forward;
@@ -62,29 +101,45 @@ namespace Realmz.Cartography
                 if (fwd.sqrMagnitude > 0.0001f)
                 {
                     fwd.Normalize();
-                    Shader.SetGlobalVector(CamForwardXZId, new Vector4(fwd.x, 0f, fwd.z, 1f));
+                    camFwdVec = new Vector4(fwd.x, 0f, fwd.z, 1f);
                 }
             }
-            else
+
+            if (!_hasSyncedGlobals || updateLightmap || (_lastCamFwd - camFwdVec).sqrMagnitude > 1e-7f)
             {
-                Shader.SetGlobalVector(CamForwardXZId, new Vector4(0f, 0f, 1f, 1f));
+                Shader.SetGlobalVector(CamForwardXZId, camFwdVec);
+                _lastCamFwd = camFwdVec;
             }
 
-            if (heroTransform != null)
+            Vector4 heroPosVec = heroTransform != null
+                ? new Vector4(heroTransform.position.x, heroTransform.position.y, heroTransform.position.z, 1f)
+                : new Vector4(9999f, 0f, 9999f, 0f);
+
+            if (!_hasSyncedGlobals || updateLightmap || (_lastHeroPos - heroPosVec).sqrMagnitude > 1e-7f)
             {
-                Vector3 hp = heroTransform.position;
-                Shader.SetGlobalVector(HeroWorldPosId, new Vector4(hp.x, hp.y, hp.z, 1f));
-            }
-            else
-            {
-                Shader.SetGlobalVector(HeroWorldPosId, new Vector4(9999f, 0f, 9999f, 0f));
+                Shader.SetGlobalVector(HeroWorldPosId, heroPosVec);
+                _lastHeroPos = heroPosVec;
             }
 
-            Shader.SetGlobalFloat(TimeOffsetId, timeOffset);
+            if (!_hasSyncedGlobals || updateLightmap || !Mathf.Approximately(_lastTimeOffset, timeOffset))
+            {
+                Shader.SetGlobalFloat(TimeOffsetId, timeOffset);
+                _lastTimeOffset = timeOffset;
+            }
 
-            if (topDownLightmap != null)
+            _hasSyncedGlobals = true;
+
+            if (updateLightmap && topDownLightmap != null)
             {
                 topDownLightmap.UpdateLightmap(simTimeSeconds);
+            }
+        }
+
+        private void ResolveReferencesIfNeeded()
+        {
+            if (topDownLightmap == null || foliageScatter == null || targetCamera == null)
+            {
+                ResolveReferences();
             }
         }
 

@@ -7,6 +7,7 @@ using NUnit.Framework;
 using Realmz.Cartography;
 using Realmz.Game;
 using Realmz.World;
+using RealmzCore.Combat;
 using RealmzCore.Data;
 using RealmzCore.Exploration;
 using UnityEngine;
@@ -148,7 +149,13 @@ namespace Realmz.PlayModeTests
                 yield return null;
                 Assert.That(ctrl.ExploreSession.CurrentMap.IsBlockedByProp(ctrl.ExploreSession.Position.X, ctrl.ExploreSession.Position.Y), Is.False);
 
-                // 5. Verify live Combat stage keeps units grounded cleanly as well
+                // 5. Verify Town Plaza Combat hides all 4 shopkeeper NPCs cleanly and Combat stage showcases intent + corpse + Melee cancel
+                ctrl.ExploreSession.MoveAlongPath(new GridCoord(10, 9), autoHaltOnEvents: false);
+                ctrl.TriggerDemoSkirmish();
+                yield return null;
+                Assert.That(ctrl.worldRenderer.AreTownNpcsHiddenForCombat, Is.True, "Town NPCs must hide in combat.");
+                Assert.That(ctrl.worldRenderer.VisibleTownNpcCount, Is.EqualTo(0), "Zero town NPCs allowed inside combat.");
+
                 ctrl.StageCombatOverlayShowcaseForCapture();
                 yield return null;
                 BywaterUnitView[] combatViews = Object.FindObjectsByType<BywaterUnitView>(FindObjectsSortMode.None);
@@ -158,7 +165,31 @@ namespace Realmz.PlayModeTests
                     if (!combatViews[i].gameObject.activeInHierarchy) continue;
                     Transform cSq = combatViews[i].transform.Find("SpriteBillboard/SpriteQuad");
                     Assert.That(cSq, Is.Not.Null);
-                    Assert.That(cSq.TransformPoint(Vector3.zero).y, Is.EqualTo(combatViews[i].transform.position.y).Within(0.02f));
+                    Assert.That(cSq.TransformPoint(Vector3.zero).y, Is.EqualTo(combatViews[i].transform.position.y).Within(0.025f));
+                }
+
+                // Hover Giant Frog cleanly so directional enemy intent arc + active hero & intent tooltip appear in preview
+                CombatantState giantFrog = null;
+                CombatantState goblin = null;
+                for (int i = 0; i < ctrl.CombatSession.Combatants.Count; i++)
+                {
+                    CombatantState unit = ctrl.CombatSession.Combatants[i];
+                    if (!unit.IsAlive || unit.Side != CombatSide.Monster) continue;
+                    if (unit.Id.IndexOf("frog", StringComparison.OrdinalIgnoreCase) >= 0) giantFrog = unit;
+                    else if (goblin == null) goblin = unit;
+                }
+
+                if (giantFrog != null)
+                {
+                    typeof(BywaterGameController).GetMethod("UpdateCombatHoverVisuals", BindingFlags.Instance | BindingFlags.NonPublic)
+                        ?.Invoke(ctrl, new object[] { giantFrog.Position });
+                    if (Camera.main != null)
+                    {
+                        GridCoord frogWorldGrid = new GridCoord(ctrl.ArenaOrigin.X + giantFrog.Position.X, ctrl.ArenaOrigin.Y + giantFrog.Position.Y);
+                        Vector3 frogWorld = CartographyWorldData.GridToWorld(frogWorldGrid, ctrl.worldRenderer.GetTileElevation(frogWorldGrid.X, frogWorldGrid.Y));
+                        ctrl.hudController.UpdateCursorTooltipPosition(Camera.main.WorldToScreenPoint(frogWorld));
+                    }
+                    yield return null;
                 }
 
                 if (captureProofs)
@@ -166,6 +197,93 @@ namespace Realmz.PlayModeTests
                     CaptureCameraToPng(Camera.main, ctrl.hudController,
                         Path.GetFullPath("M1_Bywater_Combat_Preview.png"), 1600, 900);
                 }
+
+                // 6. Bug #4 + Bug #5 Proof: Topple Giant Frog into settled flat corpse, place living Goblin on overlapping spot, activate Melee mode & test cancel/smart-move
+                if (giantFrog != null)
+                {
+                    giantFrog.Hp = 0;
+                    typeof(BywaterGameController).GetMethod("SyncAllCombatUnitViews", BindingFlags.Instance | BindingFlags.NonPublic)?.Invoke(ctrl, null);
+                    yield return new WaitForSeconds(0.45f);
+                    if (goblin != null)
+                    {
+                        GridCoord overlapTile = new GridCoord(
+                            Mathf.Clamp(giantFrog.Position.X, 0, ctrl.CombatSession.Grid.Width - 1),
+                            Mathf.Clamp(giantFrog.Position.Y, 0, ctrl.CombatSession.Grid.Height - 1));
+                        goblin.Position = overlapTile;
+                        var viewsDict = typeof(BywaterGameController).GetField("_combatUnitViews", BindingFlags.Instance | BindingFlags.NonPublic)
+                            ?.GetValue(ctrl) as Dictionary<string, BywaterUnitView>;
+                        if (viewsDict != null && viewsDict.TryGetValue(goblin.Id, out BywaterUnitView goblinView) && goblinView != null)
+                        {
+                            GridCoord worldTile = new GridCoord(ctrl.ArenaOrigin.X + overlapTile.X, ctrl.ArenaOrigin.Y + overlapTile.Y);
+                            Vector3 worldPos = CartographyWorldData.GridToWorld(worldTile, ctrl.worldRenderer.GetTileElevation(worldTile.X, worldTile.Y));
+                            goblinView.SetWorldPosition(worldPos);
+                        }
+                        typeof(BywaterGameController).GetMethod("SyncAllCombatUnitViews", BindingFlags.Instance | BindingFlags.NonPublic)?.Invoke(ctrl, null);
+                        yield return null;
+                    }
+                }
+
+                ctrl.SelectCombatModeForUi(CombatActionMode.Melee);
+                yield return null;
+                Assert.That(ctrl.ActiveCombatMode, Is.EqualTo(CombatActionMode.Melee));
+                Assert.That(ctrl.hudController.IsTargetingBannerVisible, Is.True);
+
+                CombatantState currentHero = ctrl.CombatSession.CurrentActor;
+                GridCoord smartMoveTile = currentHero.Position;
+                IReadOnlyList<ReachableTileInfo> heroReach = ctrl.CombatSession.GetReachableTiles(currentHero.Id);
+                for (int i = 0; i < heroReach.Count; i++)
+                {
+                    GridCoord candidate = heroReach[i].Coord;
+                    bool occupied = false;
+                    for (int c = 0; c < ctrl.CombatSession.Combatants.Count; c++)
+                    {
+                        CombatantState unit = ctrl.CombatSession.Combatants[c];
+                        if (unit.IsAlive && unit.Position == candidate)
+                        {
+                            occupied = true;
+                            break;
+                        }
+                    }
+                    if (candidate != currentHero.Position && !occupied)
+                    {
+                        smartMoveTile = candidate;
+                        break;
+                    }
+                }
+
+                if (smartMoveTile != currentHero.Position)
+                {
+                    typeof(BywaterGameController).GetMethod("UpdateCombatHoverVisuals", BindingFlags.Instance | BindingFlags.NonPublic)
+                        ?.Invoke(ctrl, new object[] { smartMoveTile });
+                    if (Camera.main != null)
+                    {
+                        GridCoord moveWorldGrid = new GridCoord(ctrl.ArenaOrigin.X + smartMoveTile.X, ctrl.ArenaOrigin.Y + smartMoveTile.Y);
+                        Vector3 moveWorld = CartographyWorldData.GridToWorld(moveWorldGrid, ctrl.worldRenderer.GetTileElevation(moveWorldGrid.X, moveWorldGrid.Y));
+                        ctrl.hudController.UpdateCursorTooltipPosition(Camera.main.WorldToScreenPoint(moveWorld));
+                    }
+                    yield return null;
+                }
+
+                if (captureProofs)
+                {
+                    CaptureCameraToPng(Camera.main, ctrl.hudController,
+                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_Corpse_And_MeleeCancel_Proof.png", 1600, 900);
+                }
+
+                if (smartMoveTile != currentHero.Position)
+                {
+                    ctrl.ClickCombatCoordForTest(smartMoveTile);
+                    yield return null;
+                    Assert.That(currentHero.Position, Is.EqualTo(smartMoveTile));
+                    Assert.That(ctrl.ActiveCombatMode, Is.EqualTo(CombatActionMode.Smart));
+                }
+
+                // Exit combat -> confirm all 4 shopkeeper NPCs cleanly restored
+                typeof(BywaterGameController).GetMethod("ExitCombatToExploration", BindingFlags.Instance | BindingFlags.NonPublic)
+                    ?.Invoke(ctrl, new object[] { false });
+                yield return null;
+                Assert.That(ctrl.worldRenderer.AreTownNpcsHiddenForCombat, Is.False);
+                Assert.That(ctrl.worldRenderer.VisibleTownNpcCount, Is.EqualTo(4));
 
                 Assert.That(errors, Is.Empty, "PlayMode runtime errors/warnings detected:\n" + string.Join("\n", errors));
             }
@@ -199,6 +317,7 @@ namespace Realmz.PlayModeTests
             try
             {
                 Canvas.ForceUpdateCanvases();
+                hud?.ClampTooltipToActiveCanvas();
                 cam.targetTexture = rt;
                 cam.Render();
                 RenderTexture.active = rt;

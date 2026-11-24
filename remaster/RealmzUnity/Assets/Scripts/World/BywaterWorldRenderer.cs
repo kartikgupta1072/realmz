@@ -52,8 +52,12 @@ namespace Realmz.World
             public Vector3 WorldPosition;
             public Vector2 SizeMeters;
             public float CurrentAlpha = 1f;
+            public float LastAppliedAlpha = 1f;
             public bool IsAnimated4Frame;
             public bool IsFloorDecal;
+            public bool WasTransparentFaded;
+            public bool HasInitialPropertyBlock;
+            public int LastAnimFrame = -1;
         }
 
         private sealed class NpcUnitEntry
@@ -154,6 +158,8 @@ namespace Realmz.World
         private Texture2D _portalRuneTexture;
         private Material _portalBeaconMaterial;
         private Texture2D _portalBeaconTexture;
+        private Vector3 _lastPropBillboardFwdXZ = Vector3.zero;
+        private bool _hasLastPropBillboardFwd;
         private MaterialPropertyBlock _propFadeBlock;
         private MaterialPropertyBlock _animatedPropBlock;
         private MaterialPropertyBlock _portalBeaconBlock;
@@ -161,10 +167,29 @@ namespace Realmz.World
         private int _activePortalCount;
         private int _lastAnimatedPropFrame = -1;
         private float _terrainGridHintStrength;
+        private bool _townNpcsHiddenForCombat;
 
         public CartographyWorldData CartographyData => _cartographyData;
         public Collider TerrainCollider => _elevationBuilder != null ? _elevationBuilder.terrainMeshCollider : null;
         public Transform PropsRoot => _propsContainer;
+        public bool AreTownNpcsHiddenForCombat => _townNpcsHiddenForCombat;
+
+        public int VisibleTownNpcCount
+        {
+            get
+            {
+                int count = 0;
+                for (int i = 0; i < _activeNpcCount && i < _npcPool.Count; i++)
+                {
+                    NpcUnitEntry entry = _npcPool[i];
+                    if (entry != null && entry.View != null && entry.View.gameObject.activeInHierarchy)
+                    {
+                        count++;
+                    }
+                }
+                return count;
+            }
+        }
 
         public Bounds WorldBounds
         {
@@ -446,8 +471,49 @@ namespace Realmz.World
             return found;
         }
 
+        public void SetTownNpcsHiddenForCombat(bool hidden)
+        {
+            _townNpcsHiddenForCombat = hidden;
+            if (_npcContainer != null)
+            {
+                _npcContainer.gameObject.SetActive(!hidden);
+            }
+
+            for (int i = 0; i < _activeNpcCount && i < _npcPool.Count; i++)
+            {
+                NpcUnitEntry entry = _npcPool[i];
+                if (entry == null)
+                {
+                    continue;
+                }
+
+                if (entry.View != null)
+                {
+                    entry.View.gameObject.SetActive(!hidden);
+                }
+
+                if (hidden && entry.PromptRoot != null)
+                {
+                    entry.PromptRoot.SetActive(false);
+                }
+            }
+        }
+
         public void UpdateNpcProximityPrompts(GridCoord heroCoord, Vector3 heroWorld, bool hidePrompts = false)
         {
+            if (_townNpcsHiddenForCombat)
+            {
+                for (int i = 0; i < _activeNpcCount && i < _npcPool.Count; i++)
+                {
+                    NpcUnitEntry entry = _npcPool[i];
+                    if (entry != null && entry.PromptRoot != null)
+                    {
+                        entry.PromptRoot.SetActive(false);
+                    }
+                }
+                return;
+            }
+
             for (int i = 0; i < _activeNpcCount && i < _npcPool.Count; i++)
             {
                 NpcUnitEntry entry = _npcPool[i];
@@ -482,6 +548,8 @@ namespace Realmz.World
             _propFadeBlock ??= new MaterialPropertyBlock();
 
             int limit = Mathf.Min(_activePropCount, _propPool.Count);
+            const float maxCheckDistSq = 18.0f;
+
             for (int i = 0; i < limit; i++)
             {
                 PropBillboardEntry entry = _propPool[i];
@@ -491,21 +559,51 @@ namespace Realmz.World
                 }
 
                 bool occludes = false;
-                if (IsOccludingPropKind(entry.Kind, fadeCenterBuildingsInCombat) && unitWorldPositions != null)
+                bool canOcclude = IsOccludingPropKind(entry.Kind, fadeCenterBuildingsInCombat);
+                if (canOcclude && unitWorldPositions != null && unitWorldPositions.Count > 0)
                 {
-                    float halfWidth = Mathf.Clamp(entry.SizeMeters.x * 0.38f, 0.55f, 1.75f);
-                    float maxDepth = Mathf.Clamp(entry.SizeMeters.y * 0.72f, 0.90f, 2.75f);
-
-                    for (int u = 0; u < unitWorldPositions.Count; u++)
+                    bool checkBounds = entry.CurrentAlpha < 0.995f || entry.WasTransparentFaded;
+                    if (!checkBounds)
                     {
-                        Vector3 unitPos = unitWorldPositions[u];
-                        float dz = unitPos.z - entry.WorldPosition.z;
-                        if (dz >= 0.05f && dz <= maxDepth && Mathf.Abs(unitPos.x - entry.WorldPosition.x) <= halfWidth)
+                        for (int u = 0; u < unitWorldPositions.Count; u++)
                         {
-                            occludes = true;
-                            break;
+                            Vector3 unitPos = unitWorldPositions[u];
+                            float dx = unitPos.x - entry.WorldPosition.x;
+                            float dz = unitPos.z - entry.WorldPosition.z;
+                            if ((dx * dx + dz * dz) <= maxCheckDistSq)
+                            {
+                                checkBounds = true;
+                                break;
+                            }
                         }
                     }
+
+                    if (checkBounds)
+                    {
+                        float halfWidth = Mathf.Clamp(entry.SizeMeters.x * 0.38f, 0.55f, 1.75f);
+                        float maxDepth = Mathf.Clamp(entry.SizeMeters.y * 0.72f, 0.90f, 2.75f);
+
+                        for (int u = 0; u < unitWorldPositions.Count; u++)
+                        {
+                            Vector3 unitPos = unitWorldPositions[u];
+                            float dz = unitPos.z - entry.WorldPosition.z;
+                            if (dz >= 0.05f && dz <= maxDepth && Mathf.Abs(unitPos.x - entry.WorldPosition.x) <= halfWidth)
+                            {
+                                occludes = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (!entry.IsAnimated4Frame &&
+                    !occludes &&
+                    Mathf.Abs(entry.CurrentAlpha - 1f) < 0.004f &&
+                    !entry.WasTransparentFaded &&
+                    entry.HasInitialPropertyBlock &&
+                    Mathf.Abs(entry.LastAppliedAlpha - 1f) < 0.001f)
+                {
+                    continue;
                 }
 
                 float targetAlpha = occludes ? OccludedPropAlpha : 1f;
@@ -519,7 +617,8 @@ namespace Realmz.World
                 }
 
                 bool isTransparentFaded = entry.CurrentAlpha < 0.995f;
-                if (entry.OriginalMaterial != null)
+                if (entry.OriginalMaterial != null &&
+                    (isTransparentFaded != entry.WasTransparentFaded || !entry.HasInitialPropertyBlock))
                 {
                     Material targetMat = isTransparentFaded
                         ? GetOrCreateFadedTransparentMaterial(entry.OriginalMaterial)
@@ -530,19 +629,35 @@ namespace Realmz.World
                     }
                 }
 
-                Color tint = new Color(1f, 1f, 1f, entry.CurrentAlpha);
                 if (entry.IsAnimated4Frame)
                 {
                     int frame = Application.isPlaying ? ((int)(Time.time * 6f) % 4) : 0;
-                    ApplyAnimated4FramePropertyBlock(entry.Renderer, entry.CurrentAlpha, frame);
+                    if (!entry.HasInitialPropertyBlock ||
+                        frame != entry.LastAnimFrame ||
+                        Mathf.Abs(entry.CurrentAlpha - entry.LastAppliedAlpha) >= 0.001f)
+                    {
+                        ApplyAnimated4FramePropertyBlock(entry.Renderer, entry.CurrentAlpha, frame);
+                        entry.LastAnimFrame = frame;
+                        entry.LastAppliedAlpha = entry.CurrentAlpha;
+                    }
                 }
                 else
                 {
-                    _propFadeBlock.Clear();
-                    _propFadeBlock.SetColor(TintColorId, tint);
-                    _propFadeBlock.SetColor(ColorId, tint);
-                    entry.Renderer.SetPropertyBlock(_propFadeBlock);
+                    if (!entry.HasInitialPropertyBlock ||
+                        isTransparentFaded != entry.WasTransparentFaded ||
+                        Mathf.Abs(entry.CurrentAlpha - entry.LastAppliedAlpha) >= 0.001f)
+                    {
+                        Color tint = new Color(1f, 1f, 1f, entry.CurrentAlpha);
+                        _propFadeBlock.Clear();
+                        _propFadeBlock.SetColor(TintColorId, tint);
+                        _propFadeBlock.SetColor(ColorId, tint);
+                        entry.Renderer.SetPropertyBlock(_propFadeBlock);
+                        entry.LastAppliedAlpha = entry.CurrentAlpha;
+                    }
                 }
+
+                entry.WasTransparentFaded = isTransparentFaded;
+                entry.HasInitialPropertyBlock = true;
             }
         }
 
@@ -572,6 +687,8 @@ namespace Realmz.World
                 return;
             }
 
+            SyncPropBillboardsIfCameraRotated();
+
             int frame = (int)(Time.time * 6f) % 4;
             if (frame != _lastAnimatedPropFrame)
             {
@@ -583,6 +700,9 @@ namespace Realmz.World
                     if (entry != null && entry.IsAnimated4Frame && entry.Renderer != null && entry.Root != null && entry.Root.activeSelf)
                     {
                         ApplyAnimated4FramePropertyBlock(entry.Renderer, entry.CurrentAlpha, frame);
+                        entry.LastAnimFrame = frame;
+                        entry.LastAppliedAlpha = entry.CurrentAlpha;
+                        entry.HasInitialPropertyBlock = true;
                     }
                 }
 
@@ -777,7 +897,10 @@ namespace Realmz.World
                     fwd.y = 0f;
                     if (fwd.sqrMagnitude > 0.0001f)
                     {
-                        initialYaw = Quaternion.LookRotation(fwd.normalized, Vector3.up);
+                        fwd.Normalize();
+                        initialYaw = Quaternion.LookRotation(fwd, Vector3.up);
+                        _lastPropBillboardFwdXZ = fwd;
+                        _hasLastPropBillboardFwd = true;
                     }
                 }
 
@@ -807,6 +930,9 @@ namespace Realmz.World
                     entry.IsAnimated4Frame = isAnimated4f;
                     entry.SizeMeters = new Vector2(sizeX, sizeY);
                     entry.CurrentAlpha = 1f;
+                    entry.LastAppliedAlpha = 1f;
+                    entry.WasTransparentFaded = false;
+                    entry.HasInitialPropertyBlock = true;
                     entry.OriginalMaterial = ResolvePropMaterial(prop.Kind);
                     entry.Renderer.sharedMaterial = entry.OriginalMaterial;
                     entry.Billboard.targetCamera = cam;
@@ -826,8 +952,11 @@ namespace Realmz.World
                     {
                         entry.WorldPosition = prop.WorldPosition;
                         entry.Filter.sharedMesh = _propBillboardQuadMesh;
-                        entry.Billboard.enabled = true;
-                        entry.Renderer.shadowCastingMode = ShadowCastingMode.On;
+                        // Prop yaw is synced centrally by BywaterWorldRenderer only when camera yaw changes.
+                        entry.Billboard.enabled = false;
+                        entry.Renderer.shadowCastingMode = ShouldPropCastShadow(prop.Kind)
+                            ? ShadowCastingMode.On
+                            : ShadowCastingMode.Off;
                         entry.Root.transform.position = prop.WorldPosition;
                         entry.Root.transform.rotation = initialYaw;
                         entry.Root.transform.localScale = new Vector3(sizeX, sizeY, 1f);
@@ -837,9 +966,11 @@ namespace Realmz.World
                     {
                         int frame = Application.isPlaying ? ((int)(Time.time * 6f) % 4) : 0;
                         ApplyAnimated4FramePropertyBlock(entry.Renderer, 1f, frame);
+                        entry.LastAnimFrame = frame;
                     }
                     else
                     {
+                        entry.LastAnimFrame = -1;
                         _propFadeBlock ??= new MaterialPropertyBlock();
                         _propFadeBlock.Clear();
                         _propFadeBlock.SetColor(TintColorId, Color.white);
@@ -910,6 +1041,11 @@ namespace Realmz.World
                     {
                         entry.PromptRoot.SetActive(false);
                     }
+
+                    if (_townNpcsHiddenForCombat)
+                    {
+                        entry.View.gameObject.SetActive(false);
+                    }
                 }
             }
 
@@ -920,6 +1056,11 @@ namespace Realmz.World
                 {
                     _npcPool[i].View.gameObject.SetActive(false);
                 }
+            }
+
+            if (_npcContainer != null)
+            {
+                _npcContainer.gameObject.SetActive(!_townNpcsHiddenForCombat);
             }
         }
 
@@ -1348,6 +1489,46 @@ namespace Realmz.World
             }
 
             return _propPool[index];
+        }
+
+        private void SyncPropBillboardsIfCameraRotated()
+        {
+            if (_activePropCount <= 0)
+            {
+                return;
+            }
+
+            Camera cam = ResolveActiveCamera();
+            if (cam == null)
+            {
+                return;
+            }
+
+            Vector3 fwd = cam.transform.forward;
+            fwd.y = 0f;
+            if (fwd.sqrMagnitude < 0.0001f)
+            {
+                return;
+            }
+
+            fwd.Normalize();
+            if (_hasLastPropBillboardFwd && (_lastPropBillboardFwdXZ - fwd).sqrMagnitude < 1e-6f)
+            {
+                return;
+            }
+
+            _lastPropBillboardFwdXZ = fwd;
+            _hasLastPropBillboardFwd = true;
+            Quaternion yawRot = Quaternion.LookRotation(fwd, Vector3.up);
+            int limit = Mathf.Min(_activePropCount, _propPool.Count);
+            for (int i = 0; i < limit; i++)
+            {
+                PropBillboardEntry entry = _propPool[i];
+                if (entry != null && !entry.IsFloorDecal && entry.Root != null && entry.Root.activeSelf)
+                {
+                    entry.Root.transform.rotation = yawRot;
+                }
+            }
         }
 
         private StoneBridgeEntry GetBridgeEntry(int index)
@@ -1987,6 +2168,11 @@ namespace Realmz.World
         {
             return kind == CartographyPropKind.DungeonIronGrate ||
                    kind == CartographyPropKind.DungeonSpikeTrap;
+        }
+
+        private static bool ShouldPropCastShadow(CartographyPropKind kind)
+        {
+            return !IsFloorDecalPropKind(kind);
         }
 
         private static bool IsAnimated4FramePropKind(CartographyPropKind kind)

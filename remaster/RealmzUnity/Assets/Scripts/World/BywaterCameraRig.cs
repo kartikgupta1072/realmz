@@ -53,6 +53,7 @@ namespace Realmz.World
         private Camera _cam;
         private Collider _terrainCollider;
         private BywaterHudController _hudController;
+        private EventSystem _cachedEventSystem;
         private Func<bool> _externalModalBlockCheck;
         private Vector3 _followTarget;
         private Vector3 _currentFollowPos;
@@ -159,8 +160,11 @@ namespace Realmz.World
 
         public bool IsPointerOverUiElement()
         {
-            EventSystem es = EventSystem.current;
-            return es != null && es.IsPointerOverGameObject();
+            if (_cachedEventSystem == null)
+            {
+                _cachedEventSystem = EventSystem.current;
+            }
+            return _cachedEventSystem != null && _cachedEventSystem.IsPointerOverGameObject();
         }
 
         public bool ShouldBlockPointerWorldInput()
@@ -715,15 +719,21 @@ namespace Realmz.World
                     return;
                 }
 
+                bool shiftHeld = kb.leftShiftKey.isPressed || kb.rightShiftKey.isPressed;
+                // In Exploration mode, WASD/Arrow keys move the hero cleanly without fighting manual camera pan
+                // unless Shift is held (Combat keeps WASD/Arrow free-pan). ApplyKeyboardPanInput API stays public for tests.
+                bool allowLiveKeyPan = _isCombatMode || shiftHeld;
                 float moveX = 0f;
                 float moveZ = 0f;
 
-                if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) moveX -= 1f;
-                if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) moveX += 1f;
-                if (kb.sKey.isPressed || kb.downArrowKey.isPressed) moveZ -= 1f;
-                if (kb.wKey.isPressed || kb.upArrowKey.isPressed) moveZ += 1f;
+                if (allowLiveKeyPan)
+                {
+                    if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) moveX -= 1f;
+                    if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) moveX += 1f;
+                    if (kb.sKey.isPressed || kb.downArrowKey.isPressed) moveZ -= 1f;
+                    if (kb.wKey.isPressed || kb.upArrowKey.isPressed) moveZ += 1f;
+                }
 
-                bool shiftHeld = kb.leftShiftKey.isPressed || kb.rightShiftKey.isPressed;
                 ApplyKeyboardPanInput(new Vector2(moveX, moveZ), shiftHeld, Time.unscaledDeltaTime);
             }
             else

@@ -20,12 +20,23 @@ namespace Realmz.World
         private static readonly int TintColorId = Shader.PropertyToID("_TintColor");
         private static readonly int WindPhaseId = Shader.PropertyToID("_WindPhase");
         private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
+        private static readonly int SrcBlendId = Shader.PropertyToID("_SrcBlend");
+        private static readonly int DstBlendId = Shader.PropertyToID("_DstBlend");
+        private static readonly int ZWriteId = Shader.PropertyToID("_ZWrite");
+        private static readonly int BillboardModeId = Shader.PropertyToID("_BillboardMode");
+        private static readonly int CameraPitchTiltDegId = Shader.PropertyToID("_CameraPitchTiltDeg");
+        private static readonly int AnimFpsId = Shader.PropertyToID("_AnimFps");
+        private static readonly int WindTipSwayId = Shader.PropertyToID("_WindTipSway");
+        private static readonly int TrampleStrengthId = Shader.PropertyToID("_TrampleStrength");
+        private static readonly int CutoffId = Shader.PropertyToID("_Cutoff");
         private static readonly Color CurrentTurnGold = new Color(0.980f, 0.800f, 0.082f, 0.95f); // #FACC15
         private static readonly Color HitFlashGoldWhite = new Color(1.0f, 0.953f, 0.690f, 1.0f); // #FFF3B0
-        private static readonly Color DeadSpriteTint = new Color(0.45f, 0.45f, 0.50f, 0.55f);
+        private static readonly Color DeadSpriteTint = new Color(0.56f, 0.52f, 0.50f, 0.86f);
         private static readonly Color AllyHpBlue = new Color(0.220f, 0.741f, 0.973f, 1f);      // #38BDF8
         private static readonly Color EnemyHpRed = new Color(0.937f, 0.267f, 0.267f, 1f);      // #EF4444
         private static readonly Color ContactShadowColor = new Color(0.05f, 0.06f, 0.10f, 0.55f);
+        private static readonly Dictionary<Material, Material> s_corpseMaterials = new Dictionary<Material, Material>(16);
+        private static Material s_fallbackCorpseMaterial;
 
         private static Material _sharedRingMaterial;
         private static Texture2D _sharedRingTexture;
@@ -40,6 +51,7 @@ namespace Realmz.World
 
         private MeshRenderer _spriteRenderer;
         private Transform _spriteBillboardTransform;
+        private PixelBillboard _spriteBillboard;
         private MeshRenderer _underRingRenderer;
         private MeshRenderer _contactShadowRenderer;
         private Transform _turnChevronTransform;
@@ -85,11 +97,13 @@ namespace Realmz.World
         private string _lastDetailLine;
         private float _verticalStaggerWorld;
         private bool _isHitFlashing;
+        private bool _isDyingTopple;
         private float _idlePhase;
         private float _windPhaseNorm;
         private Coroutine _moveCoroutine;
         private Coroutine _lungeCoroutine;
         private Coroutine _hitFlashCoroutine;
+        private Coroutine _deathCoroutine;
 
         private struct DustPuffInstance
         {
@@ -125,6 +139,11 @@ namespace Realmz.World
         public UnitAnimState CurrentAnimState => _animState;
         public bool FacingRight => _facingRight;
         public bool IsNameplateVisible => _nameplateVisible && _showHud && _isAlive;
+        public bool IsMoveAnimating => _moveCoroutine != null;
+        public bool IsAttackAnimating => _lungeCoroutine != null || (_animState == UnitAnimState.Attack && Time.time < _attackHoldUntil);
+        public bool IsCorpseSettled => !_isAlive && !_isDyingTopple;
+        public Renderer SpriteMeshRenderer => _spriteRenderer;
+        public int DeadCorpseRenderQueue => _spriteRenderer != null && _spriteRenderer.sharedMaterial != null ? _spriteRenderer.sharedMaterial.renderQueue : -1;
 
         private float GetVisualHeadHeight()
         {
@@ -190,7 +209,7 @@ namespace Realmz.World
 
         private void ApplyAnimStateMaterial()
         {
-            if (_spriteRenderer == null)
+            if (_spriteRenderer == null || !_isAlive)
             {
                 return;
             }
@@ -248,6 +267,7 @@ namespace Realmz.World
             _lastDetailLine = null;
             _verticalStaggerWorld = 0f;
             _isHitFlashing = false;
+            _isDyingTopple = false;
             _animState = UnitAnimState.Idle;
             _attackHoldUntil = 0f;
             _facingRight = true;
@@ -257,16 +277,29 @@ namespace Realmz.World
             StopMoveCoroutine();
             StopLungeCoroutine();
             StopHitFlashCoroutine();
+            StopDeathCoroutine();
             EnsureHierarchy();
+
+            if (_spriteBillboard != null)
+            {
+                _spriteBillboard.enabled = true;
+            }
+            if (_spriteRenderer != null)
+            {
+                _spriteRenderer.shadowCastingMode = ShadowCastingMode.On;
+                _spriteRenderer.receiveShadows = true;
+                _spriteRenderer.sortingOrder = 0;
+                _spriteRenderer.sharedMaterial = billboardMat;
+            }
 
             ResetSpriteIdlePose();
             if (_spriteBillboardTransform != null)
             {
                 _spriteBillboardTransform.localPosition = Vector3.zero;
+                _spriteBillboardTransform.localRotation = Quaternion.identity;
                 _spriteBillboardTransform.localScale = Vector3.one;
             }
 
-            _spriteRenderer.sharedMaterial = billboardMat;
             ApplySpriteTint(Color.white);
 
             if (_contactShadowRenderer != null)
@@ -442,6 +475,11 @@ namespace Realmz.World
         {
             UpdateDustPuffs(Time.deltaTime);
 
+            if (!_isAlive)
+            {
+                return;
+            }
+
             if (_animState == UnitAnimState.Attack &&
                 _attackHoldUntil > 0f &&
                 Time.time >= _attackHoldUntil &&
@@ -450,7 +488,7 @@ namespace Realmz.World
                 SetAnimState(_moveCoroutine != null ? UnitAnimState.Walk : UnitAnimState.Idle);
             }
 
-            if (_turnChevronTransform != null && _isCurrentTurn && _isAlive)
+            if (_turnChevronTransform != null && _isCurrentTurn)
             {
                 float bob = Mathf.Sin(Time.time * 4.2f + _idlePhase) * 0.055f;
                 _turnChevronTransform.localPosition = new Vector3(0f, GetVisualHeadHeight() + 0.10f + bob, 0f);
@@ -466,7 +504,7 @@ namespace Realmz.World
                 return;
             }
 
-            if (!_isAlive || _lungeCoroutine != null)
+            if (_lungeCoroutine != null)
             {
                 ResetSpriteIdlePose();
                 return;
@@ -498,12 +536,14 @@ namespace Realmz.World
 
         public void MoveAlongWorldPath(IReadOnlyList<Vector3> worldPoints, float stepDuration)
         {
-            StopMoveCoroutine();
-
             if (worldPoints == null || worldPoints.Count == 0)
             {
+                StopMoveCoroutine();
                 return;
             }
+
+            bool willAnimate = Application.isPlaying && gameObject.activeInHierarchy && stepDuration > 0.001f;
+            StopMoveCoroutine(resetToIdle: !willAnimate);
 
             _pathScratch.Clear();
             for (int i = 0; i < worldPoints.Count; i++)
@@ -518,19 +558,25 @@ namespace Realmz.World
                 SetFacingRight(finalDeltaX >= 0f);
             }
 
-            if (!Application.isPlaying || !gameObject.activeInHierarchy || stepDuration <= 0.001f)
+            if (!willAnimate)
             {
                 transform.position = finalPoint;
                 if (_spriteBillboardTransform != null && _lungeCoroutine == null)
                 {
                     _spriteBillboardTransform.localPosition = Vector3.zero;
                 }
-                ResetSpriteIdlePose();
-                SetAnimState(UnitAnimState.Idle);
+                if (_isAlive)
+                {
+                    ResetSpriteIdlePose();
+                    SetAnimState(UnitAnimState.Idle);
+                }
                 return;
             }
 
-            SetAnimState(UnitAnimState.Walk);
+            if (_animState != UnitAnimState.Walk)
+            {
+                SetAnimState(UnitAnimState.Walk);
+            }
             _moveCoroutine = StartCoroutine(MovePathRoutine(_pathScratch, stepDuration));
         }
 
@@ -609,9 +655,17 @@ namespace Realmz.World
             }
             LayoutStatusBadge();
 
+            bool wasAlive = _isAlive;
             if (isAlive)
             {
                 _isAlive = true;
+                StopDeathCoroutine();
+                _isDyingTopple = false;
+                if (!wasAlive || (_spriteBillboard != null && !_spriteBillboard.enabled))
+                {
+                    RestoreLivingSpriteState();
+                }
+
                 if (_contactShadowRenderer != null)
                 {
                     _contactShadowRenderer.gameObject.SetActive(true);
@@ -641,7 +695,6 @@ namespace Realmz.World
             else
             {
                 _isAlive = false;
-                ResetSpriteIdlePose();
                 if (_contactShadowRenderer != null)
                 {
                     _contactShadowRenderer.gameObject.SetActive(false);
@@ -650,10 +703,6 @@ namespace Realmz.World
                 if (_turnChevronTransform != null)
                 {
                     _turnChevronTransform.gameObject.SetActive(false);
-                }
-                if (!_isHitFlashing)
-                {
-                    ApplySpriteTint(DeadSpriteTint);
                 }
                 if (_microHudCanvas != null)
                 {
@@ -665,6 +714,29 @@ namespace Realmz.World
                 }
                 _expandedNameplateRoot.SetActive(false);
                 _worldHudCanvas.gameObject.SetActive(false);
+
+                if (wasAlive)
+                {
+                    StopMoveCoroutine(resetToIdle: false);
+                    StopLungeCoroutine();
+                    StopHitFlashCoroutine();
+                    StopDeathCoroutine();
+                    EmitDustPuffBurst(transform.position, 6);
+
+                    if (Application.isPlaying && gameObject.activeInHierarchy)
+                    {
+                        _isDyingTopple = true;
+                        _deathCoroutine = StartCoroutine(DeathToppleRoutine());
+                    }
+                    else
+                    {
+                        ApplySettledCorpseState();
+                    }
+                }
+                else if (!_isDyingTopple)
+                {
+                    ApplySettledCorpseState();
+                }
             }
         }
 
@@ -715,7 +787,7 @@ namespace Realmz.World
             }
         }
 
-        public void PlayAttackLunge(Vector3 targetWorldPos, float lungeDistance = 0.28f, float totalDuration = 0.07f)
+        public void PlayAttackLunge(Vector3 targetWorldPos, float lungeDistance = 0.28f, float totalDuration = 0.38f)
         {
             EnsureHierarchy();
             StopLungeCoroutine();
@@ -731,14 +803,21 @@ namespace Realmz.World
                 SetFacingRight(targetDeltaX >= 0f);
             }
 
-            SetAnimState(UnitAnimState.Attack, Mathf.Max(0.42f, totalDuration));
+            if (totalDuration <= 0.001f)
+            {
+                _spriteBillboardTransform.localPosition = Vector3.zero;
+                SetAnimState(UnitAnimState.Idle);
+                return;
+            }
+
+            SetAnimState(UnitAnimState.Attack, Mathf.Max(0.28f, totalDuration));
 
             Vector3 delta = targetWorldPos - transform.position;
             delta.y = 0f;
             Vector3 dir = delta.sqrMagnitude > 0.0001f ? delta.normalized : Vector3.forward;
             float clampedDistance = Mathf.Max(0f, lungeDistance);
 
-            if (!Application.isPlaying || !gameObject.activeInHierarchy || totalDuration <= 0.001f || clampedDistance <= 0.0001f)
+            if (!Application.isPlaying || !gameObject.activeInHierarchy || clampedDistance <= 0.0001f)
             {
                 _spriteBillboardTransform.localPosition = Vector3.zero;
                 return;
@@ -747,10 +826,46 @@ namespace Realmz.World
             _lungeCoroutine = StartCoroutine(AttackLungeRoutine(dir * clampedDistance, totalDuration));
         }
 
+        public void CompleteActiveAnimationsImmediate()
+        {
+            if (_moveCoroutine != null && _pathScratch.Count > 0)
+            {
+                transform.position = _pathScratch[_pathScratch.Count - 1];
+            }
+
+            StopMoveCoroutine(resetToIdle: false);
+            StopLungeCoroutine();
+            StopHitFlashCoroutine();
+
+            if (!_isAlive)
+            {
+                if (_isDyingTopple || _deathCoroutine != null)
+                {
+                    StopDeathCoroutine();
+                    ApplySettledCorpseState();
+                }
+                return;
+            }
+
+            if (_spriteBillboardTransform != null)
+            {
+                _spriteBillboardTransform.localPosition = Vector3.zero;
+            }
+
+            ResetSpriteIdlePose();
+            ApplySpriteTint(Color.white);
+            SetAnimState(UnitAnimState.Idle);
+        }
+
         public void PlayHitFlash(float duration = 0.055f)
         {
             EnsureHierarchy();
             StopHitFlashCoroutine();
+
+            if (!_isAlive)
+            {
+                return;
+            }
 
             float hitDuration = Mathf.Max(0.25f, duration);
             if (!Application.isPlaying || !gameObject.activeInHierarchy || duration <= 0.001f)
@@ -844,6 +959,11 @@ namespace Realmz.World
 
         private IEnumerator MovePathRoutine(IReadOnlyList<Vector3> points, float stepDuration)
         {
+            if (_animState != UnitAnimState.Walk)
+            {
+                SetAnimState(UnitAnimState.Walk);
+            }
+
             float totalElapsed = 0f;
             float dustTimer = 0f;
             float dustInterval = Mathf.Max(0.10f, stepDuration * 0.5f);
@@ -1020,7 +1140,7 @@ namespace Realmz.World
             }
         }
 
-        private void StopMoveCoroutine()
+        private void StopMoveCoroutine(bool resetToIdle = true)
         {
             if (_moveCoroutine != null)
             {
@@ -1030,12 +1150,211 @@ namespace Realmz.World
                 {
                     _spriteBillboardTransform.localPosition = Vector3.zero;
                 }
-                ResetSpriteIdlePose();
-                if (_animState == UnitAnimState.Walk)
+                if (_isAlive)
+                {
+                    ResetSpriteIdlePose();
+                }
+                if (resetToIdle && _animState == UnitAnimState.Walk)
                 {
                     SetAnimState(UnitAnimState.Idle);
                 }
             }
+        }
+
+        private void StopDeathCoroutine()
+        {
+            if (_deathCoroutine != null)
+            {
+                StopCoroutine(_deathCoroutine);
+                _deathCoroutine = null;
+            }
+        }
+
+        private Vector3 GetSettledCorpseLocalPosition()
+        {
+            return new Vector3(-0.36f * _spriteHeight, 0.022f, -0.09f * _spriteHeight);
+        }
+
+        private IEnumerator DeathToppleRoutine()
+        {
+            if (_spriteBillboard != null)
+            {
+                _spriteBillboard.enabled = false;
+            }
+
+            if (_spriteBillboardTransform != null)
+            {
+                _spriteBillboardTransform.localPosition = Vector3.zero;
+                _spriteBillboardTransform.localRotation = Quaternion.identity;
+                _spriteBillboardTransform.localScale = new Vector3(_facingRight ? 1f : -1f, 1f, 1f);
+            }
+
+            if (_spriteRenderer != null)
+            {
+                Material sourceMat = _idleMaterial != null ? _idleMaterial : _spriteRenderer.sharedMaterial;
+                Material corpseMat = GetOrCreateCorpseMaterial(sourceMat);
+                if (corpseMat != null)
+                {
+                    _spriteRenderer.sharedMaterial = corpseMat;
+                }
+                _spriteRenderer.shadowCastingMode = ShadowCastingMode.Off;
+                _spriteRenderer.receiveShadows = false;
+                _spriteRenderer.sortingOrder = -20;
+            }
+
+            const float duration = 0.35f;
+            float elapsed = 0f;
+            Vector3 startPos = Vector3.zero;
+            Vector3 endPos = GetSettledCorpseLocalPosition();
+            Quaternion startRot = Quaternion.identity;
+            Quaternion endRot = Quaternion.Euler(90f, 0f, -75f);
+            Vector3 startScale = new Vector3(_spriteWidth, _spriteHeight, 1f);
+            Vector3 endScale = new Vector3(_spriteWidth * 0.85f, _spriteHeight * 0.85f, 1f);
+
+            while (elapsed < duration && !_isAlive)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / duration);
+                float eased = 1f - ((1f - t) * (1f - t));
+
+                if (_spriteRenderer != null)
+                {
+                    Transform spriteTf = _spriteRenderer.transform;
+                    spriteTf.localPosition = Vector3.Lerp(startPos, endPos, eased);
+                    spriteTf.localRotation = Quaternion.Slerp(startRot, endRot, eased);
+                    spriteTf.localScale = Vector3.Lerp(startScale, endScale, eased);
+                }
+
+                ApplySpriteTint(Color.Lerp(Color.white, DeadSpriteTint, eased));
+                yield return null;
+            }
+
+            if (!_isAlive)
+            {
+                ApplySettledCorpseState();
+            }
+        }
+
+        private void ApplySettledCorpseState()
+        {
+            _isDyingTopple = false;
+            _deathCoroutine = null;
+
+            if (_spriteBillboard != null)
+            {
+                _spriteBillboard.enabled = false;
+            }
+
+            if (_spriteBillboardTransform != null)
+            {
+                _spriteBillboardTransform.localPosition = Vector3.zero;
+                _spriteBillboardTransform.localRotation = Quaternion.identity;
+                _spriteBillboardTransform.localScale = new Vector3(_facingRight ? 1f : -1f, 1f, 1f);
+            }
+
+            if (_spriteRenderer != null)
+            {
+                Material sourceMat = _idleMaterial != null ? _idleMaterial : _spriteRenderer.sharedMaterial;
+                Material corpseMat = GetOrCreateCorpseMaterial(sourceMat);
+                if (corpseMat != null)
+                {
+                    _spriteRenderer.sharedMaterial = corpseMat;
+                }
+                _spriteRenderer.shadowCastingMode = ShadowCastingMode.Off;
+                _spriteRenderer.receiveShadows = false;
+                _spriteRenderer.sortingOrder = -20;
+
+                Transform spriteTf = _spriteRenderer.transform;
+                spriteTf.localPosition = GetSettledCorpseLocalPosition();
+                spriteTf.localRotation = Quaternion.Euler(90f, 0f, -75f);
+                spriteTf.localScale = new Vector3(_spriteWidth * 0.85f, _spriteHeight * 0.85f, 1f);
+            }
+
+            ApplySpriteTint(DeadSpriteTint);
+        }
+
+        private void RestoreLivingSpriteState()
+        {
+            if (_spriteBillboard != null)
+            {
+                _spriteBillboard.enabled = true;
+            }
+
+            if (_spriteBillboardTransform != null)
+            {
+                _spriteBillboardTransform.localPosition = Vector3.zero;
+                _spriteBillboardTransform.localRotation = Quaternion.identity;
+                _spriteBillboardTransform.localScale = new Vector3(_facingRight ? 1f : -1f, 1f, 1f);
+            }
+
+            if (_spriteRenderer != null)
+            {
+                _spriteRenderer.shadowCastingMode = ShadowCastingMode.On;
+                _spriteRenderer.receiveShadows = true;
+                _spriteRenderer.sortingOrder = 0;
+            }
+
+            ApplyAnimStateMaterial();
+            ResetSpriteIdlePose();
+        }
+
+        private static Material GetOrCreateCorpseMaterial(Material sourceMat)
+        {
+            if (sourceMat != null && s_corpseMaterials.TryGetValue(sourceMat, out Material cached) && cached != null)
+            {
+                return cached;
+            }
+
+            if (sourceMat == null)
+            {
+                if (s_fallbackCorpseMaterial != null)
+                {
+                    return s_fallbackCorpseMaterial;
+                }
+
+                Shader fallbackShader = Shader.Find("Realmz/CartographyBillboard")
+                    ?? Shader.Find("Universal Render Pipeline/Unlit")
+                    ?? Shader.Find("Sprites/Default");
+                if (fallbackShader == null)
+                {
+                    return null;
+                }
+
+                Material fallbackMat = new Material(fallbackShader)
+                {
+                    name = "FallbackUnit_Corpse",
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+                ConfigureCorpseMaterialProperties(fallbackMat);
+                s_fallbackCorpseMaterial = fallbackMat;
+                return fallbackMat;
+            }
+
+            Material corpseMat = new Material(sourceMat)
+            {
+                name = sourceMat.name + "_Corpse",
+                hideFlags = HideFlags.HideAndDontSave
+            };
+            ConfigureCorpseMaterialProperties(corpseMat);
+            s_corpseMaterials[sourceMat] = corpseMat;
+            return corpseMat;
+        }
+
+        private static void ConfigureCorpseMaterialProperties(Material corpseMat)
+        {
+            corpseMat.SetOverrideTag("RenderType", "Transparent");
+            // Render in Transparent bucket strictly after Terrain (2000) and living AlphaTest units (2450),
+            // before overlays (3000), with ZWrite Off so corpses never erase beneath Terrain or Z-fight.
+            corpseMat.renderQueue = (int)RenderQueue.Transparent - 50;
+            if (corpseMat.HasProperty(ZWriteId)) corpseMat.SetFloat(ZWriteId, 0f);
+            if (corpseMat.HasProperty(SrcBlendId)) corpseMat.SetFloat(SrcBlendId, (float)BlendMode.SrcAlpha);
+            if (corpseMat.HasProperty(DstBlendId)) corpseMat.SetFloat(DstBlendId, (float)BlendMode.OneMinusSrcAlpha);
+            if (corpseMat.HasProperty(BillboardModeId)) corpseMat.SetFloat(BillboardModeId, 0f);
+            if (corpseMat.HasProperty(CameraPitchTiltDegId)) corpseMat.SetFloat(CameraPitchTiltDegId, 0f);
+            if (corpseMat.HasProperty(AnimFpsId)) corpseMat.SetFloat(AnimFpsId, 0f);
+            if (corpseMat.HasProperty(WindTipSwayId)) corpseMat.SetFloat(WindTipSwayId, 0f);
+            if (corpseMat.HasProperty(TrampleStrengthId)) corpseMat.SetFloat(TrampleStrengthId, 0f);
+            if (corpseMat.HasProperty(CutoffId)) corpseMat.SetFloat(CutoffId, 0.25f);
         }
 
         private void StopLungeCoroutine()
@@ -1165,7 +1484,7 @@ namespace Realmz.World
             GameObject billboardGo = new GameObject("SpriteBillboard");
             billboardGo.transform.SetParent(transform, false);
             billboardGo.transform.localPosition = Vector3.zero;
-            billboardGo.AddComponent<PixelBillboard>();
+            _spriteBillboard = billboardGo.AddComponent<PixelBillboard>();
             _spriteBillboardTransform = billboardGo.transform;
 
             GameObject spriteGo = new GameObject("SpriteQuad", typeof(MeshFilter), typeof(MeshRenderer));
@@ -1849,6 +2168,16 @@ namespace Realmz.World
 
         private void OnDisable()
         {
+            if (_deathCoroutine != null)
+            {
+                StopCoroutine(_deathCoroutine);
+                _deathCoroutine = null;
+                if (!_isAlive)
+                {
+                    ApplySettledCorpseState();
+                }
+            }
+
             for (int i = 0; i < _dustPuffs.Count; i++)
             {
                 DustPuffInstance puff = _dustPuffs[i];
