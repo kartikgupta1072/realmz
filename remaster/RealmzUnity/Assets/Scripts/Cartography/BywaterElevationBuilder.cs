@@ -5,9 +5,10 @@ using UnityEngine.Rendering;
 namespace Realmz.Cartography
 {
     /// <summary>
-    /// Generates the 3-tier heightfield terrain mesh (-0.6m river, 0.0m plaza, +0.75m ridge),
-    /// chamfered vertical cliff faces (cliff_rock via TEXCOORD1.x), baked elevation-crease and
-    /// structure footprint AO (TEXCOORD1.y), and the animated shallow_water river plane.
+    /// Generates the stepped heightfield terrain mesh at canonical coordinates
+    /// (x + 0.5, elev, -(y + 0.5)), welding contiguous equal-elevation plateaus,
+    /// emitting vertical cliff faces (cliff_rock via TEXCOORD1.x), baking crease AO
+    /// (TEXCOORD1.y), attaching a MeshCollider, and building ShallowWaterPlane.
     /// </summary>
     public sealed class BywaterElevationBuilder : MonoBehaviour
     {
@@ -26,12 +27,49 @@ namespace Realmz.Cartography
         public int LastCliffTriangleCount { get; private set; }
         public Mesh LastBuiltMesh { get; private set; }
 
+        private Mesh _ownedTerrainMesh;
+        private Mesh _ownedWaterMesh;
+        private CartographyWorldData _lastWorldData;
+
+        private void OnDestroy()
+        {
+            if (_ownedTerrainMesh != null)
+            {
+                if (terrainMeshFilter != null && terrainMeshFilter.sharedMesh == _ownedTerrainMesh)
+                {
+                    terrainMeshFilter.sharedMesh = null;
+                }
+                if (terrainMeshCollider != null && terrainMeshCollider.sharedMesh == _ownedTerrainMesh)
+                {
+                    terrainMeshCollider.sharedMesh = null;
+                }
+                DestroySafe(_ownedTerrainMesh);
+                _ownedTerrainMesh = null;
+            }
+
+            if (_ownedWaterMesh != null)
+            {
+                if (waterPlaneObject != null)
+                {
+                    MeshFilter wf = waterPlaneObject.GetComponent<MeshFilter>();
+                    if (wf != null && wf.sharedMesh == _ownedWaterMesh)
+                    {
+                        wf.sharedMesh = null;
+                    }
+                }
+                DestroySafe(_ownedWaterMesh);
+                _ownedWaterMesh = null;
+            }
+        }
+
         public void Rebuild(CartographyWorldData data)
         {
             if (data == null)
             {
                 data = CartographyWorldData.BuildBywaterProofLayout();
             }
+
+            _lastWorldData = data;
 
             if (terrainMeshFilter == null)
             {
@@ -49,7 +87,16 @@ namespace Realmz.Cartography
                 if (terrainMeshCollider == null) terrainMeshCollider = gameObject.AddComponent<MeshCollider>();
             }
 
+            if (_ownedTerrainMesh != null)
+            {
+                if (terrainMeshFilter.sharedMesh == _ownedTerrainMesh) terrainMeshFilter.sharedMesh = null;
+                if (terrainMeshCollider.sharedMesh == _ownedTerrainMesh) terrainMeshCollider.sharedMesh = null;
+                DestroySafe(_ownedTerrainMesh);
+                _ownedTerrainMesh = null;
+            }
+
             Mesh builtMesh = BuildTerrainMesh(data, out int cliffTris);
+            _ownedTerrainMesh = builtMesh;
             LastCliffTriangleCount = cliffTris;
             LastBuiltMesh = builtMesh;
 
@@ -63,11 +110,21 @@ namespace Realmz.Cartography
                 terrainMeshRenderer.sharedMaterial = terrainMaterial;
             }
 
-            EnsureWaterPlane();
+            EnsureWaterPlane(data);
         }
 
         public void EnsureWaterPlane()
         {
+            EnsureWaterPlane(_lastWorldData);
+        }
+
+        public void EnsureWaterPlane(CartographyWorldData data)
+        {
+            if (data == null)
+            {
+                data = CartographyWorldData.BuildBywaterProofLayout();
+            }
+
             Transform existing = transform.Find("ShallowWaterPlane");
             if (existing != null)
             {
@@ -79,26 +136,50 @@ namespace Realmz.Cartography
                 waterPlaneObject.transform.SetParent(transform, false);
             }
 
+            waterPlaneObject.transform.localPosition = new Vector3(
+                data.Width * 0.5f,
+                data.WaterSurfaceHeight,
+                -data.Height * 0.5f);
+            waterPlaneObject.transform.localRotation = Quaternion.identity;
+            waterPlaneObject.transform.localScale = Vector3.one;
+
             MeshFilter wf = waterPlaneObject.GetComponent<MeshFilter>();
             if (wf == null) wf = waterPlaneObject.AddComponent<MeshFilter>();
             MeshRenderer wr = waterPlaneObject.GetComponent<MeshRenderer>();
             if (wr == null) wr = waterPlaneObject.AddComponent<MeshRenderer>();
 
-            if (wf.sharedMesh == null)
+            if (_ownedWaterMesh != null)
             {
-                wf.sharedMesh = BuildWaterPlaneMesh(
-                    0f,
-                    CartographyWorldData.GridWidth,
-                    2.80f,
-                    5.20f,
-                    CartographyWorldData.WaterSurfaceElevation);
+                if (wf.sharedMesh == _ownedWaterMesh) wf.sharedMesh = null;
+                DestroySafe(_ownedWaterMesh);
+                _ownedWaterMesh = null;
             }
+
+            _ownedWaterMesh = BuildWaterPlaneMesh(data.Width, data.Height);
+            wf.sharedMesh = _ownedWaterMesh;
 
             wr.shadowCastingMode = ShadowCastingMode.Off;
             wr.receiveShadows = true;
             if (waterMaterial != null)
             {
                 wr.sharedMaterial = waterMaterial;
+            }
+        }
+
+        private static void DestroySafe(Object obj)
+        {
+            if (obj == null)
+            {
+                return;
+            }
+
+            if (Application.isPlaying)
+            {
+                Destroy(obj);
+            }
+            else
+            {
+                DestroyImmediate(obj);
             }
         }
 
@@ -109,83 +190,58 @@ namespace Realmz.Cartography
                 data = CartographyWorldData.BuildBywaterProofLayout();
             }
 
-            const int w = CartographyWorldData.GridWidth;
-            const int h = CartographyWorldData.GridHeight;
+            int w = data.Width;
+            int h = data.Height;
             const int sub = SubdivisionsPerTile;
             const float step = 1.0f / sub;
-            const float chamferInset = 0.08f;
             const float chamferDrop = 0.06f;
 
-            List<Vector3> verts = new List<Vector3>(w * h * sub * sub * 4);
-            List<Vector3> norms = new List<Vector3>(w * h * sub * sub * 4);
-            List<Vector4> tangs = new List<Vector4>(w * h * sub * sub * 4);
-            List<Color> colors = new List<Color>(w * h * sub * sub * 4);
-            List<Vector2> uv0 = new List<Vector2>(w * h * sub * sub * 4);
-            List<Vector2> uv1 = new List<Vector2>(w * h * sub * sub * 4);
-            List<int> tris = new List<int>(w * h * sub * sub * 6);
+            int estimatedQuads = w * h * sub * sub;
+            List<Vector3> verts = new List<Vector3>(estimatedQuads + w * h * 4);
+            List<Vector3> norms = new List<Vector3>(estimatedQuads + w * h * 4);
+            List<Vector4> tangs = new List<Vector4>(estimatedQuads + w * h * 4);
+            List<Color> colors = new List<Color>(estimatedQuads + w * h * 4);
+            List<Vector2> uv0 = new List<Vector2>(estimatedQuads + w * h * 4);
+            List<Vector2> uv1 = new List<Vector2>(estimatedQuads + w * h * 4);
+            List<int> tris = new List<int>(estimatedQuads * 6 + w * h * 12);
 
-            // 1. Horizontal plateau surface quads (subdivided per tile for smooth splat gradients)
+            // Cache welded plateau vertices by (subgridX, subgridZ, quantizedElevation)
+            Dictionary<long, int> plateauVertCache = new Dictionary<long, int>(estimatedQuads);
+
+            // 1. Horizontal plateau surface quads (welded across contiguous equal-elevation tiles)
             for (int ty = 0; ty < h; ty++)
             {
                 for (int tx = 0; tx < w; tx++)
                 {
                     CartographyTile tile = data.GetTile(tx, ty);
                     float yElev = tile.Elevation;
+                    int elevKey = Mathf.RoundToInt(yElev * 1000f);
 
                     for (int sy = 0; sy < sub; sy++)
                     {
                         for (int sx = 0; sx < sub; sx++)
                         {
-                            float x0 = tx + sx * step;
-                            float z0 = ty + sy * step;
-                            float x1 = x0 + step;
-                            float z1 = z0 + step;
+                            int gx0 = tx * sub + sx;
+                            int gx1 = gx0 + 1;
+                            int gzNorth = ty * sub + sy;
+                            int gzSouth = gzNorth + 1;
 
-                            SampleCornerWeights(data, x0, z0, yElev, out Color c00, out float ao00);
-                            SampleCornerWeights(data, x1, z0, yElev, out Color c10, out float ao10);
-                            SampleCornerWeights(data, x1, z1, yElev, out Color c11, out float ao11);
-                            SampleCornerWeights(data, x0, z1, yElev, out Color c01, out float ao01);
-
-                            // Slight chamfer lip drop right at higher cliff rims so sunlight highlights edges
-                            float y00 = yElev - ComputeEdgeRimDrop(data, tx, ty, x0, z0, yElev, chamferInset, chamferDrop);
-                            float y10 = yElev - ComputeEdgeRimDrop(data, tx, ty, x1, z0, yElev, chamferInset, chamferDrop);
-                            float y11 = yElev - ComputeEdgeRimDrop(data, tx, ty, x1, z1, yElev, chamferInset, chamferDrop);
-                            float y01 = yElev - ComputeEdgeRimDrop(data, tx, ty, x0, z1, yElev, chamferInset, chamferDrop);
-
-                            int baseIdx = verts.Count;
-                            verts.Add(new Vector3(x0, y00, z0));
-                            verts.Add(new Vector3(x1, y10, z0));
-                            verts.Add(new Vector3(x1, y11, z1));
-                            verts.Add(new Vector3(x0, y01, z1));
-
-                            for (int k = 0; k < 4; k++)
-                            {
-                                norms.Add(Vector3.up);
-                                tangs.Add(new Vector4(1f, 0f, 0f, -1f));
-                            }
-
-                            colors.Add(c00);
-                            colors.Add(c10);
-                            colors.Add(c11);
-                            colors.Add(c01);
-
-                            uv0.Add(new Vector2(x0 / w, z0 / h));
-                            uv0.Add(new Vector2(x1 / w, z0 / h));
-                            uv0.Add(new Vector2(x1 / w, z1 / h));
-                            uv0.Add(new Vector2(x0 / w, z1 / h));
-
-                            uv1.Add(new Vector2(0f, ao00));
-                            uv1.Add(new Vector2(0f, ao10));
-                            uv1.Add(new Vector2(0f, ao11));
-                            uv1.Add(new Vector2(0f, ao01));
+                            int i00 = GetOrAddPlateauVertex(data, w, h, gx0, gzSouth, step, yElev, elevKey, chamferDrop,
+                                plateauVertCache, verts, norms, tangs, colors, uv0, uv1);
+                            int i10 = GetOrAddPlateauVertex(data, w, h, gx1, gzSouth, step, yElev, elevKey, chamferDrop,
+                                plateauVertCache, verts, norms, tangs, colors, uv0, uv1);
+                            int i11 = GetOrAddPlateauVertex(data, w, h, gx1, gzNorth, step, yElev, elevKey, chamferDrop,
+                                plateauVertCache, verts, norms, tangs, colors, uv0, uv1);
+                            int i01 = GetOrAddPlateauVertex(data, w, h, gx0, gzNorth, step, yElev, elevKey, chamferDrop,
+                                plateauVertCache, verts, norms, tangs, colors, uv0, uv1);
 
                             // Winding for +Y up normal in Unity LH coords: (0, 2, 1) and (0, 3, 2)
-                            tris.Add(baseIdx + 0);
-                            tris.Add(baseIdx + 2);
-                            tris.Add(baseIdx + 1);
-                            tris.Add(baseIdx + 0);
-                            tris.Add(baseIdx + 3);
-                            tris.Add(baseIdx + 2);
+                            tris.Add(i00);
+                            tris.Add(i11);
+                            tris.Add(i10);
+                            tris.Add(i00);
+                            tris.Add(i01);
+                            tris.Add(i11);
                         }
                     }
                 }
@@ -193,27 +249,36 @@ namespace Realmz.Cartography
 
             // 2. Stepped vertical cliff walls (and outer diorama skirt rim)
             int cliffTriStart = tris.Count;
+            float topRimOffset = chamferDrop * 0.5f;
+
             for (int ty = 0; ty < h; ty++)
             {
+                float zNorth = -ty;
+                float zSouth = -(ty + 1);
+
                 for (int tx = 0; tx < w; tx++)
                 {
                     float eHere = data.GetTile(tx, ty).Elevation;
+                    float topY = eHere - topRimOffset;
 
-                    // Check 4 cardinal neighbors: South (-Z), North (+Z), West (-X), East (+X)
-                    CheckAndEmitCliff(data, tx, ty, tx, ty - 1, eHere,
-                        new Vector3(tx, eHere, ty), new Vector3(tx + 1, eHere, ty),
+                    // South face (neighbor at ty + 1, Z = -(ty + 1), outward Vector3.back)
+                    CheckAndEmitCliff(data, tx, ty + 1, eHere, topY, topRimOffset,
+                        new Vector3(tx + 1, topY, zSouth), new Vector3(tx, topY, zSouth),
                         Vector3.back, verts, norms, tangs, colors, uv0, uv1, tris);
 
-                    CheckAndEmitCliff(data, tx, ty, tx, ty + 1, eHere,
-                        new Vector3(tx + 1, eHere, ty + 1), new Vector3(tx, eHere, ty + 1),
+                    // North face (neighbor at ty - 1, Z = -ty, outward Vector3.forward)
+                    CheckAndEmitCliff(data, tx, ty - 1, eHere, topY, topRimOffset,
+                        new Vector3(tx, topY, zNorth), new Vector3(tx + 1, topY, zNorth),
                         Vector3.forward, verts, norms, tangs, colors, uv0, uv1, tris);
 
-                    CheckAndEmitCliff(data, tx, ty, tx - 1, ty, eHere,
-                        new Vector3(tx, eHere, ty + 1), new Vector3(tx, eHere, ty),
+                    // West face (neighbor at tx - 1, X = tx, outward Vector3.left)
+                    CheckAndEmitCliff(data, tx - 1, ty, eHere, topY, topRimOffset,
+                        new Vector3(tx, topY, zSouth), new Vector3(tx, topY, zNorth),
                         Vector3.left, verts, norms, tangs, colors, uv0, uv1, tris);
 
-                    CheckAndEmitCliff(data, tx, ty, tx + 1, ty, eHere,
-                        new Vector3(tx + 1, eHere, ty), new Vector3(tx + 1, eHere, ty + 1),
+                    // East face (neighbor at tx + 1, X = tx + 1, outward Vector3.right)
+                    CheckAndEmitCliff(data, tx + 1, ty, eHere, topY, topRimOffset,
+                        new Vector3(tx + 1, topY, zNorth), new Vector3(tx + 1, topY, zSouth),
                         Vector3.right, verts, norms, tangs, colors, uv0, uv1, tris);
                 }
             }
@@ -222,8 +287,8 @@ namespace Realmz.Cartography
 
             Mesh mesh = new Mesh
             {
-                name = "Bywater_Cartography_Terrain",
-                indexFormat = IndexFormat.UInt32
+                name = $"Cartography_Terrain_{w}x{h}",
+                indexFormat = verts.Count > 60000 ? IndexFormat.UInt32 : IndexFormat.UInt16
             };
             mesh.SetVertices(verts);
             mesh.SetNormals(norms);
@@ -236,15 +301,58 @@ namespace Realmz.Cartography
             return mesh;
         }
 
+        private static int GetOrAddPlateauVertex(
+            CartographyWorldData data,
+            int w,
+            int h,
+            int gx,
+            int gz,
+            float step,
+            float yElev,
+            int elevKey,
+            float chamferDrop,
+            Dictionary<long, int> cache,
+            List<Vector3> verts,
+            List<Vector3> norms,
+            List<Vector4> tangs,
+            List<Color> colors,
+            List<Vector2> uv0,
+            List<Vector2> uv1)
+        {
+            long key = ((long)(uint)(elevKey + 32768) << 32) | ((long)(uint)gz << 16) | (uint)gx;
+            if (cache.TryGetValue(key, out int existingIdx))
+            {
+                return existingIdx;
+            }
+
+            float wx = gx * step;
+            float worldY = gz * step;
+            float wz = -worldY;
+
+            SampleCornerWeights(data, wx, worldY, yElev, out Color splat, out float ao);
+            float rimDrop = ComputeCornerRimDrop(data, wx, worldY, yElev, chamferDrop);
+
+            int idx = verts.Count;
+            verts.Add(new Vector3(wx, yElev - rimDrop, wz));
+            norms.Add(Vector3.up);
+            tangs.Add(new Vector4(1f, 0f, 0f, -1f));
+            colors.Add(splat);
+            uv0.Add(new Vector2(wx / w, 1f - worldY / h));
+            uv1.Add(new Vector2(0f, ao));
+
+            cache[key] = idx;
+            return idx;
+        }
+
         private static void CheckAndEmitCliff(
             CartographyWorldData data,
-            int tx,
-            int ty,
             int nx,
             int ny,
             float eHere,
-            Vector3 topRight,
+            float topY,
+            float topRimOffset,
             Vector3 topLeft,
+            Vector3 topRight,
             Vector3 outwardDir,
             List<Vector3> verts,
             List<Vector3> norms,
@@ -255,28 +363,30 @@ namespace Realmz.Cartography
             List<int> tris)
         {
             float eNeighbor;
-            if (data.IsInBounds(nx, ny))
+            float botY;
+            if (data.InBounds(nx, ny))
             {
                 eNeighbor = data.GetTile(nx, ny).Elevation;
+                // Tuck cliff base down by rim offset so it seats cleanly against chamfered lower rims
+                botY = eNeighbor - topRimOffset;
             }
             else
             {
-                // Diorama cutaway border drop
                 eNeighbor = -0.75f;
+                botY = eNeighbor;
             }
 
-            if (eHere <= eNeighbor + 0.05f)
+            if (eHere <= eNeighbor + 0.03f)
             {
                 return;
             }
 
-            Vector3 botRight = new Vector3(topRight.x, eNeighbor, topRight.z);
-            Vector3 botLeft = new Vector3(topLeft.x, eNeighbor, topLeft.z);
+            Vector3 botRight = new Vector3(topRight.x, botY, topRight.z);
+            Vector3 botLeft = new Vector3(topLeft.x, botY, topLeft.z);
 
-            // Slight chamfer outward normal for crisp directional rim catch
             Vector3 cliffNormal = (outwardDir + new Vector3(0f, 0.14f, 0f)).normalized;
             Vector3 tangDir = (topRight - topLeft).normalized;
-            Vector4 tangent = new Vector4(tangDir.x, tangDir.y, tangDir.z, -1f);
+            Vector4 tangent = new Vector4(tangDir.x, tangDir.y, tangDir.z, 1f);
 
             int baseIdx = verts.Count;
             verts.Add(botLeft);
@@ -314,15 +424,13 @@ namespace Realmz.Cartography
         private static void SampleCornerWeights(
             CartographyWorldData data,
             float wx,
-            float wz,
+            float worldY,
             float tierElevation,
             out Color splatColor,
             out float creaseAO)
         {
-            // Average the up to 4 adjacent tiles sharing vertex (wx, wz) ONLY on the same elevation tier
-            // so river mud / ridge moss don't bleed weirdly across cliff dropoffs.
             int ix = Mathf.FloorToInt(wx - 0.001f);
-            int iz = Mathf.FloorToInt(wz - 0.001f);
+            int iy = Mathf.FloorToInt(worldY - 0.001f);
 
             float sumR = 0f;
             float sumG = 0f;
@@ -330,16 +438,21 @@ namespace Realmz.Cartography
             float sumA = 0f;
             float sumAO = 0f;
             int count = 0;
-            bool touchesDifferentTier = false;
+            bool touchesHigherTier = false;
 
-            for (int dz = 0; dz <= 1; dz++)
+            for (int dy = 0; dy <= 1; dy++)
             {
+                int ty = iy + dy;
                 for (int dx = 0; dx <= 1; dx++)
                 {
-                    int tx = Mathf.Clamp(ix + dx, 0, CartographyWorldData.GridWidth - 1);
-                    int tz = Mathf.Clamp(iz + dz, 0, CartographyWorldData.GridHeight - 1);
-                    CartographyTile t = data.GetTile(tx, tz);
-                    if (Mathf.Abs(t.Elevation - tierElevation) < 0.05f)
+                    int tx = ix + dx;
+                    if (!data.InBounds(tx, ty))
+                    {
+                        continue;
+                    }
+
+                    CartographyTile t = data.GetTile(tx, ty);
+                    if (Mathf.Abs(t.Elevation - tierElevation) < 0.03f)
                     {
                         sumR += t.MossWeight;
                         sumG += t.DirtWeight;
@@ -348,17 +461,18 @@ namespace Realmz.Cartography
                         sumAO += t.CreaseAO;
                         count++;
                     }
-                    else
+                    else if (t.Elevation > tierElevation + 0.03f)
                     {
-                        touchesDifferentTier = true;
+                        touchesHigherTier = true;
                     }
                 }
             }
 
             if (count == 0)
             {
-                splatColor = new Color(0f, 0f, 0f, 0f);
-                creaseAO = 1.0f;
+                CartographyTile fallback = data.GetTile(Mathf.FloorToInt(wx), Mathf.FloorToInt(worldY));
+                splatColor = new Color(fallback.MossWeight, fallback.DirtWeight, fallback.CobbleWeight, fallback.MudWeight);
+                creaseAO = fallback.CreaseAO;
                 return;
             }
 
@@ -366,73 +480,103 @@ namespace Realmz.Cartography
             splatColor = new Color(sumR * inv, sumG * inv, sumB * inv, sumA * inv);
             creaseAO = sumAO * inv;
 
-            // Darken lower plateau crease right next to a rising cliff base
-            if (touchesDifferentTier && tierElevation < CartographyWorldData.RidgeElevation)
+            if (touchesHigherTier)
             {
                 creaseAO = Mathf.Min(creaseAO, 0.58f);
             }
         }
 
-        private static float ComputeEdgeRimDrop(
+        private static float ComputeCornerRimDrop(
             CartographyWorldData data,
-            int tx,
-            int ty,
             float wx,
-            float wz,
+            float worldY,
             float tierElevation,
-            float inset,
             float drop)
         {
-            // Subtle chamfer drop if vertex lies right on a higher edge facing a lower neighbor
-            bool atWestEdge = Mathf.Abs(wx - tx) < 0.01f && (!data.IsInBounds(tx - 1, ty) || data.GetTile(tx - 1, ty).Elevation < tierElevation - 0.05f);
-            bool atEastEdge = Mathf.Abs(wx - (tx + 1)) < 0.01f && (!data.IsInBounds(tx + 1, ty) || data.GetTile(tx + 1, ty).Elevation < tierElevation - 0.05f);
-            bool atSouthEdge = Mathf.Abs(wz - ty) < 0.01f && (!data.IsInBounds(tx, ty - 1) || data.GetTile(tx, ty - 1).Elevation < tierElevation - 0.05f);
-            bool atNorthEdge = Mathf.Abs(wz - (ty + 1)) < 0.01f && (!data.IsInBounds(tx, ty + 1) || data.GetTile(tx, ty + 1).Elevation < tierElevation - 0.05f);
+            int minTx = Mathf.FloorToInt(wx - 0.001f);
+            int maxTx = Mathf.FloorToInt(wx + 0.001f);
+            int minTy = Mathf.FloorToInt(worldY - 0.001f);
+            int maxTy = Mathf.FloorToInt(worldY + 0.001f);
 
-            if (atWestEdge || atEastEdge || atSouthEdge || atNorthEdge)
+            for (int ty = minTy; ty <= maxTy; ty++)
             {
-                return drop * 0.5f;
+                for (int tx = minTx; tx <= maxTx; tx++)
+                {
+                    if (!data.InBounds(tx, ty) || data.GetTile(tx, ty).Elevation < tierElevation - 0.03f)
+                    {
+                        return drop * 0.5f;
+                    }
+                }
             }
+
             return 0f;
         }
 
-        private static Mesh BuildWaterPlaneMesh(float minX, float maxX, float minZ, float maxZ, float y)
+        private static Mesh BuildWaterPlaneMesh(int width, int height)
         {
+            int segsX = Mathf.Max(1, Mathf.CeilToInt(width / 8f));
+            int segsZ = Mathf.Max(1, Mathf.CeilToInt(height / 8f));
+
+            int vertsX = segsX + 1;
+            int vertsZ = segsZ + 1;
+
+            List<Vector3> verts = new List<Vector3>(vertsX * vertsZ);
+            List<Vector3> norms = new List<Vector3>(vertsX * vertsZ);
+            List<Vector4> tangs = new List<Vector4>(vertsX * vertsZ);
+            List<Vector2> uvs = new List<Vector2>(vertsX * vertsZ);
+            List<int> tris = new List<int>(segsX * segsZ * 6);
+
+            float halfW = width * 0.5f;
+            float halfH = height * 0.5f;
+
+            for (int iz = 0; iz <= segsZ; iz++)
+            {
+                float tz = (float)iz / segsZ;
+                float z = Mathf.Lerp(-halfH, halfH, tz);
+                float v = tz * (height * 0.5f);
+
+                for (int ix = 0; ix <= segsX; ix++)
+                {
+                    float tx = (float)ix / segsX;
+                    float x = Mathf.Lerp(-halfW, halfW, tx);
+                    float u = tx * (width * 0.5f);
+
+                    verts.Add(new Vector3(x, 0f, z));
+                    norms.Add(Vector3.up);
+                    tangs.Add(new Vector4(1f, 0f, 0f, -1f));
+                    uvs.Add(new Vector2(u, v));
+                }
+            }
+
+            for (int iz = 0; iz < segsZ; iz++)
+            {
+                int row0 = iz * vertsX;
+                int row1 = (iz + 1) * vertsX;
+                for (int ix = 0; ix < segsX; ix++)
+                {
+                    int v00 = row0 + ix;
+                    int v10 = v00 + 1;
+                    int v01 = row1 + ix;
+                    int v11 = v01 + 1;
+
+                    tris.Add(v00);
+                    tris.Add(v11);
+                    tris.Add(v10);
+                    tris.Add(v00);
+                    tris.Add(v01);
+                    tris.Add(v11);
+                }
+            }
+
             Mesh mesh = new Mesh
             {
-                name = "Bywater_ShallowWaterPlane"
+                name = $"Cartography_ShallowWaterPlane_{width}x{height}"
             };
-
-            mesh.SetVertices(new[]
-            {
-                new Vector3(minX, y, minZ),
-                new Vector3(maxX, y, minZ),
-                new Vector3(maxX, y, maxZ),
-                new Vector3(minX, y, maxZ)
-            });
-
-            mesh.SetNormals(new[]
-            {
-                Vector3.up, Vector3.up, Vector3.up, Vector3.up
-            });
-
-            mesh.SetTangents(new[]
-            {
-                new Vector4(1f, 0f, 0f, -1f),
-                new Vector4(1f, 0f, 0f, -1f),
-                new Vector4(1f, 0f, 0f, -1f),
-                new Vector4(1f, 0f, 0f, -1f)
-            });
-
-            mesh.SetUVs(0, new[]
-            {
-                new Vector2(0f, 0f),
-                new Vector2(9f, 0f),
-                new Vector2(9f, 1.5f),
-                new Vector2(0f, 1.5f)
-            });
-
-            mesh.SetTriangles(new[] { 0, 2, 1, 0, 3, 2 }, 0);
+            mesh.SetVertices(verts);
+            mesh.SetNormals(norms);
+            mesh.SetTangents(tangs);
+            mesh.SetUVs(0, uvs);
+            mesh.SetTriangles(tris, 0);
             mesh.RecalculateBounds();
             return mesh;
         }

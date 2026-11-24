@@ -17,7 +17,7 @@ MonoBehaviour:
   dirtPathMaterial: {fileID: 2100000, guid: 36ad862ee46fcaf44b05cbd49b07aca1, type: 2}
   dungeonFloorMaterial: {fileID: 2100000, guid: da320d79227f85b48b347a38558d3ef7, type: 2}
   dungeonWallMaterial: {fileID: 2100000, guid: aa329f97c59222b4ba7e658d6ebc0e0a, type: 2}
-  shallowWaterMaterial: {fileID: 2100000, guid: c40134f87f7a36b449e55f0ebe108c3c, type: 2}
+  shallowWaterMaterial: {fileID: 2100000, guid: 90ab25e0ba89d804faf000f07d2b34b1, type: 2}
   doorArchMaterial: {fileID: 2100000, guid: 792044987720d1148af0ced6bfcf577c, type: 2}
   buildingWallMaterial: {fileID: 2100000, guid: 772d347c0b6a1cb4f8b3dd4596d6d5fa, type: 2}
   treeCoverMaterial: {fileID: 2100000, guid: b2aaabe2545d12441b84199b4346d57d, type: 2}
@@ -88,6 +88,36 @@ MonoBehaviour:
   grassTuftMaterial: {fileID: 2100000, guid: b05ff0144c17e77468141c20dd727db9, type: 2}
   wildflowerTuftMaterial: {fileID: 2100000, guid: 44beae4fbf4b0ff42a220b8986c0418b, type: 2}
   pebbleScatterMaterial: {fileID: 2100000, guid: da2fa45bd0a3bf04295b74171d451184, type: 2}
+  cartographyTerrainMaterial: {fileID: 2100000, guid: d33ebfacf7448a9418c266b973279ab9, type: 2}
+  cartographyWaterMaterial: {fileID: 2100000, guid: 90ab25e0ba89d804faf000f07d2b34b1, type: 2}
+  cartographyFoliageMaterial: {fileID: 2100000, guid: 846bcf7afaebbe445bce7f588a6edae7, type: 2}
+  cartographyPropMaterials:
+  - kind: 1
+    material: {fileID: 2100000, guid: 7c185625934ab384a8067e4a8c247b63, type: 2}
+  - kind: 2
+    material: {fileID: 2100000, guid: 9fc607fb3e97c3343b9f76fbd8b37a86, type: 2}
+  - kind: 3
+    material: {fileID: 2100000, guid: 3c11552d9aeda014e9fd1bf726ad1040, type: 2}
+  - kind: 4
+    material: {fileID: 2100000, guid: 2cde2317094ac9b43925aa7296fd1b81, type: 2}
+  - kind: 5
+    material: {fileID: 2100000, guid: 1affa877c2f8e4348ad21f3f1fa125df, type: 2}
+  - kind: 6
+    material: {fileID: 2100000, guid: afcd8343fcbea8e4aa69a0ec3df911f5, type: 2}
+  - kind: 7
+    material: {fileID: 2100000, guid: 418b20d084e313e4e96575f323641737, type: 2}
+  - kind: 8
+    material: {fileID: 2100000, guid: ebf3379adaecf4d4284cc9210b10898e, type: 2}
+  - kind: 9
+    material: {fileID: 2100000, guid: 578926fe6fce29e44978955d336c4f01, type: 2}
+  - kind: 10
+    material: {fileID: 2100000, guid: e394a5d474afd084ab5c30a95bbc6888, type: 2}
+  - kind: 11
+    material: {fileID: 2100000, guid: 9c834e352b478a743845a3bc2ba02053, type: 2}
+  - kind: 12
+    material: {fileID: 2100000, guid: 984f3864e54c74c4ab279d5ed319aa68, type: 2}
+  - kind: 13
+    material: {fileID: 2100000, guid: f5d3c13ac2fbe444e8f20cd26e18a0a4, type: 2}
   heroes:
   - id: hero_knight
     archetype: Knight

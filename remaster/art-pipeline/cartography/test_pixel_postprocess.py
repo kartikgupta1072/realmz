@@ -11,10 +11,13 @@ from PIL import Image
 from pixel_postprocess import (
     DEFAULT_LAIGTER_EXE,
     DEFAULT_PALETTE_PATH,
+    compute_flat_blob_max_square,
+    count_sky_bleed_pixels,
     load_palette,
     process_seamless_tile,
     process_sprite,
     remove_background_1bit,
+    validate_outputs,
 )
 
 
@@ -143,8 +146,64 @@ def test_seamless_tile_and_alpha_transition_mask() -> None:
         print("Tile normal backend used:", stats["normal_backend"], "| Laigter exists:", DEFAULT_LAIGTER_EXE.exists())
 
 
+def test_qa_gates_detect_flat_blob_and_sky_bleed() -> None:
+    """Verify Sprint 1 QA gates catch flat chartreuse blobs and trapped sky-blue branch gaps."""
+    img = np.zeros((64, 64, 4), dtype=np.uint8)
+    # 12x12 flat green blob
+    img[10:22, 10:22] = [143, 217, 110, 255]
+    # 5 sky-blue trapped pixels
+    img[30:35, 30] = [31, 104, 181, 255]
+    assert compute_flat_blob_max_square(img) == 12
+    assert count_sky_bleed_pixels(img) == 5
+
+    pal = load_palette(DEFAULT_PALETTE_PATH)
+    norm = np.full((64, 64, 4), [128, 128, 255, 0], dtype=np.uint8)
+    norm[img[..., 3] == 255, 3] = 255
+
+    stats = validate_outputs(img, norm, pal, is_tile=False, asset_kind="tree", enforce_qa=False)
+    assert stats["flat_blob_max_square"] == 12
+    assert stats["flat_blob_ok"] is False
+    expected_pct = round(100.0 * 144.0 / 149.0, 2)
+    assert stats["flat_blob_max_run_pct"] == expected_pct
+    assert stats["sky_bleed_pixels"] == 5
+    assert stats["sky_bleed_check"] == {"passed": False, "pixels": 5}
+
+    # 10x10 flat block must raise ValueError when enforce_qa=True
+    flat10 = np.zeros((32, 32, 4), dtype=np.uint8)
+    flat10[4:14, 4:14] = [82, 166, 83, 255]
+    norm10 = np.full((32, 32, 4), [128, 128, 255, 0], dtype=np.uint8)
+    norm10[4:14, 4:14, 3] = 255
+    try:
+        validate_outputs(flat10, norm10, pal, is_tile=False, asset_kind="tree", enforce_qa=True)
+        raise AssertionError("Expected ValueError on 10x10 flat block")
+    except ValueError as exc:
+        assert "flat_blob_max_run_pct" in str(exc)
+
+    # Trapped sky-blue pixels without flat 10x10 block must raise ValueError for tree
+    sky_img = np.zeros((32, 32, 4), dtype=np.uint8)
+    for y in range(4, 16):
+        for x in range(4, 16):
+            sky_img[y, x] = [46, 105, 59, 255] if (x + y) % 2 == 0 else [82, 166, 83, 255]
+    sky_img[10:12, 10:12] = [31, 104, 181, 255]
+    norm_sky = np.full((32, 32, 4), [128, 128, 255, 0], dtype=np.uint8)
+    norm_sky[4:16, 4:16, 3] = 255
+    try:
+        validate_outputs(sky_img, norm_sky, pal, is_tile=False, asset_kind="tree", enforce_qa=True)
+        raise AssertionError("Expected ValueError on trapped sky-blue pixels")
+    except ValueError as exc:
+        assert "sky_bleed_check" in str(exc)
+
+    # Clean checkered foliage must pass enforce_qa=True
+    clean_img = sky_img.copy()
+    clean_img[10:12, 10:12] = [24, 54, 34, 255]
+    ok_stats = validate_outputs(clean_img, norm_sky, pal, is_tile=False, asset_kind="tree", enforce_qa=True)
+    assert ok_stats["flat_blob_ok"] is True
+    assert ok_stats["sky_bleed_check"] == {"passed": True, "pixels": 0}
+
+
 if __name__ == "__main__":
     test_white_bg_preserves_interior_stucco_and_windows()
     test_chroma_bg_punches_enclosed_arch_and_despills()
     test_seamless_tile_and_alpha_transition_mask()
+    test_qa_gates_detect_flat_blob_and_sky_bleed()
     print("ALL pixel_postprocess.py TESTS PASSED!")

@@ -22,7 +22,7 @@ namespace Realmz.Cartography
 
         [Header("PlayMode Demo Patrol")]
         public bool enableDemoPatrol = true;
-        public Vector3 patrolCenter = new Vector3(8.5f, 0f, 7.5f);
+        public Vector3 patrolCenter = new Vector3(8.5f, 0f, -10.5f);
         public float patrolRadiusX = 1.6f;
         public float patrolRadiusZ = 1.1f;
         public float patrolSpeed = 0.55f;

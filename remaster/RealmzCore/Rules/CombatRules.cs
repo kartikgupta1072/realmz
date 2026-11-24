@@ -16,6 +16,7 @@ namespace RealmzCore.Rules
         public int MoveRemaining { get; private set; }
         public bool HasStandardAction { get; private set; }
         public bool HasSwiftAction { get; private set; }
+        public bool HasReaction { get; private set; }
         public bool CanUndoMove => _moveHistory.Count > 0 && HasStandardAction;
 
         public void ResetTurn(int moveBudget)
@@ -29,6 +30,7 @@ namespace RealmzCore.Rules
             MoveRemaining = moveBudget;
             HasStandardAction = true;
             HasSwiftAction = true;
+            HasReaction = true;
             _moveHistory.Clear();
         }
 
@@ -42,6 +44,12 @@ namespace RealmzCore.Rules
             MoveRemaining -= cost;
             _moveHistory.Push(cost);
             return true;
+        }
+
+        public void ConsumeAllMovement()
+        {
+            MoveRemaining = 0;
+            _moveHistory.Clear();
         }
 
         public bool UndoMove()
@@ -78,6 +86,22 @@ namespace RealmzCore.Rules
             HasSwiftAction = false;
             return true;
         }
+
+        public bool CommitReaction()
+        {
+            if (!HasReaction)
+            {
+                return false;
+            }
+
+            HasReaction = false;
+            return true;
+        }
+
+        public void ResetReaction()
+        {
+            HasReaction = true;
+        }
     }
 
     public readonly struct HitPreview
@@ -88,12 +112,26 @@ namespace RealmzCore.Rules
             int grazeThresholdPercent,
             int critThresholdPercent,
             bool targetIsHelpless)
+            : this(hitChancePercent, uncappedHitScore, grazeThresholdPercent, critThresholdPercent, targetIsHelpless, 0, Array.Empty<string>())
+        {
+        }
+
+        public HitPreview(
+            int hitChancePercent,
+            int uncappedHitScore,
+            int grazeThresholdPercent,
+            int critThresholdPercent,
+            bool targetIsHelpless,
+            int elevationModifierPercent,
+            IReadOnlyList<string>? modifiers = null)
         {
             HitChancePercent = hitChancePercent;
             UncappedHitScore = uncappedHitScore;
             GrazeThresholdPercent = grazeThresholdPercent;
             CritThresholdPercent = critThresholdPercent;
             TargetIsHelpless = targetIsHelpless;
+            ElevationModifierPercent = elevationModifierPercent;
+            Modifiers = modifiers ?? Array.Empty<string>();
         }
 
         public int HitChancePercent { get; }
@@ -101,6 +139,8 @@ namespace RealmzCore.Rules
         public int GrazeThresholdPercent { get; }
         public int CritThresholdPercent { get; }
         public bool TargetIsHelpless { get; }
+        public int ElevationModifierPercent { get; }
+        public IReadOnlyList<string> Modifiers { get; }
     }
 
     public enum AttackOutcomeKind
@@ -145,9 +185,46 @@ namespace RealmzCore.Rules
             bool defenderIsEvil = false,
             ConditionTracker? attackerConditions = null,
             ConditionTracker? defenderConditions = null,
-            RulesetMode mode = RulesetMode.ModernBalanced)
+            RulesetMode mode = RulesetMode.ModernBalanced,
+            int attackerElevation = 0,
+            int defenderElevation = 0,
+            bool weaponBonusAlreadyIncluded = false,
+            bool defenderIsProne = false,
+            bool attackerIsProne = false)
         {
-            int score = 50 + attackerToHit + (isFlanking ? 20 : 0) + (5 * equippedWeaponBonus) - defenderAc;
+            int weaponHitBonus = weaponBonusAlreadyIncluded ? 0 : (5 * equippedWeaponBonus);
+            int score = 50 + attackerToHit + (isFlanking ? 20 : 0) + weaponHitBonus - defenderAc;
+            int elevationMod = 0;
+            List<string>? modifiers = null;
+
+            if (attackerElevation > defenderElevation)
+            {
+                elevationMod = 15;
+                score += 15;
+                modifiers ??= new List<string>();
+                modifiers.Add("High Ground +15%");
+            }
+            else if (attackerElevation < defenderElevation)
+            {
+                elevationMod = -15;
+                score -= 15;
+                modifiers ??= new List<string>();
+                modifiers.Add("Low Ground -15%");
+            }
+
+            if (defenderIsProne)
+            {
+                score += 15;
+                modifiers ??= new List<string>();
+                modifiers.Add("Target Prone +15%");
+            }
+
+            if (attackerIsProne)
+            {
+                score -= 15;
+                modifiers ??= new List<string>();
+                modifiers.Add("Attacker Prone -15%");
+            }
 
             if (attackerConditions != null)
             {
@@ -234,7 +311,9 @@ namespace RealmzCore.Rules
                 uncappedHitScore: score,
                 grazeThresholdPercent: grazeThreshold,
                 critThresholdPercent: critThreshold,
-                targetIsHelpless: targetIsHelpless);
+                targetIsHelpless: targetIsHelpless,
+                elevationModifierPercent: elevationMod,
+                modifiers: modifiers);
         }
 
         public static AttackOutcome ResolveMeleeAttack(
@@ -248,7 +327,12 @@ namespace RealmzCore.Rules
             bool defenderIsEvil = false,
             ConditionTracker? attackerConditions = null,
             ConditionTracker? defenderConditions = null,
-            RulesetMode mode = RulesetMode.ModernBalanced)
+            RulesetMode mode = RulesetMode.ModernBalanced,
+            int attackerElevation = 0,
+            int defenderElevation = 0,
+            bool weaponBonusAlreadyIncluded = false,
+            bool defenderIsProne = false,
+            bool attackerIsProne = false)
         {
             if (roller == null)
             {
@@ -263,7 +347,12 @@ namespace RealmzCore.Rules
                 defenderIsEvil: defenderIsEvil,
                 attackerConditions: attackerConditions,
                 defenderConditions: defenderConditions,
-                mode: mode);
+                mode: mode,
+                attackerElevation: attackerElevation,
+                defenderElevation: defenderElevation,
+                weaponBonusAlreadyIncluded: weaponBonusAlreadyIncluded,
+                defenderIsProne: defenderIsProne,
+                attackerIsProne: attackerIsProne);
 
             int roll = roller.NextInt(1, 101);
             AttackOutcomeKind kind;

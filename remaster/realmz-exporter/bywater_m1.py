@@ -614,10 +614,10 @@ def build_bywater_m1_payloads(realmz_base: Path) -> Dict[str, Any]:
         else:
             sp = 0
 
-        eq_ac = sum(item_lookup[iid]["armor_class_bonus"] for iid in spec["equipped_ids"] if iid in item_lookup)
-        eq_hit = sum(item_lookup[iid]["weapon_bonus"] for iid in spec["equipped_ids"] if iid in item_lookup)
-        base_ac = max(5, 10 + eq_ac + max(0, (ag - 12) // 2))
-        to_hit = 10 + caste["tohit_base"] + max(0, (br - 12) // 2) + eq_hit
+        # Export unequipped base AC and To-Hit only; RealmzCore PartyMemberState
+        # applies equipped armor AC and weapon bonus (+5% per +1) once at runtime.
+        base_ac = max(5, 10 + max(0, (ag - 12) // 2))
+        to_hit = 10 + caste["tohit_base"] + max(0, (br - 12) // 2)
         dodge = max(2, caste["dodge_base"] + max(0, (ag - 12)))
         missile = caste["missile_base"] + max(0, (ag - 12))
         mv = max(8, race["base_move"] + caste["move_bonus"])

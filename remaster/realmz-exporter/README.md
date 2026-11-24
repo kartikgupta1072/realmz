@@ -35,10 +35,26 @@ python C:\realmz\remaster\realmz-exporter\export_realmz.py `
 - `portrait_bywater_npc_257.png` - `44x44` RGBA NPC portrait (`Portraits.rsrc` `cicn 257`).
 - `bywater_m1/land_0.json` - `90x90` M1 Land 0 grid, `Data P BD` tile rules, town POIs, `Dungeon 0` portal `(89,48)->(33,72)`, and encounter zones.
 - `bywater_m1/dungeon_0.json` - `90x90` row-major M1 Dungeon 0 grid, bitflag passability/LOS rules, exit portal `(32,72)->(88,48)`, and encounter zones.
-- `bywater_m1/party_m1.json` - Starter 6-hero Level-1 party (`Knight`, `Cleric`, `Ranger`, `Mage`, `Paladin`, `Rogue`) with Realmz-authentic stats, gear, spells, and shared stash.
+- `bywater_m1/party_m1.json` - Starter 6-hero Level-1 party (`Knight`, `Cleric`, `Ranger`, `Mage`, `Paladin`, `Rogue`) with unequipped base `ac` and `to_hit` alongside `equipped_ids` (P0.4 contract: `RealmzCore` applies equipment bonuses once at runtime), spells, and shared stash.
 - `bywater_m1/monsters_bywater_m1.json` - 12 authentic early Bywater monsters extracted from `Data MD` & `Data BD`.
 - `bywater_m1/spells_items_m1.json` - All 18 `Data AD` `spellarea` footprints, starter spells, starter equipment/potions (`Data ID`/`Data NI`), and Bywater town shops (`Data SD`).
+- `audio/audio_manifest.json` - Audio extraction manifest (`audio.py`): 142 base SFX (`The Family Jewels.rsrc` `snd ` -> PCM `.wav`), 3 scenario SFX, and all 11 `Realmz Music` suites (`10` ProTracker `M.K.` MOD + `1` PlayerPRO `MADG` `Outdoor Music` converted to MOD -> `libvorbis` `.ogg`).
+- `scenarios/<slug>/scenario_package.json` - Scenario-agnostic `ScenarioPackageJson` packages (`scenario_exporter.py`) covering `City of Bywater`, `Prelude to Pestilence`, and `Assault on Giant Mountain` (all land/dungeon grids, binary-decoded portals, shops, treasure tables, `13x13` tactical battle grids, monsters, and `Data SD2` strings, with optional `overrides/bywater_overrides.yaml` art/name bindings).
 - `manifest.json` - SHA-256 checksums, dimensions, byte sizes, and source resource IDs for all extracted files.
+
+## Audio & Multi-Scenario CLI
+
+```powershell
+# Extract all 142 base SFX (.wav) + 11 Realmz Music suites (.ogg)
+python C:\realmz\remaster\realmz-exporter\audio.py `
+  --realmz-base C:\realmz\base\Realmz `
+  --out C:\realmz\remaster\extracted\audio
+
+# Export generic ScenarioPackageJson bundles
+python C:\realmz\remaster\realmz-exporter\scenario_exporter.py `
+  --scenarios "City of Bywater" "Prelude to Pestilence" "Assault on Giant Mountain" `
+  --out C:\realmz\remaster\extracted\scenarios
+```
 
 ## Tests
 

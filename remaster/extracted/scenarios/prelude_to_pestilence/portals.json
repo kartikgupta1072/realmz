@@ -1,0 +1,90 @@
+{
+  "scenario": "Prelude to Pestilence",
+  "count": 6,
+  "portals": [
+    {
+      "id": "land_0_portal_2_11_edcd_91",
+      "source_map_id": "land_0",
+      "x": 2,
+      "y": 11,
+      "edcd_id": 91,
+      "dest_is_dungeon": true,
+      "dest_level": 0,
+      "dest_map_id": "dungeon_0",
+      "dest_x": 16,
+      "dest_y": 18,
+      "dest_facing": "West",
+      "label": "Very well hidden behind a large shrub is a rock door.  Will you enter?"
+    },
+    {
+      "id": "land_0_portal_87_1_edcd_497",
+      "source_map_id": "land_0",
+      "x": 87,
+      "y": 1,
+      "edcd_id": 497,
+      "dest_is_dungeon": true,
+      "dest_level": 0,
+      "dest_map_id": "dungeon_0",
+      "dest_x": 26,
+      "dest_y": 64,
+      "dest_facing": "South",
+      "label": "A trap door leads down.  Will you enter?"
+    },
+    {
+      "id": "dungeon_0_portal_15_18_edcd_94",
+      "source_map_id": "dungeon_0",
+      "x": 15,
+      "y": 18,
+      "edcd_id": 94,
+      "dest_is_dungeon": false,
+      "dest_level": 0,
+      "dest_map_id": "land_0",
+      "dest_x": 2,
+      "dest_y": 12,
+      "dest_facing": "North",
+      "label": "Do you want to return to the surface?"
+    },
+    {
+      "id": "dungeon_0_portal_38_46_edcd_218",
+      "source_map_id": "dungeon_0",
+      "x": 38,
+      "y": 46,
+      "edcd_id": 218,
+      "dest_is_dungeon": false,
+      "dest_level": 0,
+      "dest_map_id": "land_0",
+      "dest_x": 5,
+      "dest_y": 15,
+      "dest_facing": "North",
+      "label": "A one-way trap door is atop this set of steps.  Would you like to return to the"
+    },
+    {
+      "id": "dungeon_0_portal_57_12_edcd_443",
+      "source_map_id": "dungeon_0",
+      "x": 57,
+      "y": 12,
+      "edcd_id": 443,
+      "dest_is_dungeon": false,
+      "dest_level": 0,
+      "dest_map_id": "land_0",
+      "dest_x": 57,
+      "dest_y": 55,
+      "dest_facing": "North",
+      "label": "This door leads to the outside.  Would you like to leave the castle?"
+    },
+    {
+      "id": "dungeon_0_portal_26_64_edcd_496",
+      "source_map_id": "dungeon_0",
+      "x": 26,
+      "y": 64,
+      "edcd_id": 496,
+      "dest_is_dungeon": false,
+      "dest_level": 0,
+      "dest_map_id": "land_0",
+      "dest_x": 87,
+      "dest_y": 2,
+      "dest_facing": "North",
+      "label": "Would you like to return to the surface?"
+    }
+  ]
+}

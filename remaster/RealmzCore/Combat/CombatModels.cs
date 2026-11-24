@@ -26,12 +26,101 @@ namespace RealmzCore.Combat
         Blocked = 2
     }
 
+    public enum SurfaceType
+    {
+        None = 0,
+        Water = 1,
+        Oil = 2,
+        Fire = 3,
+        Ice = 4,
+        Poison = 5,
+        ElectrifiedWater = 6,
+        SteamCloud = 7
+    }
+
+    public enum CombatIntentActionType
+    {
+        Hold = 0,
+        MeleeAttack = 1,
+        RangedAttack = 2,
+        CastSpell = 3,
+        MoveAndAttack = 4,
+        MoveAndRanged = 5,
+        MoveAndCast = 6,
+        HealAlly = 7,
+        Flee = 8,
+        Guard = 9
+    }
+
+    public sealed class CombatGridCell
+    {
+        public CombatGridCell()
+        {
+            MoveCost = 1;
+        }
+
+        public CombatGridCell(
+            int x,
+            int y,
+            bool isBlocked = false,
+            bool blocksLos = false,
+            bool providesCover = false,
+            int moveCost = 1,
+            short elevationTier = 0,
+            SurfaceType surface = SurfaceType.None,
+            int surfaceRoundsRemaining = 0)
+        {
+            X = x;
+            Y = y;
+            IsBlocked = isBlocked;
+            BlocksLos = blocksLos;
+            ProvidesCover = providesCover;
+            MoveCost = moveCost < 1 ? 1 : moveCost;
+            ElevationTier = elevationTier;
+            Surface = surface;
+            BaseSurface = surface == SurfaceType.Water || surface == SurfaceType.Oil ? surface : SurfaceType.None;
+            SurfaceRoundsRemaining = surfaceRoundsRemaining;
+        }
+
+        public int X { get; }
+        public int Y { get; }
+        public GridCoord Coord => new GridCoord(X, Y);
+        public bool IsBlocked { get; internal set; }
+        public bool BlocksLos { get; internal set; }
+        public bool ProvidesCover { get; internal set; }
+        public int MoveCost { get; internal set; }
+        public short ElevationTier { get; set; }
+        public SurfaceType Surface { get; set; }
+        public SurfaceType BaseSurface { get; internal set; }
+        public int SurfaceRoundsRemaining { get; set; }
+    }
+
+    public sealed class SurfaceChangeEvent
+    {
+        public SurfaceChangeEvent(
+            GridCoord coord,
+            SurfaceType previousSurface,
+            SurfaceType newSurface,
+            int roundsRemaining,
+            string cause)
+        {
+            Coord = coord;
+            PreviousSurface = previousSurface;
+            NewSurface = newSurface;
+            RoundsRemaining = roundsRemaining;
+            Cause = cause ?? string.Empty;
+        }
+
+        public GridCoord Coord { get; }
+        public SurfaceType PreviousSurface { get; }
+        public SurfaceType NewSurface { get; }
+        public int RoundsRemaining { get; }
+        public string Cause { get; }
+    }
+
     public sealed class CombatGrid
     {
-        private readonly bool[] _blocked;
-        private readonly bool[] _blocksLos;
-        private readonly bool[] _providesCover;
-        private readonly int[] _moveCost;
+        private readonly CombatGridCell[] _cells;
 
         public CombatGrid(int width, int height)
         {
@@ -48,13 +137,13 @@ namespace RealmzCore.Combat
             Width = width;
             Height = height;
             int count = width * height;
-            _blocked = new bool[count];
-            _blocksLos = new bool[count];
-            _providesCover = new bool[count];
-            _moveCost = new int[count];
-            for (int i = 0; i < count; i++)
+            _cells = new CombatGridCell[count];
+            for (int y = 0; y < height; y++)
             {
-                _moveCost[i] = 1;
+                for (int x = 0; x < width; x++)
+                {
+                    _cells[(y * width) + x] = new CombatGridCell(x, y);
+                }
             }
         }
 
@@ -68,6 +157,19 @@ namespace RealmzCore.Combat
             int width,
             int height,
             bool hasBoat = false)
+        {
+            return FromTileMapSlice(map, originX, originY, width, height, hasBoat, null, null);
+        }
+
+        public static CombatGrid FromTileMapSlice(
+            TileMapData map,
+            int originX,
+            int originY,
+            int width,
+            int height,
+            bool hasBoat,
+            Func<int, int, short>? elevationResolver,
+            Func<int, int, SurfaceType>? surfaceResolver = null)
         {
             if (map == null)
             {
@@ -101,6 +203,20 @@ namespace RealmzCore.Combat
                             grid.SetCover(x, y, rule.MoveCost, rule.BlocksLos);
                         }
                     }
+
+                    if (elevationResolver != null)
+                    {
+                        grid.SetElevation(x, y, elevationResolver(mx, my));
+                    }
+
+                    if (surfaceResolver != null)
+                    {
+                        SurfaceType surf = surfaceResolver(mx, my);
+                        if (surf != SurfaceType.None)
+                        {
+                            grid.SetSurface(x, y, surf, -1);
+                        }
+                    }
                 }
             }
 
@@ -117,6 +233,33 @@ namespace RealmzCore.Combat
             return InBounds(coord.X, coord.Y);
         }
 
+        public CombatGridCell GetCell(int x, int y)
+        {
+            if (!InBounds(x, y))
+            {
+                throw new ArgumentOutOfRangeException($"({x}, {y}) is outside {Width}x{Height} combat grid.");
+            }
+
+            return _cells[(y * Width) + x];
+        }
+
+        public CombatGridCell GetCell(GridCoord coord)
+        {
+            return GetCell(coord.X, coord.Y);
+        }
+
+        public bool TryGetCell(int x, int y, out CombatGridCell? cell)
+        {
+            if (!InBounds(x, y))
+            {
+                cell = null;
+                return false;
+            }
+
+            cell = _cells[(y * Width) + x];
+            return true;
+        }
+
         public void SetBlocked(int x, int y, bool blocksLos = true)
         {
             if (!InBounds(x, y))
@@ -124,9 +267,9 @@ namespace RealmzCore.Combat
                 return;
             }
 
-            int idx = (y * Width) + x;
-            _blocked[idx] = true;
-            _blocksLos[idx] = blocksLos;
+            CombatGridCell cell = _cells[(y * Width) + x];
+            cell.IsBlocked = true;
+            cell.BlocksLos = blocksLos;
         }
 
         public void SetCover(int x, int y, int moveCost = 2, bool blocksLos = false)
@@ -136,10 +279,10 @@ namespace RealmzCore.Combat
                 return;
             }
 
-            int idx = (y * Width) + x;
-            _providesCover[idx] = true;
-            _blocksLos[idx] = blocksLos;
-            _moveCost[idx] = moveCost < 1 ? 1 : moveCost;
+            CombatGridCell cell = _cells[(y * Width) + x];
+            cell.ProvidesCover = true;
+            cell.BlocksLos = blocksLos;
+            cell.MoveCost = moveCost < 1 ? 1 : moveCost;
         }
 
         public void SetMoveCost(int x, int y, int moveCost)
@@ -149,27 +292,146 @@ namespace RealmzCore.Combat
                 return;
             }
 
-            _moveCost[(y * Width) + x] = moveCost < 1 ? 1 : moveCost;
+            _cells[(y * Width) + x].MoveCost = moveCost < 1 ? 1 : moveCost;
+        }
+
+        public void SetElevation(int x, int y, short elevationTier)
+        {
+            if (!InBounds(x, y))
+            {
+                return;
+            }
+
+            _cells[(y * Width) + x].ElevationTier = elevationTier;
+        }
+
+        public short GetElevation(int x, int y)
+        {
+            return InBounds(x, y) ? _cells[(y * Width) + x].ElevationTier : (short)0;
+        }
+
+        public short GetElevation(GridCoord coord)
+        {
+            return GetElevation(coord.X, coord.Y);
+        }
+
+        public void ApplyElevationTiers(IReadOnlyList<short> rowMajorTiers)
+        {
+            if (rowMajorTiers == null)
+            {
+                throw new ArgumentNullException(nameof(rowMajorTiers));
+            }
+
+            int count = Math.Min(_cells.Length, rowMajorTiers.Count);
+            for (int i = 0; i < count; i++)
+            {
+                _cells[i].ElevationTier = rowMajorTiers[i];
+            }
+        }
+
+        public void ApplyElevationTiers(short[,] tiersYx)
+        {
+            if (tiersYx == null)
+            {
+                throw new ArgumentNullException(nameof(tiersYx));
+            }
+
+            int rows = Math.Min(Height, tiersYx.GetLength(0));
+            int cols = Math.Min(Width, tiersYx.GetLength(1));
+            for (int y = 0; y < rows; y++)
+            {
+                for (int x = 0; x < cols; x++)
+                {
+                    _cells[(y * Width) + x].ElevationTier = tiersYx[y, x];
+                }
+            }
+        }
+
+        public void ApplyElevationTiers(int[,] tiersYx)
+        {
+            if (tiersYx == null)
+            {
+                throw new ArgumentNullException(nameof(tiersYx));
+            }
+
+            int rows = Math.Min(Height, tiersYx.GetLength(0));
+            int cols = Math.Min(Width, tiersYx.GetLength(1));
+            for (int y = 0; y < rows; y++)
+            {
+                for (int x = 0; x < cols; x++)
+                {
+                    _cells[(y * Width) + x].ElevationTier = (short)tiersYx[y, x];
+                }
+            }
+        }
+
+        public void SetSurface(int x, int y, SurfaceType surface, int roundsRemaining = -1)
+        {
+            if (!InBounds(x, y))
+            {
+                return;
+            }
+
+            CombatGridCell cell = _cells[(y * Width) + x];
+            cell.Surface = surface;
+            cell.SurfaceRoundsRemaining = surface == SurfaceType.None ? 0 : roundsRemaining;
+            if (roundsRemaining < 0 && (surface == SurfaceType.Water || surface == SurfaceType.Oil))
+            {
+                cell.BaseSurface = surface;
+            }
+            else if (surface == SurfaceType.None)
+            {
+                cell.BaseSurface = SurfaceType.None;
+            }
+        }
+
+        public SurfaceType GetSurface(int x, int y)
+        {
+            return InBounds(x, y) ? _cells[(y * Width) + x].Surface : SurfaceType.None;
+        }
+
+        public SurfaceType GetSurface(GridCoord coord)
+        {
+            return GetSurface(coord.X, coord.Y);
+        }
+
+        public int GetSurfaceRoundsRemaining(int x, int y)
+        {
+            return InBounds(x, y) ? _cells[(y * Width) + x].SurfaceRoundsRemaining : 0;
+        }
+
+        public IReadOnlyList<CombatGridCell> GetActiveSurfaceCells()
+        {
+            List<CombatGridCell> list = new List<CombatGridCell>();
+            for (int i = 0; i < _cells.Length; i++)
+            {
+                if (_cells[i].Surface != SurfaceType.None)
+                {
+                    list.Add(_cells[i]);
+                }
+            }
+
+            return list;
         }
 
         public bool IsWalkable(int x, int y)
         {
-            return InBounds(x, y) && !_blocked[(y * Width) + x];
+            return InBounds(x, y) && !_cells[(y * Width) + x].IsBlocked;
         }
 
         public bool BlocksLos(int x, int y)
         {
-            return !InBounds(x, y) || _blocksLos[(y * Width) + x];
+            return !InBounds(x, y) || _cells[(y * Width) + x].BlocksLos;
         }
 
         public bool ProvidesCover(int x, int y)
         {
-            return InBounds(x, y) && _providesCover[(y * Width) + x];
+            return InBounds(x, y) && _cells[(y * Width) + x].ProvidesCover;
         }
 
         public int GetMoveCost(int x, int y)
         {
-            return InBounds(x, y) ? _moveCost[(y * Width) + x] : int.MaxValue;
+            return InBounds(x, y) ? _cells[(y * Width) + x].MoveCost : int.MaxValue;
         }
     }
 
@@ -178,6 +440,7 @@ namespace RealmzCore.Combat
         private readonly List<int> _spellIds;
         private readonly int[] _saves;
         private readonly bool[] _spellImmunities;
+        private readonly int[] _lootItemIds;
 
         public CombatantState(
             string id,
@@ -209,7 +472,11 @@ namespace RealmzCore.Combat
             int xpReward = 0,
             int goldReward = 0,
             int iconId = 0,
-            int portraitId = 0)
+            int portraitId = 0,
+            int brawn = 10,
+            IReadOnlyList<int>? lootItemIds = null,
+            bool? prefersRanged = null,
+            bool weaponBonusIncludedInToHit = false)
         {
             Id = id ?? throw new ArgumentNullException(nameof(id));
             Name = name ?? string.Empty;
@@ -255,12 +522,28 @@ namespace RealmzCore.Combat
                 }
             }
 
+            if (lootItemIds != null && lootItemIds.Count > 0)
+            {
+                _lootItemIds = new int[lootItemIds.Count];
+                for (int i = 0; i < lootItemIds.Count; i++)
+                {
+                    _lootItemIds[i] = lootItemIds[i];
+                }
+            }
+            else
+            {
+                _lootItemIds = Array.Empty<int>();
+            }
+
             IsEvil = isEvil;
             IsUndead = isUndead;
             XpReward = xpReward;
             GoldReward = goldReward;
             IconId = iconId;
             PortraitId = portraitId;
+            Brawn = brawn;
+            PrefersRanged = prefersRanged ?? (RangedRange > 1 && !string.IsNullOrWhiteSpace(RangedDice));
+            WeaponBonusIncludedInToHit = weaponBonusIncludedInToHit;
             Conditions = new ConditionTracker();
             Economy = new CombatActionEconomy(MovementMax);
         }
@@ -275,8 +558,11 @@ namespace RealmzCore.Combat
                 throw new ArgumentNullException(nameof(hero));
             }
 
-            int effectiveAc = hero.GetEffectiveAc(catalog);
-            int effectiveToHit = hero.GetEffectiveToHit(catalog);
+            int penaltyAc = hero.ExhaustionStacks + hero.CurseStacks;
+            int penaltyToHit = penaltyAc * 2;
+            int effectiveAc = hero.GetEffectiveAc(catalog) + penaltyAc;
+            int effectiveMeleeToHit = hero.GetEffectiveMeleeToHit(catalog) + penaltyToHit;
+            int effectiveRangedToHit = hero.GetEffectiveRangedToHit(catalog) + penaltyToHit;
             string weaponDice = hero.GetEffectiveDamageDice(catalog);
             int weaponBonus = hero.GetEffectiveWeaponBonus(catalog);
             int rangedRange = hero.GetEffectiveRangedRange(catalog);
@@ -284,6 +570,7 @@ namespace RealmzCore.Combat
             int moveMax = hero.GetEffectiveMovementMax(catalog);
             int attacks = Math.Clamp((int)Math.Floor(hero.AttacksPerRound), 1, 5);
             int damageBonus = Math.Max(0, (hero.Brawn - 12) / 3);
+            bool prefersRanged = rangedRange > 1 && !string.IsNullOrWhiteSpace(rangedDice);
 
             CombatantState state = new CombatantState(
                 id: hero.Id,
@@ -295,9 +582,9 @@ namespace RealmzCore.Combat
                 sp: hero.Sp,
                 maxSp: hero.MaxSp,
                 ac: effectiveAc,
-                toHit: effectiveToHit,
+                toHit: effectiveMeleeToHit,
                 dodge: hero.Dodge,
-                missileSkill: hero.BaseMissile > 0 ? hero.BaseMissile : effectiveToHit,
+                missileSkill: effectiveRangedToHit,
                 movementMax: moveMax,
                 dexterity: hero.Agility,
                 numAttacks: attacks,
@@ -315,7 +602,11 @@ namespace RealmzCore.Combat
                 xpReward: 0,
                 goldReward: 0,
                 iconId: hero.IconId,
-                portraitId: hero.PortraitId);
+                portraitId: hero.PortraitId,
+                brawn: hero.Brawn,
+                lootItemIds: null,
+                prefersRanged: prefersRanged,
+                weaponBonusIncludedInToHit: true);
             state.ExhaustionStacks = hero.ExhaustionStacks;
             state.CurseStacks = hero.CurseStacks;
             return state;
@@ -343,6 +634,11 @@ namespace RealmzCore.Combat
             {
                 gold = roller.NextInt(monster.GoldMin, monster.GoldMax + 1);
             }
+
+            int brawn = Math.Max(8, 10 + (Math.Max(1, monster.HitDice) - 1) * 2 + monster.DamageBonus);
+            bool prefersRanged = monster.MissileChancePct >= 50 ||
+                                 monster.CastChancePct >= 50 ||
+                                 (monster.RangedRange > 1 && !string.IsNullOrWhiteSpace(monster.RangedDice));
 
             return new CombatantState(
                 id: instanceId,
@@ -374,7 +670,11 @@ namespace RealmzCore.Combat
                 xpReward: monster.XpReward,
                 goldReward: gold,
                 iconId: monster.IconId,
-                portraitId: 0);
+                portraitId: 0,
+                brawn: brawn,
+                lootItemIds: monster.LootItemIds,
+                prefersRanged: prefersRanged,
+                weaponBonusIncludedInToHit: false);
         }
 
         public string Id { get; }
@@ -397,10 +697,14 @@ namespace RealmzCore.Combat
         public int DamageBonus { get; set; }
         public string RangedDice { get; set; }
         public int RangedRange { get; set; }
+        public int Brawn { get; set; }
+        public bool PrefersRanged { get; set; }
+        public bool WeaponBonusIncludedInToHit { get; }
         public IReadOnlyList<int> SpellIds => _spellIds;
         public int MagicResistance { get; set; }
         public IReadOnlyList<int> Saves => _saves;
         public IReadOnlyList<bool> SpellImmunities => _spellImmunities;
+        public IReadOnlyList<int> LootItemIds => _lootItemIds;
         public bool IsEvil { get; }
         public bool IsUndead { get; }
         public ConditionTracker Conditions { get; }
@@ -408,6 +712,8 @@ namespace RealmzCore.Combat
         public int ExhaustionStacks { get; set; }
         public int CurseStacks { get; set; }
         public bool IsGuarding { get; set; }
+        public bool IsProne { get; set; }
+        public bool PronePendingMovePenalty { get; set; }
         public GridCoord TurnStartPosition { get; set; }
         public bool HasTriggeredIrreversibleEvent { get; set; }
         public int XpReward { get; }
@@ -446,6 +752,8 @@ namespace RealmzCore.Combat
             }
         }
 
+        public int MeleeToHit => EffectiveToHit;
+
         public int EffectiveMissileSkill
         {
             get
@@ -457,6 +765,8 @@ namespace RealmzCore.Combat
                 return baseSkill;
             }
         }
+
+        public int RangedToHit => EffectiveMissileSkill;
 
         public int EffectiveDexterity
         {
@@ -533,18 +843,25 @@ namespace RealmzCore.Combat
 
     public sealed class LosResult
     {
-        public LosResult(LosKind kind, int coverPenaltyPct, GridCoord? blockedBy, IReadOnlyList<GridCoord> rayCells)
+        public LosResult(
+            LosKind kind,
+            int coverPenaltyPct,
+            GridCoord? blockedBy,
+            IReadOnlyList<GridCoord> rayCells,
+            bool isSteamObscured = false)
         {
             Kind = kind;
             CoverPenaltyPct = coverPenaltyPct;
             BlockedBy = blockedBy;
             RayCells = rayCells ?? Array.Empty<GridCoord>();
+            IsSteamObscured = isSteamObscured;
         }
 
         public LosKind Kind { get; }
         public int CoverPenaltyPct { get; }
         public GridCoord? BlockedBy { get; }
         public IReadOnlyList<GridCoord> RayCells { get; }
+        public bool IsSteamObscured { get; }
     }
 
     public sealed class SpellAoeFootprint
@@ -555,7 +872,8 @@ namespace RealmzCore.Combat
             IReadOnlyList<GridCoord> affectedTiles,
             IReadOnlyList<string> affectedAllyIds,
             IReadOnlyList<string> affectedEnemyIds,
-            IReadOnlyList<GridCoord> blockedTiles)
+            IReadOnlyList<GridCoord> blockedTiles,
+            bool hasLineOfSight = true)
         {
             InRange = inRange;
             Center = center;
@@ -563,6 +881,7 @@ namespace RealmzCore.Combat
             AffectedAllyIds = affectedAllyIds ?? Array.Empty<string>();
             AffectedEnemyIds = affectedEnemyIds ?? Array.Empty<string>();
             BlockedTiles = blockedTiles ?? Array.Empty<GridCoord>();
+            HasLineOfSight = hasLineOfSight;
         }
 
         public bool InRange { get; }
@@ -571,6 +890,7 @@ namespace RealmzCore.Combat
         public IReadOnlyList<string> AffectedAllyIds { get; }
         public IReadOnlyList<string> AffectedEnemyIds { get; }
         public IReadOnlyList<GridCoord> BlockedTiles { get; }
+        public bool HasLineOfSight { get; }
     }
 
     public sealed class TacticalAttackPreview
@@ -588,7 +908,8 @@ namespace RealmzCore.Combat
             bool provokesAoO,
             LosResult? losResult,
             int defenderAc,
-            IReadOnlyList<string> conditionTags)
+            IReadOnlyList<string> conditionTags,
+            int elevationModifierPct = 0)
         {
             CanExecute = canExecute;
             Reason = reason ?? string.Empty;
@@ -603,6 +924,7 @@ namespace RealmzCore.Combat
             LosResult = losResult;
             DefenderAc = defenderAc;
             ConditionTags = conditionTags ?? Array.Empty<string>();
+            ElevationModifierPct = elevationModifierPct;
         }
 
         public bool CanExecute { get; }
@@ -618,6 +940,7 @@ namespace RealmzCore.Combat
         public LosResult? LosResult { get; }
         public int DefenderAc { get; }
         public IReadOnlyList<string> ConditionTags { get; }
+        public int ElevationModifierPct { get; }
     }
 
     public sealed class TacticalSpellPreview
@@ -650,6 +973,86 @@ namespace RealmzCore.Combat
         public int SaveChancePct { get; }
         public SpellAoeFootprint AoeFootprint { get; }
         public IReadOnlyList<string> ConditionTags { get; }
+    }
+
+    public sealed class TacticalShovePreview
+    {
+        public TacticalShovePreview(
+            bool canExecute,
+            string reason,
+            int successChancePct,
+            GridCoord pushDirection,
+            GridCoord destination,
+            bool hitsWallOrBounds,
+            string? collidingUnitId,
+            bool pushesOffLedge,
+            int fallElevationDrop,
+            SurfaceType destinationSurface,
+            bool isAllyShove)
+        {
+            CanExecute = canExecute;
+            Reason = reason ?? string.Empty;
+            SuccessChancePct = successChancePct;
+            PushDirection = pushDirection;
+            Destination = destination;
+            HitsWallOrBounds = hitsWallOrBounds;
+            CollidingUnitId = collidingUnitId;
+            PushesOffLedge = pushesOffLedge;
+            FallElevationDrop = fallElevationDrop;
+            DestinationSurface = destinationSurface;
+            IsAllyShove = isAllyShove;
+        }
+
+        public bool CanExecute { get; }
+        public string Reason { get; }
+        public int SuccessChancePct { get; }
+        public GridCoord PushDirection { get; }
+        public GridCoord Destination { get; }
+        public bool HitsWallOrBounds { get; }
+        public string? CollidingUnitId { get; }
+        public bool PushesOffLedge { get; }
+        public int FallElevationDrop { get; }
+        public SurfaceType DestinationSurface { get; }
+        public bool IsAllyShove { get; }
+    }
+
+    public sealed class EnemyIntentPrediction
+    {
+        public EnemyIntentPrediction(
+            string actorId,
+            GridCoord targetCoord,
+            string actionType,
+            CombatIntentActionType actionKind,
+            string targetId,
+            GridCoord plannedMoveCoord,
+            bool hasPlannedMove,
+            string spellKey = "")
+        {
+            ActorId = actorId ?? string.Empty;
+            TargetCoord = targetCoord;
+            ActionType = actionType ?? "Hold";
+            ActionKind = actionKind;
+            TargetId = targetId ?? string.Empty;
+            PlannedMoveCoord = plannedMoveCoord;
+            HasPlannedMove = hasPlannedMove;
+            SpellKey = spellKey ?? string.Empty;
+        }
+
+        public string ActorId { get; }
+        public GridCoord TargetCoord { get; }
+        public string ActionType { get; }
+        public CombatIntentActionType ActionKind { get; }
+        public string TargetId { get; }
+        public GridCoord PlannedMoveCoord { get; }
+        public bool HasPlannedMove { get; }
+        public string SpellKey { get; }
+
+        public void Deconstruct(out GridCoord targetCoord, out string actionType, out string targetId)
+        {
+            targetCoord = TargetCoord;
+            actionType = ActionType;
+            targetId = TargetId;
+        }
     }
 
     public sealed class CombatLogEntry

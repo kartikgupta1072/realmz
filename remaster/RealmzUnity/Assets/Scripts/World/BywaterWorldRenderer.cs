@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Realmz.Cartography;
 using Realmz.Data;
 using Realmz.Rendering;
 using RealmzCore.Data;
@@ -8,43 +9,49 @@ using UnityEngine.Rendering;
 namespace Realmz.World
 {
     /// <summary>
-    /// Pooled sliding-window 3D HD-2D terrain, modular 2.5D medieval prop, portal, brazier,
-    /// and combat-arena renderer. Zero per-step heap allocations when panning/walking across Bywater maps.
+    /// Cartography-backed 3D HD-2D world renderer driving stepped elevation terrain, instanced foliage
+    /// scatter, top-down cloud/canopy/lantern lightmaps, pooled 64 px/m prop billboards, arched stone
+    /// bridges, dungeon vs overworld atmosphere shading, torch lights, and campfires.
     /// </summary>
     public sealed class BywaterWorldRenderer : MonoBehaviour
     {
-        private const int WindowRadius = 16;
         private const int MaxActiveTorchLights = 8;
 
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
-        private static readonly int SplatMapId = Shader.PropertyToID("_SplatMap");
-        private static readonly int WorldBoundsId = Shader.PropertyToID("_WorldBounds");
-        private static readonly int Layer0AlbedoId = Shader.PropertyToID("_Layer0Albedo");
-        private static readonly int GridHintStrengthId = Shader.PropertyToID("_GridHintStrength");
+        private static readonly int ColorId = Shader.PropertyToID("_Color");
+        private static readonly int GroundValueScaleId = Shader.PropertyToID("_GroundValueScale");
+        private static readonly int RoadValueBoostId = Shader.PropertyToID("_RoadValueBoost");
+        private static readonly int HorizonHazeColorId = Shader.PropertyToID("_HorizonHazeColor");
+        private static readonly int HorizonHazeStrengthId = Shader.PropertyToID("_HorizonHazeStrength");
+        private static readonly int LanternPoolIntensityId = Shader.PropertyToID("_LanternPoolIntensity");
+        private static readonly int ShallowColorId = Shader.PropertyToID("_ShallowColor");
+        private static readonly int DeepColorId = Shader.PropertyToID("_DeepColor");
+        private static readonly int HeroWorldPosId = Shader.PropertyToID("_HeroWorldPos");
 
-        private static readonly GridCoord[] LandTorchHints =
-        {
-            new GridCoord(2, 2),
-            new GridCoord(8, 11),
-            new GridCoord(10, 13),
-            new GridCoord(8, 17),
-            new GridCoord(10, 9),
-            new GridCoord(38, 13),
-            new GridCoord(88, 12)
-        };
-
-        private static readonly GridCoord[] DungeonTorchHints =
-        {
-            new GridCoord(33, 72)
-        };
-
-        private sealed class TorchPropEntry
+        private sealed class PropBillboardEntry
         {
             public GameObject Root;
-            public MeshRenderer StandRenderer;
-            public MeshRenderer BowlRenderer;
-            public MeshRenderer QuadRenderer;
-            public MeshRenderer EmberRenderer;
+            public MeshFilter Filter;
+            public MeshRenderer Renderer;
+            public PixelBillboard Billboard;
+        }
+
+        private sealed class StoneBridgeEntry
+        {
+            public GameObject Root;
+            public MeshFilter DeckFilter;
+            public MeshRenderer DeckRenderer;
+            public MeshFilter CurbFilter;
+            public MeshRenderer CurbRenderer;
+            public Mesh DeckMesh;
+            public Mesh CurbMesh;
+            public float CachedWidth;
+            public float CachedLength;
+        }
+
+        private sealed class TorchLightEntry
+        {
+            public GameObject Root;
             public Light PointLight;
             public BywaterTorchFlicker Flicker;
         }
@@ -53,148 +60,93 @@ namespace Realmz.World
         {
             public GameObject Root;
             public MeshRenderer RuneQuad;
-            public MeshRenderer BeaconPillar;
+            public MeshRenderer BeaconQuad;
+            public PixelBillboard BeaconBillboard;
         }
 
-        private sealed class CottagePropEntry
+        private sealed class CampfireEntry
         {
             public GameObject Root;
-            public GameObject ModularRoot;
-            public MeshRenderer Plinth;
-            public MeshRenderer WallBody;
-            public MeshRenderer PostFL;
-            public MeshRenderer PostFR;
-            public MeshRenderer PostBL;
-            public MeshRenderer PostBR;
-            public MeshRenderer TimberBeam;
-            public MeshRenderer RoofLeft;
-            public MeshRenderer RoofRight;
-            public MeshRenderer GablePeak;
-            public MeshRenderer RidgeBeam;
-            public MeshRenderer WindowFront;
-            public MeshRenderer BillboardQuad;
-        }
-
-        private sealed class FencePropEntry
-        {
-            public GameObject Root;
-            public GameObject ModularRoot;
-            public MeshRenderer Wall;
-            public MeshRenderer Coping;
-            public MeshRenderer Post;
-            public MeshRenderer BillboardQuad;
-        }
-
-        private sealed class TreePropEntry
-        {
-            public GameObject Root;
-            public Transform SwayTarget;
-            public BywaterPropSway Sway;
-            public GameObject OakRoot;
-            public MeshRenderer OakTrunk;
-            public MeshRenderer OakCanopyLower;
-            public MeshRenderer OakCanopyUpper;
-            public GameObject PineRoot;
-            public MeshRenderer PineTrunk;
-            public MeshRenderer PineTierLower;
-            public MeshRenderer PineTierMid;
-            public MeshRenderer PineTierTop;
-            public MeshRenderer BillboardQuad;
-        }
-
-        private sealed class BoulderPropEntry
-        {
-            public GameObject Root;
-            public MeshRenderer MainRock;
-            public MeshRenderer SubRock;
-            public MeshRenderer TopCap;
-            public MeshRenderer MossShrub;
-        }
-
-        private sealed class WildflowerPropEntry
-        {
-            public GameObject Root;
-            public Transform SwayTarget;
-            public BywaterPropSway Sway;
-            public GameObject ModularRoot;
-            public MeshRenderer Greenery;
-            public MeshRenderer BlossomA;
-            public MeshRenderer BlossomB;
-            public MeshRenderer BlossomC;
-            public MeshRenderer BillboardQuad;
-        }
-
-        private sealed class CratePropEntry
-        {
-            public GameObject Root;
-            public GameObject ModularRoot;
-            public MeshRenderer CrateBox;
-            public MeshRenderer CrateTrim;
-            public MeshRenderer BarrelBody;
-            public MeshRenderer BarrelBand;
-            public MeshRenderer BillboardQuad;
+            public MeshRenderer BillboardRenderer;
+            public PixelBillboard Billboard;
+            public Light PointLight;
+            public BywaterTorchFlicker Flicker;
         }
 
         private BywaterAssetCatalog _catalog;
         private TileMapData _currentMap;
+        private CartographyWorldData _cartographyData;
         private GridCoord _focusCenter;
         private bool _hasRendered;
 
-        private Transform _floorContainer;
-        private Transform _structureContainer;
+        private BywaterElevationBuilder _elevationBuilder;
+        private BywaterFoliageScatter _foliageScatter;
+        private BywaterTopDownLightmap _topDownLightmap;
+        private BywaterDioramaController _dioramaController;
+        private Transform _heroAnchor;
+
         private Transform _propsContainer;
-        private Transform _torchContainer;
+        private Transform _bridgesContainer;
+        private Transform _torchLightContainer;
         private Transform _portalContainer;
         private Transform _arenaContainer;
 
-        private readonly List<MeshRenderer> _floorPool = new List<MeshRenderer>(1089);
-        private readonly List<MeshRenderer> _blockPool = new List<MeshRenderer>(1400);
-        private readonly List<CottagePropEntry> _cottagePool = new List<CottagePropEntry>(128);
-        private readonly List<FencePropEntry> _fencePool = new List<FencePropEntry>(96);
-        private readonly List<TreePropEntry> _treePool = new List<TreePropEntry>(160);
-        private readonly List<BoulderPropEntry> _boulderPool = new List<BoulderPropEntry>(128);
-        private readonly List<WildflowerPropEntry> _wildflowerPool = new List<WildflowerPropEntry>(96);
-        private readonly List<CratePropEntry> _cratePool = new List<CratePropEntry>(32);
-        private readonly List<TorchPropEntry> _torchPool = new List<TorchPropEntry>(MaxActiveTorchLights);
+        private readonly List<PropBillboardEntry> _propPool = new List<PropBillboardEntry>(256);
+        private readonly List<StoneBridgeEntry> _bridgePool = new List<StoneBridgeEntry>(4);
+        private readonly List<TorchLightEntry> _torchLightPool = new List<TorchLightEntry>(MaxActiveTorchLights);
         private readonly List<PortalMarkerEntry> _portalPool = new List<PortalMarkerEntry>(16);
-        private readonly List<MeshRenderer> _arenaBlocks = new List<MeshRenderer>(8);
-        private MaterialPropertyBlock _floorPropBlock;
-        private MaterialPropertyBlock _arenaPropBlock;
 
-        private readonly List<GridCoord> _mapTorchCoords = new List<GridCoord>(64);
-        private readonly List<GridCoord> _selectedTorches = new List<GridCoord>(MaxActiveTorchLights);
-        private readonly List<int> _selectedTorchDistSq = new List<int>(MaxActiveTorchLights);
+        private readonly List<Vector3> _allLightPositions = new List<Vector3>(128);
+        private readonly List<Vector3> _selectedLightPositions = new List<Vector3>(MaxActiveTorchLights);
+        private readonly List<float> _selectedLightDistSq = new List<float>(MaxActiveTorchLights);
+        private readonly List<Vector3> _arenaPointScratch = new List<Vector3>(64);
 
         private Light _partyLantern;
+        private CampfireEntry _campfireEntry;
+        private LineRenderer _arenaBorderLine;
 
-        private BywaterGroundScatter _groundScatter;
-        private MeshFilter _terrainMeshFilter;
-        private MeshRenderer _terrainMeshRenderer;
-        private Mesh _terrainMesh;
-        private Texture2D _splatTexture;
-        private Material _activeTerrainMat;
-        private TileMapData _splatBuiltForMap;
-        private MaterialPropertyBlock _terrainPropBlock;
-        private Material _fallbackGrassTuftMat;
-        private Material _fallbackFlowerTuftMat;
-        private Material _fallbackPebbleScatterMat;
-        private bool _combatScatterSuppressed;
-        private GridCoord _combatOrigin;
-        private int _combatW;
-        private int _combatH;
+        private Mesh _propBillboardQuadMesh;
+        private Mesh _groundQuadMesh;
+        private Material _runtimeTerrainMat;
+        private Material _sourceTerrainMat;
+        private Material _runtimeWaterMat;
+        private Material _sourceWaterMat;
+        private Material _fallbackPropMaterial;
+        private Material _arenaBorderMaterial;
         private float _terrainGridHintStrength;
 
-        private readonly List<Vector3> _terrainVertices = new List<Vector3>(5100);
-        private readonly List<Vector2> _terrainUvs = new List<Vector2>(5100);
-        private readonly List<int> _terrainTriangles = new List<int>(30000);
+        public CartographyWorldData CartographyData => _cartographyData;
+        public Collider TerrainCollider => _elevationBuilder != null ? _elevationBuilder.terrainMeshCollider : null;
+        public Transform PropsRoot => _propsContainer;
+
+        public Bounds WorldBounds
+        {
+            get
+            {
+                if (_cartographyData == null)
+                {
+                    return new Bounds(Vector3.zero, Vector3.zero);
+                }
+
+                Vector3 center = new Vector3(_cartographyData.Width * 0.5f, 0f, -_cartographyData.Height * 0.5f);
+                Vector3 size = new Vector3(_cartographyData.Width, 4f, _cartographyData.Height);
+                return new Bounds(center, size);
+            }
+        }
+
+        public float GetTileElevation(int x, int y)
+        {
+            return _cartographyData != null ? _cartographyData.GetElevation(x, y) : 0f;
+        }
 
         public void Initialize(BywaterAssetCatalog catalog)
         {
             _catalog = catalog;
+            EnsureSharedMeshes();
             EnsureContainers();
+            EnsureCartographyComponents();
             EnsurePartyLantern();
-            SyncScatterMaterials();
-            WarmupPools();
+            WarmupLightAndPortalPools();
         }
 
         public void RenderMap(TileMapData map, GridCoord focusCenter, bool forceRebuild = false)
@@ -204,15 +156,20 @@ namespace Realmz.World
                 return;
             }
 
+            EnsureSharedMeshes();
             EnsureContainers();
+            EnsureCartographyComponents();
             EnsurePartyLantern();
 
             bool mapChanged = !ReferenceEquals(_currentMap, map);
             _currentMap = map;
 
-            if (mapChanged || forceRebuild)
+            if (mapChanged || forceRebuild || _cartographyData == null)
             {
-                BuildTorchLocations(map);
+                RebuildCartographyWorld(map);
+                RebuildCartographyProps(map);
+                RebuildMapPortals(map);
+                CollectMapLightPositions();
             }
 
             if (!forceRebuild && !mapChanged && _hasRendered && focusCenter == _focusCenter)
@@ -222,7 +179,7 @@ namespace Realmz.World
 
             _focusCenter = focusCenter;
             _hasRendered = true;
-            RebuildWindow(map, focusCenter);
+            UpdateWindowTorches(focusCenter, map.IsDungeon);
         }
 
         public void UpdateFocusCenter(GridCoord focusCenter)
@@ -239,11 +196,23 @@ namespace Realmz.World
 
             _focusCenter = focusCenter;
             _hasRendered = true;
-            RebuildWindow(_currentMap, focusCenter);
+            UpdateWindowTorches(focusCenter, _currentMap.IsDungeon);
+        }
+
+        public void UpdateHeroWorldPosition(Vector3 pos)
+        {
+            EnsureCartographyComponents();
+            if (_heroAnchor != null)
+            {
+                _heroAnchor.position = pos;
+            }
+
+            Shader.SetGlobalVector(HeroWorldPosId, new Vector4(pos.x, pos.y, pos.z, 1f));
         }
 
         public void SetPartyTorchPosition(Vector3 worldPos, bool isDungeon)
         {
+            UpdateHeroWorldPosition(worldPos);
             EnsurePartyLantern();
             if (_partyLantern == null)
             {
@@ -254,8 +223,8 @@ namespace Realmz.World
             if (isDungeon)
             {
                 _partyLantern.enabled = true;
-                _partyLantern.intensity = 2.6f;
-                _partyLantern.range = 10.5f;
+                _partyLantern.intensity = 2.8f;
+                _partyLantern.range = 11.0f;
             }
             else
             {
@@ -264,586 +233,249 @@ namespace Realmz.World
             }
         }
 
+        public void SetCampfireActive(bool active, Vector3 worldPos)
+        {
+            EnsureSharedMeshes();
+            EnsureContainers();
+            EnsureCampfireEntry();
+
+            if (_campfireEntry == null || _campfireEntry.Root == null)
+            {
+                return;
+            }
+
+            if (!active)
+            {
+                _campfireEntry.Root.SetActive(false);
+                return;
+            }
+
+            _campfireEntry.Root.transform.position = worldPos;
+            Material brazierMat = ResolvePropMaterial(CartographyPropKind.TorchBrazier);
+            if (_campfireEntry.BillboardRenderer != null && brazierMat != null)
+            {
+                _campfireEntry.BillboardRenderer.sharedMaterial = brazierMat;
+            }
+            if (_campfireEntry.Billboard != null)
+            {
+                _campfireEntry.Billboard.targetCamera = ResolveActiveCamera();
+            }
+
+            _campfireEntry.Root.SetActive(true);
+        }
+
         public void SetTerrainGridHint(float strength)
         {
             _terrainGridHintStrength = Mathf.Max(0f, strength);
-            ApplyTerrainPropertyBlock();
         }
 
         public void SetCombatArenaFrame(int originX, int originY, int width, int height, bool active)
         {
             EnsureContainers();
 
-            _combatScatterSuppressed = active && width > 0 && height > 0;
-            _combatOrigin = new GridCoord(originX, originY);
-            _combatW = width;
-            _combatH = height;
-
-            if (_currentMap != null && _hasRendered && _groundScatter != null)
-            {
-                _groundScatter.RebuildForMap(
-                    _currentMap,
-                    _focusCenter,
-                    WindowRadius,
-                    _combatScatterSuppressed,
-                    _combatOrigin,
-                    _combatW,
-                    _combatH);
-            }
-
             if (!active || width <= 0 || height <= 0)
             {
-                for (int i = 0; i < _arenaBlocks.Count; i++)
+                if (_arenaBorderLine != null)
                 {
-                    _arenaBlocks[i].gameObject.SetActive(false);
+                    _arenaBorderLine.gameObject.SetActive(false);
                 }
                 return;
             }
 
-            EnsureArenaMarkers();
+            EnsureArenaBorderLine();
+            _arenaPointScratch.Clear();
 
-            float left = originX - 0.5f;
-            float right = originX + width - 0.5f;
-            float north = -(originY - 0.5f);
-            float south = -(originY + height - 0.5f);
-            float midX = (left + right) * 0.5f;
-            float midZ = (north + south) * 0.5f;
-            float spanX = Mathf.Max(1f, right - left);
-            float spanZ = Mathf.Max(1f, north - south);
+            int maxX = originX + width;
+            int maxY = originY + height;
 
-            Material borderMat = _catalog != null
-                ? (_catalog.overlayBaseMaterial != null ? _catalog.overlayBaseMaterial : _catalog.portalBeaconMaterial)
-                : null;
-
-            _arenaPropBlock ??= new MaterialPropertyBlock();
-            _arenaPropBlock.Clear();
-            _arenaPropBlock.SetColor(BaseColorId, new Color(0.98f, 0.78f, 0.22f, 0.72f));
-
-            // 4 corner posts
-            ConfigureArenaPiece(_arenaBlocks[0], new Vector3(left, 0.36f, north), new Vector3(0.16f, 0.72f, 0.16f), borderMat);
-            ConfigureArenaPiece(_arenaBlocks[1], new Vector3(right, 0.36f, north), new Vector3(0.16f, 0.72f, 0.16f), borderMat);
-            ConfigureArenaPiece(_arenaBlocks[2], new Vector3(left, 0.36f, south), new Vector3(0.16f, 0.72f, 0.16f), borderMat);
-            ConfigureArenaPiece(_arenaBlocks[3], new Vector3(right, 0.36f, south), new Vector3(0.16f, 0.72f, 0.16f), borderMat);
-
-            // 4 perimeter strips
-            ConfigureArenaPiece(_arenaBlocks[4], new Vector3(midX, 0.03f, north), new Vector3(spanX + 0.08f, 0.04f, 0.08f), borderMat);
-            ConfigureArenaPiece(_arenaBlocks[5], new Vector3(midX, 0.03f, south), new Vector3(spanX + 0.08f, 0.04f, 0.08f), borderMat);
-            ConfigureArenaPiece(_arenaBlocks[6], new Vector3(left, 0.03f, midZ), new Vector3(0.08f, 0.04f, spanZ + 0.08f), borderMat);
-            ConfigureArenaPiece(_arenaBlocks[7], new Vector3(right, 0.03f, midZ), new Vector3(0.08f, 0.04f, spanZ + 0.08f), borderMat);
-        }
-
-        private void ConfigureArenaPiece(MeshRenderer renderer, Vector3 pos, Vector3 scale, Material mat)
-        {
-            renderer.transform.position = pos;
-            renderer.transform.localScale = scale;
-            if (mat != null)
+            // North edge (West -> East)
+            for (int x = originX; x <= maxX; x++)
             {
-                renderer.sharedMaterial = mat;
+                float elev = SampleCornerElevation(x, originY);
+                _arenaPointScratch.Add(new Vector3(x, elev + 0.045f, -originY));
             }
-            renderer.SetPropertyBlock(_arenaPropBlock);
-            renderer.gameObject.SetActive(true);
+
+            // East edge (North -> South)
+            for (int y = originY + 1; y <= maxY; y++)
+            {
+                float elev = SampleCornerElevation(maxX, y);
+                _arenaPointScratch.Add(new Vector3(maxX, elev + 0.045f, -y));
+            }
+
+            // South edge (East -> West)
+            for (int x = maxX - 1; x >= originX; x--)
+            {
+                float elev = SampleCornerElevation(x, maxY);
+                _arenaPointScratch.Add(new Vector3(x, elev + 0.045f, -maxY));
+            }
+
+            // West edge (South -> North)
+            for (int y = maxY - 1; y > originY; y--)
+            {
+                float elev = SampleCornerElevation(originX, y);
+                _arenaPointScratch.Add(new Vector3(originX, elev + 0.045f, -y));
+            }
+
+            _arenaBorderLine.positionCount = _arenaPointScratch.Count;
+            for (int i = 0; i < _arenaPointScratch.Count; i++)
+            {
+                _arenaBorderLine.SetPosition(i, _arenaPointScratch[i]);
+            }
+            _arenaBorderLine.gameObject.SetActive(true);
         }
 
-        private void RebuildWindow(TileMapData map, GridCoord center)
+        private float SampleCornerElevation(int cornerX, int cornerY)
         {
-            _floorPropBlock ??= new MaterialPropertyBlock();
+            if (_cartographyData == null)
+            {
+                return 0f;
+            }
 
-            int minX = Mathf.Max(0, center.X - WindowRadius);
-            int maxX = Mathf.Min(map.Width - 1, center.X + WindowRadius);
-            int minY = Mathf.Max(0, center.Y - WindowRadius);
-            int maxY = Mathf.Min(map.Height - 1, center.Y + WindowRadius);
+            float maxElev = float.MinValue;
+            for (int dy = -1; dy <= 0; dy++)
+            {
+                for (int dx = -1; dx <= 0; dx++)
+                {
+                    int tx = Mathf.Clamp(cornerX + dx, 0, _cartographyData.Width - 1);
+                    int ty = Mathf.Clamp(cornerY + dy, 0, _cartographyData.Height - 1);
+                    float e = _cartographyData.GetElevation(tx, ty);
+                    if (e > maxElev)
+                    {
+                        maxElev = e;
+                    }
+                }
+            }
 
-            int floorIdx = 0;
-            int blockIdx = 0;
-            int cottageIdx = 0;
-            int fenceIdx = 0;
-            int treeIdx = 0;
-            int boulderIdx = 0;
-            int wildflowerIdx = 0;
-            int crateIdx = 0;
+            return maxElev > float.MinValue ? maxElev : 0f;
+        }
 
+        private void RebuildCartographyWorld(TileMapData map)
+        {
+            _cartographyData = CartographyWorldData.BuildFromTileMap(map);
             bool isDungeon = map.IsDungeon;
-            Material terrainMat = ResolveTerrainBlendMaterial(map);
-            bool useTerrainBlend = terrainMat != null;
-            _activeTerrainMat = terrainMat;
+            Camera cam = ResolveActiveCamera();
 
-            if (useTerrainBlend)
-            {
-                EnsureSplatTexture(map);
-                UpdateTerrainMesh(map, minX, maxX, minY, maxY);
-                if (_terrainMeshRenderer != null)
-                {
-                    _terrainMeshRenderer.sharedMaterial = terrainMat;
-                    _terrainMeshRenderer.gameObject.SetActive(true);
-                    ApplyTerrainPropertyBlock();
-                }
-            }
-            else if (_terrainMeshRenderer != null)
-            {
-                _terrainMeshRenderer.gameObject.SetActive(false);
-            }
+            // 1. Elevation Terrain + MeshCollider + ShallowWaterPlane
+            Material terrainMat = ResolveRuntimeTerrainMaterial(isDungeon);
+            Material waterMat = ResolveRuntimeWaterMaterial(isDungeon);
+            _elevationBuilder.terrainMaterial = terrainMat;
+            _elevationBuilder.waterMaterial = waterMat;
+            _elevationBuilder.Rebuild(_cartographyData);
 
-            for (int y = minY; y <= maxY; y++)
-            {
-                for (int x = minX; x <= maxX; x++)
-                {
-                    BywaterTileKind kind = BywaterTileClassifier.Classify(map, x, y);
-                    int tileHash = BywaterTileClassifier.DeterministicTileHash(x, y);
-                    int variantIdx = ResolveWeightedTileVariant(kind, isDungeon, x, y, tileHash);
-
-                    // Floor quad: when height-blended terrain mesh is active, only keep animated water quads
-                    if (!useTerrainBlend || kind == BywaterTileKind.ShallowWater)
-                    {
-                        float floorY = kind == BywaterTileKind.ShallowWater
-                            ? (useTerrainBlend ? -0.10f : -0.12f)
-                            : 0f;
-                        MeshRenderer floorQuad = GetFloorQuad(floorIdx++);
-                        floorQuad.transform.position = new Vector3(x, floorY, -y);
-                        floorQuad.transform.rotation = Quaternion.Euler(90f, ResolveFloorYaw(kind, tileHash), 0f);
-                        floorQuad.sharedMaterial = ResolveFloorMaterial(kind, isDungeon, variantIdx);
-                        ApplyFloorTint(floorQuad, kind, tileHash);
-                        floorQuad.gameObject.SetActive(true);
-                    }
-
-                    if (isDungeon)
-                    {
-                        switch (kind)
-                        {
-                            case BywaterTileKind.DungeonWall:
-                            case BywaterTileKind.WallBlock:
-                            {
-                                Material fallbackWallMat = _catalog != null
-                                    ? _catalog.GetTileVariantMaterial(_catalog.dungeonWallMaterial, _catalog.dungeonWallVariantMaterials, variantIdx)
-                                    : null;
-                                Material wallMat = _catalog != null
-                                    ? FirstNonNull(_catalog.painterlyDungeonWallMaterial, fallbackWallMat)
-                                    : null;
-                                MeshRenderer wallCube = GetBlockCube(blockIdx++);
-                                wallCube.transform.position = new Vector3(x, 0.675f, -y);
-                                wallCube.transform.localScale = new Vector3(1.0f, 1.35f, 1.0f);
-                                wallCube.sharedMaterial = wallMat;
-                                wallCube.gameObject.SetActive(true);
-
-                                MeshRenderer trimCap = GetBlockCube(blockIdx++);
-                                trimCap.transform.position = new Vector3(x, 1.385f, -y);
-                                trimCap.transform.localScale = new Vector3(1.05f, 0.07f, 1.05f);
-                                trimCap.sharedMaterial = FirstNonNull(_catalog != null ? _catalog.painterlyDungeonWallMaterial : null, _catalog != null ? _catalog.stoneFenceMaterial : null, wallMat);
-                                trimCap.gameObject.SetActive(true);
-                                break;
-                            }
-
-                            case BywaterTileKind.DungeonDoor:
-                            {
-                                Material archMat = _catalog != null ? _catalog.doorArchMaterial : null;
-                                MeshRenderer leftJamb = GetBlockCube(blockIdx++);
-                                leftJamb.transform.position = new Vector3(x - 0.36f, 0.575f, -y);
-                                leftJamb.transform.localScale = new Vector3(0.18f, 1.15f, 0.18f);
-                                leftJamb.sharedMaterial = archMat;
-                                leftJamb.gameObject.SetActive(true);
-
-                                MeshRenderer rightJamb = GetBlockCube(blockIdx++);
-                                rightJamb.transform.position = new Vector3(x + 0.36f, 0.575f, -y);
-                                rightJamb.transform.localScale = new Vector3(0.18f, 1.15f, 0.18f);
-                                rightJamb.sharedMaterial = archMat;
-                                rightJamb.gameObject.SetActive(true);
-                                break;
-                            }
-
-                            case BywaterTileKind.DungeonStairs:
-                            {
-                                Material stairMat = _catalog != null
-                                    ? FirstNonNull(_catalog.doorArchMaterial, _catalog.dungeonWallMaterial)
-                                    : null;
-
-                                for (int step = 0; step < 3; step++)
-                                {
-                                    MeshRenderer stepBlock = GetBlockCube(blockIdx++);
-                                    float stepHeight = 0.12f * (step + 1);
-                                    float offsetZ = (step - 1) * 0.22f;
-                                    stepBlock.transform.position = new Vector3(x, stepHeight * 0.5f, -y + offsetZ);
-                                    stepBlock.transform.localScale = new Vector3(0.72f, stepHeight, 0.22f);
-                                    stepBlock.sharedMaterial = stairMat;
-                                    stepBlock.gameObject.SetActive(true);
-                                }
-                                break;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        BywaterOutdoorPropKind propKind = BywaterTileClassifier.ClassifyOutdoorProp(map, x, y, out int variantHash);
-                        switch (propKind)
-                        {
-                            case BywaterOutdoorPropKind.CottageFacade:
-                                ConfigureCottageProp(GetCottageProp(cottageIdx++), x, y, variantHash);
-                                break;
-                            case BywaterOutdoorPropKind.StoneFence:
-                                ConfigureFenceProp(GetFenceProp(fenceIdx++), x, y, variantHash);
-                                break;
-                            case BywaterOutdoorPropKind.OakTree:
-                                ConfigureTreeProp(GetTreeProp(treeIdx++), x, y, variantHash, isPine: false);
-                                break;
-                            case BywaterOutdoorPropKind.PineTree:
-                                ConfigureTreeProp(GetTreeProp(treeIdx++), x, y, variantHash, isPine: true);
-                                break;
-                            case BywaterOutdoorPropKind.BoulderCliff:
-                                ConfigureBoulderProp(GetBoulderProp(boulderIdx++), x, y, variantHash);
-                                break;
-                            case BywaterOutdoorPropKind.WildflowerBush:
-                                ConfigureWildflowerProp(GetWildflowerProp(wildflowerIdx++), x, y, variantHash);
-                                break;
-                            case BywaterOutdoorPropKind.MarketCrates:
-                                ConfigureCrateProp(GetCrateProp(crateIdx++), x, y, variantHash);
-                                break;
-                        }
-                    }
-                }
-            }
-
-            DeactivateUnused(_floorPool, floorIdx);
-            DeactivateUnused(_blockPool, blockIdx);
-            DeactivateUnusedCottages(cottageIdx);
-            DeactivateUnusedFences(fenceIdx);
-            DeactivateUnusedTrees(treeIdx);
-            DeactivateUnusedBoulders(boulderIdx);
-            DeactivateUnusedWildflowers(wildflowerIdx);
-            DeactivateUnusedCrates(crateIdx);
-
-            UpdateWindowPortals(map, minX, maxX, minY, maxY);
-            UpdateWindowTorches(center, minX, maxX, minY, maxY, isDungeon);
-
-            if (_groundScatter != null)
-            {
-                SyncScatterMaterials();
-                _groundScatter.RebuildForMap(
-                    map,
-                    center,
-                    WindowRadius,
-                    _combatScatterSuppressed,
-                    _combatOrigin,
-                    _combatW,
-                    _combatH);
-            }
-        }
-
-        private void ApplyFloorTint(MeshRenderer floorQuad, BywaterTileKind kind, int tileHash)
-        {
-            _floorPropBlock.Clear();
-            if (kind == BywaterTileKind.Grass ||
-                kind == BywaterTileKind.ForestCover ||
-                kind == BywaterTileKind.DirtPath ||
-                kind == BywaterTileKind.DungeonFloor ||
-                kind == BywaterTileKind.DungeonDoor ||
-                kind == BywaterTileKind.DungeonStairs)
-            {
-                int step = (tileHash >> 4) % 11;
-                float lightness = 0.95f + step * 0.01f;
-                _floorPropBlock.SetColor(BaseColorId, new Color(lightness, lightness, lightness, 1f));
-            }
-            else
-            {
-                _floorPropBlock.SetColor(BaseColorId, Color.white);
-            }
-
-            floorQuad.SetPropertyBlock(_floorPropBlock);
-        }
-
-        private static int ResolveWeightedTileVariant(BywaterTileKind kind, bool isDungeon, int x, int y, int tileHash)
-        {
+            // 2. Top-Down Lightmap (disable bright daytime clouds in underground dungeons)
             if (isDungeon)
             {
-                return BywaterTileClassifier.GetTileVariantIndex(x, y, 3);
-            }
-
-            if (kind == BywaterTileKind.Grass || kind == BywaterTileKind.ForestCover)
-            {
-                int roll = tileHash % 10;
-                return roll < 7 ? 0 : (roll < 9 ? 1 : 2);
-            }
-
-            if (kind == BywaterTileKind.Cobblestone || kind == BywaterTileKind.TownBuildingDoor)
-            {
-                int roll = tileHash % 10;
-                return roll < 7 ? 0 : (roll < 9 ? 1 : 2);
-            }
-
-            return BywaterTileClassifier.GetTileVariantIndex(x, y, 3);
-        }
-
-        private static float ResolveFloorYaw(BywaterTileKind kind, int tileHash)
-        {
-            // Keep 0 deg alignment so seamless W-222 tile borders and +Y-up normal bevels align cleanly.
-            return 0f;
-        }
-
-        private void ConfigureCottageProp(CottagePropEntry entry, int x, int y, int variantHash)
-        {
-            entry.Root.transform.position = new Vector3(x, 0f, -y);
-
-            bool useBillboard = _catalog != null
-                && _catalog.cottageBillboardSprite != null
-                && _catalog.cottageBillboardMaterial != null;
-
-            entry.ModularRoot.SetActive(!useBillboard);
-            entry.BillboardQuad.gameObject.SetActive(useBillboard);
-
-            if (useBillboard)
-            {
-                entry.BillboardQuad.sharedMaterial = _catalog.cottageBillboardMaterial;
-                entry.Root.SetActive(true);
-                return;
-            }
-
-            Material plinthMat = _catalog != null
-                ? FirstNonNull(_catalog.stoneFenceMaterial, _catalog.boulderMaterial, _catalog.buildingWallMaterial)
-                : null;
-            Material wallMat = _catalog != null
-                ? FirstNonNull(_catalog.cottageWallMaterial, _catalog.buildingWallMaterial, _catalog.dungeonWallMaterial)
-                : null;
-            Material timberMat = _catalog != null
-                ? FirstNonNull(_catalog.timberTrimMaterial, _catalog.treeTrunkMaterial, _catalog.doorArchMaterial)
-                : null;
-            Material windowMat = _catalog != null
-                ? FirstNonNull(_catalog.warmWindowGlowMaterial, _catalog.torchEmberMaterial, _catalog.portalBeaconMaterial)
-                : null;
-
-            Material roofMat = null;
-            if (_catalog != null)
-            {
-                int roofChoice = variantHash % 3;
-                if (roofChoice == 0)
-                {
-                    roofMat = FirstNonNull(_catalog.cottageRoofTerracottaMaterial, _catalog.cottageRoofSlateMaterial, _catalog.cottageRoofThatchMaterial);
-                }
-                else if (roofChoice == 1)
-                {
-                    roofMat = FirstNonNull(_catalog.cottageRoofSlateMaterial, _catalog.cottageRoofTerracottaMaterial, _catalog.cottageRoofThatchMaterial);
-                }
-                else
-                {
-                    roofMat = FirstNonNull(_catalog.cottageRoofThatchMaterial, _catalog.cottageRoofTerracottaMaterial, _catalog.cottageRoofSlateMaterial);
-                }
-                roofMat = FirstNonNull(roofMat, _catalog.buildingWallMaterial, _catalog.dungeonWallMaterial);
-            }
-
-            entry.Plinth.sharedMaterial = plinthMat;
-            entry.WallBody.sharedMaterial = wallMat;
-            entry.PostFL.sharedMaterial = timberMat;
-            entry.PostFR.sharedMaterial = timberMat;
-            entry.PostBL.sharedMaterial = timberMat;
-            entry.PostBR.sharedMaterial = timberMat;
-            entry.TimberBeam.sharedMaterial = timberMat;
-            entry.RoofLeft.sharedMaterial = roofMat;
-            entry.RoofRight.sharedMaterial = roofMat;
-            entry.GablePeak.sharedMaterial = wallMat;
-            entry.RidgeBeam.sharedMaterial = timberMat;
-            entry.WindowFront.sharedMaterial = windowMat;
-
-            entry.Root.SetActive(true);
-        }
-
-        private void ConfigureFenceProp(FencePropEntry entry, int x, int y, int variantHash)
-        {
-            entry.Root.transform.position = new Vector3(x, 0f, -y);
-
-            bool useBillboard = _catalog != null
-                && _catalog.stoneFenceBillboardSprite != null
-                && _catalog.stoneFenceBillboardMaterial != null;
-
-            entry.ModularRoot.SetActive(!useBillboard);
-            entry.BillboardQuad.gameObject.SetActive(useBillboard);
-
-            if (useBillboard)
-            {
-                entry.BillboardQuad.sharedMaterial = _catalog.stoneFenceBillboardMaterial;
-                entry.Root.SetActive(true);
-                return;
-            }
-
-            Material fenceMat = _catalog != null
-                ? FirstNonNull(_catalog.stoneFenceMaterial, _catalog.boulderMaterial, _catalog.dungeonWallMaterial)
-                : null;
-            Material copingMat = _catalog != null
-                ? FirstNonNull(_catalog.boulderMaterial, _catalog.stoneFenceMaterial, _catalog.dungeonWallMaterial)
-                : null;
-
-            entry.Wall.sharedMaterial = fenceMat;
-            entry.Coping.sharedMaterial = copingMat;
-            entry.Post.sharedMaterial = fenceMat;
-
-            float postX = (variantHash & 1) == 0 ? -0.38f : 0.38f;
-            entry.Post.transform.localPosition = new Vector3(postX, 0.36f, 0f);
-
-            entry.Root.SetActive(true);
-        }
-
-        private void ConfigureTreeProp(TreePropEntry entry, int x, int y, int variantHash, bool isPine)
-        {
-            entry.Root.transform.position = new Vector3(x, 0f, -y);
-            float yaw = ((variantHash >> 2) % 4) * 90f;
-            float scaleJitter = 0.94f + ((variantHash >> 5) % 13) * 0.01f;
-            entry.Root.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
-            entry.Root.transform.localScale = new Vector3(scaleJitter, scaleJitter, scaleJitter);
-
-            bool useBillboard = _catalog != null && (isPine
-                ? (_catalog.pineTreeBillboardSprite != null && _catalog.pineTreeBillboardMaterial != null)
-                : (_catalog.oakTreeBillboardSprite != null && _catalog.oakTreeBillboardMaterial != null));
-
-            entry.BillboardQuad.gameObject.SetActive(useBillboard);
-
-            if (useBillboard)
-            {
-                entry.OakRoot.SetActive(false);
-                entry.PineRoot.SetActive(false);
-                entry.BillboardQuad.sharedMaterial = isPine ? _catalog.pineTreeBillboardMaterial : _catalog.oakTreeBillboardMaterial;
+                _topDownLightmap.cloudStrength = 0.04f;
+                _topDownLightmap.cloudShadowColor = new Color(0.24f, 0.28f, 0.42f, 1f);
+                _topDownLightmap.canopyShadowColor = new Color(0.18f, 0.22f, 0.34f, 1f);
             }
             else
             {
-                Material trunkMat = _catalog != null
-                    ? FirstNonNull(_catalog.treeTrunkMaterial, _catalog.timberTrimMaterial, _catalog.crateWoodMaterial)
-                    : null;
+                _topDownLightmap.cloudStrength = 0.82f;
+                _topDownLightmap.cloudShadowColor = new Color(0.56f, 0.62f, 0.74f, 1f);
+                _topDownLightmap.canopyShadowColor = new Color(0.48f, 0.54f, 0.66f, 1f);
+            }
 
-                if (isPine)
+            _topDownLightmap.ConfigureFromWorldData(_cartographyData);
+            _topDownLightmap.UpdateLightmap(Application.isPlaying ? Time.time : 0f);
+
+            // 3. Instanced Foliage Scatter (skip outdoor grass foliage in dungeons)
+            _foliageScatter.foliageMaterial = _catalog != null ? _catalog.cartographyFoliageMaterial : null;
+            _foliageScatter.targetCamera = cam;
+            _foliageScatter.RebuildScatter(_cartographyData);
+            _foliageScatter.gameObject.SetActive(!isDungeon);
+
+            // 4. Diorama Runtime Global Coordinator
+            _dioramaController.targetCamera = cam;
+            _dioramaController.topDownLightmap = _topDownLightmap;
+            _dioramaController.foliageScatter = _foliageScatter;
+            _dioramaController.heroTransform = _heroAnchor;
+            _dioramaController.enableDemoPatrol = false;
+            _dioramaController.SyncGlobals(Application.isPlaying ? Time.time : 0f);
+        }
+
+        private void RebuildCartographyProps(TileMapData map)
+        {
+            int propIdx = 0;
+            int bridgeIdx = 0;
+
+            if (_cartographyData != null && _cartographyData.Props != null)
+            {
+                IReadOnlyList<CartographyPropPlacement> props = _cartographyData.Props;
+                Camera cam = ResolveActiveCamera();
+                Quaternion initialYaw = Quaternion.identity;
+                if (cam != null)
                 {
-                    Material pineMat = _catalog != null
-                        ? FirstNonNull(_catalog.pineFoliageMaterial, _catalog.oakFoliageMaterial, _catalog.treeCoverMaterial)
-                        : null;
-                    entry.OakRoot.SetActive(false);
-                    entry.PineRoot.SetActive(true);
-                    entry.PineTrunk.sharedMaterial = trunkMat;
-                    entry.PineTierLower.sharedMaterial = pineMat;
-                    entry.PineTierMid.sharedMaterial = pineMat;
-                    entry.PineTierTop.sharedMaterial = pineMat;
+                    Vector3 fwd = cam.transform.forward;
+                    fwd.y = 0f;
+                    if (fwd.sqrMagnitude > 0.0001f)
+                    {
+                        initialYaw = Quaternion.LookRotation(fwd.normalized, Vector3.up);
+                    }
                 }
-                else
+
+                for (int i = 0; i < props.Count; i++)
                 {
-                    Material oakMat = _catalog != null
-                        ? FirstNonNull(_catalog.oakFoliageMaterial, _catalog.pineFoliageMaterial, _catalog.treeCoverMaterial)
-                        : null;
-                    entry.PineRoot.SetActive(false);
-                    entry.OakRoot.SetActive(true);
-                    entry.OakTrunk.sharedMaterial = trunkMat;
-                    entry.OakCanopyLower.sharedMaterial = oakMat;
-                    entry.OakCanopyUpper.sharedMaterial = oakMat;
+                    CartographyPropPlacement prop = props[i];
+                    if (prop.Kind == CartographyPropKind.None)
+                    {
+                        continue;
+                    }
+
+                    if (prop.Kind == CartographyPropKind.StoneBridge)
+                    {
+                        StoneBridgeEntry bridge = GetBridgeEntry(bridgeIdx++);
+                        ConfigureStoneBridge(bridge, prop, map.IsDungeon);
+                        continue;
+                    }
+
+                    PropBillboardEntry entry = GetPropEntry(propIdx++);
+                    entry.Root.transform.position = prop.WorldPosition;
+                    entry.Root.transform.rotation = initialYaw;
+                    entry.Root.transform.localScale = new Vector3(
+                        Mathf.Max(0.25f, prop.SizeMeters.x),
+                        Mathf.Max(0.25f, prop.SizeMeters.y),
+                        1f);
+                    entry.Renderer.sharedMaterial = ResolvePropMaterial(prop.Kind);
+                    entry.Billboard.targetCamera = cam;
+                    entry.Root.SetActive(true);
                 }
             }
 
-            entry.Sway.ConfigureSeed(x, y);
-            entry.Root.SetActive(true);
-        }
-
-        private void ConfigureBoulderProp(BoulderPropEntry entry, int x, int y, int variantHash)
-        {
-            entry.Root.transform.position = new Vector3(x, 0f, -y);
-            float yaw = (variantHash % 4) * 90f;
-            float scaleJitter = 0.90f + ((variantHash >> 3) % 15) * 0.01f;
-            entry.Root.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
-            entry.Root.transform.localScale = new Vector3(scaleJitter, scaleJitter, scaleJitter);
-
-            Material rockMat = _catalog != null
-                ? FirstNonNull(_catalog.boulderMaterial, _catalog.stoneFenceMaterial, _catalog.dungeonWallMaterial)
-                : null;
-            Material mossMat = _catalog != null
-                ? FirstNonNull(_catalog.oakFoliageMaterial, _catalog.treeCoverMaterial, rockMat)
-                : null;
-
-            entry.MainRock.sharedMaterial = rockMat;
-            entry.SubRock.sharedMaterial = rockMat;
-            entry.TopCap.sharedMaterial = rockMat;
-            entry.MossShrub.sharedMaterial = mossMat;
-
-            entry.Root.SetActive(true);
-        }
-
-        private void ConfigureWildflowerProp(WildflowerPropEntry entry, int x, int y, int variantHash)
-        {
-            entry.Root.transform.position = new Vector3(x, 0f, -y);
-
-            bool useBillboard = _catalog != null
-                && _catalog.wildflowerBushBillboardSprite != null
-                && _catalog.wildflowerBushBillboardMaterial != null;
-
-            entry.ModularRoot.SetActive(!useBillboard);
-            entry.BillboardQuad.gameObject.SetActive(useBillboard);
-
-            if (useBillboard)
+            for (int i = propIdx; i < _propPool.Count; i++)
             {
-                entry.BillboardQuad.sharedMaterial = _catalog.wildflowerBushBillboardMaterial;
-            }
-            else
-            {
-                Material greenMat = _catalog != null
-                    ? FirstNonNull(_catalog.oakFoliageMaterial, _catalog.treeCoverMaterial, _catalog.grassMaterial)
-                    : null;
-                Material flowerMat = _catalog != null
-                    ? FirstNonNull(_catalog.wildflowerMaterial, _catalog.torchEmberMaterial, greenMat)
-                    : null;
-
-                entry.Greenery.sharedMaterial = greenMat;
-                entry.BlossomA.sharedMaterial = flowerMat;
-                entry.BlossomB.sharedMaterial = flowerMat;
-                entry.BlossomC.sharedMaterial = flowerMat;
+                _propPool[i].Root.SetActive(false);
             }
 
-            entry.Sway.ConfigureSeed(x, y);
-            entry.Root.SetActive(true);
-        }
-
-        private void ConfigureCrateProp(CratePropEntry entry, int x, int y, int variantHash)
-        {
-            entry.Root.transform.position = new Vector3(x, 0f, -y);
-
-            bool useBillboard = _catalog != null
-                && _catalog.marketCratesBillboardSprite != null
-                && _catalog.marketCratesBillboardMaterial != null;
-
-            entry.ModularRoot.SetActive(!useBillboard);
-            entry.BillboardQuad.gameObject.SetActive(useBillboard);
-
-            if (useBillboard)
+            for (int i = bridgeIdx; i < _bridgePool.Count; i++)
             {
-                entry.BillboardQuad.sharedMaterial = _catalog.marketCratesBillboardMaterial;
-                entry.Root.SetActive(true);
-                return;
+                _bridgePool[i].Root.SetActive(false);
             }
-
-            Material woodMat = _catalog != null
-                ? FirstNonNull(_catalog.crateWoodMaterial, _catalog.treeTrunkMaterial, _catalog.timberTrimMaterial)
-                : null;
-            Material ironMat = _catalog != null
-                ? FirstNonNull(_catalog.ironTrimMaterial, _catalog.stoneFenceMaterial, _catalog.dungeonWallMaterial)
-                : null;
-
-            entry.CrateBox.sharedMaterial = woodMat;
-            entry.CrateTrim.sharedMaterial = ironMat;
-            entry.BarrelBody.sharedMaterial = woodMat;
-            entry.BarrelBand.sharedMaterial = ironMat;
-
-            entry.BarrelBody.gameObject.SetActive((variantHash & 1) == 0);
-            entry.BarrelBand.gameObject.SetActive((variantHash & 1) == 0);
-
-            entry.Root.SetActive(true);
         }
 
-        private void UpdateWindowPortals(TileMapData map, int minX, int maxX, int minY, int maxY)
+        private void RebuildMapPortals(TileMapData map)
         {
             int portalIdx = 0;
             IReadOnlyList<MapPortal> portals = map.Portals;
             if (portals != null)
             {
                 Material portalMat = _catalog != null ? _catalog.portalBeaconMaterial : null;
+                Camera cam = ResolveActiveCamera();
+
                 for (int i = 0; i < portals.Count; i++)
                 {
                     MapPortal portal = portals[i];
-                    if (portal.X < minX || portal.X > maxX || portal.Y < minY || portal.Y > maxY)
-                    {
-                        continue;
-                    }
+                    float elev = GetTileElevation(portal.X, portal.Y);
+                    Vector3 pos = CartographyWorldData.GridToWorld(portal.X, portal.Y, elev);
 
                     PortalMarkerEntry entry = GetPortalMarker(portalIdx++);
-                    entry.Root.transform.position = new Vector3(portal.X, 0f, -portal.Y);
-                    entry.RuneQuad.sharedMaterial = portalMat;
-                    entry.BeaconPillar.sharedMaterial = portalMat;
+                    entry.Root.transform.position = pos;
+                    if (portalMat != null)
+                    {
+                        entry.RuneQuad.sharedMaterial = portalMat;
+                        entry.BeaconQuad.sharedMaterial = portalMat;
+                    }
+                    entry.BeaconBillboard.targetCamera = cam;
                     entry.Root.SetActive(true);
                 }
             }
@@ -854,1341 +486,612 @@ namespace Realmz.World
             }
         }
 
-        private void UpdateWindowTorches(GridCoord center, int minX, int maxX, int minY, int maxY, bool isDungeon)
+        private void CollectMapLightPositions()
         {
-            _selectedTorches.Clear();
-            _selectedTorchDistSq.Clear();
-
-            for (int i = 0; i < _mapTorchCoords.Count; i++)
+            _allLightPositions.Clear();
+            if (_cartographyData == null)
             {
-                GridCoord tc = _mapTorchCoords[i];
-                if (tc.X < minX || tc.X > maxX || tc.Y < minY || tc.Y > maxY)
+                return;
+            }
+
+            IReadOnlyList<CartographyPropPlacement> props = _cartographyData.Props;
+            for (int i = 0; i < props.Count; i++)
+            {
+                if (props[i].Kind == CartographyPropKind.TorchBrazier)
+                {
+                    _allLightPositions.Add(props[i].WorldPosition);
+                }
+            }
+
+            IReadOnlyList<CartographyLanternSource> lanterns = _cartographyData.Lanterns;
+            for (int i = 0; i < lanterns.Count; i++)
+            {
+                CartographyLanternSource l = lanterns[i];
+                bool nearExisting = false;
+                for (int j = 0; j < _allLightPositions.Count; j++)
+                {
+                    float dx = _allLightPositions[j].x - l.WorldXZ.x;
+                    float dz = _allLightPositions[j].z - l.WorldXZ.y;
+                    if (dx * dx + dz * dz < 1.44f)
+                    {
+                        nearExisting = true;
+                        break;
+                    }
+                }
+
+                if (!nearExisting)
+                {
+                    CartographyWorldData.WorldToGrid(new Vector3(l.WorldXZ.x, 0f, l.WorldXZ.y), out int gx, out int gy);
+                    float elev = _cartographyData.GetElevation(gx, gy);
+                    _allLightPositions.Add(new Vector3(l.WorldXZ.x, elev, l.WorldXZ.y));
+                }
+            }
+        }
+
+        private void UpdateWindowTorches(GridCoord center, bool isDungeon)
+        {
+            _selectedLightPositions.Clear();
+            _selectedLightDistSq.Clear();
+
+            Vector3 centerWorld = CartographyWorldData.GridToWorld(center);
+            const float maxSearchRadiusSq = 28f * 28f;
+
+            for (int i = 0; i < _allLightPositions.Count; i++)
+            {
+                Vector3 lp = _allLightPositions[i];
+                float dx = lp.x - centerWorld.x;
+                float dz = lp.z - centerWorld.z;
+                float distSq = dx * dx + dz * dz;
+                if (distSq > maxSearchRadiusSq)
                 {
                     continue;
                 }
 
-                int dx = tc.X - center.X;
-                int dy = tc.Y - center.Y;
-                int distSq = dx * dx + dy * dy;
-
-                if (_selectedTorches.Count < MaxActiveTorchLights)
+                if (_selectedLightPositions.Count < MaxActiveTorchLights)
                 {
-                    _selectedTorches.Add(tc);
-                    _selectedTorchDistSq.Add(distSq);
+                    _selectedLightPositions.Add(lp);
+                    _selectedLightDistSq.Add(distSq);
                 }
                 else
                 {
                     int worstIdx = 0;
-                    int worstDist = _selectedTorchDistSq[0];
-                    for (int k = 1; k < _selectedTorchDistSq.Count; k++)
+                    float worstDist = _selectedLightDistSq[0];
+                    for (int k = 1; k < _selectedLightDistSq.Count; k++)
                     {
-                        if (_selectedTorchDistSq[k] > worstDist)
+                        if (_selectedLightDistSq[k] > worstDist)
                         {
-                            worstDist = _selectedTorchDistSq[k];
+                            worstDist = _selectedLightDistSq[k];
                             worstIdx = k;
                         }
                     }
 
                     if (distSq < worstDist)
                     {
-                        _selectedTorches[worstIdx] = tc;
-                        _selectedTorchDistSq[worstIdx] = distSq;
+                        _selectedLightPositions[worstIdx] = lp;
+                        _selectedLightDistSq[worstIdx] = distSq;
                     }
                 }
             }
 
-            float targetIntensity = isDungeon ? 2.8f : 0.70f;
-            float targetRange = isDungeon ? 8.5f : 3.8f;
-            float targetFlickerAmp = isDungeon ? 0.35f : 0.14f;
+            float targetIntensity = isDungeon ? 3.1f : 0.95f;
+            float targetRange = isDungeon ? 9.0f : 4.2f;
+            float targetFlickerAmp = isDungeon ? 0.38f : 0.14f;
 
-            Material ironMat = _catalog != null
-                ? FirstNonNull(_catalog.ironTrimMaterial, _catalog.stoneFenceMaterial, _catalog.dungeonWallMaterial)
-                : null;
-            bool hasBrazierBillboard = _catalog != null
-                && _catalog.brazierBillboardSprite != null
-                && _catalog.brazierBillboardMaterial != null;
-            Material brazierQuadMat = hasBrazierBillboard
-                ? _catalog.brazierBillboardMaterial
-                : (_catalog != null ? _catalog.torchPropMaterial : null);
-            Material emberMat = _catalog != null ? _catalog.torchEmberMaterial : null;
-
-            for (int i = 0; i < _selectedTorches.Count; i++)
+            for (int i = 0; i < _selectedLightPositions.Count; i++)
             {
-                GridCoord tc = _selectedTorches[i];
-                TorchPropEntry entry = GetTorchProp(i);
-                entry.Root.transform.position = new Vector3(tc.X + 0.34f, 0f, -tc.Y + 0.34f);
-
-                if (ironMat != null)
-                {
-                    entry.StandRenderer.sharedMaterial = ironMat;
-                    entry.BowlRenderer.sharedMaterial = ironMat;
-                }
-                entry.StandRenderer.gameObject.SetActive(!hasBrazierBillboard);
-                entry.BowlRenderer.gameObject.SetActive(!hasBrazierBillboard);
-                entry.EmberRenderer.gameObject.SetActive(!hasBrazierBillboard);
-                entry.QuadRenderer.transform.localPosition = hasBrazierBillboard
-                    ? new Vector3(0f, 0.54f, 0f)
-                    : new Vector3(0f, 0.72f, 0f);
-                entry.QuadRenderer.transform.localScale = hasBrazierBillboard
-                    ? new Vector3(1.12f, 1.12f, 1f)
-                    : new Vector3(0.88f, 0.88f, 1f);
-                entry.QuadRenderer.sharedMaterial = brazierQuadMat;
-                entry.EmberRenderer.sharedMaterial = emberMat;
-
+                Vector3 lp = _selectedLightPositions[i];
+                TorchLightEntry entry = GetTorchLightEntry(i);
+                entry.Root.transform.position = new Vector3(lp.x, lp.y + 1.05f, lp.z - 0.30f);
                 entry.PointLight.intensity = targetIntensity;
                 entry.PointLight.range = targetRange;
                 entry.Flicker.baseIntensity = targetIntensity;
                 entry.Flicker.flickerAmplitude = targetFlickerAmp;
-
                 entry.Root.SetActive(true);
             }
 
-            for (int i = _selectedTorches.Count; i < _torchPool.Count; i++)
+            for (int i = _selectedLightPositions.Count; i < _torchLightPool.Count; i++)
             {
-                _torchPool[i].Root.SetActive(false);
+                _torchLightPool[i].Root.SetActive(false);
             }
         }
 
-        private void BuildTorchLocations(TileMapData map)
+        private Material ResolveRuntimeTerrainMaterial(bool isDungeon)
         {
-            _mapTorchCoords.Clear();
-
-            GridCoord[] hints = map.IsDungeon ? DungeonTorchHints : LandTorchHints;
-            for (int i = 0; i < hints.Length; i++)
-            {
-                TryAddTorchNear(map, hints[i], minSpacing: 3);
-            }
-
-            IReadOnlyList<MapPortal> portals = map.Portals;
-            if (portals != null)
-            {
-                for (int i = 0; i < portals.Count; i++)
-                {
-                    TryAddTorchNear(map, portals[i].Coord, minSpacing: 3);
-                }
-            }
-
-            IReadOnlyList<MapPointOfInterest> pois = map.PointsOfInterest;
-            if (pois != null)
-            {
-                for (int i = 0; i < pois.Count; i++)
-                {
-                    TryAddTorchNear(map, pois[i].Coord, minSpacing: 3);
-                }
-            }
-
-            if (map.IsDungeon)
-            {
-                for (int cy = 0; cy < map.Height; cy += 7)
-                {
-                    for (int cx = 0; cx < map.Width; cx += 7)
-                    {
-                        if (TryFindJunctionInCell(map, cx, cy, 7, out GridCoord junction))
-                        {
-                            TryAddTorchNear(map, junction, minSpacing: 5);
-                        }
-                    }
-                }
-            }
-        }
-
-        private void TryAddTorchNear(TileMapData map, GridCoord target, int minSpacing)
-        {
-            if (!TryFindWalkableSpot(map, target, out GridCoord spot))
-            {
-                return;
-            }
-
-            for (int i = 0; i < _mapTorchCoords.Count; i++)
-            {
-                if (_mapTorchCoords[i].ChebyshevDistance(spot) < minSpacing)
-                {
-                    return;
-                }
-            }
-
-            _mapTorchCoords.Add(spot);
-        }
-
-        private static bool TryFindWalkableSpot(TileMapData map, GridCoord origin, out GridCoord result)
-        {
-            for (int r = 0; r <= 2; r++)
-            {
-                for (int dy = -r; dy <= r; dy++)
-                {
-                    for (int dx = -r; dx <= r; dx++)
-                    {
-                        int x = origin.X + dx;
-                        int y = origin.Y + dy;
-                        if (!map.InBounds(x, y))
-                        {
-                            continue;
-                        }
-
-                        if (!IsSolidStructure(BywaterTileClassifier.Classify(map, x, y)))
-                        {
-                            result = new GridCoord(x, y);
-                            return true;
-                        }
-                    }
-                }
-            }
-
-            result = default;
-            return false;
-        }
-
-        private static bool TryFindJunctionInCell(TileMapData map, int startX, int startY, int cellSize, out GridCoord bestCoord)
-        {
-            int endX = Mathf.Min(map.Width - 1, startX + cellSize - 1);
-            int endY = Mathf.Min(map.Height - 1, startY + cellSize - 1);
-            int bestNeighbors = -1;
-            bestCoord = default;
-
-            for (int y = startY; y <= endY; y++)
-            {
-                for (int x = startX; x <= endX; x++)
-                {
-                    if (!map.IsPassable(x, y) || IsSolidStructure(BywaterTileClassifier.Classify(map, x, y)))
-                    {
-                        continue;
-                    }
-
-                    int openNeighbors = 0;
-                    if (map.InBounds(x + 1, y) && map.IsPassable(x + 1, y)) openNeighbors++;
-                    if (map.InBounds(x - 1, y) && map.IsPassable(x - 1, y)) openNeighbors++;
-                    if (map.InBounds(x, y + 1) && map.IsPassable(x, y + 1)) openNeighbors++;
-                    if (map.InBounds(x, y - 1) && map.IsPassable(x, y - 1)) openNeighbors++;
-
-                    if (openNeighbors > bestNeighbors)
-                    {
-                        bestNeighbors = openNeighbors;
-                        bestCoord = new GridCoord(x, y);
-                    }
-                }
-            }
-
-            return bestNeighbors >= 2;
-        }
-
-        private static bool IsSolidStructure(BywaterTileKind kind)
-        {
-            return kind == BywaterTileKind.WallBlock
-                || kind == BywaterTileKind.DungeonWall
-                || kind == BywaterTileKind.TownBuildingSolid
-                || kind == BywaterTileKind.ShallowWater;
-        }
-
-        private Material ResolveFloorMaterial(BywaterTileKind kind, bool isDungeon, int variantIdx)
-        {
-            if (_catalog == null)
+            Material source = _catalog != null ? _catalog.cartographyTerrainMaterial : null;
+            if (source == null)
             {
                 return null;
             }
 
-            switch (kind)
+            if (_runtimeTerrainMat == null || _sourceTerrainMat != source)
             {
-                case BywaterTileKind.Grass:
-                case BywaterTileKind.ForestCover:
-                    return _catalog.GetTileVariantMaterial(_catalog.grassMaterial, _catalog.grassVariantMaterials, variantIdx);
-                case BywaterTileKind.Cobblestone:
-                case BywaterTileKind.TownBuildingDoor:
-                    return _catalog.GetTileVariantMaterial(_catalog.cobblestoneMaterial, _catalog.cobblestoneVariantMaterials, variantIdx);
-                case BywaterTileKind.DirtPath:
-                    return _catalog.GetTileVariantMaterial(_catalog.dirtPathMaterial, _catalog.dirtPathVariantMaterials, variantIdx);
-                case BywaterTileKind.DungeonFloor:
-                case BywaterTileKind.DungeonDoor:
-                case BywaterTileKind.DungeonStairs:
-                    return _catalog.GetTileVariantMaterial(_catalog.dungeonFloorMaterial, _catalog.dungeonFloorVariantMaterials, variantIdx);
-                case BywaterTileKind.ShallowWater:
-                    return _catalog.shallowWaterMaterial;
-                default:
-                    return isDungeon
-                        ? _catalog.GetTileVariantMaterial(_catalog.dungeonFloorMaterial, _catalog.dungeonFloorVariantMaterials, variantIdx)
-                        : _catalog.GetTileVariantMaterial(_catalog.grassMaterial, _catalog.grassVariantMaterials, variantIdx);
+                DestroyResource(_runtimeTerrainMat);
+                _sourceTerrainMat = source;
+                _runtimeTerrainMat = new Material(source)
+                {
+                    name = source.name + "_Runtime",
+                    hideFlags = HideFlags.HideAndDontSave
+                };
             }
+
+            if (isDungeon)
+            {
+                if (_runtimeTerrainMat.HasProperty(GroundValueScaleId)) _runtimeTerrainMat.SetFloat(GroundValueScaleId, 0.42f);
+                if (_runtimeTerrainMat.HasProperty(RoadValueBoostId)) _runtimeTerrainMat.SetFloat(RoadValueBoostId, 0.46f);
+                if (_runtimeTerrainMat.HasProperty(HorizonHazeColorId)) _runtimeTerrainMat.SetColor(HorizonHazeColorId, new Color(0.05f, 0.07f, 0.12f, 1f));
+                if (_runtimeTerrainMat.HasProperty(HorizonHazeStrengthId)) _runtimeTerrainMat.SetFloat(HorizonHazeStrengthId, 0.22f);
+                if (_runtimeTerrainMat.HasProperty(LanternPoolIntensityId)) _runtimeTerrainMat.SetFloat(LanternPoolIntensityId, 1.15f);
+            }
+            else
+            {
+                if (_runtimeTerrainMat.HasProperty(GroundValueScaleId)) _runtimeTerrainMat.SetFloat(GroundValueScaleId, 0.76f);
+                if (_runtimeTerrainMat.HasProperty(RoadValueBoostId)) _runtimeTerrainMat.SetFloat(RoadValueBoostId, 0.86f);
+                if (_runtimeTerrainMat.HasProperty(HorizonHazeColorId)) _runtimeTerrainMat.SetColor(HorizonHazeColorId, new Color(0.91f, 0.83f, 0.70f, 1f));
+                if (_runtimeTerrainMat.HasProperty(HorizonHazeStrengthId)) _runtimeTerrainMat.SetFloat(HorizonHazeStrengthId, 0.09f);
+                if (_runtimeTerrainMat.HasProperty(LanternPoolIntensityId)) _runtimeTerrainMat.SetFloat(LanternPoolIntensityId, 1.35f);
+            }
+
+            return _runtimeTerrainMat;
         }
 
-        private static Material FirstNonNull(Material a, Material b = null, Material c = null)
+        private Material ResolveRuntimeWaterMaterial(bool isDungeon)
         {
-            if (a != null) return a;
-            if (b != null) return b;
-            return c;
+            Material source = _catalog != null
+                ? (_catalog.cartographyWaterMaterial != null ? _catalog.cartographyWaterMaterial : _catalog.shallowWaterMaterial)
+                : null;
+            if (source == null)
+            {
+                return null;
+            }
+
+            if (_runtimeWaterMat == null || _sourceWaterMat != source)
+            {
+                DestroyResource(_runtimeWaterMat);
+                _sourceWaterMat = source;
+                _runtimeWaterMat = new Material(source)
+                {
+                    name = source.name + "_Runtime",
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+            }
+
+            if (isDungeon)
+            {
+                if (_runtimeWaterMat.HasProperty(BaseColorId)) _runtimeWaterMat.SetColor(BaseColorId, new Color(0.08f, 0.16f, 0.24f, 1f));
+                if (_runtimeWaterMat.HasProperty(ShallowColorId)) _runtimeWaterMat.SetColor(ShallowColorId, new Color(0.08f, 0.18f, 0.28f, 0.90f));
+                if (_runtimeWaterMat.HasProperty(DeepColorId)) _runtimeWaterMat.SetColor(DeepColorId, new Color(0.03f, 0.08f, 0.14f, 0.98f));
+            }
+            else
+            {
+                if (_runtimeWaterMat.HasProperty(BaseColorId)) _runtimeWaterMat.SetColor(BaseColorId, new Color(0.16f, 0.38f, 0.46f, 1f));
+                if (_runtimeWaterMat.HasProperty(ShallowColorId)) _runtimeWaterMat.SetColor(ShallowColorId, new Color(0.18f, 0.45f, 0.62f, 0.88f));
+                if (_runtimeWaterMat.HasProperty(DeepColorId)) _runtimeWaterMat.SetColor(DeepColorId, new Color(0.08f, 0.24f, 0.40f, 0.96f));
+            }
+
+            return _runtimeWaterMat;
         }
 
-        private void WarmupPools()
+        private Material ResolvePropMaterial(CartographyPropKind kind)
         {
-            _floorPropBlock ??= new MaterialPropertyBlock();
-
-            for (int i = _floorPool.Count; i < 1089; i++)
+            Material mat = _catalog != null ? _catalog.GetCartographyPropMaterial(kind) : null;
+            if (mat != null)
             {
-                MeshRenderer r = CreateFloorQuad(i);
-                r.gameObject.SetActive(false);
-                _floorPool.Add(r);
+                return mat;
             }
 
-            for (int i = _blockPool.Count; i < 1400; i++)
+            if (_fallbackPropMaterial == null)
             {
-                MeshRenderer r = CreateBlockCube(i);
-                r.gameObject.SetActive(false);
-                _blockPool.Add(r);
+                Shader shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default");
+                _fallbackPropMaterial = new Material(shader)
+                {
+                    name = "FallbackCartographyProp_Mat",
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+                if (_fallbackPropMaterial.HasProperty(BaseColorId)) _fallbackPropMaterial.SetColor(BaseColorId, new Color(0.45f, 0.55f, 0.40f, 1f));
             }
 
-            for (int i = _cottagePool.Count; i < 128; i++)
-            {
-                CottagePropEntry e = CreateCottageProp(i);
-                e.Root.SetActive(false);
-                _cottagePool.Add(e);
-            }
-
-            for (int i = _fencePool.Count; i < 96; i++)
-            {
-                FencePropEntry e = CreateFenceProp(i);
-                e.Root.SetActive(false);
-                _fencePool.Add(e);
-            }
-
-            for (int i = _treePool.Count; i < 160; i++)
-            {
-                TreePropEntry e = CreateTreeProp(i);
-                e.Root.SetActive(false);
-                _treePool.Add(e);
-            }
-
-            for (int i = _boulderPool.Count; i < 128; i++)
-            {
-                BoulderPropEntry e = CreateBoulderProp(i);
-                e.Root.SetActive(false);
-                _boulderPool.Add(e);
-            }
-
-            for (int i = _wildflowerPool.Count; i < 96; i++)
-            {
-                WildflowerPropEntry e = CreateWildflowerProp(i);
-                e.Root.SetActive(false);
-                _wildflowerPool.Add(e);
-            }
-
-            for (int i = _cratePool.Count; i < 32; i++)
-            {
-                CratePropEntry e = CreateCrateProp(i);
-                e.Root.SetActive(false);
-                _cratePool.Add(e);
-            }
-
-            for (int i = _torchPool.Count; i < MaxActiveTorchLights; i++)
-            {
-                TorchPropEntry entry = CreateTorchProp(i);
-                entry.Root.SetActive(false);
-                _torchPool.Add(entry);
-            }
-
-            for (int i = _portalPool.Count; i < 16; i++)
-            {
-                PortalMarkerEntry entry = CreatePortalMarker(i);
-                entry.Root.SetActive(false);
-                _portalPool.Add(entry);
-            }
+            return _fallbackPropMaterial;
         }
 
-        private MeshRenderer GetFloorQuad(int index)
+        private void ConfigureStoneBridge(StoneBridgeEntry entry, CartographyPropPlacement placement, bool isDungeon)
         {
-            while (_floorPool.Count <= index)
+            float w = Mathf.Max(1.0f, placement.SizeMeters.x);
+            float l = Mathf.Max(1.2f, placement.SizeMeters.y);
+
+            if (entry.DeckMesh == null || Mathf.Abs(entry.CachedWidth - w) > 0.01f || Mathf.Abs(entry.CachedLength - l) > 0.01f)
             {
-                MeshRenderer r = CreateFloorQuad(_floorPool.Count);
-                _floorPool.Add(r);
+                DestroyResource(entry.DeckMesh);
+                DestroyResource(entry.CurbMesh);
+                entry.DeckMesh = BuildBridgeDeckMesh(w * 0.86f, l);
+                entry.CurbMesh = BuildBridgeParapetAndArchMesh(w, l);
+                entry.DeckFilter.sharedMesh = entry.DeckMesh;
+                entry.CurbFilter.sharedMesh = entry.CurbMesh;
+                entry.CachedWidth = w;
+                entry.CachedLength = l;
             }
-            return _floorPool[index];
+
+            Material mat = ResolveRuntimeTerrainMaterial(isDungeon);
+            if (mat != null)
+            {
+                entry.DeckRenderer.sharedMaterial = mat;
+                entry.CurbRenderer.sharedMaterial = mat;
+            }
+
+            entry.Root.transform.position = placement.WorldPosition;
+            entry.Root.SetActive(true);
         }
 
-        private MeshRenderer GetBlockCube(int index)
+        private PropBillboardEntry GetPropEntry(int index)
         {
-            while (_blockPool.Count <= index)
+            while (_propPool.Count <= index)
             {
-                MeshRenderer r = CreateBlockCube(_blockPool.Count);
-                _blockPool.Add(r);
+                GameObject go = new GameObject("PropBillboard_" + _propPool.Count);
+                go.transform.SetParent(_propsContainer, false);
+
+                MeshFilter mf = go.AddComponent<MeshFilter>();
+                mf.sharedMesh = _propBillboardQuadMesh;
+
+                MeshRenderer mr = go.AddComponent<MeshRenderer>();
+                mr.shadowCastingMode = ShadowCastingMode.On;
+                mr.receiveShadows = true;
+
+                PixelBillboard bb = go.AddComponent<PixelBillboard>();
+                go.SetActive(false);
+
+                _propPool.Add(new PropBillboardEntry
+                {
+                    Root = go,
+                    Filter = mf,
+                    Renderer = mr,
+                    Billboard = bb
+                });
             }
-            return _blockPool[index];
+
+            return _propPool[index];
         }
 
-        private CottagePropEntry GetCottageProp(int index)
+        private StoneBridgeEntry GetBridgeEntry(int index)
         {
-            while (_cottagePool.Count <= index)
+            while (_bridgePool.Count <= index)
             {
-                CottagePropEntry e = CreateCottageProp(_cottagePool.Count);
-                _cottagePool.Add(e);
+                GameObject root = new GameObject("StoneBridge_" + _bridgePool.Count);
+                root.transform.SetParent(_bridgesContainer, false);
+
+                GameObject deckGo = new GameObject("BridgeCobbleDeck");
+                deckGo.transform.SetParent(root.transform, false);
+                MeshFilter deckMf = deckGo.AddComponent<MeshFilter>();
+                MeshRenderer deckMr = deckGo.AddComponent<MeshRenderer>();
+                deckMr.shadowCastingMode = ShadowCastingMode.On;
+                deckMr.receiveShadows = true;
+
+                GameObject curbGo = new GameObject("BridgeStoneParapets");
+                curbGo.transform.SetParent(root.transform, false);
+                MeshFilter curbMf = curbGo.AddComponent<MeshFilter>();
+                MeshRenderer curbMr = curbGo.AddComponent<MeshRenderer>();
+                curbMr.shadowCastingMode = ShadowCastingMode.On;
+                curbMr.receiveShadows = true;
+
+                root.SetActive(false);
+                _bridgePool.Add(new StoneBridgeEntry
+                {
+                    Root = root,
+                    DeckFilter = deckMf,
+                    DeckRenderer = deckMr,
+                    CurbFilter = curbMf,
+                    CurbRenderer = curbMr
+                });
             }
-            return _cottagePool[index];
+
+            return _bridgePool[index];
         }
 
-        private FencePropEntry GetFenceProp(int index)
+        private TorchLightEntry GetTorchLightEntry(int index)
         {
-            while (_fencePool.Count <= index)
+            while (_torchLightPool.Count <= index)
             {
-                FencePropEntry e = CreateFenceProp(_fencePool.Count);
-                _fencePool.Add(e);
-            }
-            return _fencePool[index];
-        }
+                GameObject go = new GameObject("TorchLight_" + _torchLightPool.Count);
+                go.transform.SetParent(_torchLightContainer, false);
 
-        private TreePropEntry GetTreeProp(int index)
-        {
-            while (_treePool.Count <= index)
-            {
-                TreePropEntry e = CreateTreeProp(_treePool.Count);
-                _treePool.Add(e);
-            }
-            return _treePool[index];
-        }
+                Light pointLight = go.AddComponent<Light>();
+                pointLight.type = LightType.Point;
+                pointLight.color = new Color(1.0f, 0.580f, 0.239f, 1f);
+                pointLight.range = 7.5f;
+                pointLight.intensity = 2.8f;
+                pointLight.shadows = LightShadows.None;
 
-        private BoulderPropEntry GetBoulderProp(int index)
-        {
-            while (_boulderPool.Count <= index)
-            {
-                BoulderPropEntry e = CreateBoulderProp(_boulderPool.Count);
-                _boulderPool.Add(e);
-            }
-            return _boulderPool[index];
-        }
+                BywaterTorchFlicker flicker = go.AddComponent<BywaterTorchFlicker>();
+                flicker.baseIntensity = 2.8f;
+                flicker.flickerAmplitude = 0.35f;
+                flicker.flickerSpeed = 6.5f;
+                flicker.emberTransform = null;
 
-        private WildflowerPropEntry GetWildflowerProp(int index)
-        {
-            while (_wildflowerPool.Count <= index)
-            {
-                WildflowerPropEntry e = CreateWildflowerProp(_wildflowerPool.Count);
-                _wildflowerPool.Add(e);
+                go.SetActive(false);
+                _torchLightPool.Add(new TorchLightEntry
+                {
+                    Root = go,
+                    PointLight = pointLight,
+                    Flicker = flicker
+                });
             }
-            return _wildflowerPool[index];
-        }
 
-        private CratePropEntry GetCrateProp(int index)
-        {
-            while (_cratePool.Count <= index)
-            {
-                CratePropEntry e = CreateCrateProp(_cratePool.Count);
-                _cratePool.Add(e);
-            }
-            return _cratePool[index];
-        }
-
-        private TorchPropEntry GetTorchProp(int index)
-        {
-            while (_torchPool.Count <= index)
-            {
-                TorchPropEntry entry = CreateTorchProp(_torchPool.Count);
-                _torchPool.Add(entry);
-            }
-            return _torchPool[index];
+            return _torchLightPool[index];
         }
 
         private PortalMarkerEntry GetPortalMarker(int index)
         {
             while (_portalPool.Count <= index)
             {
-                PortalMarkerEntry entry = CreatePortalMarker(_portalPool.Count);
-                _portalPool.Add(entry);
+                GameObject root = new GameObject("PortalRune_" + _portalPool.Count);
+                root.transform.SetParent(_portalContainer, false);
+
+                GameObject runeGo = new GameObject("RuneFloor");
+                runeGo.transform.SetParent(root.transform, false);
+                runeGo.transform.localPosition = new Vector3(0f, 0.022f, 0f);
+                runeGo.transform.localScale = new Vector3(0.86f, 1f, 0.86f);
+                runeGo.AddComponent<MeshFilter>().sharedMesh = _groundQuadMesh;
+                MeshRenderer runeRenderer = runeGo.AddComponent<MeshRenderer>();
+                runeRenderer.shadowCastingMode = ShadowCastingMode.Off;
+                runeRenderer.receiveShadows = false;
+
+                GameObject beaconGo = new GameObject("RuneBeacon");
+                beaconGo.transform.SetParent(root.transform, false);
+                beaconGo.transform.localPosition = new Vector3(-0.34f, 0.02f, 0.34f);
+                beaconGo.transform.localScale = new Vector3(0.18f, 0.85f, 1f);
+                beaconGo.AddComponent<MeshFilter>().sharedMesh = _propBillboardQuadMesh;
+                MeshRenderer beaconRenderer = beaconGo.AddComponent<MeshRenderer>();
+                beaconRenderer.shadowCastingMode = ShadowCastingMode.Off;
+                beaconRenderer.receiveShadows = false;
+                PixelBillboard bb = beaconGo.AddComponent<PixelBillboard>();
+
+                root.SetActive(false);
+                _portalPool.Add(new PortalMarkerEntry
+                {
+                    Root = root,
+                    RuneQuad = runeRenderer,
+                    BeaconQuad = beaconRenderer,
+                    BeaconBillboard = bb
+                });
             }
+
             return _portalPool[index];
         }
 
-        private static void DeactivateUnused(List<MeshRenderer> pool, int activeCount)
+        private void WarmupLightAndPortalPools()
         {
-            for (int i = activeCount; i < pool.Count; i++)
+            for (int i = _torchLightPool.Count; i < MaxActiveTorchLights; i++)
             {
-                pool[i].gameObject.SetActive(false);
+                GetTorchLightEntry(i);
+            }
+
+            for (int i = _portalPool.Count; i < 8; i++)
+            {
+                GetPortalMarker(i);
             }
         }
 
-        private void DeactivateUnusedCottages(int activeCount)
+        private void EnsureCampfireEntry()
         {
-            for (int i = activeCount; i < _cottagePool.Count; i++)
+            if (_campfireEntry != null && _campfireEntry.Root != null)
             {
-                _cottagePool[i].Root.SetActive(false);
+                return;
             }
-        }
 
-        private void DeactivateUnusedFences(int activeCount)
-        {
-            for (int i = activeCount; i < _fencePool.Count; i++)
-            {
-                _fencePool[i].Root.SetActive(false);
-            }
-        }
-
-        private void DeactivateUnusedTrees(int activeCount)
-        {
-            for (int i = activeCount; i < _treePool.Count; i++)
-            {
-                _treePool[i].Root.SetActive(false);
-            }
-        }
-
-        private void DeactivateUnusedBoulders(int activeCount)
-        {
-            for (int i = activeCount; i < _boulderPool.Count; i++)
-            {
-                _boulderPool[i].Root.SetActive(false);
-            }
-        }
-
-        private void DeactivateUnusedWildflowers(int activeCount)
-        {
-            for (int i = activeCount; i < _wildflowerPool.Count; i++)
-            {
-                _wildflowerPool[i].Root.SetActive(false);
-            }
-        }
-
-        private void DeactivateUnusedCrates(int activeCount)
-        {
-            for (int i = activeCount; i < _cratePool.Count; i++)
-            {
-                _cratePool[i].Root.SetActive(false);
-            }
-        }
-
-        private MeshRenderer CreateFloorQuad(int index)
-        {
-            GameObject go = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            go.name = "TileFloor_" + index;
-            go.transform.SetParent(_floorContainer, false);
-            go.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-            go.transform.localScale = Vector3.one;
-            DestroyCollider(go);
-
-            MeshRenderer renderer = go.GetComponent<MeshRenderer>();
-            renderer.shadowCastingMode = ShadowCastingMode.Off;
-            renderer.receiveShadows = true;
-            return renderer;
-        }
-
-        private MeshRenderer CreateBlockCube(int index)
-        {
-            GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.name = "TileBlock_" + index;
-            go.transform.SetParent(_structureContainer, false);
-            DestroyCollider(go);
-
-            MeshRenderer renderer = go.GetComponent<MeshRenderer>();
-            renderer.shadowCastingMode = ShadowCastingMode.On;
-            renderer.receiveShadows = true;
-            return renderer;
-        }
-
-        private CottagePropEntry CreateCottageProp(int index)
-        {
-            GameObject root = new GameObject("CottageProp_" + index);
+            GameObject root = new GameObject("CampfireProp");
             root.transform.SetParent(_propsContainer, false);
 
-            GameObject modular = new GameObject("Modular");
-            modular.transform.SetParent(root.transform, false);
-
-            MeshRenderer plinth = CreatePrimitivePiece(PrimitiveType.Cube, "Plinth", modular.transform, new Vector3(0f, 0.11f, 0f), new Vector3(1.02f, 0.22f, 1.02f), Quaternion.identity);
-            MeshRenderer wallBody = CreatePrimitivePiece(PrimitiveType.Cube, "WallBody", modular.transform, new Vector3(0f, 0.57f, 0f), new Vector3(0.94f, 0.70f, 0.94f), Quaternion.identity);
-            MeshRenderer postFL = CreatePrimitivePiece(PrimitiveType.Cube, "PostFL", modular.transform, new Vector3(-0.45f, 0.57f, -0.45f), new Vector3(0.09f, 0.72f, 0.09f), Quaternion.identity);
-            MeshRenderer postFR = CreatePrimitivePiece(PrimitiveType.Cube, "PostFR", modular.transform, new Vector3(0.45f, 0.57f, -0.45f), new Vector3(0.09f, 0.72f, 0.09f), Quaternion.identity);
-            MeshRenderer postBL = CreatePrimitivePiece(PrimitiveType.Cube, "PostBL", modular.transform, new Vector3(-0.45f, 0.57f, 0.45f), new Vector3(0.09f, 0.72f, 0.09f), Quaternion.identity);
-            MeshRenderer postBR = CreatePrimitivePiece(PrimitiveType.Cube, "PostBR", modular.transform, new Vector3(0.45f, 0.57f, 0.45f), new Vector3(0.09f, 0.72f, 0.09f), Quaternion.identity);
-            MeshRenderer timberBeam = CreatePrimitivePiece(PrimitiveType.Cube, "TimberBeam", modular.transform, new Vector3(0f, 0.93f, 0f), new Vector3(1.00f, 0.08f, 1.00f), Quaternion.identity);
-            MeshRenderer gablePeak = CreatePrimitivePiece(PrimitiveType.Cube, "GablePeak", modular.transform, new Vector3(0f, 0.97f, 0f), new Vector3(0.58f, 0.58f, 0.90f), Quaternion.Euler(0f, 0f, 45f));
-            MeshRenderer roofLeft = CreatePrimitivePiece(PrimitiveType.Cube, "RoofLeft", modular.transform, new Vector3(-0.27f, 1.21f, 0f), new Vector3(0.74f, 0.08f, 1.08f), Quaternion.Euler(0f, 0f, 38f));
-            MeshRenderer roofRight = CreatePrimitivePiece(PrimitiveType.Cube, "RoofRight", modular.transform, new Vector3(0.27f, 1.21f, 0f), new Vector3(0.74f, 0.08f, 1.08f), Quaternion.Euler(0f, 0f, -38f));
-            MeshRenderer ridgeBeam = CreatePrimitivePiece(PrimitiveType.Cube, "RidgeBeam", modular.transform, new Vector3(0f, 1.46f, 0f), new Vector3(0.10f, 0.10f, 1.10f), Quaternion.identity);
-            MeshRenderer windowFront = CreatePrimitivePiece(PrimitiveType.Cube, "WindowFront", modular.transform, new Vector3(0f, 0.56f, -0.475f), new Vector3(0.30f, 0.28f, 0.03f), Quaternion.identity, castShadows: false);
-
-            MeshRenderer billboardQuad = CreateBillboardQuad("CottageBillboard", root.transform, new Vector3(0f, 0.86f, 0f), new Vector3(1.76f, 1.76f, 1f));
-            billboardQuad.gameObject.SetActive(false);
-
-            return new CottagePropEntry
-            {
-                Root = root,
-                ModularRoot = modular,
-                Plinth = plinth,
-                WallBody = wallBody,
-                PostFL = postFL,
-                PostFR = postFR,
-                PostBL = postBL,
-                PostBR = postBR,
-                TimberBeam = timberBeam,
-                RoofLeft = roofLeft,
-                RoofRight = roofRight,
-                GablePeak = gablePeak,
-                RidgeBeam = ridgeBeam,
-                WindowFront = windowFront,
-                BillboardQuad = billboardQuad
-            };
-        }
-
-        private FencePropEntry CreateFenceProp(int index)
-        {
-            GameObject root = new GameObject("FenceProp_" + index);
-            root.transform.SetParent(_propsContainer, false);
-
-            GameObject modular = new GameObject("Modular");
-            modular.transform.SetParent(root.transform, false);
-
-            MeshRenderer wall = CreatePrimitivePiece(PrimitiveType.Cube, "FenceWall", modular.transform, new Vector3(0f, 0.27f, 0f), new Vector3(0.96f, 0.54f, 0.42f), Quaternion.identity);
-            MeshRenderer coping = CreatePrimitivePiece(PrimitiveType.Cube, "FenceCoping", modular.transform, new Vector3(0f, 0.56f, 0f), new Vector3(1.00f, 0.08f, 0.60f), Quaternion.identity);
-            MeshRenderer post = CreatePrimitivePiece(PrimitiveType.Cube, "FencePost", modular.transform, new Vector3(-0.38f, 0.36f, 0f), new Vector3(0.24f, 0.72f, 0.54f), Quaternion.identity);
-
-            MeshRenderer billboardQuad = CreateBillboardQuad("FenceBillboard", root.transform, new Vector3(0f, 0.48f, 0f), new Vector3(1.16f, 0.96f, 1f));
-            billboardQuad.gameObject.SetActive(false);
-
-            return new FencePropEntry
-            {
-                Root = root,
-                ModularRoot = modular,
-                Wall = wall,
-                Coping = coping,
-                Post = post,
-                BillboardQuad = billboardQuad
-            };
-        }
-
-        private TreePropEntry CreateTreeProp(int index)
-        {
-            GameObject root = new GameObject("TreeProp_" + index);
-            root.transform.SetParent(_propsContainer, false);
-
-            GameObject swayGo = new GameObject("SwayTarget");
-            swayGo.transform.SetParent(root.transform, false);
-            BywaterPropSway sway = swayGo.AddComponent<BywaterPropSway>();
-            sway.targetTransform = swayGo.transform;
-            sway.swayAmplitudeDeg = 2.4f;
-            sway.swaySpeed = 1.35f;
-            sway.bobAmplitude = 0.012f;
-            sway.CacheBasePose();
-
-            GameObject oakRoot = new GameObject("Oak");
-            oakRoot.transform.SetParent(swayGo.transform, false);
-            MeshRenderer oakTrunk = CreatePrimitivePiece(PrimitiveType.Cylinder, "OakTrunk", oakRoot.transform, new Vector3(0f, 0.34f, 0f), new Vector3(0.22f, 0.34f, 0.22f), Quaternion.identity);
-            MeshRenderer oakLower = CreatePrimitivePiece(PrimitiveType.Sphere, "OakCanopyLower", oakRoot.transform, new Vector3(-0.04f, 0.92f, 0.02f), new Vector3(0.94f, 0.68f, 0.90f), Quaternion.identity);
-            MeshRenderer oakUpper = CreatePrimitivePiece(PrimitiveType.Sphere, "OakCanopyUpper", oakRoot.transform, new Vector3(0.14f, 1.24f, -0.06f), new Vector3(0.68f, 0.56f, 0.66f), Quaternion.identity);
-
-            GameObject pineRoot = new GameObject("Pine");
-            pineRoot.transform.SetParent(swayGo.transform, false);
-            MeshRenderer pineTrunk = CreatePrimitivePiece(PrimitiveType.Cylinder, "PineTrunk", pineRoot.transform, new Vector3(0f, 0.32f, 0f), new Vector3(0.18f, 0.32f, 0.18f), Quaternion.identity);
-            MeshRenderer pineLower = CreatePrimitivePiece(PrimitiveType.Cube, "PineTierLower", pineRoot.transform, new Vector3(0f, 0.66f, 0f), new Vector3(0.88f, 0.34f, 0.88f), Quaternion.Euler(0f, 15f, 0f));
-            MeshRenderer pineMid = CreatePrimitivePiece(PrimitiveType.Cube, "PineTierMid", pineRoot.transform, new Vector3(0f, 0.98f, 0f), new Vector3(0.64f, 0.36f, 0.64f), Quaternion.Euler(0f, 45f, 0f));
-            MeshRenderer pineTop = CreatePrimitivePiece(PrimitiveType.Cube, "PineTierTop", pineRoot.transform, new Vector3(0f, 1.32f, 0f), new Vector3(0.38f, 0.40f, 0.38f), Quaternion.Euler(0f, 20f, 0f));
-
-            MeshRenderer billboardQuad = CreateBillboardQuad("TreeBillboard", swayGo.transform, new Vector3(0f, 0.90f, 0f), new Vector3(1.82f, 1.82f, 1f));
-            billboardQuad.gameObject.SetActive(false);
-
-            return new TreePropEntry
-            {
-                Root = root,
-                SwayTarget = swayGo.transform,
-                Sway = sway,
-                OakRoot = oakRoot,
-                OakTrunk = oakTrunk,
-                OakCanopyLower = oakLower,
-                OakCanopyUpper = oakUpper,
-                PineRoot = pineRoot,
-                PineTrunk = pineTrunk,
-                PineTierLower = pineLower,
-                PineTierMid = pineMid,
-                PineTierTop = pineTop,
-                BillboardQuad = billboardQuad
-            };
-        }
-
-        private BoulderPropEntry CreateBoulderProp(int index)
-        {
-            GameObject root = new GameObject("BoulderProp_" + index);
-            root.transform.SetParent(_propsContainer, false);
-
-            MeshRenderer mainRock = CreatePrimitivePiece(PrimitiveType.Cube, "MainRock", root.transform, new Vector3(-0.06f, 0.36f, 0.04f), new Vector3(0.76f, 0.72f, 0.72f), Quaternion.Euler(6f, 18f, -5f));
-            MeshRenderer subRock = CreatePrimitivePiece(PrimitiveType.Cube, "SubRock", root.transform, new Vector3(0.22f, 0.24f, -0.14f), new Vector3(0.50f, 0.46f, 0.48f), Quaternion.Euler(-8f, 42f, 10f));
-            MeshRenderer topCap = CreatePrimitivePiece(PrimitiveType.Cube, "TopCap", root.transform, new Vector3(-0.10f, 0.68f, 0.08f), new Vector3(0.44f, 0.28f, 0.42f), Quaternion.Euler(4f, -25f, 8f));
-            MeshRenderer mossShrub = CreatePrimitivePiece(PrimitiveType.Sphere, "MossShrub", root.transform, new Vector3(0.24f, 0.42f, -0.18f), new Vector3(0.32f, 0.24f, 0.32f), Quaternion.identity);
-
-            return new BoulderPropEntry
-            {
-                Root = root,
-                MainRock = mainRock,
-                SubRock = subRock,
-                TopCap = topCap,
-                MossShrub = mossShrub
-            };
-        }
-
-        private WildflowerPropEntry CreateWildflowerProp(int index)
-        {
-            GameObject root = new GameObject("WildflowerProp_" + index);
-            root.transform.SetParent(_propsContainer, false);
-
-            GameObject swayGo = new GameObject("SwayTarget");
-            swayGo.transform.SetParent(root.transform, false);
-            swayGo.transform.localPosition = new Vector3(0.06f, 0f, 0.06f);
-
-            BywaterPropSway sway = swayGo.AddComponent<BywaterPropSway>();
-            sway.targetTransform = swayGo.transform;
-            sway.swayAmplitudeDeg = 2.0f;
-            sway.swaySpeed = 1.65f;
-            sway.bobAmplitude = 0.008f;
-            sway.CacheBasePose();
-
-            GameObject modular = new GameObject("Modular");
-            modular.transform.SetParent(swayGo.transform, false);
-
-            MeshRenderer greenery = CreatePrimitivePiece(PrimitiveType.Sphere, "Greenery", modular.transform, new Vector3(0f, 0.07f, 0f), new Vector3(0.24f, 0.14f, 0.22f), Quaternion.identity, castShadows: false);
-            MeshRenderer blossomA = CreatePrimitivePiece(PrimitiveType.Sphere, "BlossomA", modular.transform, new Vector3(-0.07f, 0.16f, 0.04f), new Vector3(0.08f, 0.08f, 0.08f), Quaternion.identity, castShadows: false);
-            MeshRenderer blossomB = CreatePrimitivePiece(PrimitiveType.Sphere, "BlossomB", modular.transform, new Vector3(0.06f, 0.18f, -0.04f), new Vector3(0.08f, 0.08f, 0.08f), Quaternion.identity, castShadows: false);
-            MeshRenderer blossomC = CreatePrimitivePiece(PrimitiveType.Sphere, "BlossomC", modular.transform, new Vector3(0.01f, 0.15f, 0.07f), new Vector3(0.07f, 0.07f, 0.07f), Quaternion.identity, castShadows: false);
-
-            MeshRenderer billboardQuad = CreateBillboardQuad("WildflowerBillboard", swayGo.transform, new Vector3(0f, 0.34f, 0f), new Vector3(0.70f, 0.70f, 1f), castShadows: false);
-            billboardQuad.gameObject.SetActive(false);
-
-            return new WildflowerPropEntry
-            {
-                Root = root,
-                SwayTarget = swayGo.transform,
-                Sway = sway,
-                ModularRoot = modular,
-                Greenery = greenery,
-                BlossomA = blossomA,
-                BlossomB = blossomB,
-                BlossomC = blossomC,
-                BillboardQuad = billboardQuad
-            };
-        }
-
-        private CratePropEntry CreateCrateProp(int index)
-        {
-            GameObject root = new GameObject("CrateProp_" + index);
-            root.transform.SetParent(_propsContainer, false);
-
-            GameObject modular = new GameObject("Modular");
-            modular.transform.SetParent(root.transform, false);
-
-            MeshRenderer crateBox = CreatePrimitivePiece(PrimitiveType.Cube, "CrateBox", modular.transform, new Vector3(0.20f, 0.13f, 0.38f), new Vector3(0.24f, 0.26f, 0.24f), Quaternion.Euler(0f, 12f, 0f));
-            MeshRenderer crateTrim = CreatePrimitivePiece(PrimitiveType.Cube, "CrateTrim", modular.transform, new Vector3(0.20f, 0.13f, 0.38f), new Vector3(0.26f, 0.05f, 0.26f), Quaternion.Euler(0f, 12f, 0f));
-            MeshRenderer barrelBody = CreatePrimitivePiece(PrimitiveType.Cylinder, "BarrelBody", modular.transform, new Vector3(-0.16f, 0.15f, 0.38f), new Vector3(0.20f, 0.15f, 0.20f), Quaternion.identity);
-            MeshRenderer barrelBand = CreatePrimitivePiece(PrimitiveType.Cylinder, "BarrelBand", modular.transform, new Vector3(-0.16f, 0.19f, 0.38f), new Vector3(0.22f, 0.03f, 0.22f), Quaternion.identity);
-
-            MeshRenderer billboardQuad = CreateBillboardQuad("CrateBillboard", root.transform, new Vector3(0f, 0.42f, 0.24f), new Vector3(0.88f, 0.88f, 1f));
-            billboardQuad.gameObject.SetActive(false);
-
-            return new CratePropEntry
-            {
-                Root = root,
-                ModularRoot = modular,
-                CrateBox = crateBox,
-                CrateTrim = crateTrim,
-                BarrelBody = barrelBody,
-                BarrelBand = barrelBand,
-                BillboardQuad = billboardQuad
-            };
-        }
-
-        private static MeshRenderer CreatePrimitivePiece(
-            PrimitiveType primitiveType,
-            string pieceName,
-            Transform parent,
-            Vector3 localPosition,
-            Vector3 localScale,
-            Quaternion localRotation,
-            bool castShadows = true)
-        {
-            GameObject go = GameObject.CreatePrimitive(primitiveType);
-            go.name = pieceName;
-            go.transform.SetParent(parent, false);
-            go.transform.localPosition = localPosition;
-            go.transform.localScale = localScale;
-            go.transform.localRotation = localRotation;
-            DestroyCollider(go);
-
-            MeshRenderer renderer = go.GetComponent<MeshRenderer>();
-            renderer.shadowCastingMode = castShadows ? ShadowCastingMode.On : ShadowCastingMode.Off;
-            renderer.receiveShadows = true;
-            return renderer;
-        }
-
-        private static MeshRenderer CreateBillboardQuad(
-            string quadName,
-            Transform parent,
-            Vector3 localPosition,
-            Vector3 localScale,
-            bool castShadows = true)
-        {
-            GameObject go = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            go.name = quadName;
-            go.transform.SetParent(parent, false);
-            go.transform.localPosition = localPosition;
-            go.transform.localScale = localScale;
-            DestroyCollider(go);
-            go.AddComponent<PixelBillboard>();
-
-            MeshRenderer renderer = go.GetComponent<MeshRenderer>();
-            renderer.shadowCastingMode = castShadows ? ShadowCastingMode.On : ShadowCastingMode.Off;
-            renderer.receiveShadows = true;
-            return renderer;
-        }
-
-        private TorchPropEntry CreateTorchProp(int index)
-        {
-            GameObject root = new GameObject("TorchProp_" + index);
-            root.transform.SetParent(_torchContainer, false);
-
-            MeshRenderer standRenderer = CreatePrimitivePiece(
-                PrimitiveType.Cylinder,
-                "BrazierStand",
-                root.transform,
-                new Vector3(0f, 0.28f, 0f),
-                new Vector3(0.11f, 0.28f, 0.11f),
-                Quaternion.identity);
-
-            MeshRenderer bowlRenderer = CreatePrimitivePiece(
-                PrimitiveType.Cylinder,
-                "BrazierBowl",
-                root.transform,
-                new Vector3(0f, 0.56f, 0f),
-                new Vector3(0.36f, 0.08f, 0.36f),
-                Quaternion.identity);
-
-            GameObject quadGo = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            quadGo.name = "TorchBillboard";
+            GameObject quadGo = new GameObject("CampfireBillboard");
             quadGo.transform.SetParent(root.transform, false);
-            quadGo.transform.localPosition = new Vector3(0f, 0.72f, 0f);
-            quadGo.transform.localScale = new Vector3(0.88f, 0.88f, 1f);
-            DestroyCollider(quadGo);
-            quadGo.AddComponent<PixelBillboard>();
-            MeshRenderer quadRenderer = quadGo.GetComponent<MeshRenderer>();
-            quadRenderer.shadowCastingMode = ShadowCastingMode.Off;
-            quadRenderer.receiveShadows = true;
+            quadGo.transform.localScale = new Vector3(0.95f, 1.15f, 1f);
+            quadGo.AddComponent<MeshFilter>().sharedMesh = _propBillboardQuadMesh;
+            MeshRenderer mr = quadGo.AddComponent<MeshRenderer>();
+            mr.shadowCastingMode = ShadowCastingMode.On;
+            mr.receiveShadows = true;
+            PixelBillboard bb = quadGo.AddComponent<PixelBillboard>();
 
-            GameObject emberGo = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            emberGo.name = "TorchEmber";
-            emberGo.transform.SetParent(root.transform, false);
-            emberGo.transform.localPosition = new Vector3(0f, 0.72f, 0f);
-            emberGo.transform.localScale = new Vector3(0.16f, 0.22f, 0.16f);
-            DestroyCollider(emberGo);
-            MeshRenderer emberRenderer = emberGo.GetComponent<MeshRenderer>();
-            emberRenderer.shadowCastingMode = ShadowCastingMode.Off;
-            emberRenderer.receiveShadows = false;
-
-            GameObject lightGo = new GameObject("TorchLight");
+            GameObject lightGo = new GameObject("CampfireLight");
             lightGo.transform.SetParent(root.transform, false);
-            lightGo.transform.localPosition = new Vector3(0f, 1.35f, -0.45f);
-            Light pointLight = lightGo.AddComponent<Light>();
-            pointLight.type = LightType.Point;
-            pointLight.color = new Color(1.0f, 0.580f, 0.239f, 1f);
-            pointLight.range = 7.5f;
-            pointLight.intensity = 6.2f;
-            pointLight.shadows = LightShadows.None;
+            lightGo.transform.localPosition = new Vector3(0f, 0.95f, -0.25f);
+            Light light = lightGo.AddComponent<Light>();
+            light.type = LightType.Point;
+            light.color = new Color(1.0f, 0.56f, 0.20f, 1f);
+            light.range = 6.5f;
+            light.intensity = 3.2f;
+            light.shadows = LightShadows.None;
 
             BywaterTorchFlicker flicker = lightGo.AddComponent<BywaterTorchFlicker>();
-            flicker.baseIntensity = 6.2f;
-            flicker.flickerAmplitude = 0.75f;
-            flicker.flickerSpeed = 6.5f;
-            flicker.emberTransform = emberGo.transform;
+            flicker.baseIntensity = 3.2f;
+            flicker.flickerAmplitude = 0.55f;
+            flicker.flickerSpeed = 6.8f;
 
-            return new TorchPropEntry
+            root.SetActive(false);
+            _campfireEntry = new CampfireEntry
             {
                 Root = root,
-                StandRenderer = standRenderer,
-                BowlRenderer = bowlRenderer,
-                QuadRenderer = quadRenderer,
-                EmberRenderer = emberRenderer,
-                PointLight = pointLight,
+                BillboardRenderer = mr,
+                Billboard = bb,
+                PointLight = light,
                 Flicker = flicker
             };
         }
 
-        private PortalMarkerEntry CreatePortalMarker(int index)
+        private void EnsureArenaBorderLine()
         {
-            GameObject root = new GameObject("PortalRune_" + index);
-            root.transform.SetParent(_portalContainer, false);
-
-            GameObject runeGo = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            runeGo.name = "RuneFloor";
-            runeGo.transform.SetParent(root.transform, false);
-            runeGo.transform.localPosition = new Vector3(0f, 0.024f, 0f);
-            runeGo.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-            runeGo.transform.localScale = new Vector3(0.86f, 0.86f, 1f);
-            DestroyCollider(runeGo);
-            MeshRenderer runeRenderer = runeGo.GetComponent<MeshRenderer>();
-            runeRenderer.shadowCastingMode = ShadowCastingMode.Off;
-            runeRenderer.receiveShadows = false;
-
-            GameObject pillarGo = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            pillarGo.name = "RuneBeacon";
-            pillarGo.transform.SetParent(root.transform, false);
-            pillarGo.transform.localPosition = new Vector3(-0.34f, 0.425f, 0.34f);
-            pillarGo.transform.localScale = new Vector3(0.16f, 0.85f, 0.16f);
-            DestroyCollider(pillarGo);
-            MeshRenderer pillarRenderer = pillarGo.GetComponent<MeshRenderer>();
-            pillarRenderer.shadowCastingMode = ShadowCastingMode.Off;
-            pillarRenderer.receiveShadows = false;
-
-            return new PortalMarkerEntry
+            if (_arenaBorderLine != null)
             {
-                Root = root,
-                RuneQuad = runeRenderer,
-                BeaconPillar = pillarRenderer
-            };
-        }
-
-        private void EnsureArenaMarkers()
-        {
-            while (_arenaBlocks.Count < 8)
-            {
-                GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                go.name = "ArenaMarker_" + _arenaBlocks.Count;
-                go.transform.SetParent(_arenaContainer, false);
-                DestroyCollider(go);
-                MeshRenderer r = go.GetComponent<MeshRenderer>();
-                r.shadowCastingMode = ShadowCastingMode.Off;
-                r.receiveShadows = false;
-                go.SetActive(false);
-                _arenaBlocks.Add(r);
+                return;
             }
+
+            GameObject go = new GameObject("CombatArenaBorder");
+            go.transform.SetParent(_arenaContainer, false);
+            _arenaBorderLine = go.AddComponent<LineRenderer>();
+            _arenaBorderLine.useWorldSpace = true;
+            _arenaBorderLine.loop = true;
+            _arenaBorderLine.startWidth = 0.10f;
+            _arenaBorderLine.endWidth = 0.10f;
+            _arenaBorderLine.numCornerVertices = 2;
+            _arenaBorderLine.shadowCastingMode = ShadowCastingMode.Off;
+            _arenaBorderLine.receiveShadows = false;
+
+            Color borderColor = new Color(0.98f, 0.78f, 0.22f, 0.85f);
+            _arenaBorderLine.startColor = borderColor;
+            _arenaBorderLine.endColor = borderColor;
+
+            if (_arenaBorderMaterial == null)
+            {
+                if (_catalog != null && _catalog.overlayBaseMaterial != null)
+                {
+                    _arenaBorderMaterial = new Material(_catalog.overlayBaseMaterial);
+                }
+                else
+                {
+                    Shader shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default");
+                    _arenaBorderMaterial = new Material(shader);
+                }
+                _arenaBorderMaterial.name = "CombatArenaBorder_Mat";
+                _arenaBorderMaterial.hideFlags = HideFlags.HideAndDontSave;
+                if (_arenaBorderMaterial.HasProperty(BaseColorId)) _arenaBorderMaterial.SetColor(BaseColorId, borderColor);
+                if (_arenaBorderMaterial.HasProperty(ColorId)) _arenaBorderMaterial.SetColor(ColorId, borderColor);
+            }
+
+            _arenaBorderLine.sharedMaterial = _arenaBorderMaterial;
+            go.SetActive(false);
         }
 
         private void EnsureContainers()
         {
-            if (_floorContainer == null) _floorContainer = CreateChildContainer("Floors");
-            if (_structureContainer == null) _structureContainer = CreateChildContainer("Structures");
             if (_propsContainer == null) _propsContainer = CreateChildContainer("Props");
-            if (_torchContainer == null) _torchContainer = CreateChildContainer("Torches");
+            if (_bridgesContainer == null) _bridgesContainer = CreateChildContainer("Bridges");
+            if (_torchLightContainer == null) _torchLightContainer = CreateChildContainer("TorchLights");
             if (_portalContainer == null) _portalContainer = CreateChildContainer("Portals");
             if (_arenaContainer == null) _arenaContainer = CreateChildContainer("CombatArenaFrame");
+        }
 
-            if (_terrainMeshFilter == null || _terrainMeshRenderer == null)
+        private void EnsureCartographyComponents()
+        {
+            if (_elevationBuilder == null)
             {
-                Transform terrainTransform = CreateChildContainer("TerrainGround");
-                _terrainMeshFilter = terrainTransform.GetComponent<MeshFilter>();
-                if (_terrainMeshFilter == null)
-                {
-                    _terrainMeshFilter = terrainTransform.gameObject.AddComponent<MeshFilter>();
-                }
-
-                _terrainMeshRenderer = terrainTransform.GetComponent<MeshRenderer>();
-                if (_terrainMeshRenderer == null)
-                {
-                    _terrainMeshRenderer = terrainTransform.gameObject.AddComponent<MeshRenderer>();
-                }
-
-                _terrainMeshRenderer.shadowCastingMode = ShadowCastingMode.Off;
-                _terrainMeshRenderer.receiveShadows = true;
-                terrainTransform.gameObject.SetActive(false);
+                Transform t = CreateChildContainer("CartographyTerrain");
+                _elevationBuilder = t.GetComponent<BywaterElevationBuilder>() ?? t.gameObject.AddComponent<BywaterElevationBuilder>();
             }
 
-            if (_groundScatter == null)
+            if (_foliageScatter == null)
             {
-                Transform scatterTransform = CreateChildContainer("GroundScatter");
-                _groundScatter = scatterTransform.GetComponent<BywaterGroundScatter>();
-                if (_groundScatter == null)
-                {
-                    _groundScatter = scatterTransform.gameObject.AddComponent<BywaterGroundScatter>();
-                }
+                Transform t = CreateChildContainer("CartographyFoliage");
+                _foliageScatter = t.GetComponent<BywaterFoliageScatter>() ?? t.gameObject.AddComponent<BywaterFoliageScatter>();
+            }
+
+            if (_topDownLightmap == null)
+            {
+                Transform t = CreateChildContainer("CartographyTopDownLightmap");
+                _topDownLightmap = t.GetComponent<BywaterTopDownLightmap>() ?? t.gameObject.AddComponent<BywaterTopDownLightmap>();
+            }
+
+            if (_heroAnchor == null)
+            {
+                _heroAnchor = CreateChildContainer("CartographyHeroAnchor");
+            }
+
+            if (_dioramaController == null)
+            {
+                Transform t = CreateChildContainer("CartographyDioramaController");
+                _dioramaController = t.GetComponent<BywaterDioramaController>() ?? t.gameObject.AddComponent<BywaterDioramaController>();
+                _dioramaController.enableDemoPatrol = false;
             }
         }
 
-        private void SyncScatterMaterials()
+        private void EnsurePartyLantern()
         {
-            if (_groundScatter == null)
+            if (_partyLantern != null)
             {
                 return;
             }
 
-            Material grassMat = _catalog != null && _catalog.grassTuftMaterial != null
-                ? _catalog.grassTuftMaterial
-                : (_fallbackGrassTuftMat ??= BywaterGroundScatter.CreateDefaultGrassTuftMaterial());
-
-            Material flowerMat = _catalog != null && _catalog.wildflowerTuftMaterial != null
-                ? _catalog.wildflowerTuftMaterial
-                : (_fallbackFlowerTuftMat ??= BywaterGroundScatter.CreateDefaultFlowerMaterial());
-
-            Material pebbleMat = _catalog != null && _catalog.pebbleScatterMaterial != null
-                ? _catalog.pebbleScatterMaterial
-                : (_fallbackPebbleScatterMat ??= BywaterGroundScatter.CreateDefaultPebbleMaterial());
-
-            _groundScatter.SetMaterials(grassMat, flowerMat, pebbleMat);
-        }
-
-        private Material ResolveTerrainBlendMaterial(TileMapData map)
-        {
-            if (_catalog == null || map == null)
+            Transform existing = transform.Find("PartyLantern");
+            if (existing != null)
             {
-                return null;
-            }
-
-            Material mat = map.IsDungeon
-                ? _catalog.terrainBlendDungeonMaterial
-                : _catalog.terrainBlendOverworldMaterial;
-            if (mat == null || !mat.HasProperty(Layer0AlbedoId) || mat.GetTexture(Layer0AlbedoId) == null)
-            {
-                return null;
-            }
-
-            return mat;
-        }
-
-        private void ApplyTerrainPropertyBlock()
-        {
-            if (_terrainMeshRenderer == null || _currentMap == null || _splatTexture == null)
-            {
-                return;
-            }
-
-            _terrainPropBlock ??= new MaterialPropertyBlock();
-            _terrainPropBlock.Clear();
-            _terrainPropBlock.SetTexture(SplatMapId, _splatTexture);
-            _terrainPropBlock.SetVector(WorldBoundsId, new Vector4(
-                -0.5f,
-                -(_currentMap.Height - 0.5f),
-                1.0f / Mathf.Max(1, _currentMap.Width),
-                1.0f / Mathf.Max(1, _currentMap.Height)));
-            _terrainPropBlock.SetFloat(GridHintStrengthId, _terrainGridHintStrength);
-            _terrainMeshRenderer.SetPropertyBlock(_terrainPropBlock);
-        }
-
-        private void EnsureSplatTexture(TileMapData map)
-        {
-            if (map == null || map.Width <= 0 || map.Height <= 0)
-            {
-                return;
-            }
-
-            int texW = map.Width * 2;
-            int texH = map.Height * 2;
-            if (_splatTexture != null &&
-                ReferenceEquals(_splatBuiltForMap, map) &&
-                _splatTexture.width == texW &&
-                _splatTexture.height == texH)
-            {
-                return;
-            }
-
-            if (_splatTexture == null || _splatTexture.width != texW || _splatTexture.height != texH)
-            {
-                DestroyResource(_splatTexture);
-                _splatTexture = new Texture2D(texW, texH, TextureFormat.RGBA32, mipChain: false, linear: true);
-                _splatTexture.name = "BywaterTerrainSplat";
-                _splatTexture.filterMode = FilterMode.Bilinear;
-                _splatTexture.wrapMode = TextureWrapMode.Clamp;
-            }
-
-            int count = texW * texH;
-            Color[] raw = new Color[count];
-            bool isDungeon = map.IsDungeon;
-
-            for (int sy = 0; sy < texH; sy++)
-            {
-                int y = sy >> 1;
-                int subY = sy & 1;
-                for (int sx = 0; sx < texW; sx++)
+                _partyLantern = existing.GetComponent<Light>();
+                if (_partyLantern != null)
                 {
-                    int x = sx >> 1;
-                    int subX = sx & 1;
-                    BywaterTileKind kind = BywaterTileClassifier.Classify(map, x, y);
-
-                    Color w;
-                    if (isDungeon)
-                    {
-                        if (kind == BywaterTileKind.DungeonWall || kind == BywaterTileKind.WallBlock)
-                        {
-                            w = new Color(0f, 1f, 0f, 0f);
-                        }
-                        else
-                        {
-                            int edgeNx = subX == 0 ? x - 1 : x + 1;
-                            int edgeNy = subY == 0 ? y - 1 : y + 1;
-                            bool subAdjacentWall = IsDungeonWallTile(map, edgeNx, y)
-                                || IsDungeonWallTile(map, x, edgeNy)
-                                || IsDungeonWallTile(map, edgeNx, edgeNy);
-
-                            if (subAdjacentWall)
-                            {
-                                w = new Color(0.54f, 0.28f, 0.18f, 0f);
-                            }
-                            else if (IsDungeonWallTile(map, x - 1, y)
-                                || IsDungeonWallTile(map, x + 1, y)
-                                || IsDungeonWallTile(map, x, y - 1)
-                                || IsDungeonWallTile(map, x, y + 1))
-                            {
-                                w = new Color(0.78f, 0.14f, 0.08f, 0f);
-                            }
-                            else
-                            {
-                                w = new Color(1f, 0f, 0f, 0f);
-                            }
-                        }
-                    }
-                    else
-                    {
-                        if (kind == BywaterTileKind.ShallowWater)
-                        {
-                            w = new Color(0f, 0f, 0f, 1f);
-                        }
-                        else
-                        {
-                            switch (kind)
-                            {
-                                case BywaterTileKind.Cobblestone:
-                                case BywaterTileKind.TownBuildingDoor:
-                                case BywaterTileKind.TownBuildingSolid:
-                                    w = new Color(0f, 1f, 0f, 0f);
-                                    break;
-                                case BywaterTileKind.DirtPath:
-                                    w = new Color(0f, 0f, 1f, 0f);
-                                    break;
-                                case BywaterTileKind.WallBlock:
-                                {
-                                    BywaterOutdoorPropKind prop = BywaterTileClassifier.ClassifyOutdoorProp(map, x, y, out _);
-                                    w = (prop == BywaterOutdoorPropKind.CottageFacade || prop == BywaterOutdoorPropKind.StoneFence)
-                                        ? new Color(0.25f, 0.75f, 0f, 0f)
-                                        : new Color(1f, 0f, 0f, 0f);
-                                    break;
-                                }
-                                default:
-                                    w = new Color(1f, 0f, 0f, 0f);
-                                    break;
-                            }
-
-                            // Smooth shoreline transition within 1.5 tiles of ShallowWater
-                            float subWorldX = x + (subX == 0 ? -0.25f : 0.25f);
-                            float subTileY = y + (subY == 0 ? -0.25f : 0.25f);
-                            float minDistSq = float.MaxValue;
-                            for (int dy = -2; dy <= 2; dy++)
-                            {
-                                int wy = y + dy;
-                                if (wy < 0 || wy >= map.Height) continue;
-                                for (int dx = -2; dx <= 2; dx++)
-                                {
-                                    int wx = x + dx;
-                                    if (wx < 0 || wx >= map.Width) continue;
-                                    if (BywaterTileClassifier.Classify(map, wx, wy) == BywaterTileKind.ShallowWater)
-                                    {
-                                        float ddx = wx - subWorldX;
-                                        float ddy = wy - subTileY;
-                                        float distSq = ddx * ddx + ddy * ddy;
-                                        if (distSq < minDistSq)
-                                        {
-                                            minDistSq = distSq;
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (minDistSq <= 1.55f * 1.55f)
-                            {
-                                float dist = Mathf.Sqrt(minDistSq);
-                                float bank = Mathf.Lerp(0.80f, 0.45f, Mathf.Clamp01((dist - 0.70f) / 0.85f));
-                                if (kind == BywaterTileKind.Cobblestone)
-                                {
-                                    bank *= 0.45f;
-                                }
-
-                                float landScale = 1f - bank;
-                                w.r *= landScale;
-                                w.g *= landScale;
-                                w.b *= landScale;
-                                w.a = Mathf.Max(w.a, bank);
-                            }
-                        }
-                    }
-
-                    raw[sy * texW + sx] = w;
+                    return;
                 }
             }
 
-            // Gentle 3x3 smoothing while keeping tile centers crisp; flip Y so row 0 maps to top (world Z = 0)
-            Color[] finalPixels = new Color[count];
-            for (int sy = 0; sy < texH; sy++)
-            {
-                int py = (texH - 1) - sy;
-                for (int sx = 0; sx < texW; sx++)
-                {
-                    Color acc = raw[sy * texW + sx] * 0.56f;
-                    for (int oy = -1; oy <= 1; oy++)
-                    {
-                        int ny = Mathf.Clamp(sy + oy, 0, texH - 1);
-                        for (int ox = -1; ox <= 1; ox++)
-                        {
-                            if (ox == 0 && oy == 0) continue;
-                            int nx = Mathf.Clamp(sx + ox, 0, texW - 1);
-                            float weight = (ox == 0 || oy == 0) ? 0.08f : 0.03f;
-                            acc += raw[ny * texW + nx] * weight;
-                        }
-                    }
-
-                    float sum = acc.r + acc.g + acc.b + acc.a;
-                    if (sum > 0.0001f)
-                    {
-                        float inv = 1f / sum;
-                        acc.r *= inv;
-                        acc.g *= inv;
-                        acc.b *= inv;
-                        acc.a *= inv;
-                    }
-                    else
-                    {
-                        acc = new Color(1f, 0f, 0f, 0f);
-                    }
-
-                    finalPixels[py * texW + sx] = acc;
-                }
-            }
-
-            _splatTexture.SetPixels(finalPixels);
-            _splatTexture.Apply(updateMipmaps: false, makeNoLongerReadable: false);
-            _splatBuiltForMap = map;
+            GameObject go = new GameObject("PartyLantern");
+            go.transform.SetParent(transform, false);
+            _partyLantern = go.AddComponent<Light>();
+            _partyLantern.type = LightType.Point;
+            _partyLantern.color = new Color(1.0f, 0.635f, 0.290f, 1f);
+            _partyLantern.intensity = 2.8f;
+            _partyLantern.range = 11.0f;
+            _partyLantern.shadows = LightShadows.Soft;
+            _partyLantern.shadowStrength = 0.65f;
         }
 
-        private static bool IsDungeonWallTile(TileMapData map, int x, int y)
+        private void EnsureSharedMeshes()
         {
-            if (!map.InBounds(x, y))
+            if (_propBillboardQuadMesh == null)
             {
-                return true;
-            }
-
-            BywaterTileKind kind = BywaterTileClassifier.Classify(map, x, y);
-            return kind == BywaterTileKind.DungeonWall || kind == BywaterTileKind.WallBlock;
-        }
-
-        private void UpdateTerrainMesh(TileMapData map, int minX, int maxX, int minY, int maxY)
-        {
-            if (_terrainMeshFilter == null)
-            {
-                return;
-            }
-
-            if (_terrainMesh == null)
-            {
-                _terrainMesh = new Mesh
+                _propBillboardQuadMesh = new Mesh
                 {
-                    name = "BywaterTerrainWindowMesh"
+                    name = "Cartography_RuntimePropQuad",
+                    hideFlags = HideFlags.HideAndDontSave
                 };
-                _terrainMesh.MarkDynamic();
-            }
-
-            int gMinX = Mathf.Max(0, minX - 1);
-            int gMaxX = Mathf.Min(map.Width - 1, maxX + 1);
-            int gMinY = Mathf.Max(0, minY - 1);
-            int gMaxY = Mathf.Min(map.Height - 1, maxY + 1);
-
-            int quadsX = (gMaxX - gMinX + 1) * 2;
-            int quadsZ = (gMaxY - gMinY + 1) * 2;
-            int vertsX = quadsX + 1;
-            int vertsZ = quadsZ + 1;
-
-            _terrainVertices.Clear();
-            _terrainUvs.Clear();
-            _terrainTriangles.Clear();
-
-            for (int iz = 0; iz < vertsZ; iz++)
-            {
-                float vz = -(gMinY - 0.5f) - iz * 0.5f;
-                for (int ix = 0; ix < vertsX; ix++)
+                _propBillboardQuadMesh.SetVertices(new[]
                 {
-                    float vx = (gMinX - 0.5f) + ix * 0.5f;
-                    float vy = ComputeTerrainVertexHeight(map, gMinX, gMinY, ix, iz);
-                    _terrainVertices.Add(new Vector3(vx, vy, vz));
-                    _terrainUvs.Add(new Vector2(vx, -vz));
-                }
-            }
-
-            for (int qz = 0; qz < quadsZ; qz++)
-            {
-                int row0 = qz * vertsX;
-                int row1 = (qz + 1) * vertsX;
-                for (int qx = 0; qx < quadsX; qx++)
+                    new Vector3(-0.5f, 0f, 0f),
+                    new Vector3( 0.5f, 0f, 0f),
+                    new Vector3( 0.5f, 1f, 0f),
+                    new Vector3(-0.5f, 1f, 0f)
+                });
+                _propBillboardQuadMesh.SetNormals(new[]
                 {
-                    int v00 = row0 + qx;
-                    int v10 = v00 + 1;
-                    int v01 = row1 + qx;
-                    int v11 = v01 + 1;
-
-                    _terrainTriangles.Add(v00);
-                    _terrainTriangles.Add(v10);
-                    _terrainTriangles.Add(v11);
-
-                    _terrainTriangles.Add(v00);
-                    _terrainTriangles.Add(v11);
-                    _terrainTriangles.Add(v01);
-                }
-            }
-
-            _terrainMesh.Clear();
-            _terrainMesh.SetVertices(_terrainVertices);
-            _terrainMesh.SetUVs(0, _terrainUvs);
-            _terrainMesh.SetTriangles(_terrainTriangles, 0, true);
-            _terrainMesh.RecalculateNormals();
-            _terrainMesh.RecalculateTangents();
-            _terrainMesh.RecalculateBounds();
-            _terrainMeshFilter.sharedMesh = _terrainMesh;
-        }
-
-        private static float ComputeTerrainVertexHeight(TileMapData map, int gMinX, int gMinY, int ix, int iz)
-        {
-            int txStart = (ix & 1) == 1 ? gMinX + (ix >> 1) : gMinX + (ix >> 1) - 1;
-            int txEnd = (ix & 1) == 1 ? txStart : txStart + 1;
-            int tyStart = (iz & 1) == 1 ? gMinY + (iz >> 1) : gMinY + (iz >> 1) - 1;
-            int tyEnd = (iz & 1) == 1 ? tyStart : tyStart + 1;
-
-            int totalTiles = 0;
-            int waterTiles = 0;
-            for (int ty = tyStart; ty <= tyEnd; ty++)
-            {
-                for (int tx = txStart; tx <= txEnd; tx++)
+                    Vector3.back, Vector3.back, Vector3.back, Vector3.back
+                });
+                _propBillboardQuadMesh.SetUVs(0, new[]
                 {
-                    totalTiles++;
-                    if (map.InBounds(tx, ty) && BywaterTileClassifier.Classify(map, tx, ty) == BywaterTileKind.ShallowWater)
-                    {
-                        waterTiles++;
-                    }
-                }
+                    new Vector2(0f, 0f),
+                    new Vector2(1f, 0f),
+                    new Vector2(1f, 1f),
+                    new Vector2(0f, 1f)
+                });
+                _propBillboardQuadMesh.SetUVs(1, new[]
+                {
+                    new Vector2(0f, 0f),
+                    new Vector2(1f, 0f),
+                    new Vector2(1f, 1f),
+                    new Vector2(0f, 1f)
+                });
+                _propBillboardQuadMesh.SetTriangles(new[] { 0, 2, 1, 0, 3, 2 }, 0);
+                _propBillboardQuadMesh.RecalculateBounds();
             }
 
-            if (waterTiles == 0)
+            if (_groundQuadMesh == null)
             {
-                return 0f;
-            }
-
-            if (waterTiles == totalTiles)
-            {
-                return -0.24f;
-            }
-
-            float ratio = waterTiles / (float)totalTiles;
-            return Mathf.Lerp(-0.01f, -0.07f, ratio);
-        }
-
-        private void OnDestroy()
-        {
-            DestroyResource(_terrainMesh);
-            _terrainMesh = null;
-
-            DestroyResource(_splatTexture);
-            _splatTexture = null;
-
-            DestroyResource(_fallbackGrassTuftMat);
-            _fallbackGrassTuftMat = null;
-
-            DestroyResource(_fallbackFlowerTuftMat);
-            _fallbackFlowerTuftMat = null;
-
-            DestroyResource(_fallbackPebbleScatterMat);
-            _fallbackPebbleScatterMat = null;
-        }
-
-        private static void DestroyResource(Object obj)
-        {
-            if (obj == null)
-            {
-                return;
-            }
-
-            if (Application.isPlaying)
-            {
-                Destroy(obj);
-            }
-            else
-            {
-                DestroyImmediate(obj);
+                _groundQuadMesh = new Mesh
+                {
+                    name = "Cartography_RuntimeGroundQuad",
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+                _groundQuadMesh.SetVertices(new[]
+                {
+                    new Vector3(-0.5f, 0f, -0.5f),
+                    new Vector3( 0.5f, 0f, -0.5f),
+                    new Vector3( 0.5f, 0f,  0.5f),
+                    new Vector3(-0.5f, 0f,  0.5f)
+                });
+                _groundQuadMesh.SetNormals(new[]
+                {
+                    Vector3.up, Vector3.up, Vector3.up, Vector3.up
+                });
+                _groundQuadMesh.SetUVs(0, new[]
+                {
+                    new Vector2(0f, 0f),
+                    new Vector2(1f, 0f),
+                    new Vector2(1f, 1f),
+                    new Vector2(0f, 1f)
+                });
+                _groundQuadMesh.SetTriangles(new[] { 0, 2, 1, 0, 3, 2 }, 0);
+                _groundQuadMesh.RecalculateBounds();
             }
         }
 
@@ -2205,37 +1108,254 @@ namespace Realmz.World
             return go.transform;
         }
 
-        private void EnsurePartyLantern()
+        private static Camera ResolveActiveCamera()
         {
-            if (_partyLantern != null)
+            return Camera.main;
+        }
+
+        private static float EvalBridgeArchY(float zNorm)
+        {
+            float clamped = Mathf.Clamp(zNorm, -1f, 1f);
+            float arch = Mathf.Cos(clamped * Mathf.PI * 0.5f);
+            return 0.04f + 0.36f * arch;
+        }
+
+        private static float EvalBridgeUndersideY(float zNorm)
+        {
+            float az = Mathf.Abs(zNorm);
+            if (az < 0.62f)
+            {
+                float t = az / 0.62f;
+                return -0.52f + 0.66f * Mathf.Sqrt(Mathf.Max(0f, 1f - t * t));
+            }
+            return -0.52f;
+        }
+
+        private static Mesh BuildBridgeDeckMesh(float roadWidth, float lengthMeters)
+        {
+            const int segs = 12;
+            float halfW = roadWidth * 0.5f;
+            float halfL = lengthMeters * 0.5f;
+
+            List<Vector3> verts = new List<Vector3>(segs * 4);
+            List<Vector2> uvs = new List<Vector2>(segs * 4);
+            List<Vector2> uv1 = new List<Vector2>(segs * 4);
+            List<Color> colors = new List<Color>(segs * 4);
+            List<int> tris = new List<int>(segs * 6);
+            Color cobbleColor = new Color(0f, 0f, 1f, 0f);
+
+            for (int i = 0; i < segs; i++)
+            {
+                float t0 = (float)i / segs * 2f - 1f;
+                float t1 = (float)(i + 1) / segs * 2f - 1f;
+                float z0 = t0 * halfL;
+                float z1 = t1 * halfL;
+                float y0 = EvalBridgeArchY(t0);
+                float y1 = EvalBridgeArchY(t1);
+                float v0 = (z0 + halfL) * 0.5f;
+                float v1 = (z1 + halfL) * 0.5f;
+                float u0 = 0f;
+                float u1 = roadWidth * 0.5f;
+
+                float ao0 = Mathf.Lerp(0.96f, 0.78f, Mathf.Abs(t0));
+                float ao1 = Mathf.Lerp(0.96f, 0.78f, Mathf.Abs(t1));
+
+                AddBridgeQuad(
+                    verts, uvs, tris,
+                    new Vector3(-halfW, y0, z0),
+                    new Vector3(-halfW, y1, z1),
+                    new Vector3( halfW, y1, z1),
+                    new Vector3( halfW, y0, z0),
+                    new Vector2(u0, v0),
+                    new Vector2(u0, v1),
+                    new Vector2(u1, v1),
+                    new Vector2(u1, v0));
+
+                colors.Add(cobbleColor);
+                colors.Add(cobbleColor);
+                colors.Add(cobbleColor);
+                colors.Add(cobbleColor);
+
+                uv1.Add(new Vector2(0f, ao0));
+                uv1.Add(new Vector2(0f, ao1));
+                uv1.Add(new Vector2(0f, ao1));
+                uv1.Add(new Vector2(0f, ao0));
+            }
+
+            Mesh m = new Mesh { name = "Cartography_RuntimeBridgeDeck", hideFlags = HideFlags.HideAndDontSave };
+            m.SetVertices(verts);
+            m.SetUVs(0, uvs);
+            m.SetUVs(1, uv1);
+            m.SetColors(colors);
+            m.SetTriangles(tris, 0);
+            m.RecalculateNormals();
+            m.RecalculateTangents();
+            m.RecalculateBounds();
+            return m;
+        }
+
+        private static Mesh BuildBridgeParapetAndArchMesh(float totalWidth, float lengthMeters)
+        {
+            const int segs = 12;
+            float halfTotal = totalWidth * 0.5f;
+            float halfL = lengthMeters * 0.5f;
+            const float curbW = 0.24f;
+            const float curbRise = 0.28f;
+
+            List<Vector3> verts = new List<Vector3>(segs * 24 + 16);
+            List<Vector2> uvs = new List<Vector2>(segs * 24 + 16);
+            List<Vector2> uv1 = new List<Vector2>(segs * 24 + 16);
+            List<Color> colors = new List<Color>(segs * 24 + 16);
+            List<int> tris = new List<int>(segs * 36 + 24);
+
+            void StampAttr(float aoBot, float aoTop)
+            {
+                colors.Add(Color.clear);
+                colors.Add(Color.clear);
+                colors.Add(Color.clear);
+                colors.Add(Color.clear);
+                uv1.Add(new Vector2(1f, aoBot));
+                uv1.Add(new Vector2(1f, aoTop));
+                uv1.Add(new Vector2(1f, aoTop));
+                uv1.Add(new Vector2(1f, aoBot));
+            }
+
+            for (int side = -1; side <= 1; side += 2)
+            {
+                float xOuter = side < 0 ? -halfTotal : halfTotal - curbW;
+                float xInner = xOuter + curbW;
+                float xMin = Mathf.Min(xOuter, xInner);
+                float xMax = Mathf.Max(xOuter, xInner);
+
+                for (int i = 0; i < segs; i++)
+                {
+                    float t0 = (float)i / segs * 2f - 1f;
+                    float t1 = (float)(i + 1) / segs * 2f - 1f;
+                    float z0 = t0 * halfL;
+                    float z1 = t1 * halfL;
+                    float yTop0 = EvalBridgeArchY(t0) + curbRise;
+                    float yTop1 = EvalBridgeArchY(t1) + curbRise;
+                    float yBot0 = EvalBridgeUndersideY(t0);
+                    float yBot1 = EvalBridgeUndersideY(t1);
+                    float v0 = (z0 + halfL) * 0.5f;
+                    float v1 = (z1 + halfL) * 0.5f;
+
+                    AddBridgeQuad(verts, uvs, tris,
+                        new Vector3(xMin, yTop0, z0), new Vector3(xMin, yTop1, z1),
+                        new Vector3(xMax, yTop1, z1), new Vector3(xMax, yTop0, z0),
+                        new Vector2(0f, v0), new Vector2(0f, v1), new Vector2(0.18f, v1), new Vector2(0.18f, v0));
+                    StampAttr(0.95f, 0.95f);
+
+                    AddBridgeQuad(verts, uvs, tris,
+                        new Vector3(xMin, yBot1, z1), new Vector3(xMin, yTop1, z1),
+                        new Vector3(xMin, yTop0, z0), new Vector3(xMin, yBot0, z0),
+                        new Vector2(v1, 0f), new Vector2(v1, 0.5f), new Vector2(v0, 0.5f), new Vector2(v0, 0f));
+                    StampAttr(0.46f, 0.94f);
+
+                    AddBridgeQuad(verts, uvs, tris,
+                        new Vector3(xMax, yBot0, z0), new Vector3(xMax, yTop0, z0),
+                        new Vector3(xMax, yTop1, z1), new Vector3(xMax, yBot1, z1),
+                        new Vector2(v0, 0f), new Vector2(v0, 0.5f), new Vector2(v1, 0.5f), new Vector2(v1, 0f));
+                    StampAttr(0.46f, 0.94f);
+                }
+
+                float yEndTop = EvalBridgeArchY(-1f) + curbRise;
+                AddBridgeQuad(verts, uvs, tris,
+                    new Vector3(xMin, -0.52f, -halfL), new Vector3(xMin, yEndTop, -halfL),
+                    new Vector3(xMax, yEndTop, -halfL), new Vector3(xMax, -0.52f, -halfL),
+                    new Vector2(0f, 0f), new Vector2(0f, 0.5f), new Vector2(0.2f, 0.5f), new Vector2(0.2f, 0f));
+                StampAttr(0.52f, 0.94f);
+
+                AddBridgeQuad(verts, uvs, tris,
+                    new Vector3(xMax, -0.52f, halfL), new Vector3(xMax, yEndTop, halfL),
+                    new Vector3(xMin, yEndTop, halfL), new Vector3(xMin, -0.52f, halfL),
+                    new Vector2(0f, 0f), new Vector2(0f, 0.5f), new Vector2(0.2f, 0.5f), new Vector2(0.2f, 0f));
+                StampAttr(0.52f, 0.94f);
+            }
+
+            Mesh m = new Mesh { name = "Cartography_RuntimeBridgeCurbs", hideFlags = HideFlags.HideAndDontSave };
+            m.SetVertices(verts);
+            m.SetUVs(0, uvs);
+            m.SetUVs(1, uv1);
+            m.SetColors(colors);
+            m.SetTriangles(tris, 0);
+            m.RecalculateNormals();
+            m.RecalculateTangents();
+            m.RecalculateBounds();
+            return m;
+        }
+
+        private static void AddBridgeQuad(
+            List<Vector3> verts,
+            List<Vector2> uvs,
+            List<int> tris,
+            Vector3 p0,
+            Vector3 p1,
+            Vector3 p2,
+            Vector3 p3,
+            Vector2 uv0,
+            Vector2 uv1,
+            Vector2 uv2,
+            Vector2 uv3)
+        {
+            int idx = verts.Count;
+            verts.Add(p0);
+            verts.Add(p1);
+            verts.Add(p2);
+            verts.Add(p3);
+            uvs.Add(uv0);
+            uvs.Add(uv1);
+            uvs.Add(uv2);
+            uvs.Add(uv3);
+            tris.Add(idx);
+            tris.Add(idx + 1);
+            tris.Add(idx + 2);
+            tris.Add(idx);
+            tris.Add(idx + 2);
+            tris.Add(idx + 3);
+        }
+
+        private void OnDestroy()
+        {
+            for (int i = 0; i < _bridgePool.Count; i++)
+            {
+                DestroyResource(_bridgePool[i].DeckMesh);
+                DestroyResource(_bridgePool[i].CurbMesh);
+            }
+
+            DestroyResource(_propBillboardQuadMesh);
+            _propBillboardQuadMesh = null;
+
+            DestroyResource(_groundQuadMesh);
+            _groundQuadMesh = null;
+
+            DestroyResource(_runtimeTerrainMat);
+            _runtimeTerrainMat = null;
+
+            DestroyResource(_runtimeWaterMat);
+            _runtimeWaterMat = null;
+
+            DestroyResource(_fallbackPropMaterial);
+            _fallbackPropMaterial = null;
+
+            DestroyResource(_arenaBorderMaterial);
+            _arenaBorderMaterial = null;
+        }
+
+        private static void DestroyResource(Object obj)
+        {
+            if (obj == null)
             {
                 return;
             }
 
-            GameObject go = new GameObject("PartyLantern");
-            go.transform.SetParent(transform, false);
-            _partyLantern = go.AddComponent<Light>();
-            _partyLantern.type = LightType.Point;
-            _partyLantern.color = new Color(1.0f, 0.635f, 0.290f, 1f);
-            _partyLantern.intensity = 2.4f;
-            _partyLantern.range = 5.2f;
-            _partyLantern.shadows = LightShadows.Soft;
-            _partyLantern.shadowStrength = 0.65f;
-        }
-
-        private static void DestroyCollider(GameObject go)
-        {
-            Collider col = go.GetComponent<Collider>();
-            if (col != null)
+            if (Application.isPlaying)
             {
-                if (Application.isPlaying)
-                {
-                    Destroy(col);
-                }
-                else
-                {
-                    DestroyImmediate(col);
-                }
+                Destroy(obj);
+            }
+            else
+            {
+                DestroyImmediate(obj);
             }
         }
     }

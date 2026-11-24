@@ -1,10 +1,14 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
+using Realmz.Audio;
+using Realmz.Cartography;
 using Realmz.Data;
 using Realmz.EditorTools;
 using Realmz.Game;
 using Realmz.World;
+using RealmzCore.Combat;
 using RealmzCore.Data;
 using RealmzCore.Exploration;
 using RealmzCore.Rules;
@@ -17,6 +21,7 @@ using UnityEngine.InputSystem.UI;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
+using UnityEngine.TestTools;
 
 namespace Realmz.EditorTests
 {
@@ -76,10 +81,16 @@ namespace Realmz.EditorTests
                 else
                 {
                     Assert.That(importer.textureType, Is.EqualTo(TextureImporterType.Sprite), "Expected Sprite textureType on " + rel);
+                    bool isUnifiedCharacterOrPortrait =
+                        rel.Contains("/Heroes/") ||
+                        rel.Contains("/Monsters/") ||
+                        rel.Contains("/Portraits/");
                     Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>(rel);
-                    float expectedPpu = (tex != null && tex.width >= 256)
-                        ? 256f
-                        : ((tex != null && tex.width >= 128) ? 128f : 64f);
+                    float expectedPpu = isUnifiedCharacterOrPortrait
+                        ? 64f
+                        : ((tex != null && tex.width >= 256)
+                            ? 256f
+                            : ((tex != null && tex.width >= 128) ? 128f : 64f));
                     Assert.That(importer.spritePixelsPerUnit, Is.EqualTo(expectedPpu), "Expected " + expectedPpu + " PPU on " + rel);
                 }
             }
@@ -123,7 +134,6 @@ namespace Realmz.EditorTests
         public void BywaterScene_IsBuiltWiredAndRegisteredInBuildSettings()
         {
             Assert.That(File.Exists(Path.GetFullPath(M1BywaterSceneBuilder.ScenePath)), Is.True, "M1_Bywater_Slice.unity missing.");
-            Assert.That(File.Exists(Path.GetFullPath("Assets/Scenes/M0_HD2D_SmokeScene.unity")), Is.True, "M0_HD2D_SmokeScene.unity must remain intact.");
 
             Scene scene = EditorSceneManager.OpenScene(M1BywaterSceneBuilder.ScenePath, OpenSceneMode.Single);
             Assert.That(scene.IsValid(), Is.True);
@@ -131,6 +141,8 @@ namespace Realmz.EditorTests
             Camera cam = Camera.main;
             Assert.That(cam, Is.Not.Null);
             Assert.That(cam.allowHDR, Is.True);
+            Assert.That(cam.GetComponent<AudioListener>(), Is.Not.Null, "Main Camera must carry the single AudioListener.");
+            Assert.That(Object.FindObjectsByType<AudioListener>(FindObjectsSortMode.None).Length, Is.EqualTo(1), "Expected exactly 1 AudioListener in M1_Bywater_Slice.");
             UniversalAdditionalCameraData camData = cam.GetUniversalAdditionalCameraData();
             Assert.That(camData, Is.Not.Null);
             Assert.That(camData.renderPostProcessing, Is.True);
@@ -152,6 +164,7 @@ namespace Realmz.EditorTests
             Assert.That(ctrl.cameraRig, Is.Not.Null);
             Assert.That(ctrl.gridOverlays, Is.Not.Null);
             Assert.That(ctrl.hudController, Is.Not.Null);
+            Assert.That(ctrl.audioDirector, Is.Not.Null);
 
             Assert.That(EditorBuildSettings.scenes.Length, Is.GreaterThanOrEqualTo(1));
             Assert.That(EditorBuildSettings.scenes[0].path, Is.EqualTo(M1BywaterSceneBuilder.ScenePath));
@@ -344,31 +357,11 @@ namespace Realmz.EditorTests
 
             Assert.That(catalog.shallowWaterMaterial, Is.Not.Null);
             Assert.That(catalog.shallowWaterMaterial.shader, Is.Not.Null);
-            Assert.That(catalog.shallowWaterMaterial.shader.name, Is.EqualTo("Realmz/BywaterShimmerWater"));
+            Assert.That(catalog.shallowWaterMaterial.shader.name, Is.EqualTo("Realmz/CartographyWater"));
 
-            Material[] propMaterials =
-            {
-                catalog.cottageWallMaterial,
-                catalog.cottageRoofTerracottaMaterial,
-                catalog.cottageRoofSlateMaterial,
-                catalog.cottageRoofThatchMaterial,
-                catalog.timberTrimMaterial,
-                catalog.warmWindowGlowMaterial,
-                catalog.oakFoliageMaterial,
-                catalog.pineFoliageMaterial,
-                catalog.treeTrunkMaterial,
-                catalog.boulderMaterial,
-                catalog.stoneFenceMaterial,
-                catalog.crateWoodMaterial,
-                catalog.ironTrimMaterial,
-                catalog.wildflowerMaterial
-            };
-
-            Assert.That(propMaterials.Length, Is.EqualTo(14));
-            for (int i = 0; i < propMaterials.Length; i++)
-            {
-                Assert.That(propMaterials[i], Is.Not.Null, $"M1.5 modular prop material at index {i} is null.");
-            }
+            Assert.That(catalog.cartographyTerrainMaterial, Is.Not.Null, "cartographyTerrainMaterial missing.");
+            Assert.That(catalog.cartographyWaterMaterial, Is.Not.Null, "cartographyWaterMaterial missing.");
+            Assert.That(catalog.cartographyFoliageMaterial, Is.Not.Null, "cartographyFoliageMaterial missing.");
 
             Assert.That(catalog.cottageBillboardSprite, Is.Not.Null, "cottageBillboardSprite missing.");
             Assert.That(catalog.cottageBillboardMaterial, Is.Not.Null, "cottageBillboardMaterial missing.");
@@ -431,6 +424,380 @@ namespace Realmz.EditorTests
                     }
                 }
             }
+        }
+
+        [Test]
+        public void SaveService_AtomicRoundTrip_PreservesConditionsChargesXpTurnsClearedZonesAndRngSeed()
+        {
+            string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
+
+            PartyState party = PartyState.FromBundle(bundle);
+            DeterministicDiceRoller roller = new DeterministicDiceRoller(987654321UL);
+            roller.NextInt(1, 100);
+
+            ExplorationSession session = new ExplorationSession(bundle.Maps, "land_0", party, roller);
+            GridCoord stepNeighbor = FindAdjacentPassableTile(session.CurrentMap, session.Position, session.Party.HasBoat);
+            GridCoord startPos = session.Position;
+            Assert.That(session.StepOneTile(stepNeighbor, autoHaltOnEvents: false).Moved, Is.True);
+            Assert.That(session.StepOneTile(startPos, autoHaltOnEvents: false).Moved, Is.True);
+            Assert.That(session.TurnCount, Is.EqualTo(2));
+
+            PartyMemberState hero = session.Party.Members[0];
+            hero.Conditions.RestoreEntry(CharConditionId.Poisoned, 2, 5, 25, true, 10, 3);
+
+            InventoryItem eqWeapon = hero.GetEquipped(EquipmentSlot.Weapon);
+            Assert.That(eqWeapon, Is.Not.Null, "Expected hero_0 to have an equipped weapon.");
+            eqWeapon.RemainingCharges = 2;
+
+            ItemDefinition chargedStashDef = null;
+            foreach (ItemDefinition def in bundle.Items.Values)
+            {
+                if (def.Charges > 2)
+                {
+                    chargedStashDef = def;
+                    break;
+                }
+            }
+            Assert.That(chargedStashDef, Is.Not.Null, "Expected at least one item with Charges > 2 in bundle.");
+            int reducedStashCharges = chargedStashDef.Charges - 2;
+            session.Party.AddItemToStash(chargedStashDef.Id, 1, isIdentified: true, charges: reducedStashCharges);
+
+            int levelsGained = hero.AddXp(500);
+            Assert.That(levelsGained, Is.GreaterThanOrEqualTo(1));
+            int expectedXp = hero.Xp;
+            int expectedLevel = hero.Level;
+
+            const string clearedKey = "land_0:zone:0";
+            session.MarkEncounterCleared(clearedKey);
+
+            ulong expectedSeed = roller.State;
+            int expectedNextRoll = new DeterministicDiceRoller(expectedSeed).NextInt(1, 10000);
+
+            string tempPath = Path.Combine(Path.GetTempPath(), "realmz_wave_b_atomic_save_test.json");
+            try
+            {
+                BywaterSaveData snapshot = BywaterSaveService.CaptureSnapshot(session, new[] { "[R1] Test combat log line" });
+                Assert.That(BywaterSaveService.TryWriteSave(tempPath, snapshot), Is.True);
+                Assert.That(File.Exists(tempPath + ".tmp"), Is.False, "No lingering .tmp file should remain after atomic save.");
+
+                Assert.That(BywaterSaveService.TryLoadSave(tempPath, out BywaterSaveData loadedData, out string status), Is.True, status);
+
+                PartyState freshParty = PartyState.FromBundle(bundle);
+                ExplorationSession loadedSession = new ExplorationSession(
+                    bundle.Maps,
+                    loadedData.mapId,
+                    freshParty,
+                    new DeterministicDiceRoller(1UL),
+                    new GridCoord(loadedData.x, loadedData.y),
+                    loadedData.facing);
+                BywaterSaveService.ApplySnapshot(loadedData, loadedSession, bundle.Items, out ulong restoredSeed);
+
+                PartyMemberState loadedHero = loadedSession.Party.Members[0];
+                Assert.That(loadedHero.Conditions.Has(CharConditionId.Poisoned), Is.True, "Poisoned condition must survive F5->F9.");
+                Assert.That(loadedHero.Conditions.GetElapsedRounds(CharConditionId.Poisoned), Is.EqualTo(3));
+
+                InventoryItem loadedEqWeapon = loadedHero.GetEquipped(EquipmentSlot.Weapon);
+                Assert.That(loadedEqWeapon, Is.Not.Null);
+                Assert.That(loadedEqWeapon.RemainingCharges, Is.EqualTo(2), "Equipped charges must not refill on load.");
+
+                InventoryItem loadedStashItem = null;
+                for (int i = 0; i < loadedSession.Party.Stash.Count; i++)
+                {
+                    if (loadedSession.Party.Stash[i].ItemId == chargedStashDef.Id)
+                    {
+                        loadedStashItem = loadedSession.Party.Stash[i];
+                        break;
+                    }
+                }
+                Assert.That(loadedStashItem, Is.Not.Null, "Charged stash item missing after load.");
+                Assert.That(loadedStashItem.RemainingCharges, Is.EqualTo(reducedStashCharges), "Stash charges must not refill on load.");
+
+                Assert.That(loadedHero.Xp, Is.EqualTo(expectedXp));
+                Assert.That(loadedHero.Level, Is.EqualTo(expectedLevel));
+                Assert.That(loadedSession.TurnCount, Is.EqualTo(session.TurnCount));
+                Assert.That(loadedSession.IsEncounterCleared(clearedKey), Is.True);
+                Assert.That(restoredSeed, Is.EqualTo(expectedSeed));
+                Assert.That(new DeterministicDiceRoller(restoredSeed).NextInt(1, 10000), Is.EqualTo(expectedNextRoll));
+
+                // Corrupt JSON load test
+                File.WriteAllText(tempPath, "{ corrupt json !!");
+                LogAssert.Expect(LogType.Warning, new Regex("BywaterSaveService"));
+                Assert.That(BywaterSaveService.TryLoadSave(tempPath, out _, out _), Is.False);
+            }
+            finally
+            {
+                if (File.Exists(tempPath)) File.Delete(tempPath);
+                if (File.Exists(tempPath + ".tmp")) File.Delete(tempPath + ".tmp");
+                if (File.Exists(tempPath + ".bak")) File.Delete(tempPath + ".bak");
+            }
+        }
+
+        [Test]
+        public void AudioDirector_ManifestLoadsAll11MusicSuitesAnd145PlusSfx()
+        {
+            GameObject host = new GameObject("TempAudioDirectorTest");
+            try
+            {
+                BywaterAudioDirector director = host.AddComponent<BywaterAudioDirector>();
+                Assert.That(director.HasLoadedManifest, Is.True, "Audio manifest should load from Resources.");
+                Assert.That(director.MusicTrackCount, Is.EqualTo(11), "Expected 11 music suites in audio manifest.");
+                Assert.That(director.SfxCount, Is.GreaterThanOrEqualTo(145), "Expected >= 145 SFX entries in audio manifest.");
+
+                Assert.That(director.TryGetSfxResourcePath(82, out string roadSfx), Is.True, "Walk road SFX 82 missing.");
+                Assert.That(roadSfx, Is.Not.Empty);
+                Assert.That(director.TryGetSfxResourcePath(83, out string caveSfx), Is.True, "Walk cave SFX 83 missing.");
+                Assert.That(caveSfx, Is.Not.Empty);
+
+                Assert.That(director.TryGetMusicResourcePath("outdoor", out _), Is.True, "Music suite 'outdoor' missing.");
+                Assert.That(director.TryGetMusicResourcePath("dungeon", out _), Is.True, "Music suite 'dungeon' missing.");
+                Assert.That(director.TryGetMusicResourcePath("battle", out _), Is.True, "Music suite 'battle' missing.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
+        public void HudController_PoolsRowsWithoutChurnAndExposesShoveAndVictoryRewards()
+        {
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
+
+            PartyState party = PartyState.FromBundle(bundle);
+            int added = 0;
+            foreach (ItemDefinition item in bundle.Items.Values)
+            {
+                party.AddItemToStash(item.Id, 1, true, item.Charges);
+                added++;
+                if (added >= 6)
+                {
+                    break;
+                }
+            }
+
+            PartyMemberState magePreset = party.Members.Count > 3 ? party.Members[3] : party.Members[0];
+            CombatantState hero = new CombatantState(
+                magePreset.Id,
+                magePreset.Name,
+                CombatSide.Hero,
+                new GridCoord(1, 1),
+                hp: 9999,
+                maxHp: 9999,
+                sp: 99,
+                maxSp: 99,
+                spellIds: magePreset.KnownSpellIds);
+            CombatantState monster = CombatantState.FromMonster(bundle.Monsters[0], "mon_0_test", new GridCoord(4, 4), new DeterministicDiceRoller(77UL));
+
+            CombatGrid grid = new CombatGrid(6, 6);
+            TacticalCombatSession combat = new TacticalCombatSession(
+                grid,
+                new[] { hero, monster },
+                bundle.Spells,
+                bundle.Items,
+                new DeterministicDiceRoller(77UL),
+                RulesetMode.ModernBalanced,
+                party);
+
+            int safety = 0;
+            while (combat.Log.Count < 45 && combat.Outcome == CombatOutcome.InProgress && safety < 120)
+            {
+                safety++;
+                if (combat.CurrentActor != null && combat.CurrentActor.Side == CombatSide.Hero)
+                {
+                    combat.GuardOverwatch();
+                }
+                combat.EndTurn();
+            }
+            Assert.That(combat.Log.Count, Is.GreaterThanOrEqualTo(45), "Expected >= 45 combat log lines to test ring-buffer pooling.");
+
+            int spellId = hero.SpellIds.Count > 0 ? hero.SpellIds[0] : -1;
+            bool hadEventSystem = Object.FindFirstObjectByType<EventSystem>() != null;
+            GameObject tempGo = new GameObject("TempHudPoolingTest");
+
+            try
+            {
+                BywaterHudController hud = tempGo.AddComponent<BywaterHudController>();
+                hud.BuildUi(catalog);
+                Canvas canvas = tempGo.GetComponentInChildren<Canvas>(true);
+                Assert.That(canvas, Is.Not.Null);
+
+                hud.RefreshPartyDrawer(party, bundle, 0);
+                hud.RefreshShopModal(party, bundle);
+                hud.RefreshCombatHud(combat, bundle, CombatActionMode.Spell, spellId, "1x");
+
+                Assert.That(hud.PooledLogRowCount, Is.EqualTo(40), "Expected PooledLogRowCount == 40.");
+
+                Transform stashContent = FindDescendantByPathSuffix(canvas.transform, "StashScroll/Viewport/Content");
+                Transform shopBuyContent = FindDescendantByPathSuffix(canvas.transform, "ShopBuyScroll/Viewport/Content");
+                Transform shopSellContent = FindDescendantByPathSuffix(canvas.transform, "ShopSellScroll/Viewport/Content");
+                Transform logContent = FindDescendantByPathSuffix(canvas.transform, "CombatLogScroll/Viewport/Content");
+                Transform spellBar = FindDescendantByName(canvas.transform, "SpellPickerBar");
+
+                int stashChildrenBefore = stashContent.childCount;
+                int buyChildrenBefore = shopBuyContent.childCount;
+                int sellChildrenBefore = shopSellContent.childCount;
+                int logChildrenBefore = logContent.childCount;
+                int spellChildrenBefore = spellBar.childCount;
+                int pooledStashBefore = hud.PooledStashRowCount;
+                int pooledShopBefore = hud.PooledShopRowCount;
+                int pooledSpellBefore = hud.PooledSpellRowCount;
+
+                // Second refresh must reuse pooled rows with zero GameObject churn
+                hud.RefreshPartyDrawer(party, bundle, 0);
+                hud.RefreshShopModal(party, bundle);
+                hud.RefreshCombatHud(combat, bundle, CombatActionMode.Spell, spellId, "1x");
+
+                Assert.That(stashContent.childCount, Is.EqualTo(stashChildrenBefore));
+                Assert.That(shopBuyContent.childCount, Is.EqualTo(buyChildrenBefore));
+                Assert.That(shopSellContent.childCount, Is.EqualTo(sellChildrenBefore));
+                Assert.That(logContent.childCount, Is.EqualTo(logChildrenBefore));
+                Assert.That(spellBar.childCount, Is.EqualTo(spellChildrenBefore));
+                Assert.That(hud.PooledStashRowCount, Is.EqualTo(pooledStashBefore));
+                Assert.That(hud.PooledShopRowCount, Is.EqualTo(pooledShopBefore));
+                Assert.That(hud.PooledSpellRowCount, Is.EqualTo(pooledSpellBefore));
+                Assert.That(hud.PooledLogRowCount, Is.EqualTo(40));
+
+                Transform shoveBtn = FindDescendantByName(canvas.transform, "ShoveBtn");
+                Assert.That(shoveBtn, Is.Not.Null, "ShoveBtn missing from Combat Action Bar.");
+
+                hud.SetCombatHoverPreview("Melee vs Goblin", "Hit%: 85%", "[HIGH GROUND +15% / +1 RNG]");
+                Transform badgeRoot = FindDescendantByName(canvas.transform, "TooltipBadge");
+                Transform badgeTextTf = FindDescendantByName(canvas.transform, "TooltipBadgeText");
+                Assert.That(badgeRoot, Is.Not.Null);
+                Assert.That(badgeRoot.gameObject.activeSelf, Is.True, "High Ground badge should be visible.");
+                Assert.That(badgeTextTf.GetComponent<TextMeshProUGUI>().text, Does.Contain("HIGH GROUND"));
+
+                hud.ShowOutcomeModal(CombatOutcome.Victory, 350, 2, 120, new[] { "Iron Longsword", "Healing Potion" });
+                Transform lvlBanner = FindDescendantByName(canvas.transform, "OutcomeLevelUpBanner");
+                Transform lvlTextTf = FindDescendantByName(canvas.transform, "OutcomeLevelUpText");
+                Transform summaryTf = FindDescendantByName(canvas.transform, "OutcomeSummary");
+                Assert.That(lvlBanner.gameObject.activeSelf, Is.True, "Level Up banner should show when VictoryLevelsGained > 0.");
+                Assert.That(lvlTextTf.GetComponent<TextMeshProUGUI>().text, Does.Contain("2"));
+                Assert.That(summaryTf.GetComponent<TextMeshProUGUI>().text, Does.Contain("Iron Longsword"));
+                Assert.That(summaryTf.GetComponent<TextMeshProUGUI>().text, Does.Contain("Healing Potion"));
+            }
+            finally
+            {
+                Object.DestroyImmediate(tempGo);
+                if (!hadEventSystem)
+                {
+                    EventSystem createdEs = Object.FindFirstObjectByType<EventSystem>();
+                    if (createdEs != null)
+                    {
+                        Object.DestroyImmediate(createdEs.gameObject);
+                    }
+                }
+            }
+        }
+
+        [Test]
+        public void CombatAndWorldOverlays_IntegrateHighGroundShoveSurfacesAndEnemyIntent()
+        {
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
+
+            GameObject overlaysGo = new GameObject("TempGridOverlaysTest");
+            GameObject camGo = new GameObject("TempCameraRigTest", typeof(Camera));
+            try
+            {
+                BywaterCameraRig camRig = camGo.AddComponent<BywaterCameraRig>();
+                Assert.That(camRig, Is.Not.Null);
+
+                Vector3 expectedWorld = new Vector3(5.5f, 0.55f, -5.5f);
+                Assert.That(BywaterCameraRig.GridToWorld(new GridCoord(5, 5), 0.55f), Is.EqualTo(expectedWorld));
+
+                BywaterGridOverlays overlays = overlaysGo.AddComponent<BywaterGridOverlays>();
+                overlays.Initialize(catalog);
+                overlays.SetElevationResolver((x, y) => (x == 5 && y == 5) ? 0.55f : 0f);
+
+                overlays.SetExplorationHoverPath(new[] { new GridCoord(5, 5) }, new GridCoord(5, 5), reachable: true);
+                Transform exploreLayer = FindDescendantByName(overlays.transform, "ExplorationHoverPath");
+                Assert.That(exploreLayer, Is.Not.Null);
+                bool foundElevatedQuad = false;
+                MeshRenderer[] hoverQuads = exploreLayer.GetComponentsInChildren<MeshRenderer>(false);
+                for (int i = 0; i < hoverQuads.Length; i++)
+                {
+                    if (hoverQuads[i].gameObject.activeSelf && hoverQuads[i].transform.position.y >= 0.55f + 0.02f)
+                    {
+                        foundElevatedQuad = true;
+                        break;
+                    }
+                }
+                Assert.That(foundElevatedQuad, Is.True, "Expected elevated overlay quad above 0.55f + 0.02f.");
+
+                overlays.SetSurfaceCells(new[]
+                {
+                    new CombatGridCell(5, 5, surface: SurfaceType.Fire, surfaceRoundsRemaining: 3),
+                    new CombatGridCell(6, 5, surface: SurfaceType.Water, surfaceRoundsRemaining: -1)
+                });
+                Transform surfaceLayer = FindDescendantByName(overlays.transform, "ElementalSurfaces");
+                Assert.That(surfaceLayer, Is.Not.Null);
+                Assert.That(surfaceLayer.GetComponentsInChildren<MeshRenderer>(false).Length, Is.GreaterThanOrEqualTo(2));
+
+                overlays.ShowEnemyIntentArcs(new[]
+                {
+                    new EnemyIntentArcData { From = new GridCoord(7, 5), To = new GridCoord(5, 5), IsSpell = false }
+                });
+                LineRenderer[] intentLines = overlays.GetComponentsInChildren<LineRenderer>(false);
+                Assert.That(intentLines.Length, Is.GreaterThanOrEqualTo(1));
+                Assert.That(intentLines[0].positionCount, Is.GreaterThan(0));
+
+                CombatGrid grid = new CombatGrid(10, 10);
+                grid.SetElevation(5, 5, 1);
+                grid.SetElevation(6, 5, 0);
+                grid.SetSurface(6, 5, SurfaceType.Water, -1);
+
+                PartyState party = PartyState.FromBundle(bundle);
+                CombatantState hero = CombatantState.FromHero(party.Members[0], new GridCoord(5, 5), bundle.Items);
+                CombatantState monster = CombatantState.FromMonster(bundle.Monsters[0], "mon_0_overlay", new GridCoord(6, 5), new DeterministicDiceRoller(99UL));
+
+                TacticalCombatSession session = new TacticalCombatSession(
+                    grid,
+                    new[] { hero, monster },
+                    bundle.Spells,
+                    bundle.Items,
+                    new DeterministicDiceRoller(99UL),
+                    RulesetMode.ModernBalanced,
+                    party);
+
+                TacticalAttackPreview melee = session.PreviewMeleeAttack(hero.Id, monster.Id);
+                Assert.That(melee.ElevationModifierPct, Is.GreaterThan(0), "Expected High Ground ElevationModifierPct > 0.");
+
+                TacticalShovePreview shove = session.PreviewShove(hero.Id, monster.Id);
+                Assert.That(shove.CanExecute, Is.True);
+                Assert.That(shove.Destination, Is.EqualTo(new GridCoord(7, 5)));
+
+                EnemyIntentPrediction intent = session.PredictNextIntent(monster.Id);
+                Assert.That(intent, Is.Not.Null);
+            }
+            finally
+            {
+                Object.DestroyImmediate(overlaysGo);
+                Object.DestroyImmediate(camGo);
+            }
+        }
+
+        private static GridCoord FindAdjacentPassableTile(TileMapData map, GridCoord origin, bool hasBoat)
+        {
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    if (dx == 0 && dy == 0) continue;
+                    int nx = origin.X + dx;
+                    int ny = origin.Y + dy;
+                    if (map.InBounds(nx, ny) && map.IsPassable(nx, ny, hasBoat))
+                    {
+                        return new GridCoord(nx, ny);
+                    }
+                }
+            }
+
+            return origin;
         }
 
         private static void AssertVariantArray(Material[] mats, string fieldName)

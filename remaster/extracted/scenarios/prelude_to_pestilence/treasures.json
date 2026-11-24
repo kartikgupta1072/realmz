@@ -1,0 +1,852 @@
+{
+  "scenario": "Prelude to Pestilence",
+  "count": 56,
+  "treasures": [
+    {
+      "treasure_id": 0,
+      "item_ids": [
+        11,
+        209,
+        405,
+        884,
+        454,
+        877,
+        877,
+        877,
+        877,
+        877
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Longsword +1",
+        "Leather Armor",
+        "Helm +4",
+        "Necklace of Berhune",
+        "Leather Boots",
+        "Iron Rations",
+        "Iron Rations",
+        "Iron Rations",
+        "Iron Rations",
+        "Iron Rations"
+      ]
+    },
+    {
+      "treasure_id": 1,
+      "item_ids": [
+        884
+      ],
+      "gold": 100,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Necklace of Berhune"
+      ]
+    },
+    {
+      "treasure_id": 2,
+      "item_ids": [
+        885
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Necklace of Griloch"
+      ]
+    },
+    {
+      "treasure_id": 3,
+      "item_ids": [
+        654
+      ],
+      "gold": 500,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Iron Key"
+      ]
+    },
+    {
+      "treasure_id": 4,
+      "item_ids": [
+        459
+      ],
+      "gold": 250,
+      "gems": 0,
+      "jewelry": 6,
+      "flags": 0,
+      "item_names": [
+        "Combat Boots +2"
+      ]
+    },
+    {
+      "treasure_id": 5,
+      "item_ids": [
+        652
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Jailers Key"
+      ]
+    },
+    {
+      "treasure_id": 6,
+      "item_ids": [
+        5,
+        610,
+        609,
+        221
+      ],
+      "gold": 0,
+      "gems": 5000,
+      "jewelry": 0,
+      "flags": -2,
+      "item_names": [
+        "Dagger of Penetration +2",
+        "Waterworld",
+        "Vaporous Form",
+        "Banded Armor +6"
+      ]
+    },
+    {
+      "treasure_id": 7,
+      "item_ids": [
+        886
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Sword of Volta +2"
+      ]
+    },
+    {
+      "treasure_id": 8,
+      "item_ids": [
+        615
+      ],
+      "gold": 0,
+      "gems": 250,
+      "jewelry": 2,
+      "flags": 0,
+      "item_names": [
+        "Aqua Luck Stone +3"
+      ]
+    },
+    {
+      "treasure_id": 9,
+      "item_ids": [
+        11,
+        211,
+        419,
+        459,
+        809,
+        600,
+        601,
+        604
+      ],
+      "gold": 2500,
+      "gems": 400,
+      "jewelry": 0,
+      "flags": -3,
+      "item_names": [
+        "Longsword +1",
+        "Leather Armor +6",
+        "Shield +3",
+        "Combat Boots +2",
+        "Star Mines",
+        "Invisible Skin",
+        "Adrenelin",
+        "Cold Resistance"
+      ]
+    },
+    {
+      "treasure_id": 10,
+      "item_ids": [
+        800,
+        773,
+        774,
+        775,
+        776,
+        623
+      ],
+      "gold": 1200,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Sorcerer Scroll Case",
+        "Plane of Fire",
+        "Thought Lace",
+        "Fire Flies",
+        "Fearful Thoughts",
+        "Ring of Defense +3"
+      ]
+    },
+    {
+      "treasure_id": 11,
+      "item_ids": [
+        200,
+        623,
+        626
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Robe",
+        "Ring of Defense +3",
+        "Ring of Heat"
+      ]
+    },
+    {
+      "treasure_id": 12,
+      "item_ids": [],
+      "gold": 0,
+      "gems": 100,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 13,
+      "item_ids": [
+        760,
+        762
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Leap",
+        "Superfly"
+      ]
+    },
+    {
+      "treasure_id": 14,
+      "item_ids": [
+        1,
+        1,
+        11,
+        11,
+        12,
+        20,
+        24,
+        31,
+        31,
+        38,
+        200,
+        209,
+        215,
+        209,
+        602,
+        602,
+        223,
+        223,
+        602,
+        419
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Dagger",
+        "Dagger",
+        "Longsword +1",
+        "Longsword +1",
+        "Longsword +2",
+        "Broadsword",
+        "Two Handed Sword",
+        "Scimitar",
+        "Scimitar",
+        "Mace +1",
+        "Robe",
+        "Leather Armor",
+        "Chain Armor",
+        "Leather Armor",
+        "Heal Poison",
+        "Heal Poison",
+        "Plate Armor",
+        "Plate Armor",
+        "Heal Poison",
+        "Shield +3"
+      ]
+    },
+    {
+      "treasure_id": 15,
+      "item_ids": [
+        622,
+        8,
+        412
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": -2,
+      "item_names": [
+        "Speckled Luck Stone +2",
+        "Dagger of Spells +1",
+        "Dunce Cap -6"
+      ]
+    },
+    {
+      "treasure_id": 16,
+      "item_ids": [
+        781,
+        781
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Soul Bind",
+        "Soul Bind"
+      ]
+    },
+    {
+      "treasure_id": 17,
+      "item_ids": [],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 18,
+      "item_ids": [
+        117
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Staff of FireBalls +1"
+      ]
+    },
+    {
+      "treasure_id": 19,
+      "item_ids": [
+        207,
+        218,
+        886,
+        601,
+        606,
+        610,
+        616,
+        603
+      ],
+      "gold": 0,
+      "gems": 5000,
+      "jewelry": 13,
+      "flags": 5,
+      "item_names": [
+        "Robe of Strength",
+        "Volted Chain + 9",
+        "Sword of Volta +2",
+        "Adrenelin",
+        "Muscle Potion",
+        "Waterworld",
+        "Copper Luck Stone +3",
+        "Heat Resistance"
+      ]
+    },
+    {
+      "treasure_id": 20,
+      "item_ids": [
+        888
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Candle of Summoning"
+      ]
+    },
+    {
+      "treasure_id": 21,
+      "item_ids": [
+        225,
+        13,
+        887
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Mithril Plate +6",
+        "Longsword +3",
+        "Candle of Improvement"
+      ]
+    },
+    {
+      "treasure_id": 22,
+      "item_ids": [
+        890
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Store Identification"
+      ]
+    },
+    {
+      "treasure_id": 23,
+      "item_ids": [
+        609,
+        783,
+        784
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Vaporous Form",
+        "Sandman",
+        "Puppet Master"
+      ]
+    },
+    {
+      "treasure_id": 24,
+      "item_ids": [
+        614,
+        402,
+        74
+      ],
+      "gold": 0,
+      "gems": 500,
+      "jewelry": 3,
+      "flags": 1,
+      "item_names": [
+        "Heal Massive Wounds",
+        "Helm of Might +2",
+        "Penetration Tip Sword +2"
+      ]
+    },
+    {
+      "treasure_id": 25,
+      "item_ids": [],
+      "gold": 0,
+      "gems": 4933,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 26,
+      "item_ids": [
+        785
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Revive Dead"
+      ]
+    },
+    {
+      "treasure_id": 27,
+      "item_ids": [
+        226
+      ],
+      "gold": 0,
+      "gems": 1000,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Plate Armor +13"
+      ]
+    },
+    {
+      "treasure_id": 28,
+      "item_ids": [
+        3
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Dagger -5"
+      ]
+    },
+    {
+      "treasure_id": 29,
+      "item_ids": [],
+      "gold": 0,
+      "gems": 500,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 30,
+      "item_ids": [],
+      "gold": 0,
+      "gems": 2500,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 31,
+      "item_ids": [],
+      "gold": 0,
+      "gems": 50,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 32,
+      "item_ids": [
+        614,
+        54
+      ],
+      "gold": 0,
+      "gems": 200,
+      "jewelry": 5,
+      "flags": 1,
+      "item_names": [
+        "Heal Massive Wounds",
+        "Jo Stick +2"
+      ]
+    },
+    {
+      "treasure_id": 33,
+      "item_ids": [
+        620
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Blue Luck Stone +3"
+      ]
+    },
+    {
+      "treasure_id": 34,
+      "item_ids": [
+        32,
+        603,
+        404,
+        207
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": -2,
+      "item_names": [
+        "Scimitar +1",
+        "Heat Resistance",
+        "Helm of Defense +5",
+        "Robe of Strength"
+      ]
+    },
+    {
+      "treasure_id": 35,
+      "item_ids": [
+        12,
+        212,
+        224,
+        404,
+        617,
+        619,
+        621,
+        620,
+        216,
+        234
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": -10,
+      "item_names": [
+        "Longsword +2",
+        "Leather Armor +9",
+        "Plate Armor +3",
+        "Helm of Defense +5",
+        "Yellow Luck Stone +3",
+        "Purple Luck Stone +3",
+        "Red Luck Stone +3",
+        "Blue Luck Stone +3",
+        "Chain Armor +3",
+        "Gauntlets +16"
+      ]
+    },
+    {
+      "treasure_id": 36,
+      "item_ids": [
+        416
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Cap of Regeneration +3"
+      ]
+    },
+    {
+      "treasure_id": 37,
+      "item_ids": [],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 38,
+      "item_ids": [],
+      "gold": 0,
+      "gems": 100,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 39,
+      "item_ids": [
+        619,
+        408,
+        201
+      ],
+      "gold": 0,
+      "gems": 250,
+      "jewelry": 0,
+      "flags": -2,
+      "item_names": [
+        "Purple Luck Stone +3",
+        "Helm of The Vikings +5",
+        "Robe of The Magi +2"
+      ]
+    },
+    {
+      "treasure_id": 40,
+      "item_ids": [
+        18
+      ],
+      "gold": 0,
+      "gems": 250,
+      "jewelry": 5,
+      "flags": 0,
+      "item_names": [
+        "Sword of No Redemption -2"
+      ]
+    },
+    {
+      "treasure_id": 41,
+      "item_ids": [
+        33
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Scimitar +3"
+      ]
+    },
+    {
+      "treasure_id": 42,
+      "item_ids": [
+        891
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Sacred Book of Njaln"
+      ]
+    },
+    {
+      "treasure_id": 43,
+      "item_ids": [
+        4,
+        602,
+        603,
+        786,
+        787,
+        212,
+        217
+      ],
+      "gold": 0,
+      "gems": 25000,
+      "jewelry": 20,
+      "flags": 5,
+      "item_names": [
+        "Dagger of Styx +2",
+        "Heal Poison",
+        "Heat Resistance",
+        "Banish",
+        "Death",
+        "Leather Armor +9",
+        "Mithril Chain Armor +6"
+      ]
+    },
+    {
+      "treasure_id": 44,
+      "item_ids": [
+        620
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Blue Luck Stone +3"
+      ]
+    },
+    {
+      "treasure_id": 45,
+      "item_ids": [],
+      "gold": 0,
+      "gems": 3000,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 46,
+      "item_ids": [
+        213,
+        624,
+        627
+      ],
+      "gold": 0,
+      "gems": 5000,
+      "jewelry": 0,
+      "flags": -3,
+      "item_names": [
+        "Leather of Strength +9",
+        "Ring of Defense +5",
+        "Ring of Cold"
+      ]
+    },
+    {
+      "treasure_id": 47,
+      "item_ids": [
+        635
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Ring of Entanglement"
+      ]
+    },
+    {
+      "treasure_id": 48,
+      "item_ids": [
+        3,
+        208,
+        401,
+        608,
+        222
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Dagger -5",
+        "Robe of Vulnerability -2",
+        "Helm of Pain -1",
+        "Poison",
+        "Armor of Imprisonment -3"
+      ]
+    },
+    {
+      "treasure_id": 49,
+      "item_ids": [
+        424
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 1,
+      "item_names": [
+        "Shield of Hawk Sight +6"
+      ]
+    },
+    {
+      "treasure_id": 50,
+      "item_ids": [],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 51,
+      "item_ids": [],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 52,
+      "item_ids": [],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 53,
+      "item_ids": [],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 54,
+      "item_ids": [],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 55,
+      "item_ids": [],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    }
+  ]
+}

@@ -198,6 +198,59 @@ namespace RealmzCore.Rules
             return Math.Clamp(escalated, 0, 95);
         }
 
+        public IReadOnlyList<ConditionEntry> ExportEntries()
+        {
+            if (_entries.Count == 0)
+            {
+                return Array.Empty<ConditionEntry>();
+            }
+
+            List<CharConditionId> sortedIds = new List<CharConditionId>(_entries.Keys);
+            sortedIds.Sort();
+
+            List<ConditionEntry> snapshot = new List<ConditionEntry>(sortedIds.Count);
+            for (int i = 0; i < sortedIds.Count; i++)
+            {
+                ConditionEntry entry = _entries[sortedIds[i]];
+                ConditionEntry copy = new ConditionEntry(
+                    entry.Id,
+                    entry.Magnitude,
+                    entry.TurnsRemaining,
+                    entry.BaseRecoveryChancePercent,
+                    entry.CanRecoverBySave,
+                    entry.EscalationStepPercent)
+                {
+                    ElapsedRounds = entry.ElapsedRounds
+                };
+                snapshot.Add(copy);
+            }
+
+            return snapshot;
+        }
+
+        public void RestoreEntry(
+            CharConditionId condition,
+            int magnitude,
+            int turnsRemaining,
+            int baseRecoveryChancePercent,
+            bool canRecoverBySave,
+            int escalationStepPercent,
+            int elapsedRounds)
+        {
+            Apply(
+                condition,
+                magnitude,
+                turnsRemaining,
+                baseRecoveryChancePercent,
+                canRecoverBySave,
+                escalationStepPercent);
+
+            if (_entries.TryGetValue(condition, out ConditionEntry? entry))
+            {
+                entry.ElapsedRounds = Math.Max(0, elapsedRounds);
+            }
+        }
+
         public IReadOnlyList<ConditionDisplayEffect> GetDisplayEffects()
         {
             if (_entries.Count == 0)

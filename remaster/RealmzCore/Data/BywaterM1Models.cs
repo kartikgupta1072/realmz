@@ -571,7 +571,9 @@ namespace RealmzCore.Data
             CharConditionId? appliedCondition = null,
             int conditionDuration = 0,
             int baseRecoveryPct = 20,
-            string saveKind = "Magic")
+            string saveKind = "Magic",
+            string createdSurface = "",
+            int createdSurfaceRounds = 0)
         {
             Id = id;
             Key = key ?? string.Empty;
@@ -605,6 +607,8 @@ namespace RealmzCore.Data
             ConditionDuration = conditionDuration;
             BaseRecoveryPct = baseRecoveryPct;
             SaveKind = saveKind ?? "Magic";
+            CreatedSurface = createdSurface ?? string.Empty;
+            CreatedSurfaceRounds = createdSurfaceRounds;
         }
 
         public int Id { get; }
@@ -626,6 +630,8 @@ namespace RealmzCore.Data
         public int ConditionDuration { get; }
         public int BaseRecoveryPct { get; }
         public string SaveKind { get; }
+        public string CreatedSurface { get; }
+        public int CreatedSurfaceRounds { get; }
     }
 
     public sealed class MonsterDefinition
@@ -813,7 +819,8 @@ namespace RealmzCore.Data
             int vitality = 10,
             int luck = 10,
             IReadOnlyList<int>? equippedIds = null,
-            IReadOnlyList<int>? knownSpellIds = null)
+            IReadOnlyList<int>? knownSpellIds = null,
+            int xp = 0)
         {
             Id = id ?? string.Empty;
             Name = name ?? string.Empty;
@@ -823,6 +830,7 @@ namespace RealmzCore.Data
             CasteId = casteId;
             CasteName = casteName ?? string.Empty;
             Level = level;
+            Xp = Math.Max(0, xp);
             Hp = hp;
             MaxHp = maxHp;
             Sp = sp;
@@ -877,6 +885,7 @@ namespace RealmzCore.Data
         public int CasteId { get; }
         public string CasteName { get; }
         public int Level { get; }
+        public int Xp { get; }
         public int Hp { get; }
         public int MaxHp { get; }
         public int Sp { get; }

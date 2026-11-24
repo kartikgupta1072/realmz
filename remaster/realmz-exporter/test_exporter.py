@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+import wave
 
 from PIL import Image
 
@@ -14,8 +15,11 @@ EXPORTER_DIR = Path(__file__).resolve().parent
 if str(EXPORTER_DIR) not in sys.path:
     sys.path.insert(0, str(EXPORTER_DIR))
 
+from audio import convert_madg_to_mod, decode_mac_snd, write_wav
+from bywater_m1 import STARTER_PARTY_SPECS, build_bywater_m1_payloads
 from export_realmz import export_scenario
 from formats import (
+    parse_battles_tactical,
     parse_character,
     parse_doors,
     parse_dungeon_grid,
@@ -23,12 +27,15 @@ from formats import (
     parse_mapstats,
     parse_maps_metadata,
     parse_monsters,
+    parse_races_and_castes,
     parse_rand_level,
     parse_spellarea,
     parse_spells,
+    parse_treasures,
 )
 from graphics import decode_cicn, decode_pict, slice_tilesheet
 from rsrc import ResourceFork
+from scenario_exporter import export_scenario_package, slugify_scenario
 
 
 REALMZ_BASE = Path(r"C:\realmz\base\Realmz")
@@ -251,6 +258,206 @@ class TestM1BinaryParsers(unittest.TestCase):
         self.assertEqual(by_id[1108]["name"], "Magic Darts")
         self.assertEqual(by_id[1306]["name"], "Fireball")
         self.assertEqual(by_id[2105]["name"], "Heal Small Wounds")
+
+
+class TestP04UnequippedStatContract(unittest.TestCase):
+    """Verify P0.4 fix: party_m1.json exports unequipped base ac and to_hit without gear baking."""
+
+    def test_starter_party_exports_unequipped_base_stats(self) -> None:
+        payloads = build_bywater_m1_payloads(REALMZ_BASE)
+        party = payloads["party_m1.json"]
+        items_by_id = {it["id"]: it for it in payloads["spells_items_m1.json"]["items"]}
+
+        fj = ResourceFork(DATA_FILES / "The Family Jewels.rsrc")
+        races, castes = parse_races_and_castes(DATA_FILES / "Data Race", DATA_FILES / "Data Caste", fj)
+
+        self.assertEqual(len(party["heroes"]), len(STARTER_PARTY_SPECS))
+        for hero, spec in zip(party["heroes"], STARTER_PARTY_SPECS):
+            self.assertEqual(hero["equipped_ids"], spec["equipped_ids"])
+            attrs = hero["attributes"]
+            caste = castes[spec["caste_id"]]
+            expected_base_ac = max(5, 10 + max(0, (attrs["agility"] - 12) // 2))
+            expected_base_to_hit = 10 + caste["tohit_base"] + max(0, (attrs["brawn"] - 12) // 2)
+
+            self.assertEqual(hero["ac"], expected_base_ac, f"{hero['name']} base AC has baked equipment!")
+            self.assertEqual(hero["to_hit"], expected_base_to_hit, f"{hero['name']} base To-Hit has baked equipment!")
+
+            # Verify runtime equipment application adds armor AC cleanly once.
+            eq_ac = sum(items_by_id[iid]["armor_class_bonus"] for iid in hero["equipped_ids"] if iid in items_by_id)
+            if eq_ac != 0:
+                self.assertNotEqual(hero["ac"], expected_base_ac + eq_ac)
+
+        # Verify on-disk extracted/bywater_m1/party_m1.json matches contract and is BOM-free.
+        disk_party_path = Path(r"C:\realmz\remaster\extracted\bywater_m1\party_m1.json")
+        if disk_party_path.is_file():
+            raw_bytes = disk_party_path.read_bytes()
+            self.assertFalse(raw_bytes.startswith(b"\xef\xbb\xbf"))
+            disk_party = json.loads(raw_bytes.decode("utf-8"))
+            self.assertEqual(disk_party["heroes"], party["heroes"])
+
+
+class TestAudioExtraction(unittest.TestCase):
+    """Verify Mac snd decoding, MADG->MOD conversion, and extracted audio_manifest.json."""
+
+    def test_decode_mac_snd_format1_and_format2_variants(self) -> None:
+        fj = ResourceFork(DATA_FILES / "The Family Jewels.rsrc")
+        # Test Format 1 stdSH (82), Format 1 extSH (702), Format 1 cmpSH uncompressed (10122),
+        # Format 2 normal (20), and Format 2 off-by-6 (90, 643).
+        sample_ids = [20, 82, 90, 643, 702, 10122]
+        with tempfile.TemporaryDirectory() as tmp:
+            for rid in sample_ids:
+                self.assertTrue(fj.has("snd ", rid), f"Missing snd {rid}")
+                decoded = decode_mac_snd(fj.get("snd ", rid).data)
+                self.assertGreater(decoded["num_frames"], 0)
+                self.assertGreater(decoded["duration_sec"], 0.0)
+                self.assertGreater(decoded["sample_rate"], 1000)
+                self.assertGreater(decoded["rms"], 0.0)
+
+                wav_path = write_wav(Path(tmp) / f"snd_{rid}.wav", decoded)
+                head = wav_path.read_bytes()[:12]
+                self.assertEqual(head[:4], b"RIFF")
+                self.assertEqual(head[8:12], b"WAVE")
+                with wave.open(str(wav_path), "rb") as wf:
+                    self.assertEqual(wf.getnframes(), decoded["num_frames"])
+                    self.assertEqual(wf.getframerate(), decoded["sample_rate"])
+                    self.assertEqual(wf.getnchannels(), decoded["channels"])
+
+    def test_decode_all_142_base_snd_resources(self) -> None:
+        fj = ResourceFork(DATA_FILES / "The Family Jewels.rsrc")
+        snd_ids = fj.ids("snd ")
+        self.assertEqual(len(snd_ids), 142)
+        for rid in snd_ids:
+            decoded = decode_mac_snd(fj.get("snd ", rid).data)
+            self.assertGreater(decoded["num_frames"], 0, f"snd {rid} decoded 0 frames")
+            self.assertGreater(decoded["rms"], 0.0, f"snd {rid} decoded silent")
+
+    def test_convert_madg_outdoor_music_to_protracker_mod(self) -> None:
+        outdoor_raw = (REALMZ_BASE / "Realmz Music" / "Outdoor Music").read_bytes()
+        mod_bytes, title = convert_madg_to_mod(outdoor_raw)
+        self.assertEqual(title, "after-the-rain")
+        self.assertEqual(mod_bytes[1080:1084], b"M.K.")
+        self.assertEqual(mod_bytes[950], 30)  # 30 song positions
+        self.assertGreater(len(mod_bytes), 50000)
+
+    def test_extracted_audio_manifest_and_assets_on_disk(self) -> None:
+        audio_root = Path(r"C:\realmz\remaster\extracted\audio")
+        manifest_path = audio_root / "audio_manifest.json"
+        self.assertTrue(manifest_path.is_file(), "audio_manifest.json must be extracted")
+        raw_bytes = manifest_path.read_bytes()
+        self.assertFalse(raw_bytes.startswith(b"\xef\xbb\xbf"))
+        raw_text = raw_bytes.decode("utf-8")
+        self.assertNotIn("\u2014", raw_text)
+        self.assertNotIn("\u2013", raw_text)
+
+        manifest = json.loads(raw_text)
+        self.assertEqual(manifest["sfx_count"], 142)
+        self.assertEqual(manifest["skipped_sfx_count"], 0)
+        self.assertEqual(manifest["music_count"], 11)
+        self.assertIn("90", manifest["sfx_by_id"])
+
+        for sfx_entry in manifest["sfx"][:15]:
+            wav_p = audio_root / sfx_entry["relative_path"]
+            self.assertTrue(wav_p.is_file(), f"Missing WAV: {wav_p}")
+            hdr = wav_p.read_bytes()[:12]
+            self.assertEqual(hdr[:4], b"RIFF")
+            self.assertEqual(hdr[8:12], b"WAVE")
+            self.assertGreater(sfx_entry["duration_sec"], 0.0)
+
+        expected_tracks = {
+            "battle", "camp", "cave", "create", "dungeon",
+            "indoor", "items", "outdoor", "shop", "temple", "treasure",
+        }
+        self.assertEqual(set(manifest["music_by_key"].keys()), expected_tracks)
+        for key, track in manifest["music_by_key"].items():
+            ogg_p = audio_root / track["relative_path"]
+            self.assertTrue(ogg_p.is_file(), f"Missing OGG: {ogg_p}")
+            self.assertGreater(ogg_p.stat().st_size, 100_000, f"Track {key} unexpectedly small")
+            self.assertEqual(ogg_p.read_bytes()[:4], b"OggS")
+            self.assertGreater(track["duration_sec"], 30.0)
+            self.assertGreater(track["max_volume_db"], -25.0)
+
+
+class TestMultiScenarioExporter(unittest.TestCase):
+    """Verify scenario-agnostic P1.5 extraction across Bywater + 2 additional classic scenarios."""
+
+    def test_treasures_and_13x13_tactical_battles_parsers(self) -> None:
+        treasures = parse_treasures(BYWATER_DIR / "Data TD")
+        self.assertEqual(len(treasures), 76)
+        self.assertGreater(treasures[5]["gold"], 0)
+        self.assertGreater(len(treasures[5]["item_ids"]), 0)
+
+        battles = parse_battles_tactical(BYWATER_DIR / "Data BD")
+        self.assertEqual(len(battles), 257)
+        b1 = battles[1]
+        self.assertTrue(b1["is_valid"])
+        self.assertEqual(len(b1["tactical_grid_13x13"]), 13)
+        self.assertEqual(len(b1["tactical_grid_13x13"][0]), 13)
+        self.assertGreater(len(b1["placements"]), 0)
+
+    def test_export_three_scenarios_without_hardcoded_coords(self) -> None:
+        scenarios = [
+            "City of Bywater",
+            "Prelude to Pestilence",
+            "Assault on Giant Mountain",
+        ]
+        bywater_ov = EXPORTER_DIR / "overrides" / "bywater_overrides.yaml"
+        with tempfile.TemporaryDirectory() as tmp:
+            out_root = Path(tmp)
+            for sname in scenarios:
+                ov = bywater_ov if sname == "City of Bywater" else None
+                pkg = export_scenario_package(REALMZ_BASE, sname, out_root, overrides_path=ov)
+                slug = slugify_scenario(sname)
+                pkg_dir = out_root / slug
+                pkg_json_path = pkg_dir / "scenario_package.json"
+                self.assertTrue(pkg_json_path.is_file())
+
+                raw_bytes = pkg_json_path.read_bytes()
+                self.assertFalse(raw_bytes.startswith(b"\xef\xbb\xbf"))
+                raw_text = raw_bytes.decode("utf-8")
+                self.assertNotIn("\u2014", raw_text)
+                self.assertNotIn("\u2013", raw_text)
+
+                c = pkg["counts"]
+                self.assertGreaterEqual(c["land_levels"], 5, sname)
+                self.assertGreaterEqual(c["dungeon_levels"], 1, sname)
+                self.assertGreaterEqual(c["portals"], 5, sname)
+                self.assertGreaterEqual(c["battles_valid"], 100, sname)
+                self.assertGreaterEqual(c["monsters_valid"], 100, sname)
+                self.assertGreaterEqual(c["shops"], 10, sname)
+                self.assertGreaterEqual(c["treasures"], 50, sname)
+                self.assertGreaterEqual(c["strings_non_empty"], 500, sname)
+
+                # Verify land_0 and dungeon_0 grids, battles 13x13, and strings payloads
+                land0 = json.loads((pkg_dir / "land_levels" / "land_0.json").read_text(encoding="utf-8"))
+                self.assertEqual((land0["width"], land0["height"]), (90, 90))
+                self.assertEqual(len(land0["tiles_yx"]), 90)
+                self.assertGreater(len(land0["tile_rules"]), 100)
+
+                dung0 = json.loads((pkg_dir / "dungeon_levels" / "dungeon_0.json").read_text(encoding="utf-8"))
+                self.assertEqual((dung0["width"], dung0["height"]), (90, 90))
+                self.assertTrue(dung0["is_dungeon"])
+
+                battles_doc = json.loads((pkg_dir / "battles.json").read_text(encoding="utf-8"))
+                valid_b = [b for b in battles_doc["battles"] if b["is_valid"]]
+                self.assertEqual(len(valid_b), c["battles_valid"])
+                self.assertEqual(len(valid_b[0]["tactical_grid_13x13"]), 13)
+
+                strings_doc = json.loads((pkg_dir / "strings.json").read_text(encoding="utf-8"))
+                self.assertEqual(strings_doc["non_empty_count"], c["strings_non_empty"])
+
+                if sname == "City of Bywater":
+                    portals_doc = json.loads((pkg_dir / "portals.json").read_text(encoding="utf-8"))
+                    self.assertTrue(
+                        any(
+                            p["source_map_id"] == "land_0"
+                            and p["x"] == 89
+                            and p["y"] == 48
+                            and p["dest_map_id"] == "dungeon_0"
+                            and p["dest_x"] == 33
+                            and p["dest_y"] == 72
+                            for p in portals_doc["portals"]
+                        )
+                    )
 
 
 if __name__ == "__main__":

@@ -32,13 +32,8 @@ Shader "Hidden/Realmz/CartographyTopDownLightmapGen"
             half4 _CanopyShadowColor;
             half _CloudStrength;
 
-            // Packed canopy circles: xy = worldXZ, z = radius, w = darkness
-            int _CanopyCount;
-            float4 _CanopyCircles[24];
-
-            // Packed lantern pools: xy = worldXZ, z = radius, w = intensity
-            int _LanternCount;
-            float4 _LanternPools[12];
+            TEXTURE2D(_WorldStaticMap);
+            SAMPLER(sampler_WorldStaticMap);
 
             struct Attributes
             {
@@ -100,38 +95,16 @@ Shader "Hidden/Realmz/CartographyTopDownLightmapGen"
 
                 half3 lightMul = lerp(half3(1.0h, 1.0h, 1.0h), _CloudShadowColor.rgb, (half)(cloudCoverage * _CloudStrength));
 
-                // Stationary dark canopy shadow blotches under trees and north ridge
-                float canopyMask = 0.0;
-                int cCount = min(_CanopyCount, 24);
-                [loop] for (int i = 0; i < cCount; i++)
-                {
-                    float4 c = _CanopyCircles[i];
-                    float dist = length(worldXZ - c.xy);
-                    float r = max(0.1, c.z);
-                    float blotch = (1.0 - smoothstep(r * 0.25, r, dist)) * c.w;
-                    canopyMask = max(canopyMask, blotch);
-                }
+                // Baked static world data: R = 1 - canopy/cliff AO, G = shoreline proximity, B = static lantern glow
+                half4 staticData = SAMPLE_TEXTURE2D(_WorldStaticMap, sampler_WorldStaticMap, input.uv);
+                half canopyMask = saturate(1.0h - staticData.r);
+                lightMul = lerp(lightMul, lightMul * _CanopyShadowColor.rgb, canopyMask);
 
-                // Northern ridge subtle ambient overhang shadow along z ~ 12.6..13.5
-                float ridgeOverhang = smoothstep(13.6, 12.7, worldXZ.y) * smoothstep(11.9, 12.8, worldXZ.y) * 0.35;
-                canopyMask = saturate(max(canopyMask, ridgeOverhang));
+                // Warm animated lantern / brazier pools stored in alpha
+                float flicker = 0.94 + 0.06 * sin(_SimTime * 6.5 + worldXZ.x * 0.7 + worldXZ.y * 0.5);
+                half lanternGlow = saturate(staticData.b * (half)flicker);
 
-                lightMul = lerp(lightMul, lightMul * _CanopyShadowColor.rgb, (half)canopyMask);
-
-                // Warm lantern / brazier pools stored in alpha
-                float lanternGlow = 0.0;
-                int lCount = min(_LanternCount, 12);
-                [loop] for (int j = 0; j < lCount; j++)
-                {
-                    float4 l = _LanternPools[j];
-                    float dist = length(worldXZ - l.xy);
-                    float r = max(0.1, l.z);
-                    float falloff = saturate(1.0 - dist / r);
-                    float flicker = 0.94 + 0.06 * sin(_SimTime * 6.5 + j * 2.1);
-                    lanternGlow += falloff * falloff * l.w * flicker;
-                }
-
-                return half4(saturate(lightMul), saturate((half)lanternGlow));
+                return half4(saturate(lightMul), lanternGlow);
             }
             ENDHLSL
         }

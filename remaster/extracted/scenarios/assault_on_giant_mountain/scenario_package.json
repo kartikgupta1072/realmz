@@ -1,0 +1,596 @@
+{
+  "schema": "ScenarioPackageJson",
+  "schema_version": "1.0.0",
+  "exporter": "realmz-exporter.scenario_exporter",
+  "scenario": "Assault on Giant Mountain",
+  "source_scenario_name": "Assault on Giant Mountain",
+  "slug": "assault_on_giant_mountain",
+  "header": {
+    "recommended_level": 36,
+    "max_level": 99,
+    "start_land_level": 0,
+    "start_look_x": 48,
+    "start_look_y": 15,
+    "file_size_bytes": 320
+  },
+  "map_names": [
+    "Map Showing the General Area",
+    "Secret Cave",
+    "Glowing Coal Inn",
+    "Garrison Commander's Room",
+    "Secret Outpost Entrance",
+    "Location of Battle",
+    "Location of Battle with Vermin",
+    "Location of Old Man",
+    "Map to Mysterious Island",
+    "Secret Entrance to Citadel",
+    "Tunnel Leading to Hill Giant Citadel",
+    "Magical Tunnel to Fire Giant Citadel",
+    "Map Showing Location to a Hinge Pin",
+    "Map Showing the Location of a Secret Lab",
+    "Map Found on a Dead Gnath",
+    "Page Torn from the Anti'ids book",
+    "--------------------",
+    "--------------------",
+    "--------------------",
+    "--------------------"
+  ],
+  "maps_md2": [
+    {
+      "index": 0,
+      "startx": 5,
+      "starty": 10,
+      "level": 0,
+      "pictid": 0,
+      "iconsize": 4,
+      "show": 1,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "A map showing the terrain of the surrounding countryside.  It pinpoints the locations of towns, outposts and citadels."
+    },
+    {
+      "index": 1,
+      "startx": 5,
+      "starty": 10,
+      "level": 0,
+      "pictid": 0,
+      "iconsize": 16,
+      "show": 1,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 5
+      },
+      "note": "Scribbled on the map in dwarven runes are the words \"abandoned vault\".  An X marks the location of a secret cavern."
+    },
+    {
+      "index": 2,
+      "startx": 20,
+      "starty": 0,
+      "level": 0,
+      "pictid": 0,
+      "iconsize": 32,
+      "show": 1,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 8224
+      },
+      "note": "The footman's map showing the location of the Glowing Coal Inn.                                "
+    },
+    {
+      "index": 3,
+      "startx": 0,
+      "starty": 26,
+      "level": 4,
+      "pictid": 0,
+      "iconsize": 16,
+      "show": 1,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "A map of the gnaths stronghold's upper floor.  A ogre has marked the room where the gnath leader spends most of his time.  The outer room is constantly patrolled by his best troops."
+    },
+    {
+      "index": 4,
+      "startx": 15,
+      "starty": 40,
+      "level": 0,
+      "pictid": 0,
+      "iconsize": 16,
+      "show": 0,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 30
+      },
+      "note": "Cave rumored to exist in the Imhotep Gap."
+    },
+    {
+      "index": 5,
+      "startx": 50,
+      "starty": 40,
+      "level": 0,
+      "pictid": 0,
+      "iconsize": 16,
+      "show": 1,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "A map showing the location of a great battle between King Bradwick's men and some gnath."
+    },
+    {
+      "index": 6,
+      "startx": 0,
+      "starty": 40,
+      "level": 0,
+      "pictid": 0,
+      "iconsize": 16,
+      "show": 1,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "A map showing the location of some vermin that are supposedly located in a cave near wispy falls.  Village elders have asked you to blow a magical ivory horn which provokes an attack."
+    },
+    {
+      "index": 7,
+      "startx": 67,
+      "starty": 34,
+      "level": 0,
+      "pictid": 0,
+      "iconsize": 32,
+      "show": 1,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "A map showing the location of an old man you have been hired to assassinate."
+    },
+    {
+      "index": 8,
+      "startx": 0,
+      "starty": 46,
+      "level": 1,
+      "pictid": 0,
+      "iconsize": 8,
+      "show": 1,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "A map given to you by an old dwarf.  It shows the location of a mysterious island.  This island may lead to a dwarven clan who have withdrawn from the rest of the Realmz.  Scribbled on the corner of the map are the words, \"Flying Potion Needed\"."
+    },
+    {
+      "index": 9,
+      "startx": 17,
+      "starty": 58,
+      "level": 3,
+      "pictid": 0,
+      "iconsize": 32,
+      "show": 1,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "A map showing the location of a small cave that leads into the ice giant compound."
+    },
+    {
+      "index": 10,
+      "startx": 70,
+      "starty": 60,
+      "level": 0,
+      "pictid": 0,
+      "iconsize": 32,
+      "show": 1,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "A map showing the location of a small tunnel created by Anti'ids.  The Anti'ids were making plans to capture giants for use as psionic brain food."
+    },
+    {
+      "index": 11,
+      "startx": 70,
+      "starty": 0,
+      "level": 3,
+      "pictid": 0,
+      "iconsize": 16,
+      "show": 1,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "This map shows the location of an entrance that can only be used with the aid of a magical necklace."
+    },
+    {
+      "index": 12,
+      "startx": 8,
+      "starty": 27,
+      "level": 6,
+      "pictid": 0,
+      "iconsize": 16,
+      "show": 1,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "A map showing the location of a hinge pin that was to be pulled in case the citadel had to be abandoned.  Pulling this pin will cause the entire citadel to collapse."
+    },
+    {
+      "index": 13,
+      "startx": 55,
+      "starty": 59,
+      "level": 6,
+      "pictid": 0,
+      "iconsize": 16,
+      "show": 0,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "A map showing the location of a secret passage to a laboratory."
+    },
+    {
+      "index": 14,
+      "startx": 4,
+      "starty": 60,
+      "level": 0,
+      "pictid": 0,
+      "iconsize": 32,
+      "show": 1,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "A map you found on a dead gnath.  You can't read any of the words written on the dirty scrap of papyrus.  You can only make out an X scribbled with a piece of charcoal."
+    },
+    {
+      "index": 15,
+      "startx": 44,
+      "starty": 40,
+      "level": 0,
+      "pictid": 0,
+      "iconsize": 16,
+      "show": 1,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "A page containing a sketch that you found on a Anti'ids body."
+    },
+    {
+      "index": 16,
+      "startx": 0,
+      "starty": 0,
+      "level": 0,
+      "pictid": 0,
+      "iconsize": 32,
+      "show": 0,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": ""
+    },
+    {
+      "index": 17,
+      "startx": 472,
+      "starty": 10090,
+      "level": 473,
+      "pictid": 642,
+      "iconsize": 474,
+      "show": 159,
+      "isdungeon": true,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 1,
+        "bottom": 9,
+        "right": 12
+      },
+      "note": ""
+    },
+    {
+      "index": 18,
+      "startx": 24948,
+      "starty": 24864,
+      "level": 18738,
+      "pictid": 0,
+      "iconsize": 29282,
+      "show": 0,
+      "isdungeon": true,
+      "spare": 17509,
+      "rect": {
+        "top": 30309,
+        "left": 27759,
+        "bottom": 28781,
+        "right": 25966
+      },
+      "note": " Pix Maps:Data SUBw+b::Development Pix Maps:Data Pw+b::Data Files:Data I1w+b::Data Files:Data I2w+b::Devel"
+    },
+    {
+      "index": 19,
+      "startx": 0,
+      "starty": 17505,
+      "level": 29793,
+      "pictid": 8261,
+      "iconsize": 17408,
+      "show": 29282,
+      "isdungeon": false,
+      "spare": 17505,
+      "rect": {
+        "top": 29793,
+        "left": 8261,
+        "bottom": 17408,
+        "right": 29282
+      },
+      "note": ""
+    },
+    {
+      "index": 20,
+      "startx": 8274,
+      "starty": 17476,
+      "level": 0,
+      "pictid": 29227,
+      "iconsize": 25088,
+      "show": 17505,
+      "isdungeon": true,
+      "spare": 8260,
+      "rect": {
+        "top": 17408,
+        "left": 29227,
+        "bottom": 25088,
+        "right": 17505
+      },
+      "note": "a LDr+bData RDr+b```"
+    }
+  ],
+  "counts": {
+    "land_levels": 7,
+    "dungeon_levels": 2,
+    "monsters_valid": 169,
+    "battles_total": 288,
+    "battles_valid": 288,
+    "shops": 39,
+    "treasures": 90,
+    "strings_total": 983,
+    "strings_non_empty": 978,
+    "portals": 5,
+    "ap_doors": 473,
+    "custom_items": 33,
+    "edcd_records": 2392
+  },
+  "land_levels": [
+    {
+      "level": 0,
+      "map_id": "land_0",
+      "name": "Map Showing the General Area",
+      "file": "land_levels/land_0.json",
+      "landlook": 0,
+      "tileset_pict_id": 300,
+      "tileset_bd_file": "Data P BD",
+      "is_dark": false,
+      "use_los": false,
+      "portal_count": 0,
+      "shop_trigger_count": 4,
+      "battle_trigger_count": 11,
+      "treasure_trigger_count": 7,
+      "encounter_zone_count": 18,
+      "ap_door_count": 92
+    },
+    {
+      "level": 1,
+      "map_id": "land_1",
+      "name": "Secret Cave",
+      "file": "land_levels/land_1.json",
+      "landlook": 3,
+      "tileset_pict_id": 303,
+      "tileset_bd_file": "Data Castle BD",
+      "is_dark": false,
+      "use_los": false,
+      "portal_count": 0,
+      "shop_trigger_count": 0,
+      "battle_trigger_count": 9,
+      "treasure_trigger_count": 16,
+      "encounter_zone_count": 12,
+      "ap_door_count": 70
+    },
+    {
+      "level": 2,
+      "map_id": "land_2",
+      "name": "Glowing Coal Inn",
+      "file": "land_levels/land_2.json",
+      "landlook": 9,
+      "tileset_pict_id": 309,
+      "tileset_bd_file": "Data Swamp BD",
+      "is_dark": true,
+      "use_los": false,
+      "portal_count": 0,
+      "shop_trigger_count": 0,
+      "battle_trigger_count": 1,
+      "treasure_trigger_count": 0,
+      "encounter_zone_count": 5,
+      "ap_door_count": 11
+    },
+    {
+      "level": 3,
+      "map_id": "land_3",
+      "name": "Garrison Commander's Room",
+      "file": "land_levels/land_3.json",
+      "landlook": 0,
+      "tileset_pict_id": 300,
+      "tileset_bd_file": "Data P BD",
+      "is_dark": false,
+      "use_los": false,
+      "portal_count": 0,
+      "shop_trigger_count": 2,
+      "battle_trigger_count": 1,
+      "treasure_trigger_count": 0,
+      "encounter_zone_count": 10,
+      "ap_door_count": 30
+    },
+    {
+      "level": 4,
+      "map_id": "land_4",
+      "name": "Secret Outpost Entrance",
+      "file": "land_levels/land_4.json",
+      "landlook": 4,
+      "tileset_pict_id": 304,
+      "tileset_bd_file": "Data SUB BD",
+      "is_dark": false,
+      "use_los": true,
+      "portal_count": 0,
+      "shop_trigger_count": 1,
+      "battle_trigger_count": 2,
+      "treasure_trigger_count": 0,
+      "encounter_zone_count": 3,
+      "ap_door_count": 40
+    },
+    {
+      "level": 5,
+      "map_id": "land_5",
+      "name": "Location of Battle",
+      "file": "land_levels/land_5.json",
+      "landlook": 4,
+      "tileset_pict_id": 304,
+      "tileset_bd_file": "Data SUB BD",
+      "is_dark": false,
+      "use_los": true,
+      "portal_count": 2,
+      "shop_trigger_count": 0,
+      "battle_trigger_count": 1,
+      "treasure_trigger_count": 13,
+      "encounter_zone_count": 6,
+      "ap_door_count": 76
+    },
+    {
+      "level": 6,
+      "map_id": "land_6",
+      "name": "Location of Battle with Vermin",
+      "file": "land_levels/land_6.json",
+      "landlook": 4,
+      "tileset_pict_id": 304,
+      "tileset_bd_file": "Data SUB BD",
+      "is_dark": false,
+      "use_los": true,
+      "portal_count": 0,
+      "shop_trigger_count": 0,
+      "battle_trigger_count": 0,
+      "treasure_trigger_count": 0,
+      "encounter_zone_count": 8,
+      "ap_door_count": 84
+    }
+  ],
+  "dungeon_levels": [
+    {
+      "level": 0,
+      "map_id": "dungeon_0",
+      "file": "dungeon_levels/dungeon_0.json",
+      "tileset_pict_id": 300,
+      "is_dark": true,
+      "use_los": true,
+      "portal_count": 0,
+      "battle_trigger_count": 0,
+      "treasure_trigger_count": 0,
+      "encounter_zone_count": 1,
+      "ap_door_count": 0
+    },
+    {
+      "level": 1,
+      "map_id": "dungeon_1",
+      "file": "dungeon_levels/dungeon_1.json",
+      "tileset_pict_id": 300,
+      "is_dark": true,
+      "use_los": true,
+      "portal_count": 3,
+      "battle_trigger_count": 12,
+      "treasure_trigger_count": 17,
+      "encounter_zone_count": 6,
+      "ap_door_count": 70
+    }
+  ],
+  "files": {
+    "battles": "battles.json",
+    "monsters": "monsters.json",
+    "shops": "shops.json",
+    "treasures": "treasures.json",
+    "strings": "strings.json",
+    "portals": "portals.json",
+    "custom_items": "custom_items.json"
+  },
+  "overrides": {
+    "source": "",
+    "art_bindings": {},
+    "music_bindings": {}
+  }
+}

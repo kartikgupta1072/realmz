@@ -82,8 +82,21 @@ namespace Realmz.Data
         public Material wildflowerTuftMaterial;
         public Material pebbleScatterMaterial;
 
+        [Header("Wave B Cartography")]
+        public Material cartographyTerrainMaterial;
+        public Material cartographyWaterMaterial;
+        public Material cartographyFoliageMaterial;
+        public List<CartographyPropMaterialEntry> cartographyPropMaterials = new List<CartographyPropMaterialEntry>();
+
         public List<HeroArtEntry> heroes = new List<HeroArtEntry>();
         public List<MonsterArtEntry> monsters = new List<MonsterArtEntry>();
+
+        [Serializable]
+        public sealed class CartographyPropMaterialEntry
+        {
+            public Realmz.Cartography.CartographyPropKind kind;
+            public Material material;
+        }
 
         [Serializable]
         public sealed class HeroArtEntry
@@ -104,6 +117,28 @@ namespace Realmz.Data
             public string displayName;
             public Material billboardMaterial;
             public Sprite sprite;
+        }
+
+        /// <summary>
+        /// Resolves a Wave B Cartography prop material by kind, returning null if not registered.
+        /// </summary>
+        public Material GetCartographyPropMaterial(Realmz.Cartography.CartographyPropKind kind)
+        {
+            if (cartographyPropMaterials == null || kind == Realmz.Cartography.CartographyPropKind.None)
+            {
+                return null;
+            }
+
+            for (int i = 0; i < cartographyPropMaterials.Count; i++)
+            {
+                CartographyPropMaterialEntry entry = cartographyPropMaterials[i];
+                if (entry != null && entry.kind == kind && entry.material != null)
+                {
+                    return entry.material;
+                }
+            }
+
+            return null;
         }
 
         /// <summary>

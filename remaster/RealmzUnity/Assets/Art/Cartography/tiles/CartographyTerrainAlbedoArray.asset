@@ -29,7 +29,7 @@ Texture2DArray:
     m_WrapV: 0
     m_WrapW: 0
   m_UsageMode: 0
-  m_IsReadable: 1
+  m_IsReadable: 0
   m_IgnoreMipmapLimit: 1
   m_MipmapLimitGroupName: 
   image data: 393216

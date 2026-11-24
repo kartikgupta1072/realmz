@@ -34,7 +34,7 @@ namespace Realmz.EditorTools.Cartography
             RenderSettings.ambientSkyColor = new Color(0.42f, 0.56f, 0.78f, 1f);
             RenderSettings.ambientEquatorColor = new Color(0.36f, 0.38f, 0.35f, 1f);
             RenderSettings.ambientGroundColor = new Color(0.22f, 0.21f, 0.18f, 1f);
-            RenderSettings.ambientIntensity = 0.72f;
+            RenderSettings.ambientIntensity = 0.54f;
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
             RenderSettings.fogColor = new Color(0.54f, 0.68f, 0.84f, 1f);
@@ -46,7 +46,7 @@ namespace Realmz.EditorTools.Cartography
             camGo.tag = "MainCamera";
             Camera cam = camGo.AddComponent<Camera>();
             cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = new Color(0.30f, 0.46f, 0.68f, 1f);
+            cam.backgroundColor = new Color(0.19f, 0.28f, 0.42f, 1f);
             cam.fieldOfView = 34f;
             cam.nearClipPlane = 0.3f;
             cam.farClipPlane = 120f;
@@ -58,19 +58,19 @@ namespace Realmz.EditorTools.Cartography
             camData.volumeLayerMask = ~0;
             camData.antialiasing = AntialiasingMode.None;
 
-            Vector3 dioramaFocus = new Vector3(9.0f, 0.15f, 8.2f);
+            Vector3 dioramaFocus = new Vector3(9.0f, 0.35f, -9.0f);
             Quaternion camRot = Quaternion.Euler(48f, 0f, 0f);
             camGo.transform.rotation = camRot;
-            camGo.transform.position = dioramaFocus - (camRot * Vector3.forward) * 19.2f;
+            camGo.transform.position = dioramaFocus - (camRot * Vector3.forward) * 19.4f;
 
             // 3. Warm Directional Sun with crisp soft shadows
             GameObject sunGo = new GameObject("Directional Sun");
             Light sun = sunGo.AddComponent<Light>();
             sun.type = LightType.Directional;
             sun.color = new Color(1.0f, 0.941f, 0.831f, 1f);
-            sun.intensity = 2.15f;
+            sun.intensity = 1.65f;
             sun.shadows = LightShadows.Soft;
-            sun.shadowStrength = 0.84f;
+            sun.shadowStrength = 0.88f;
             sunGo.transform.rotation = Quaternion.Euler(46f, -34f, 0f);
 
             // 4. Cloned VolumeProfile (Bloom + Neutral Tonemapping + SplitToning + subtle DepthOfField)
@@ -111,6 +111,7 @@ namespace Realmz.EditorTools.Cartography
             controller.foliageScatter = foliageScatter;
             controller.heroTransform = heroTransform;
             controller.targetCamera = cam;
+            controller.patrolCenter = heroTransform != null ? heroTransform.position : new Vector3(8.5f, 0f, -10.5f);
             controller.SyncGlobals(0f);
 
             AssetDatabase.SaveAssets();
@@ -173,15 +174,15 @@ namespace Realmz.EditorTools.Cartography
         {
             GameObject atmoRoot = new GameObject("BywaterDioramaAtmosphere");
 
-            // Warm Inn Door Lantern
-            CreateWarmLanternLight(atmoRoot.transform, "InnDoorLantern", new Vector3(5.2f, 0.95f, 8.9f), 4.0f, 1.40f);
-            // Warm Bridge Brazier Light
-            CreateWarmLanternLight(atmoRoot.transform, "BridgeBrazierLight", new Vector3(9.5f, 0.85f, 5.4f), 3.4f, 1.15f);
+            // Warm Inn Door Lantern (canonical Z = 8.9 - 18.0 = -9.1)
+            CreateWarmLanternLight(atmoRoot.transform, "InnDoorLantern", new Vector3(5.2f, 0.95f, -9.1f), 4.0f, 1.40f);
+            // Warm Bridge Brazier Light (canonical Z = 5.4 - 18.0 = -12.6)
+            CreateWarmLanternLight(atmoRoot.transform, "BridgeBrazierLight", new Vector3(9.5f, 0.85f, -12.6f), 3.4f, 1.15f);
 
             // Sunbeam Dust Motes floating subtly above the meadow
             GameObject psGo = new GameObject("SunbeamMotes");
             psGo.transform.SetParent(atmoRoot.transform, false);
-            psGo.transform.position = new Vector3(9.0f, 2.5f, 8.5f);
+            psGo.transform.position = new Vector3(9.0f, 2.5f, -9.5f);
 
             ParticleSystem ps = psGo.AddComponent<ParticleSystem>();
             ParticleSystem.MainModule main = ps.main;
@@ -262,11 +263,11 @@ namespace Realmz.EditorTools.Cartography
 
             ColorAdjustments colorAdj = GetOrAddVolumeComponent<ColorAdjustments>(profile);
             colorAdj.postExposure.overrideState = true;
-            colorAdj.postExposure.value = -0.14f;
+            colorAdj.postExposure.value = -0.18f;
             colorAdj.contrast.overrideState = true;
-            colorAdj.contrast.value = 14f;
+            colorAdj.contrast.value = 20f;
             colorAdj.saturation.overrideState = true;
-            colorAdj.saturation.value = 14f;
+            colorAdj.saturation.value = 10f;
 
             SplitToning split = GetOrAddVolumeComponent<SplitToning>(profile);
             split.highlights.overrideState = true;
@@ -278,11 +279,20 @@ namespace Realmz.EditorTools.Cartography
 
             Bloom bloom = GetOrAddVolumeComponent<Bloom>(profile);
             bloom.threshold.overrideState = true;
-            bloom.threshold.value = 1.60f;
+            bloom.threshold.value = 1.08f;
             bloom.intensity.overrideState = true;
-            bloom.intensity.value = 0.14f;
+            bloom.intensity.value = 0.24f;
             bloom.scatter.overrideState = true;
-            bloom.scatter.value = 0.45f;
+            bloom.scatter.value = 0.52f;
+
+            Vignette vignette = GetOrAddVolumeComponent<Vignette>(profile);
+            vignette.active = true;
+            vignette.color.overrideState = true;
+            vignette.color.value = new Color(0.055f, 0.075f, 0.125f, 1f);
+            vignette.intensity.overrideState = true;
+            vignette.intensity.value = 0.26f;
+            vignette.smoothness.overrideState = true;
+            vignette.smoothness.value = 0.42f;
 
             // Keep crisp razor-sharp pixel art across entire diorama (disable soft DoF blur)
             DepthOfField dof = GetOrAddVolumeComponent<DepthOfField>(profile);
@@ -357,8 +367,13 @@ namespace Realmz.EditorTools.Cartography
             const string deckMeshPath = "Assets/Art/Cartography/Materials/Cartography_BridgeDeck.asset";
             const string curbMeshPath = "Assets/Art/Cartography/Materials/Cartography_BridgeCurbs.asset";
 
-            Material deckMat = LoadOrCreateBridgeLitMaterial("Cartography_Bridge_DeckMat", CartographyAssetImporter.TilesDir + "/cobble_plaza.png", CartographyAssetImporter.TilesDir + "/cobble_plaza_n.png");
-            Material curbMat = LoadOrCreateBridgeLitMaterial("Cartography_Bridge_CurbMat", CartographyAssetImporter.TilesDir + "/cliff_rock.png", CartographyAssetImporter.TilesDir + "/cliff_rock_n.png");
+            Material cartoTerrainMat = AssetDatabase.LoadAssetAtPath<Material>(CartographyAssetImporter.TerrainMaterialPath);
+            if (cartoTerrainMat == null)
+            {
+                cartoTerrainMat = CartographyAssetImporter.CreateOrUpdateTerrainMaterial(
+                    AssetDatabase.LoadAssetAtPath<Texture2DArray>(CartographyAssetImporter.AlbedoArrayAssetPath),
+                    AssetDatabase.LoadAssetAtPath<Texture2DArray>(CartographyAssetImporter.NormalArrayAssetPath));
+            }
 
             Mesh deckMesh = BuildBridgeDeckMesh(widthMeters * 0.86f, lengthMeters);
             deckMesh = SaveOrUpdateMeshAsset(deckMesh, deckMeshPath);
@@ -367,7 +382,7 @@ namespace Realmz.EditorTools.Cartography
             deckGo.transform.SetParent(root.transform, false);
             deckGo.AddComponent<MeshFilter>().sharedMesh = deckMesh;
             MeshRenderer deckMr = deckGo.AddComponent<MeshRenderer>();
-            deckMr.sharedMaterial = deckMat;
+            deckMr.sharedMaterial = cartoTerrainMat;
             deckMr.shadowCastingMode = ShadowCastingMode.On;
             deckMr.receiveShadows = true;
 
@@ -378,7 +393,7 @@ namespace Realmz.EditorTools.Cartography
             curbGo.transform.SetParent(root.transform, false);
             curbGo.AddComponent<MeshFilter>().sharedMesh = curbMesh;
             MeshRenderer curbMr = curbGo.AddComponent<MeshRenderer>();
-            curbMr.sharedMaterial = curbMat;
+            curbMr.sharedMaterial = cartoTerrainMat;
             curbMr.shadowCastingMode = ShadowCastingMode.On;
             curbMr.receiveShadows = true;
         }
@@ -409,7 +424,10 @@ namespace Realmz.EditorTools.Cartography
 
             List<Vector3> verts = new List<Vector3>();
             List<Vector2> uvs = new List<Vector2>();
+            List<Vector2> uv1 = new List<Vector2>();
+            List<Color> colors = new List<Color>();
             List<int> tris = new List<int>();
+            Color cobbleColor = new Color(0f, 0f, 1f, 0f);
 
             for (int i = 0; i < segs; i++)
             {
@@ -424,6 +442,9 @@ namespace Realmz.EditorTools.Cartography
                 float u0 = 0f;
                 float u1 = roadWidth * 0.5f;
 
+                float ao0 = Mathf.Lerp(0.96f, 0.78f, Mathf.Abs(t0));
+                float ao1 = Mathf.Lerp(0.96f, 0.78f, Mathf.Abs(t1));
+
                 AddQuad(
                     verts, uvs, tris,
                     new Vector3(-halfW, y0, z0),
@@ -434,13 +455,26 @@ namespace Realmz.EditorTools.Cartography
                     new Vector2(u0, v1),
                     new Vector2(u1, v1),
                     new Vector2(u1, v0));
+
+                colors.Add(cobbleColor);
+                colors.Add(cobbleColor);
+                colors.Add(cobbleColor);
+                colors.Add(cobbleColor);
+
+                uv1.Add(new Vector2(0f, ao0));
+                uv1.Add(new Vector2(0f, ao1));
+                uv1.Add(new Vector2(0f, ao1));
+                uv1.Add(new Vector2(0f, ao0));
             }
 
             Mesh m = new Mesh { name = "Cartography_BridgeDeck" };
             m.SetVertices(verts);
             m.SetUVs(0, uvs);
+            m.SetUVs(1, uv1);
+            m.SetColors(colors);
             m.SetTriangles(tris, 0);
             m.RecalculateNormals();
+            m.RecalculateTangents();
             m.RecalculateBounds();
             return m;
         }
@@ -455,7 +489,21 @@ namespace Realmz.EditorTools.Cartography
 
             List<Vector3> verts = new List<Vector3>();
             List<Vector2> uvs = new List<Vector2>();
+            List<Vector2> uv1 = new List<Vector2>();
+            List<Color> colors = new List<Color>();
             List<int> tris = new List<int>();
+
+            void StampAttr(float aoBot, float aoTop)
+            {
+                colors.Add(Color.clear);
+                colors.Add(Color.clear);
+                colors.Add(Color.clear);
+                colors.Add(Color.clear);
+                uv1.Add(new Vector2(1f, aoBot));
+                uv1.Add(new Vector2(1f, aoTop));
+                uv1.Add(new Vector2(1f, aoTop));
+                uv1.Add(new Vector2(1f, aoBot));
+            }
 
             // Left and right raised stone parapets + arched retaining skirts down to -0.52m
             for (int side = -1; side <= 1; side += 2)
@@ -483,18 +531,23 @@ namespace Realmz.EditorTools.Cartography
                         new Vector3(xMin, yTop0, z0), new Vector3(xMin, yTop1, z1),
                         new Vector3(xMax, yTop1, z1), new Vector3(xMax, yTop0, z0),
                         new Vector2(0f, v0), new Vector2(0f, v1), new Vector2(0.18f, v1), new Vector2(0.18f, v0));
+                    StampAttr(0.95f, 0.95f);
 
                     // Outer / -X facing vertical stone arch wall face
                     AddQuad(verts, uvs, tris,
                         new Vector3(xMin, yBot1, z1), new Vector3(xMin, yTop1, z1),
                         new Vector3(xMin, yTop0, z0), new Vector3(xMin, yBot0, z0),
                         new Vector2(v1, 0f), new Vector2(v1, 0.5f), new Vector2(v0, 0.5f), new Vector2(v0, 0f));
+                    colors.Add(Color.clear); colors.Add(Color.clear); colors.Add(Color.clear); colors.Add(Color.clear);
+                    uv1.Add(new Vector2(1f, 0.46f)); uv1.Add(new Vector2(1f, 0.94f));
+                    uv1.Add(new Vector2(1f, 0.94f)); uv1.Add(new Vector2(1f, 0.46f));
 
                     // Inner vertical face facing roadway
                     AddQuad(verts, uvs, tris,
                         new Vector3(xMax, yBot0, z0), new Vector3(xMax, yTop0, z0),
                         new Vector3(xMax, yTop1, z1), new Vector3(xMax, yBot1, z1),
                         new Vector2(v0, 0f), new Vector2(v0, 0.5f), new Vector2(v1, 0.5f), new Vector2(v1, 0f));
+                    StampAttr(0.46f, 0.94f);
                 }
 
                 // South and North end caps
@@ -503,17 +556,23 @@ namespace Realmz.EditorTools.Cartography
                     new Vector3(xMin, -0.52f, -halfL), new Vector3(xMin, yEndTop, -halfL),
                     new Vector3(xMax, yEndTop, -halfL), new Vector3(xMax, -0.52f, -halfL),
                     new Vector2(0f, 0f), new Vector2(0f, 0.5f), new Vector2(0.2f, 0.5f), new Vector2(0.2f, 0f));
+                StampAttr(0.52f, 0.94f);
+
                 AddQuad(verts, uvs, tris,
                     new Vector3(xMax, -0.52f, halfL), new Vector3(xMax, yEndTop, halfL),
                     new Vector3(xMin, yEndTop, halfL), new Vector3(xMin, -0.52f, halfL),
                     new Vector2(0f, 0f), new Vector2(0f, 0.5f), new Vector2(0.2f, 0.5f), new Vector2(0.2f, 0f));
+                StampAttr(0.52f, 0.94f);
             }
 
             Mesh m = new Mesh { name = "Cartography_BridgeCurbs" };
             m.SetVertices(verts);
             m.SetUVs(0, uvs);
+            m.SetUVs(1, uv1);
+            m.SetColors(colors);
             m.SetTriangles(tris, 0);
             m.RecalculateNormals();
+            m.RecalculateTangents();
             m.RecalculateBounds();
             return m;
         }
@@ -559,44 +618,30 @@ namespace Realmz.EditorTools.Cartography
             existing.Clear();
             existing.SetVertices(source.vertices);
             existing.SetUVs(0, source.uv);
+            List<Vector2> uv1 = new List<Vector2>();
+            source.GetUVs(1, uv1);
+            if (uv1.Count == source.vertexCount)
+            {
+                existing.SetUVs(1, uv1);
+            }
+            if (source.colors != null && source.colors.Length == source.vertexCount)
+            {
+                existing.SetColors(source.colors);
+            }
             existing.SetTriangles(source.triangles, 0);
             existing.SetNormals(source.normals);
+            if (source.tangents != null && source.tangents.Length == source.vertexCount)
+            {
+                existing.SetTangents(source.tangents);
+            }
+            else
+            {
+                existing.RecalculateTangents();
+            }
             existing.RecalculateBounds();
             EditorUtility.SetDirty(existing);
             Object.DestroyImmediate(source);
             return existing;
-        }
-
-        private static Material LoadOrCreateBridgeLitMaterial(string name, string albedoPath, string normalPath)
-        {
-            string matPath = CartographyAssetImporter.MaterialsDir + "/" + name + ".mat";
-            Shader litShader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-            Material mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
-            if (mat == null)
-            {
-                mat = new Material(litShader);
-                AssetDatabase.CreateAsset(mat, matPath);
-            }
-            else if (mat.shader != litShader)
-            {
-                mat.shader = litShader;
-            }
-
-            Texture2D albedo = AssetDatabase.LoadAssetAtPath<Texture2D>(albedoPath)
-                ?? AssetDatabase.LoadAssetAtPath<Texture2D>(albedoPath.Replace("Cartography/Tiles", "Cartography/tiles"));
-            Texture2D normal = AssetDatabase.LoadAssetAtPath<Texture2D>(normalPath)
-                ?? AssetDatabase.LoadAssetAtPath<Texture2D>(normalPath.Replace("Cartography/Tiles", "Cartography/tiles"));
-
-            if (albedo != null && mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", albedo);
-            if (normal != null && mat.HasProperty("_BumpMap"))
-            {
-                mat.SetTexture("_BumpMap", normal);
-                mat.EnableKeyword("_NORMALMAP");
-            }
-            if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.08f);
-            if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0f);
-            EditorUtility.SetDirty(mat);
-            return mat;
         }
 
         private static void EnsureFolder(string assetPath)

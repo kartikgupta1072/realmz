@@ -1,0 +1,1438 @@
+{
+  "scenario": "City of Bywater",
+  "count": 76,
+  "treasures": [
+    {
+      "treasure_id": 0,
+      "item_ids": [
+        990
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Invitation"
+      ]
+    },
+    {
+      "treasure_id": 1,
+      "item_ids": [
+        204,
+        5
+      ],
+      "gold": 0,
+      "gems": 45,
+      "jewelry": 3,
+      "flags": 0,
+      "item_names": [
+        "Robe of Protection +1",
+        "Dagger of Penetration +2"
+      ]
+    },
+    {
+      "treasure_id": 2,
+      "item_ids": [
+        990,
+        991
+      ],
+      "gold": 600,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Invitation",
+        "Writ of entrance"
+      ]
+    },
+    {
+      "treasure_id": 3,
+      "item_ids": [
+        9
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Frozen Viper +2"
+      ]
+    },
+    {
+      "treasure_id": 4,
+      "item_ids": [
+        656
+      ],
+      "gold": 600,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "The Book of Judgment"
+      ]
+    },
+    {
+      "treasure_id": 5,
+      "item_ids": [
+        405,
+        769,
+        770,
+        771,
+        772,
+        806
+      ],
+      "gold": 700,
+      "gems": 250,
+      "jewelry": 3,
+      "flags": 0,
+      "item_names": [
+        "Helm +4",
+        "Charm Foe",
+        "Phase",
+        "Annihilate",
+        "Major Charm Foe",
+        "Parchment"
+      ]
+    },
+    {
+      "treasure_id": 6,
+      "item_ids": [],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 3,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 7,
+      "item_ids": [
+        648,
+        654
+      ],
+      "gold": 300,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Necklace of Invisible Skin",
+        "Iron Key"
+      ]
+    },
+    {
+      "treasure_id": 8,
+      "item_ids": [
+        600,
+        601,
+        617,
+        801,
+        806
+      ],
+      "gold": 600,
+      "gems": 0,
+      "jewelry": 5,
+      "flags": 2,
+      "item_names": [
+        "Invisible Skin",
+        "Adrenelin",
+        "Yellow Luck Stone +3",
+        "Priest Scroll Case",
+        "Parchment"
+      ]
+    },
+    {
+      "treasure_id": 9,
+      "item_ids": [
+        654
+      ],
+      "gold": 100,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Iron Key"
+      ]
+    },
+    {
+      "treasure_id": 10,
+      "item_ids": [
+        8,
+        439,
+        427,
+        802,
+        760,
+        767,
+        768,
+        603,
+        604,
+        611,
+        611,
+        611,
+        806,
+        806,
+        806
+      ],
+      "gold": 2000,
+      "gems": 2000,
+      "jewelry": 6,
+      "flags": 1,
+      "item_names": [
+        "Dagger of Spells +1",
+        "Gloves of Trickery -15",
+        "Shield of Healing +10",
+        "Enchanter Scroll Case",
+        "Leap",
+        "Waterworld",
+        "Cosmic Blast",
+        "Heat Resistance",
+        "Cold Resistance",
+        "Heal Small Wounds",
+        "Heal Small Wounds",
+        "Heal Small Wounds",
+        "Parchment",
+        "Parchment",
+        "Parchment"
+      ]
+    },
+    {
+      "treasure_id": 11,
+      "item_ids": [
+        807
+      ],
+      "gold": 1200,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Personal Items"
+      ]
+    },
+    {
+      "treasure_id": 12,
+      "item_ids": [
+        1,
+        209,
+        450,
+        452,
+        250
+      ],
+      "gold": 0,
+      "gems": 250,
+      "jewelry": 5,
+      "flags": 0,
+      "item_names": [
+        "Dagger",
+        "Leather Armor",
+        "Leather Cap",
+        "Leather Gloves",
+        "Padded Cloak"
+      ]
+    },
+    {
+      "treasure_id": 13,
+      "item_ids": [
+        765,
+        766,
+        611,
+        608,
+        806,
+        719
+      ],
+      "gold": 400,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Fireball",
+        "Plague",
+        "Heal Small Wounds",
+        "Poison",
+        "Parchment",
+        "Corelian Ointment"
+      ]
+    },
+    {
+      "treasure_id": 14,
+      "item_ids": [
+        1,
+        1,
+        104,
+        11,
+        45,
+        60,
+        210,
+        216,
+        401,
+        419,
+        400,
+        400,
+        400,
+        209,
+        215,
+        215,
+        223
+      ],
+      "gold": 1200,
+      "gems": 250,
+      "jewelry": 5,
+      "flags": 0,
+      "item_names": [
+        "Dagger",
+        "Dagger",
+        "Bow",
+        "Longsword +1",
+        "Nunchuka +1",
+        "Morning Star +2",
+        "Leather Armor +3",
+        "Chain Armor +3",
+        "Helm of Pain -1",
+        "Shield +3",
+        "Helm",
+        "Helm",
+        "Helm",
+        "Leather Armor",
+        "Chain Armor",
+        "Chain Armor",
+        "Plate Armor"
+      ]
+    },
+    {
+      "treasure_id": 15,
+      "item_ids": [
+        808
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Orc Babe"
+      ]
+    },
+    {
+      "treasure_id": 16,
+      "item_ids": [
+        90,
+        146
+      ],
+      "gold": 1000,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Throwing Axe of Sketch +1",
+        "Poison Throwing Daggers"
+      ]
+    },
+    {
+      "treasure_id": 17,
+      "item_ids": [
+        802
+      ],
+      "gold": 200,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Enchanter Scroll Case"
+      ]
+    },
+    {
+      "treasure_id": 18,
+      "item_ids": [
+        657,
+        623,
+        649,
+        204,
+        111,
+        119,
+        806,
+        806,
+        715
+      ],
+      "gold": 1200,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 5,
+      "item_names": [
+        "Book of Turanians",
+        "Ring of Defense +3",
+        "Necklace of Shen +3",
+        "Robe of Protection +1",
+        "Dart of Frost",
+        "Staff of Missiles +1",
+        "Parchment",
+        "Parchment",
+        "Lip Balm Salve"
+      ]
+    },
+    {
+      "treasure_id": 19,
+      "item_ids": [
+        210,
+        434
+      ],
+      "gold": 800,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Leather Armor +3",
+        "Gloves of The Seasons +8"
+      ]
+    },
+    {
+      "treasure_id": 20,
+      "item_ids": [
+        5,
+        12,
+        25,
+        74,
+        86
+      ],
+      "gold": 6000,
+      "gems": 1500,
+      "jewelry": 15,
+      "flags": 2,
+      "item_names": [
+        "Dagger of Penetration +2",
+        "Longsword +2",
+        "Two Handed Sword +1",
+        "Penetration Tip Sword +2",
+        "War Axe of Strength +2"
+      ]
+    },
+    {
+      "treasure_id": 21,
+      "item_ids": [
+        203,
+        220,
+        405,
+        402,
+        427,
+        445,
+        456,
+        459
+      ],
+      "gold": 6000,
+      "gems": 1500,
+      "jewelry": 15,
+      "flags": 2,
+      "item_names": [
+        "Robe of Many Favors +1",
+        "Banded Armor +3",
+        "Helm +4",
+        "Helm of Might +2",
+        "Shield of Healing +10",
+        "Gauntlets of Combat +2",
+        "Boots of Quick Step",
+        "Combat Boots +2"
+      ]
+    },
+    {
+      "treasure_id": 22,
+      "item_ids": [
+        800,
+        616,
+        623,
+        638,
+        637,
+        659
+      ],
+      "gold": 6000,
+      "gems": 1500,
+      "jewelry": 15,
+      "flags": 2,
+      "item_names": [
+        "Sorcerer Scroll Case",
+        "Copper Luck Stone +3",
+        "Ring of Defense +3",
+        "Necklace of Revival",
+        "Necklace of Lightning Bolts",
+        "Prism of Power"
+      ]
+    },
+    {
+      "treasure_id": 23,
+      "item_ids": [
+        641
+      ],
+      "gold": 500,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Necklace of Keys"
+      ]
+    },
+    {
+      "treasure_id": 24,
+      "item_ids": [
+        242
+      ],
+      "gold": 2500,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Cloak of Protection +6"
+      ]
+    },
+    {
+      "treasure_id": 25,
+      "item_ids": [
+        877,
+        877,
+        877,
+        877,
+        877,
+        877,
+        877,
+        877,
+        877,
+        877
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Iron Rations",
+        "Iron Rations",
+        "Iron Rations",
+        "Iron Rations",
+        "Iron Rations",
+        "Iron Rations",
+        "Iron Rations",
+        "Iron Rations",
+        "Iron Rations",
+        "Iron Rations"
+      ]
+    },
+    {
+      "treasure_id": 26,
+      "item_ids": [
+        883,
+        883,
+        883,
+        883,
+        883,
+        883,
+        883,
+        883,
+        883,
+        883,
+        883,
+        883,
+        883,
+        883,
+        883,
+        883,
+        883,
+        883,
+        883,
+        883
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Wine",
+        "Wine",
+        "Wine",
+        "Wine",
+        "Wine",
+        "Wine",
+        "Wine",
+        "Wine",
+        "Wine",
+        "Wine",
+        "Wine",
+        "Wine",
+        "Wine",
+        "Wine",
+        "Wine",
+        "Wine",
+        "Wine",
+        "Wine",
+        "Wine",
+        "Wine"
+      ]
+    },
+    {
+      "treasure_id": 27,
+      "item_ids": [
+        605,
+        606,
+        607,
+        619,
+        627,
+        638
+      ],
+      "gold": 1000,
+      "gems": 550,
+      "jewelry": 5,
+      "flags": 1,
+      "item_names": [
+        "Chemical Resistance",
+        "Muscle Potion",
+        "Improvement",
+        "Purple Luck Stone +3",
+        "Ring of Cold",
+        "Necklace of Revival"
+      ]
+    },
+    {
+      "treasure_id": 28,
+      "item_ids": [
+        800,
+        606,
+        609,
+        607,
+        415,
+        611
+      ],
+      "gold": 1000,
+      "gems": 0,
+      "jewelry": 5,
+      "flags": 2,
+      "item_names": [
+        "Sorcerer Scroll Case",
+        "Muscle Potion",
+        "Vaporous Form",
+        "Improvement",
+        "Cap of Protection +6",
+        "Heal Small Wounds"
+      ]
+    },
+    {
+      "treasure_id": 29,
+      "item_ids": [
+        623,
+        232,
+        600,
+        610,
+        610,
+        611
+      ],
+      "gold": 1000,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Ring of Defense +3",
+        "Gauntlets +8",
+        "Invisible Skin",
+        "Waterworld",
+        "Waterworld",
+        "Heal Small Wounds"
+      ]
+    },
+    {
+      "treasure_id": 30,
+      "item_ids": [
+        216,
+        214,
+        401,
+        405,
+        419
+      ],
+      "gold": 1000,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Chain Armor +3",
+        "Leather of Darkness -2",
+        "Helm of Pain -1",
+        "Helm +4",
+        "Shield +3"
+      ]
+    },
+    {
+      "treasure_id": 31,
+      "item_ids": [
+        34,
+        220,
+        421,
+        1,
+        803,
+        803,
+        1,
+        83
+      ],
+      "gold": 1000,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Scimitar of Speed +2",
+        "Banded Armor +3",
+        "Iron Scales +4",
+        "Dagger",
+        "Quiver of Arrows",
+        "Quiver of Arrows",
+        "Dagger",
+        "War Axe +2"
+      ]
+    },
+    {
+      "treasure_id": 32,
+      "item_ids": [
+        656,
+        655
+      ],
+      "gold": 1500,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "The Book of Judgment",
+        "Tome of Shalizar"
+      ]
+    },
+    {
+      "treasure_id": 33,
+      "item_ids": [
+        618
+      ],
+      "gold": 650,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Green Luck Stone +3"
+      ]
+    },
+    {
+      "treasure_id": 34,
+      "item_ids": [
+        614
+      ],
+      "gold": 300,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Heal Massive Wounds"
+      ]
+    },
+    {
+      "treasure_id": 35,
+      "item_ids": [
+        7,
+        202,
+        407
+      ],
+      "gold": 1000,
+      "gems": 1500,
+      "jewelry": 7,
+      "flags": 2,
+      "item_names": [
+        "Dagger of Anti Magic +1",
+        "Robe of Enchanters +1",
+        "Helm of Kranack +4"
+      ]
+    },
+    {
+      "treasure_id": 36,
+      "item_ids": [
+        801,
+        806,
+        877,
+        806,
+        806,
+        881,
+        881,
+        881,
+        883,
+        883,
+        806,
+        806,
+        806,
+        806,
+        806,
+        806,
+        806,
+        806,
+        806,
+        806
+      ],
+      "gold": 2000,
+      "gems": 1500,
+      "jewelry": 20,
+      "flags": 2,
+      "item_names": [
+        "Priest Scroll Case",
+        "Parchment",
+        "Iron Rations",
+        "Parchment",
+        "Parchment",
+        "Flask of Oil",
+        "Flask of Oil",
+        "Flask of Oil",
+        "Wine",
+        "Wine",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment"
+      ]
+    },
+    {
+      "treasure_id": 37,
+      "item_ids": [],
+      "gold": 600,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 38,
+      "item_ids": [],
+      "gold": 200,
+      "gems": 100,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 39,
+      "item_ids": [],
+      "gold": 400,
+      "gems": 200,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 40,
+      "item_ids": [],
+      "gold": 600,
+      "gems": 300,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 41,
+      "item_ids": [],
+      "gold": 800,
+      "gems": 400,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 42,
+      "item_ids": [],
+      "gold": 1000,
+      "gems": 400,
+      "jewelry": 5,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 43,
+      "item_ids": [],
+      "gold": 6000,
+      "gems": 18000,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 44,
+      "item_ids": [
+        8,
+        614,
+        715,
+        800
+      ],
+      "gold": 3000,
+      "gems": 2300,
+      "jewelry": 15,
+      "flags": 3,
+      "item_names": [
+        "Dagger of Spells +1",
+        "Heal Massive Wounds",
+        "Lip Balm Salve",
+        "Sorcerer Scroll Case"
+      ]
+    },
+    {
+      "treasure_id": 45,
+      "item_ids": [
+        662
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Crown of Safe Return"
+      ]
+    },
+    {
+      "treasure_id": 46,
+      "item_ids": [
+        3,
+        1,
+        1,
+        1
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": -3,
+      "item_names": [
+        "Dagger -5",
+        "Dagger",
+        "Dagger",
+        "Dagger"
+      ]
+    },
+    {
+      "treasure_id": 47,
+      "item_ids": [
+        624
+      ],
+      "gold": 500,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Ring of Defense +5"
+      ]
+    },
+    {
+      "treasure_id": 48,
+      "item_ids": [
+        803,
+        806,
+        805,
+        806,
+        803,
+        806,
+        806,
+        806,
+        805,
+        806,
+        806,
+        806,
+        877,
+        806,
+        878,
+        806,
+        803,
+        880,
+        881,
+        881
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Quiver of Arrows",
+        "Parchment",
+        "Torch",
+        "Parchment",
+        "Quiver of Arrows",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Torch",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Iron Rations",
+        "Parchment",
+        "Rope",
+        "Parchment",
+        "Quiver of Arrows",
+        "Iron Spikes",
+        "Flask of Oil",
+        "Flask of Oil"
+      ]
+    },
+    {
+      "treasure_id": 49,
+      "item_ids": [
+        619
+      ],
+      "gold": 750,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Purple Luck Stone +3"
+      ]
+    },
+    {
+      "treasure_id": 50,
+      "item_ids": [
+        18,
+        23
+      ],
+      "gold": 10000,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": -5,
+      "item_names": [
+        "Sword of No Redemption -2",
+        "Penetration Broadsword +2"
+      ]
+    },
+    {
+      "treasure_id": 51,
+      "item_ids": [],
+      "gold": 6500,
+      "gems": 500,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 52,
+      "item_ids": [
+        405,
+        1,
+        11,
+        219,
+        418,
+        436,
+        455
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Helm +4",
+        "Dagger",
+        "Longsword +1",
+        "Banded Armor",
+        "Shield",
+        "Plate Gauntlets",
+        "Steel Shod Boots"
+      ]
+    },
+    {
+      "treasure_id": 53,
+      "item_ids": [],
+      "gold": 6000,
+      "gems": 500,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 54,
+      "item_ids": [],
+      "gold": 7000,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 55,
+      "item_ids": [
+        169,
+        169
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Shuriken",
+        "Shuriken"
+      ]
+    },
+    {
+      "treasure_id": 56,
+      "item_ids": [
+        623,
+        637
+      ],
+      "gold": 6000,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Ring of Defense +3",
+        "Necklace of Lightning Bolts"
+      ]
+    },
+    {
+      "treasure_id": 57,
+      "item_ids": [
+        881,
+        881,
+        881,
+        881,
+        881,
+        881,
+        881,
+        881,
+        881,
+        881
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Flask of Oil",
+        "Flask of Oil",
+        "Flask of Oil",
+        "Flask of Oil",
+        "Flask of Oil",
+        "Flask of Oil",
+        "Flask of Oil",
+        "Flask of Oil",
+        "Flask of Oil",
+        "Flask of Oil"
+      ]
+    },
+    {
+      "treasure_id": 58,
+      "item_ids": [
+        883,
+        883,
+        883,
+        883,
+        877,
+        877,
+        877,
+        877,
+        877,
+        877
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Wine",
+        "Wine",
+        "Wine",
+        "Wine",
+        "Iron Rations",
+        "Iron Rations",
+        "Iron Rations",
+        "Iron Rations",
+        "Iron Rations",
+        "Iron Rations"
+      ]
+    },
+    {
+      "treasure_id": 59,
+      "item_ids": [
+        8,
+        405,
+        421,
+        211,
+        607,
+        716
+      ],
+      "gold": 6000,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Dagger of Spells +1",
+        "Helm +4",
+        "Iron Scales +4",
+        "Leather Armor +6",
+        "Improvement",
+        "Oil of Resistance"
+      ]
+    },
+    {
+      "treasure_id": 60,
+      "item_ids": [
+        601,
+        601,
+        602,
+        715,
+        719
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Adrenelin",
+        "Adrenelin",
+        "Heal Poison",
+        "Lip Balm Salve",
+        "Corelian Ointment"
+      ]
+    },
+    {
+      "treasure_id": 61,
+      "item_ids": [],
+      "gold": 1500,
+      "gems": 2200,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 62,
+      "item_ids": [
+        22
+      ],
+      "gold": 1500,
+      "gems": 25,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Broadsword +2"
+      ]
+    },
+    {
+      "treasure_id": 63,
+      "item_ids": [
+        1,
+        216,
+        405,
+        421
+      ],
+      "gold": 0,
+      "gems": 45,
+      "jewelry": 5,
+      "flags": 0,
+      "item_names": [
+        "Dagger",
+        "Chain Armor +3",
+        "Helm +4",
+        "Iron Scales +4"
+      ]
+    },
+    {
+      "treasure_id": 64,
+      "item_ids": [
+        761,
+        763,
+        764,
+        806,
+        806
+      ],
+      "gold": 150,
+      "gems": 65,
+      "jewelry": 5,
+      "flags": 0,
+      "item_names": [
+        "Open Lock",
+        "Flame Spikes",
+        "Adrenalin",
+        "Parchment",
+        "Parchment"
+      ]
+    },
+    {
+      "treasure_id": 65,
+      "item_ids": [
+        602,
+        604,
+        607,
+        715,
+        718
+      ],
+      "gold": 1200,
+      "gems": 350,
+      "jewelry": 0,
+      "flags": -2,
+      "item_names": [
+        "Heal Poison",
+        "Cold Resistance",
+        "Improvement",
+        "Lip Balm Salve",
+        "Oil of Sovrameni"
+      ]
+    },
+    {
+      "treasure_id": 66,
+      "item_ids": [],
+      "gold": 10000,
+      "gems": 24000,
+      "jewelry": 0,
+      "flags": 13,
+      "item_names": []
+    },
+    {
+      "treasure_id": 67,
+      "item_ids": [
+        672,
+        703
+      ],
+      "gold": 15000,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Belt of Brawn",
+        "Rod of Transmutation"
+      ]
+    },
+    {
+      "treasure_id": 68,
+      "item_ids": [
+        162,
+        162,
+        406,
+        800,
+        715,
+        717
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Dagger +1",
+        "Dagger +1",
+        "Helm +3",
+        "Sorcerer Scroll Case",
+        "Lip Balm Salve",
+        "Juice of Safu"
+      ]
+    },
+    {
+      "treasure_id": 69,
+      "item_ids": [],
+      "gold": 2000,
+      "gems": 4500,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": []
+    },
+    {
+      "treasure_id": 70,
+      "item_ids": [
+        806,
+        806,
+        806,
+        806,
+        806,
+        806,
+        806,
+        806,
+        806,
+        806,
+        806,
+        806,
+        806,
+        806,
+        806,
+        806,
+        806,
+        806,
+        806,
+        806
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment",
+        "Parchment"
+      ]
+    },
+    {
+      "treasure_id": 71,
+      "item_ids": [
+        178
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Bull Whip +1"
+      ]
+    },
+    {
+      "treasure_id": 72,
+      "item_ids": [
+        804
+      ],
+      "gold": 2000,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Rat Figures"
+      ]
+    },
+    {
+      "treasure_id": 73,
+      "item_ids": [
+        178
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Bull Whip +1"
+      ]
+    },
+    {
+      "treasure_id": 74,
+      "item_ids": [
+        178
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Bull Whip +1"
+      ]
+    },
+    {
+      "treasure_id": 75,
+      "item_ids": [
+        465
+      ],
+      "gold": 0,
+      "gems": 0,
+      "jewelry": 0,
+      "flags": 0,
+      "item_names": [
+        "Sir Robbins Shield -6"
+      ]
+    }
+  ]
+}

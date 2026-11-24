@@ -15,6 +15,10 @@ Shader "Realmz/CartographyTerrain"
         _Smoothness ("Smoothness", Range(0, 1)) = 0.06
         _LanternPoolColor ("Lantern Pool Color", Color) = (1.0, 0.62, 0.24, 1)
         _LanternPoolIntensity ("Lantern Pool Intensity", Range(0, 3)) = 1.35
+        _GroundValueScale ("SoC Ground Chiaroscuro Scale", Range(0.5, 1.2)) = 0.78
+        _RoadValueBoost ("Road & Cobble Value Scale", Range(0.6, 1.2)) = 0.88
+        _HorizonHazeColor ("North Horizon Haze Color", Color) = (0.91, 0.83, 0.70, 1)
+        _HorizonHazeStrength ("North Horizon Haze Strength", Range(0, 0.35)) = 0.09
     }
 
     SubShader
@@ -52,6 +56,10 @@ Shader "Realmz/CartographyTerrain"
             half _Smoothness;
             half4 _LanternPoolColor;
             half _LanternPoolIntensity;
+            half _GroundValueScale;
+            half _RoadValueBoost;
+            half4 _HorizonHazeColor;
+            half _HorizonHazeStrength;
         CBUFFER_END
         ENDHLSL
 
@@ -301,9 +309,31 @@ Shader "Realmz/CartographyTerrain"
                 half creaseAO = lerp(1.0h, saturate((half)input.cliffAndAO.y), _CreaseAOStrength);
                 albedo *= lerp(0.55h, 1.0h, creaseAO);
 
-                // Tangent-to-world normal
-                float3 tangentWS = length(input.tangentWS) > 0.001 ? SafeNormalize(input.tangentWS) : float3(1.0, 0.0, 0.0);
-                float3 bitangentWS = length(input.bitangentWS) > 0.001 ? SafeNormalize(input.bitangentWS) : cross(baseNormalWS, tangentWS);
+                // SoC chiaroscuro ground-vs-road value split
+                half roadFactor = saturate(b2 * 0.65h + b3);
+                albedo *= lerp(_GroundValueScale, _RoadValueBoost, roadFactor);
+
+                // Planar TBN aligned strictly with ComputePixelLockedUV
+                float3 absN = abs(baseNormalWS);
+                float3 rawT;
+                float3 rawB;
+                if (absN.y >= 0.55)
+                {
+                    rawT = float3(1.0, 0.0, 0.0);
+                    rawB = float3(0.0, 0.0, 1.0);
+                }
+                else if (absN.x >= absN.z)
+                {
+                    rawT = float3(0.0, 0.0, 1.0);
+                    rawB = float3(0.0, 1.0, 0.0);
+                }
+                else
+                {
+                    rawT = float3(1.0, 0.0, 0.0);
+                    rawB = float3(0.0, 1.0, 0.0);
+                }
+                float3 tangentWS = SafeNormalize(rawT - baseNormalWS * dot(rawT, baseNormalWS));
+                float3 bitangentWS = SafeNormalize(rawB - baseNormalWS * dot(rawB, baseNormalWS));
                 half3 normalWS = SafeNormalize(normalTS.x * tangentWS + normalTS.y * bitangentWS + normalTS.z * baseNormalWS);
 
                 float3 viewDirWS = GetWorldSpaceNormalizeViewDir(input.positionWS);
@@ -378,6 +408,11 @@ Shader "Realmz/CartographyTerrain"
                 half3 lanternPool = albedo * _LanternPoolColor.rgb * (topDownLM.a * _LanternPoolIntensity);
 
                 half3 color = ambientColor + directDiffuse + directSpecular + addLighting + lanternPool;
+                if (_TopDownLightmapBounds.w > 0.00001)
+                {
+                    half northFrac = saturate((half)((input.positionWS.z - _TopDownLightmapBounds.y) * _TopDownLightmapBounds.w));
+                    color = lerp(color, _HorizonHazeColor.rgb, smoothstep(0.76h, 1.0h, northFrac) * _HorizonHazeStrength);
+                }
                 color = clamp(color, half3(0.0h, 0.0h, 0.0h), half3(64.0h, 64.0h, 64.0h));
                 color = MixFog(color, input.fogFactor);
 

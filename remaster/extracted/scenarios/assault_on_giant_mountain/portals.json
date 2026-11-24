@@ -1,0 +1,76 @@
+{
+  "scenario": "Assault on Giant Mountain",
+  "count": 5,
+  "portals": [
+    {
+      "id": "land_5_portal_39_12_edcd_135",
+      "source_map_id": "land_5",
+      "x": 39,
+      "y": 12,
+      "edcd_id": 135,
+      "dest_is_dungeon": true,
+      "dest_level": 1,
+      "dest_map_id": "dungeon_1",
+      "dest_x": 39,
+      "dest_y": 12,
+      "dest_facing": "East",
+      "label": "These stairs lead downwards.  The air grows cold and damp as you descend."
+    },
+    {
+      "id": "land_5_portal_23_25_edcd_135",
+      "source_map_id": "land_5",
+      "x": 23,
+      "y": 25,
+      "edcd_id": 135,
+      "dest_is_dungeon": true,
+      "dest_level": 1,
+      "dest_map_id": "dungeon_1",
+      "dest_x": 39,
+      "dest_y": 12,
+      "dest_facing": "East",
+      "label": "These stairs lead downwards.  The air grows cold and damp as you descend."
+    },
+    {
+      "id": "dungeon_1_portal_0_1_edcd_135",
+      "source_map_id": "dungeon_1",
+      "x": 0,
+      "y": 1,
+      "edcd_id": 135,
+      "dest_is_dungeon": true,
+      "dest_level": 1,
+      "dest_map_id": "dungeon_1",
+      "dest_x": 39,
+      "dest_y": 12,
+      "dest_facing": "East",
+      "label": "You leave the fortress Martech."
+    },
+    {
+      "id": "dungeon_1_portal_39_13_edcd_189",
+      "source_map_id": "dungeon_1",
+      "x": 39,
+      "y": 13,
+      "edcd_id": 189,
+      "dest_is_dungeon": false,
+      "dest_level": 5,
+      "dest_map_id": "land_5",
+      "dest_x": 4,
+      "dest_y": 30,
+      "dest_facing": "North",
+      "label": "You ascend the stairs to the first floor."
+    },
+    {
+      "id": "dungeon_1_portal_10_78_edcd_304",
+      "source_map_id": "dungeon_1",
+      "x": 10,
+      "y": 78,
+      "edcd_id": 304,
+      "dest_is_dungeon": false,
+      "dest_level": 0,
+      "dest_map_id": "land_0",
+      "dest_x": 54,
+      "dest_y": 55,
+      "dest_facing": "North",
+      "label": "Portal to land_0 (54,55)"
+    }
+  ]
+}

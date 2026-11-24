@@ -8,6 +8,18 @@ namespace RealmzCore.Combat
 {
     public sealed class TacticalCombatSession
     {
+        private enum ElementKind
+        {
+            None = 0,
+            Heat = 1,
+            Cold = 2,
+            Electric = 3,
+            Chemical = 4,
+            Mental = 5,
+            Charm = 6,
+            Magic = 7
+        }
+
         private readonly Dictionary<string, CombatantState> _combatantsById =
             new Dictionary<string, CombatantState>(StringComparer.Ordinal);
         private readonly List<CombatantState> _combatants = new List<CombatantState>();
@@ -17,6 +29,11 @@ namespace RealmzCore.Combat
         private readonly Dictionary<int, ItemDefinition> _items;
         private readonly List<string> _roundQueue = new List<string>();
         private readonly List<CombatLogEntry> _log = new List<CombatLogEntry>();
+        private readonly List<int> _collectedLootItemIds = new List<int>();
+        private readonly List<SurfaceChangeEvent> _lastSurfaceChanges = new List<SurfaceChangeEvent>();
+        private readonly AStarPathfinder _pathfinder;
+        private bool _victoryRewardsGranted;
+        private bool _partyRewardsApplied;
 
         public TacticalCombatSession(
             CombatGrid grid,
@@ -61,6 +78,7 @@ namespace RealmzCore.Combat
             Roller = roller ?? new DeterministicDiceRoller(0x434F4D424154UL);
             Mode = mode;
             Party = party;
+            _pathfinder = new AStarPathfinder(Math.Max(grid.Width, 16), Math.Max(grid.Height, 16));
             RoundNumber = 1;
             TurnNumber = 1;
 
@@ -68,6 +86,8 @@ namespace RealmzCore.Combat
             StartCurrentActorTurn();
             CheckOutcome();
         }
+
+        public event Action<IReadOnlyList<SurfaceChangeEvent>>? SurfaceChanged;
 
         public CombatGrid Grid { get; }
         public IDiceRoller Roller { get; }
@@ -77,11 +97,15 @@ namespace RealmzCore.Combat
         public IReadOnlyDictionary<int, SpellDefinition> Spells => _spells;
         public IReadOnlyDictionary<int, ItemDefinition> Items => _items;
         public IReadOnlyList<CombatLogEntry> Log => _log;
+        public IReadOnlyList<int> CollectedLootItemIds => _collectedLootItemIds;
+        public IReadOnlyList<SurfaceChangeEvent> LastSurfaceChanges => _lastSurfaceChanges;
         public int RoundNumber { get; private set; }
         public int TurnNumber { get; private set; }
         public CombatOutcome Outcome { get; private set; }
         public int TotalXpEarned { get; private set; }
         public int TotalGoldLoot { get; private set; }
+        public int VictoryLevelsGained { get; private set; }
+        public bool VictoryRewardsGranted => _victoryRewardsGranted;
 
         public CombatantState? CurrentActor =>
             _roundQueue.Count > 0 && _combatantsById.TryGetValue(_roundQueue[0], out CombatantState? actor)
@@ -100,6 +124,11 @@ namespace RealmzCore.Combat
         public CombatantState? GetCombatant(string id)
         {
             return _combatantsById.TryGetValue(id, out CombatantState? unit) ? unit : null;
+        }
+
+        public IReadOnlyList<CombatGridCell> GetActiveSurfaceCells()
+        {
+            return Grid.GetActiveSurfaceCells();
         }
 
         public IReadOnlyList<InitiativeEntry> GetInitiativeRibbon(int maxCount = 8)
@@ -162,7 +191,7 @@ namespace RealmzCore.Combat
             for (int i = 0; i < _combatants.Count; i++)
             {
                 CombatantState c = _combatants[i];
-                if (c.Side == moverSide || !c.IsConscious)
+                if (c.Side == moverSide || !c.IsConscious || !c.Economy.HasReaction)
                 {
                     continue;
                 }
@@ -185,6 +214,7 @@ namespace RealmzCore.Combat
         {
             if (!_combatantsById.TryGetValue(unitId, out CombatantState? unit) ||
                 !unit.IsConscious ||
+                !unit.Economy.HasReaction ||
                 unit.Conditions.Has(CharConditionId.RunsAway))
             {
                 return Array.Empty<GridCoord>();
@@ -238,7 +268,7 @@ namespace RealmzCore.Combat
             for (int i = 0; i < threatsAtFrom.Count; i++)
             {
                 CombatantState? enemy = GetCombatant(threatsAtFrom[i]);
-                if (enemy == null)
+                if (enemy == null || !enemy.Economy.HasReaction)
                 {
                     continue;
                 }
@@ -255,18 +285,23 @@ namespace RealmzCore.Combat
 
         public IReadOnlyList<ReachableTileInfo> GetReachableTiles(string combatantId)
         {
+            return GetReachableTilesInternal(combatantId, ignoreMoveRemaining: false);
+        }
+
+        internal IReadOnlyList<ReachableTileInfo> GetReachableTilesInternal(string combatantId, bool ignoreMoveRemaining)
+        {
             if (!_combatantsById.TryGetValue(combatantId, out CombatantState? unit) || !unit.IsConscious)
             {
                 return Array.Empty<ReachableTileInfo>();
             }
 
-            int budget = unit.Economy.MoveRemaining;
+            int budget = ignoreMoveRemaining ? unit.EffectiveMovement : unit.Economy.MoveRemaining;
             if (budget <= 0)
             {
                 return Array.Empty<ReachableTileInfo>();
             }
 
-            Dictionary<GridCoord, ReachableNode> nodes = AStarPathfinder.FindReachableTiles(
+            Dictionary<GridCoord, ReachableNode> nodes = _pathfinder.FindReachableTiles(
                 Grid.Width,
                 Grid.Height,
                 unit.Position,
@@ -319,8 +354,22 @@ namespace RealmzCore.Combat
 
         public LosResult CheckLineOfSight(GridCoord from, GridCoord to)
         {
+            return CheckLineOfSight(from, to, includeSteamObscuration: true);
+        }
+
+        public LosResult CheckLineOfSight(GridCoord from, GridCoord to, bool includeSteamObscuration)
+        {
             List<GridCoord> rayCells = TraceBresenham(from, to);
             bool partialCover = false;
+            bool steamObscured = false;
+
+            if (includeSteamObscuration &&
+                (Grid.GetSurface(from.X, from.Y) == SurfaceType.SteamCloud ||
+                 Grid.GetSurface(to.X, to.Y) == SurfaceType.SteamCloud))
+            {
+                partialCover = true;
+                steamObscured = true;
+            }
 
             GridCoord prev = from;
             for (int i = 0; i < rayCells.Count; i++)
@@ -352,6 +401,11 @@ namespace RealmzCore.Combat
                         return new LosResult(LosKind.Blocked, 0, cell, rayCells);
                     }
 
+                    if (includeSteamObscuration && Grid.GetSurface(cell.X, cell.Y) == SurfaceType.SteamCloud)
+                    {
+                        return new LosResult(LosKind.Blocked, 0, cell, rayCells, isSteamObscured: true);
+                    }
+
                     if (Grid.ProvidesCover(cell.X, cell.Y) || IsOccupiedByLiving(cell.X, cell.Y))
                     {
                         partialCover = true;
@@ -359,6 +413,11 @@ namespace RealmzCore.Combat
                 }
 
                 prev = cell;
+            }
+
+            if (steamObscured)
+            {
+                return new LosResult(LosKind.PartialCover, 20, null, rayCells, isSteamObscured: true);
             }
 
             return partialCover
@@ -411,6 +470,15 @@ namespace RealmzCore.Combat
 
         public SpellAoeFootprint GetSpellAoeFootprint(string spellIdOrKey, GridCoord targetCenter, string casterId)
         {
+            return GetSpellAoeFootprint(spellIdOrKey, targetCenter, casterId, fromPos: null);
+        }
+
+        public SpellAoeFootprint GetSpellAoeFootprint(
+            string spellIdOrKey,
+            GridCoord targetCenter,
+            string casterId,
+            GridCoord? fromPos)
+        {
             CombatantState? caster = GetCombatant(casterId);
             SpellDefinition? spell = ResolveSpell(spellIdOrKey);
             if (caster == null || spell == null)
@@ -421,11 +489,20 @@ namespace RealmzCore.Combat
                     Array.Empty<GridCoord>(),
                     Array.Empty<string>(),
                     Array.Empty<string>(),
-                    Array.Empty<GridCoord>());
+                    Array.Empty<GridCoord>(),
+                    hasLineOfSight: false);
             }
 
+            GridCoord casterPos = fromPos ?? caster.Position;
+            int casterElev = Grid.GetElevation(casterPos.X, casterPos.Y);
+            int targetElev = Grid.InBounds(targetCenter) ? Grid.GetElevation(targetCenter.X, targetCenter.Y) : 0;
+            int effectiveRange = spell.Range > 0 && casterElev > targetElev
+                ? spell.Range + 1
+                : Math.Max(0, spell.Range);
+
             bool inRange = Grid.InBounds(targetCenter) &&
-                           caster.Position.ChebyshevDistance(targetCenter) <= Math.Max(0, spell.Range);
+                           casterPos.ChebyshevDistance(targetCenter) <= effectiveRange;
+            bool hasLos = true;
 
             List<GridCoord> affectedTiles = new List<GridCoord>();
             List<GridCoord> blockedTiles = new List<GridCoord>();
@@ -462,46 +539,80 @@ namespace RealmzCore.Combat
             else if (string.Equals(mode, "Self", StringComparison.OrdinalIgnoreCase))
             {
                 inRange = true;
-                affectedTiles.Add(caster.Position);
+                affectedTiles.Add(casterPos);
                 allyIds.Add(caster.Id);
             }
             else
             {
-                IReadOnlyList<GridCoord> offsets = spell.AoeOffsets.Count > 0
-                    ? spell.AoeOffsets
-                    : new[] { new GridCoord(0, 0) };
-
-                HashSet<GridCoord> seen = new HashSet<GridCoord>();
-                for (int i = 0; i < offsets.Count; i++)
+                if (!Grid.InBounds(targetCenter) || Grid.BlocksLos(targetCenter.X, targetCenter.Y))
                 {
-                    GridCoord tile = new GridCoord(targetCenter.X + offsets[i].X, targetCenter.Y + offsets[i].Y);
-                    if (!Grid.InBounds(tile) || !seen.Add(tile))
+                    hasLos = false;
+                    if (Grid.InBounds(targetCenter))
                     {
-                        continue;
+                        blockedTiles.Add(targetCenter);
                     }
-
-                    if (Grid.BlocksLos(tile.X, tile.Y))
+                }
+                else
+                {
+                    LosResult centerLos = CheckLineOfSight(casterPos, targetCenter, includeSteamObscuration: false);
+                    if (centerLos.Kind == LosKind.Blocked)
                     {
-                        blockedTiles.Add(tile);
-                        continue;
+                        hasLos = false;
+                        if (centerLos.BlockedBy.HasValue)
+                        {
+                            blockedTiles.Add(centerLos.BlockedBy.Value);
+                        }
                     }
+                }
 
-                    affectedTiles.Add(tile);
-                    for (int u = 0; u < _combatants.Count; u++)
+                if (hasLos)
+                {
+                    IReadOnlyList<GridCoord> offsets = spell.AoeOffsets.Count > 0
+                        ? spell.AoeOffsets
+                        : new[] { new GridCoord(0, 0) };
+
+                    HashSet<GridCoord> seen = new HashSet<GridCoord>();
+                    for (int i = 0; i < offsets.Count; i++)
                     {
-                        CombatantState c = _combatants[u];
-                        if (!c.IsAlive || c.Position != tile)
+                        GridCoord tile = new GridCoord(targetCenter.X + offsets[i].X, targetCenter.Y + offsets[i].Y);
+                        if (!Grid.InBounds(tile) || !seen.Add(tile))
                         {
                             continue;
                         }
 
-                        if (c.Side == caster.Side)
+                        if (Grid.BlocksLos(tile.X, tile.Y))
                         {
-                            allyIds.Add(c.Id);
+                            blockedTiles.Add(tile);
+                            continue;
                         }
-                        else
+
+                        if (tile != targetCenter)
                         {
-                            enemyIds.Add(c.Id);
+                            LosResult blastLos = CheckLineOfSight(targetCenter, tile, includeSteamObscuration: false);
+                            if (blastLos.Kind == LosKind.Blocked)
+                            {
+                                blockedTiles.Add(tile);
+                                continue;
+                            }
+                        }
+
+                        affectedTiles.Add(tile);
+                        for (int u = 0; u < _combatants.Count; u++)
+                        {
+                            CombatantState c = _combatants[u];
+                            if (!c.IsAlive || c.Position != tile)
+                            {
+                                continue;
+                            }
+
+                            if (c.Side == caster.Side)
+                            {
+                                allyIds.Add(c.Id);
+                            }
+                            else
+                            {
+                                enemyIds.Add(c.Id);
+                            }
                         }
                     }
                 }
@@ -513,10 +624,20 @@ namespace RealmzCore.Combat
                 affectedTiles,
                 new List<string>(allyIds),
                 new List<string>(enemyIds),
-                blockedTiles);
+                blockedTiles,
+                hasLineOfSight: hasLos);
         }
 
         public TacticalAttackPreview PreviewMeleeAttack(string attackerId, string defenderId, GridCoord? fromPos = null)
+        {
+            return PreviewMeleeAttackInternal(attackerId, defenderId, fromPos, ignoreActionBudget: false);
+        }
+
+        internal TacticalAttackPreview PreviewMeleeAttackInternal(
+            string attackerId,
+            string defenderId,
+            GridCoord? fromPos,
+            bool ignoreActionBudget)
         {
             CombatantState? attacker = GetCombatant(attackerId);
             CombatantState? defender = GetCombatant(defenderId);
@@ -531,19 +652,27 @@ namespace RealmzCore.Combat
             GridCoord pos = fromPos ?? attacker.Position;
             bool adjacent = pos.ChebyshevDistance(defender.Position) == 1;
             bool flanking = adjacent && IsFlanking(attackerId, defenderId, pos);
+            int attElev = Grid.GetElevation(pos.X, pos.Y);
+            int defElev = Grid.GetElevation(defender.Position.X, defender.Position.Y);
+            int unappliedWeaponBonus = attacker.WeaponBonusIncludedInToHit ? 0 : attacker.WeaponBonus;
 
             HitPreview hit = CombatRules.CalculateHitPreview(
                 attackerToHit: attacker.EffectiveToHit,
                 defenderAc: defender.EffectiveAc,
                 isFlanking: flanking,
-                equippedWeaponBonus: attacker.WeaponBonus,
+                equippedWeaponBonus: unappliedWeaponBonus,
                 defenderIsEvil: defender.IsEvil,
                 attackerConditions: attacker.Conditions,
                 defenderConditions: defender.Conditions,
-                mode: Mode);
+                mode: Mode,
+                attackerElevation: attElev,
+                defenderElevation: defElev,
+                weaponBonusAlreadyIncluded: attacker.WeaponBonusIncludedInToHit,
+                defenderIsProne: defender.IsProne,
+                attackerIsProne: attacker.IsProne);
 
             ComputeDamageRange(attacker.WeaponDice, attacker.DamageBonus, attacker.Conditions, out int minDmg, out int maxDmg);
-            List<string> tags = CollectConditionTags(attacker, defender, flanking, los: null);
+            List<string> tags = CollectConditionTags(attacker, defender, flanking, los: null, hit.Modifiers);
 
             bool provokesAoO = false;
             if (fromPos.HasValue && fromPos.Value != attacker.Position)
@@ -551,10 +680,11 @@ namespace RealmzCore.Combat
                 provokesAoO = WouldStepProvokeAoO(attackerId, attacker.Position, fromPos.Value);
             }
 
-            bool canExecute = adjacent && attacker.Side != defender.Side && attacker.Economy.HasStandardAction;
+            bool hasAction = ignoreActionBudget || attacker.Economy.HasStandardAction;
+            bool canExecute = adjacent && attacker.Side != defender.Side && hasAction;
             string reason = !adjacent
                 ? "Target is out of melee reach."
-                : !attacker.Economy.HasStandardAction
+                : !hasAction
                     ? "No standard action remaining."
                     : string.Empty;
 
@@ -571,10 +701,20 @@ namespace RealmzCore.Combat
                 provokesAoO: provokesAoO,
                 losResult: null,
                 defenderAc: defender.EffectiveAc,
-                conditionTags: tags);
+                conditionTags: tags,
+                elevationModifierPct: hit.ElevationModifierPercent);
         }
 
         public TacticalAttackPreview PreviewRangedAttack(string attackerId, string defenderId, GridCoord? fromPos = null)
+        {
+            return PreviewRangedAttackInternal(attackerId, defenderId, fromPos, ignoreActionBudget: false);
+        }
+
+        internal TacticalAttackPreview PreviewRangedAttackInternal(
+            string attackerId,
+            string defenderId,
+            GridCoord? fromPos,
+            bool ignoreActionBudget)
         {
             CombatantState? attacker = GetCombatant(attackerId);
             CombatantState? defender = GetCombatant(defenderId);
@@ -589,7 +729,13 @@ namespace RealmzCore.Combat
             GridCoord pos = fromPos ?? attacker.Position;
             int dist = pos.ChebyshevDistance(defender.Position);
             bool hasRanged = attacker.RangedRange > 0 && !string.IsNullOrWhiteSpace(attacker.RangedDice);
-            LosResult los = CheckLineOfSight(pos, defender.Position);
+            int attElev = Grid.GetElevation(pos.X, pos.Y);
+            int defElev = Grid.GetElevation(defender.Position.X, defender.Position.Y);
+            int effectiveRange = hasRanged
+                ? attacker.RangedRange + (attElev > defElev ? 1 : 0)
+                : 0;
+
+            LosResult los = CheckLineOfSight(pos, defender.Position, includeSteamObscuration: true);
 
             int missileToHit = attacker.EffectiveMissileSkill - los.CoverPenaltyPct;
             if (defender.Conditions.Has(CharConditionId.ShieldFromProjectiles))
@@ -605,22 +751,28 @@ namespace RealmzCore.Combat
                 defenderIsEvil: defender.IsEvil,
                 attackerConditions: attacker.Conditions,
                 defenderConditions: defender.Conditions,
-                mode: Mode);
+                mode: Mode,
+                attackerElevation: attElev,
+                defenderElevation: defElev,
+                weaponBonusAlreadyIncluded: true,
+                defenderIsProne: false,
+                attackerIsProne: attacker.IsProne);
 
             string diceStr = hasRanged ? attacker.RangedDice : "1d4";
             ComputeDamageRange(diceStr, 0, null, out int minDmg, out int maxDmg);
-            List<string> tags = CollectConditionTags(attacker, defender, isFlanking: false, los);
+            List<string> tags = CollectConditionTags(attacker, defender, isFlanking: false, los, hit.Modifiers);
 
-            bool inRange = hasRanged && dist > 0 && dist <= attacker.RangedRange;
+            bool inRange = hasRanged && dist > 0 && dist <= effectiveRange;
             bool losClear = los.Kind != LosKind.Blocked;
-            bool canExecute = inRange && losClear && attacker.Side != defender.Side && attacker.Economy.HasStandardAction;
+            bool hasAction = ignoreActionBudget || attacker.Economy.HasStandardAction;
+            bool canExecute = inRange && losClear && attacker.Side != defender.Side && hasAction;
             string reason = !hasRanged
                 ? "No ranged weapon equipped."
                 : !inRange
                     ? "Target out of ranged weapon range."
                     : !losClear
                         ? "Line of sight is blocked."
-                        : !attacker.Economy.HasStandardAction
+                        : !hasAction
                             ? "No standard action remaining."
                             : string.Empty;
 
@@ -637,10 +789,21 @@ namespace RealmzCore.Combat
                 provokesAoO: false,
                 losResult: los,
                 defenderAc: defender.EffectiveAc,
-                conditionTags: tags);
+                conditionTags: tags,
+                elevationModifierPct: hit.ElevationModifierPercent);
         }
 
         public TacticalSpellPreview PreviewSpell(string casterId, string spellIdOrKey, GridCoord targetCenter)
+        {
+            return PreviewSpellInternal(casterId, spellIdOrKey, targetCenter, fromPos: null, ignoreActionBudget: false);
+        }
+
+        internal TacticalSpellPreview PreviewSpellInternal(
+            string casterId,
+            string spellIdOrKey,
+            GridCoord targetCenter,
+            GridCoord? fromPos,
+            bool ignoreActionBudget)
         {
             CombatantState? caster = GetCombatant(casterId);
             SpellDefinition? spell = ResolveSpell(spellIdOrKey);
@@ -650,11 +813,12 @@ namespace RealmzCore.Combat
                     false,
                     "Caster or spell not found.",
                     0, 0, 0, 0,
-                    new SpellAoeFootprint(false, targetCenter, Array.Empty<GridCoord>(), Array.Empty<string>(), Array.Empty<string>(), Array.Empty<GridCoord>()),
+                    new SpellAoeFootprint(false, targetCenter, Array.Empty<GridCoord>(), Array.Empty<string>(), Array.Empty<string>(), Array.Empty<GridCoord>(), hasLineOfSight: false),
                     Array.Empty<string>());
             }
 
-            SpellAoeFootprint footprint = GetSpellAoeFootprint(spellIdOrKey, targetCenter, casterId);
+            GridCoord casterPos = fromPos ?? caster.Position;
+            SpellAoeFootprint footprint = GetSpellAoeFootprint(spellIdOrKey, targetCenter, casterId, casterPos);
             int minAmount = 0;
             int maxAmount = 0;
             if (!string.IsNullOrWhiteSpace(spell.EffectDice) && DiceSpec.TryParse(spell.EffectDice, out DiceSpec spec))
@@ -667,6 +831,21 @@ namespace RealmzCore.Combat
             bool isHostile = !string.Equals(spell.EffectKind, "Heal", StringComparison.OrdinalIgnoreCase) &&
                              !string.Equals(spell.EffectKind, "Buff", StringComparison.OrdinalIgnoreCase) &&
                              !string.Equals(spell.EffectKind, "Cure", StringComparison.OrdinalIgnoreCase);
+
+            List<string> tags = new List<string>();
+            if (spell.AppliedCondition.HasValue)
+            {
+                tags.Add(ConditionEffects.GetCode(spell.AppliedCondition.Value));
+            }
+
+            int casterElev = Grid.GetElevation(casterPos.X, casterPos.Y);
+            int targetElev = Grid.InBounds(targetCenter) ? Grid.GetElevation(targetCenter.X, targetCenter.Y) : 0;
+            if (spell.Range > 0 && casterElev > targetElev)
+            {
+                tags.Add("High Ground +1 Range");
+            }
+
+            bool anyImmune = false;
             if (isHostile && footprint.AffectedEnemyIds.Count > 0)
             {
                 int totalSave = 0;
@@ -675,6 +854,11 @@ namespace RealmzCore.Combat
                     CombatantState? enemy = GetCombatant(footprint.AffectedEnemyIds[i]);
                     if (enemy != null)
                     {
+                        if (IsTargetImmuneToSpell(enemy, spell))
+                        {
+                            anyImmune = true;
+                        }
+
                         totalSave += ComputeSpellSaveChance(enemy, spell);
                     }
                 }
@@ -682,16 +866,15 @@ namespace RealmzCore.Combat
                 saveChancePct = totalSave / footprint.AffectedEnemyIds.Count;
             }
 
-            List<string> tags = new List<string>();
-            if (spell.AppliedCondition.HasValue)
+            if (anyImmune)
             {
-                tags.Add(ConditionEffects.GetCode(spell.AppliedCondition.Value));
+                tags.Add("IMMUNE");
             }
 
             bool silenced = caster.Conditions.Has(CharConditionId.Silenced);
             bool enoughSp = caster.Sp >= spell.SpCost;
-            bool hasAction = caster.Economy.HasStandardAction;
-            bool canExecute = caster.IsConscious && !silenced && enoughSp && hasAction && footprint.InRange;
+            bool hasAction = ignoreActionBudget || caster.Economy.HasStandardAction;
+            bool canExecute = caster.IsConscious && !silenced && enoughSp && hasAction && footprint.InRange && footprint.HasLineOfSight;
 
             string reason = silenced
                 ? "Caster is silenced."
@@ -699,9 +882,11 @@ namespace RealmzCore.Combat
                     ? "Insufficient SP."
                     : !footprint.InRange
                         ? "Target is out of spell range."
-                        : !hasAction
-                            ? "No standard action remaining."
-                            : string.Empty;
+                        : !footprint.HasLineOfSight
+                            ? "Target is blocked by wall or obstacle (no line of sight)."
+                            : !hasAction
+                                ? "No standard action remaining."
+                                : string.Empty;
 
             return new TacticalSpellPreview(
                 canExecute: canExecute,
@@ -712,6 +897,191 @@ namespace RealmzCore.Combat
                 saveChancePct: saveChancePct,
                 aoeFootprint: footprint,
                 conditionTags: tags);
+        }
+
+        public TacticalShovePreview PreviewShove(string actorId, string targetId, GridCoord? fromPos = null)
+        {
+            CombatantState? actor = GetCombatant(actorId);
+            CombatantState? target = GetCombatant(targetId);
+            if (actor == null || target == null || !actor.IsConscious || !target.IsAlive || actor.Id == target.Id)
+            {
+                return new TacticalShovePreview(
+                    false,
+                    "Actor or target unavailable for Shove.",
+                    0,
+                    new GridCoord(0, 0),
+                    target?.Position ?? new GridCoord(0, 0),
+                    false,
+                    null,
+                    false,
+                    0,
+                    SurfaceType.None,
+                    false);
+            }
+
+            GridCoord pos = fromPos ?? actor.Position;
+            int dx = Math.Sign(target.Position.X - pos.X);
+            int dy = Math.Sign(target.Position.Y - pos.Y);
+            GridCoord pushDir = new GridCoord(dx, dy);
+            GridCoord dest = new GridCoord(target.Position.X + dx, target.Position.Y + dy);
+
+            bool adjacent = pos.ChebyshevDistance(target.Position) == 1;
+            bool hasSwift = actor.Economy.HasSwiftAction;
+            bool isAlly = actor.Side == target.Side;
+
+            bool hitsWall = !Grid.InBounds(dest) || !Grid.IsWalkable(dest.X, dest.Y);
+            string? collidingUnitId = null;
+            if (!hitsWall)
+            {
+                CombatantState? occupant = GetLivingUnitAt(dest, excludeId: target.Id);
+                if (occupant != null)
+                {
+                    collidingUnitId = occupant.Id;
+                }
+            }
+
+            int startElev = Grid.GetElevation(target.Position.X, target.Position.Y);
+            int destElev = !hitsWall && collidingUnitId == null ? Grid.GetElevation(dest.X, dest.Y) : startElev;
+            int elevDrop = Math.Max(0, startElev - destElev);
+            bool pushesOffLedge = !hitsWall && collidingUnitId == null && elevDrop > 0;
+            SurfaceType destSurface = Grid.InBounds(dest) ? Grid.GetSurface(dest.X, dest.Y) : SurfaceType.None;
+
+            int successPct = isAlly
+                ? 100
+                : ComputeShoveSuccessChance(actor, target);
+
+            bool canExecute = adjacent && hasSwift;
+            string reason = !adjacent
+                ? "Target is not adjacent for Shove."
+                : !hasSwift
+                    ? "No swift action remaining."
+                    : string.Empty;
+
+            return new TacticalShovePreview(
+                canExecute: canExecute,
+                reason: reason,
+                successChancePct: successPct,
+                pushDirection: pushDir,
+                destination: dest,
+                hitsWallOrBounds: hitsWall,
+                collidingUnitId: collidingUnitId,
+                pushesOffLedge: pushesOffLedge,
+                fallElevationDrop: elevDrop,
+                destinationSurface: destSurface,
+                isAllyShove: isAlly);
+        }
+
+        public CombatActionResult TryShove(string targetId)
+        {
+            if (Outcome != CombatOutcome.InProgress)
+            {
+                return new CombatActionResult(false, "Combat has ended.");
+            }
+
+            CombatantState? actor = CurrentActor;
+            CombatantState? target = GetCombatant(targetId);
+            if (actor == null || target == null)
+            {
+                return new CombatActionResult(false, "Invalid actor or target.");
+            }
+
+            TacticalShovePreview preview = PreviewShove(actor.Id, target.Id);
+            if (!preview.CanExecute)
+            {
+                return new CombatActionResult(false, preview.Reason);
+            }
+
+            actor.Economy.CommitSwiftAction();
+            actor.HasTriggeredIrreversibleEvent = true;
+
+            if (!preview.IsAllyShove)
+            {
+                int roll = Roller.NextInt(1, 101);
+                if (roll > preview.SuccessChancePct)
+                {
+                    string resistMsg = $"{actor.Name} tries to shove {target.Name} ({preview.SuccessChancePct}%), but {target.Name} holds firm (roll {roll}).";
+                    AppendLog(actor.Id, actor.Name, "Shove", resistMsg, new[] { target.Id });
+                    return new CombatActionResult(true, resistMsg);
+                }
+            }
+
+            int totalDamage = 0;
+            List<string> notes = new List<string>();
+            List<string> loggedTargets = new List<string> { target.Id };
+
+            if (preview.HitsWallOrBounds)
+            {
+                int crush = Math.Max(1, DiceSpec.Parse("1d4").Roll(Roller));
+                target.Hp = Math.Max(0, target.Hp - crush);
+                totalDamage += crush;
+                notes.Add($"slams into wall for {crush} crush damage");
+            }
+            else if (!string.IsNullOrEmpty(preview.CollidingUnitId))
+            {
+                CombatantState? other = GetCombatant(preview.CollidingUnitId!);
+                int targetCrush = Math.Max(1, DiceSpec.Parse("1d4").Roll(Roller));
+                target.Hp = Math.Max(0, target.Hp - targetCrush);
+                totalDamage += targetCrush;
+
+                if (other != null && other.IsAlive)
+                {
+                    int otherCrush = Math.Max(1, DiceSpec.Parse("1d4").Roll(Roller));
+                    other.Hp = Math.Max(0, other.Hp - otherCrush);
+                    totalDamage += otherCrush;
+                    loggedTargets.Add(other.Id);
+                    notes.Add($"collides into {other.Name} ({targetCrush}/{otherCrush} crush damage)");
+                }
+                else
+                {
+                    notes.Add($"takes {targetCrush} collision damage");
+                }
+            }
+            else
+            {
+                // Forced displacement never provokes AoOs.
+                target.Position = preview.Destination;
+                notes.Add($"is shoved to {target.Position}");
+
+                if (preview.PushesOffLedge && target.IsAlive)
+                {
+                    int fallDmg = 0;
+                    DiceSpec d6 = DiceSpec.Parse("1d6");
+                    for (int tier = 0; tier < preview.FallElevationDrop; tier++)
+                    {
+                        fallDmg += Math.Max(1, d6.Roll(Roller));
+                    }
+
+                    target.Hp = Math.Max(0, target.Hp - fallDmg);
+                    totalDamage += fallDmg;
+                    if (target.IsAlive)
+                    {
+                        target.IsProne = true;
+                        target.PronePendingMovePenalty = true;
+                    }
+
+                    notes.Add($"falls off ledge ({fallDmg} fall dmg, Prone)");
+                }
+
+                if (target.IsAlive)
+                {
+                    int surfaceDmg = ApplyTileSurfaceHazard(target, target.Position, isStepEnter: true);
+                    totalDamage += surfaceDmg;
+                    if (surfaceDmg > 0)
+                    {
+                        notes.Add($"takes {surfaceDmg} surface damage");
+                    }
+                    else if (target.IsProne && preview.DestinationSurface == SurfaceType.Ice)
+                    {
+                        notes.Add("slips Prone on Ice");
+                    }
+                }
+            }
+
+            string msg = $"{actor.Name} shoves {target.Name}: {string.Join(", ", notes)}.";
+            AppendLog(actor.Id, actor.Name, "Shove", msg, loggedTargets, damageDealt: totalDamage);
+            CheckOutcome();
+
+            return new CombatActionResult(true, msg, damageDealt: totalDamage);
         }
 
         public CombatActionResult TryMoveTo(GridCoord destination)
@@ -737,7 +1107,7 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, "Destination tile is occupied.");
             }
 
-            PathResult path = AStarPathfinder.FindPath(
+            PathResult path = _pathfinder.FindPath(
                 Grid.Width,
                 Grid.Height,
                 actor.Position,
@@ -754,53 +1124,26 @@ namespace RealmzCore.Combat
             }
 
             bool aooTriggered = false;
-            int aooDamage = 0;
+            int totalDamage = 0;
+            List<AttackOutcome> aooOutcomes = new List<AttackOutcome>();
 
             for (int i = 0; i < path.Steps.Count; i++)
             {
-                GridCoord next = path.Steps[i];
-                if (WouldStepProvokeAoO(actor.Id, actor.Position, next, out List<string> provokers))
+                if (!ResolveMovementStep(actor, path.Steps[i], ref aooTriggered, ref totalDamage, aooOutcomes))
                 {
-                    actor.HasTriggeredIrreversibleEvent = true;
-                    aooTriggered = true;
-                    for (int p = 0; p < provokers.Count; p++)
+                    if (!actor.IsConscious)
                     {
-                        CombatantState? enemy = GetCombatant(provokers[p]);
-                        if (enemy == null || !enemy.IsConscious || !actor.IsAlive)
-                        {
-                            continue;
-                        }
-
-                        AttackOutcome aoo = ResolveSingleMeleeSwing(enemy, actor, isFlanking: false);
-                        aooDamage += aoo.DamageDealt;
-                        AppendLog(
-                            enemy.Id,
-                            enemy.Name,
-                            "AoO",
-                            $"{enemy.Name} makes an Opportunity Attack on {actor.Name}: {aoo.Kind} ({aoo.DamageDealt} dmg).",
-                            new[] { actor.Id },
-                            damageDealt: aoo.DamageDealt);
-
-                        if (!actor.IsConscious)
-                        {
-                            CheckOutcome();
-                            return new CombatActionResult(
-                                true,
-                                $"{actor.Name} was stopped by an Opportunity Attack.",
-                                new[] { aoo },
-                                damageDealt: aooDamage,
-                                aooTriggered: true);
-                        }
+                        CheckOutcome();
+                        return new CombatActionResult(
+                            true,
+                            $"{actor.Name} was stopped at {actor.Position}.",
+                            aooOutcomes,
+                            damageDealt: totalDamage,
+                            aooTriggered: aooTriggered);
                     }
-                }
 
-                int stepCost = Grid.GetMoveCost(next.X, next.Y);
-                if (!actor.Economy.TryStep(stepCost))
-                {
                     break;
                 }
-
-                actor.Position = next;
             }
 
             AppendLog(
@@ -808,13 +1151,79 @@ namespace RealmzCore.Combat
                 actor.Name,
                 "Move",
                 $"{actor.Name} moves to {actor.Position}.",
-                Array.Empty<string>());
+                Array.Empty<string>(),
+                damageDealt: 0);
 
+            CheckOutcome();
             return new CombatActionResult(
                 true,
                 $"{actor.Name} moved to {actor.Position}.",
-                damageDealt: aooDamage,
+                aooOutcomes,
+                damageDealt: totalDamage,
                 aooTriggered: aooTriggered);
+        }
+
+        private bool ResolveMovementStep(
+            CombatantState actor,
+            GridCoord next,
+            ref bool aooTriggered,
+            ref int totalDamage,
+            List<AttackOutcome> aooOutcomes)
+        {
+            if (WouldStepProvokeAoO(actor.Id, actor.Position, next, out List<string> provokers))
+            {
+                for (int p = 0; p < provokers.Count; p++)
+                {
+                    CombatantState? enemy = GetCombatant(provokers[p]);
+                    if (enemy == null || !enemy.IsConscious || !enemy.Economy.HasReaction || !actor.IsAlive)
+                    {
+                        continue;
+                    }
+
+                    if (!enemy.Economy.CommitReaction())
+                    {
+                        continue;
+                    }
+
+                    actor.HasTriggeredIrreversibleEvent = true;
+                    aooTriggered = true;
+
+                    AttackOutcome aoo = ResolveSingleMeleeSwing(enemy, actor, isFlanking: false);
+                    aooOutcomes.Add(aoo);
+                    totalDamage += aoo.DamageDealt;
+                    AppendLog(
+                        enemy.Id,
+                        enemy.Name,
+                        "AoO",
+                        $"{enemy.Name} makes an Opportunity Attack on {actor.Name}: {aoo.Kind} ({aoo.DamageDealt} dmg).",
+                        new[] { actor.Id },
+                        damageDealt: aoo.DamageDealt);
+
+                    if (!actor.IsConscious)
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            int stepCost = Grid.GetMoveCost(next.X, next.Y);
+            if (!actor.Economy.TryStep(stepCost))
+            {
+                return false;
+            }
+
+            actor.Position = next;
+
+            bool wasProneBefore = actor.IsProne;
+            int surfaceDamage = ApplyTileSurfaceHazard(actor, next, isStepEnter: true);
+            totalDamage += surfaceDamage;
+
+            if (!actor.IsConscious || (!wasProneBefore && actor.IsProne))
+            {
+                return false;
+            }
+
+            return true;
         }
 
         public bool UndoMove()
@@ -910,6 +1319,9 @@ namespace RealmzCore.Combat
                 ? parsed
                 : DiceSpec.Parse("1d4");
 
+            int attElev = Grid.GetElevation(actor.Position.X, actor.Position.Y);
+            int defElev = Grid.GetElevation(target.Position.X, target.Position.Y);
+
             AttackOutcome outcome = CombatRules.ResolveMeleeAttack(
                 Roller,
                 dice,
@@ -921,7 +1333,12 @@ namespace RealmzCore.Combat
                 defenderIsEvil: target.IsEvil,
                 attackerConditions: actor.Conditions,
                 defenderConditions: target.Conditions,
-                mode: Mode);
+                mode: Mode,
+                attackerElevation: attElev,
+                defenderElevation: defElev,
+                weaponBonusAlreadyIncluded: true,
+                defenderIsProne: false,
+                attackerIsProne: actor.IsProne);
 
             if (outcome.DamageDealt > 0)
             {
@@ -977,13 +1394,14 @@ namespace RealmzCore.Combat
                 targetIds.AddRange(preview.AoeFootprint.AffectedEnemyIds);
                 if (!string.Equals(spell.TargetMode, "AllEnemies", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Friendly-fire AoE spells also hit allies caught in the blast!
+                    // Friendly-fire AoE spells also hit allies caught in the blast.
                     targetIds.AddRange(preview.AoeFootprint.AffectedAllyIds);
                 }
             }
 
             int totalDamage = 0;
             int totalHealing = 0;
+            List<string> immuneTargetNames = new List<string>();
             DiceSpec? effectSpec = null;
             if (!string.IsNullOrWhiteSpace(spell.EffectDice) && DiceSpec.TryParse(spell.EffectDice, out DiceSpec parsed))
             {
@@ -1031,6 +1449,19 @@ namespace RealmzCore.Combat
                 }
                 else
                 {
+                    if (IsTargetImmuneToSpell(target, spell))
+                    {
+                        immuneTargetNames.Add(target.Name);
+                        string dmgLabel = string.IsNullOrWhiteSpace(spell.DamageType) ? "Spell" : spell.DamageType;
+                        AppendLog(
+                            caster.Id,
+                            caster.Name,
+                            "SpellImmune",
+                            $"{target.Name} is immune to {dmgLabel} ({spell.Name}).",
+                            new[] { target.Id });
+                        continue;
+                    }
+
                     int saveChance = ComputeSpellSaveChance(target, spell);
                     bool saved = saveChance > 0 && Roller.NextInt(1, 101) <= saveChance;
 
@@ -1062,11 +1493,39 @@ namespace RealmzCore.Combat
                 }
             }
 
-            string msg = $"{caster.Name} casts {spell.Name} ({totalDamage} dmg, {totalHealing} heal).";
+            if (!isHeal && !isBuff && !isCure && preview.AoeFootprint.AffectedTiles.Count > 0)
+            {
+                int surfaceComboDamage = ApplyElementToTiles(
+                    preview.AoeFootprint.AffectedTiles,
+                    spell.DamageType,
+                    spell.Key,
+                    spell);
+                totalDamage += surfaceComboDamage;
+            }
+
+            string immuneSuffix = immuneTargetNames.Count > 0
+                ? $" [Immune: {string.Join(", ", immuneTargetNames)}]"
+                : string.Empty;
+            string msg = $"{caster.Name} casts {spell.Name} ({totalDamage} dmg, {totalHealing} heal).{immuneSuffix}";
             AppendLog(caster.Id, caster.Name, "CastSpell", msg, targetIds, damageDealt: totalDamage, healingDone: totalHealing);
             CheckOutcome();
 
             return new CombatActionResult(true, msg, damageDealt: totalDamage, healingDone: totalHealing);
+        }
+
+        public int ApplySurfaceInteraction(
+            IReadOnlyList<GridCoord> tiles,
+            string elementType,
+            string cause = "Environment")
+        {
+            if (tiles == null || tiles.Count == 0)
+            {
+                return 0;
+            }
+
+            int dmg = ApplyElementToTiles(tiles, elementType, cause, spell: null);
+            CheckOutcome();
+            return dmg;
         }
 
         public CombatActionResult GuardOverwatch()
@@ -1236,6 +1695,12 @@ namespace RealmzCore.Combat
                 {
                     AppendLog(actor.Id, actor.Name, "ConditionEnd", $"{actor.Name} recovers from {string.Join(", ", cleared)}.");
                 }
+
+                if (actor.IsProne && !actor.PronePendingMovePenalty)
+                {
+                    actor.IsProne = false;
+                    AppendLog(actor.Id, actor.Name, "ProneEnd", $"{actor.Name} stands up from Prone.");
+                }
             }
 
             CheckOutcome();
@@ -1263,16 +1728,88 @@ namespace RealmzCore.Combat
             if (_roundQueue.Count == 0)
             {
                 RoundNumber++;
+                TickSurfacesOnNewRound();
                 RebuildRoundQueue();
             }
 
             TurnNumber++;
             StartCurrentActorTurn();
+            CheckOutcome();
         }
 
         public CombatActionResult ExecuteMonsterAiTurn()
         {
             return MonsterAi.ExecuteTurn(this);
+        }
+
+        public EnemyIntentPrediction PredictNextIntent(string? actorId = null)
+        {
+            return MonsterAi.PredictNextIntent(this, actorId);
+        }
+
+        public void GrantVictoryRewardsToParty(PartyState party)
+        {
+            if (party == null)
+            {
+                throw new ArgumentNullException(nameof(party));
+            }
+
+            if (Outcome != CombatOutcome.Victory || _partyRewardsApplied)
+            {
+                return;
+            }
+
+            _partyRewardsApplied = true;
+
+            if (TotalGoldLoot > 0)
+            {
+                party.Gold += TotalGoldLoot;
+            }
+
+            for (int i = 0; i < _collectedLootItemIds.Count; i++)
+            {
+                int itemId = _collectedLootItemIds[i];
+                int charges = _items.TryGetValue(itemId, out ItemDefinition? def) ? def.Charges : 0;
+                party.AddItemToStash(itemId, 1, isIdentified: true, charges: charges);
+            }
+
+            if (TotalXpEarned > 0 && party.Members.Count > 0)
+            {
+                List<PartyMemberState> recipients = new List<PartyMemberState>();
+                for (int i = 0; i < party.Members.Count; i++)
+                {
+                    PartyMemberState member = party.Members[i];
+                    CombatantState? combatant = GetCombatant(member.Id);
+                    bool alive = combatant != null ? combatant.IsAlive : member.IsAlive;
+                    if (alive)
+                    {
+                        recipients.Add(member);
+                    }
+                }
+
+                if (recipients.Count == 0)
+                {
+                    for (int i = 0; i < party.Members.Count; i++)
+                    {
+                        recipients.Add(party.Members[i]);
+                    }
+                }
+
+                int baseShare = TotalXpEarned / recipients.Count;
+                int remainder = TotalXpEarned % recipients.Count;
+                int levelsGained = 0;
+
+                for (int i = 0; i < recipients.Count; i++)
+                {
+                    int share = baseShare + (i < remainder ? 1 : 0);
+                    if (share > 0)
+                    {
+                        levelsGained += recipients[i].AddXp(share);
+                    }
+                }
+
+                VictoryLevelsGained = levelsGained;
+            }
         }
 
         internal void AppendLog(
@@ -1325,11 +1862,39 @@ namespace RealmzCore.Combat
             return null;
         }
 
+        internal static bool IsTargetImmuneToSpell(CombatantState target, SpellDefinition spell)
+        {
+            if (!TryGetImmunityIndex(spell.DamageType, out int index))
+            {
+                return false;
+            }
+
+            return index >= 0 && index < target.SpellImmunities.Count && target.SpellImmunities[index];
+        }
+
+        internal CombatantState? GetLivingUnitAt(GridCoord coord, string? excludeId = null)
+        {
+            for (int i = 0; i < _combatants.Count; i++)
+            {
+                CombatantState c = _combatants[i];
+                if (c.IsAlive && c.Id != excludeId && c.Position == coord)
+                {
+                    return c;
+                }
+            }
+
+            return null;
+        }
+
         private AttackOutcome ResolveSingleMeleeSwing(CombatantState attacker, CombatantState defender, bool isFlanking)
         {
             DiceSpec weapon = DiceSpec.TryParse(attacker.WeaponDice, out DiceSpec parsed)
                 ? parsed
                 : DiceSpec.Parse("1d4");
+
+            int attElev = Grid.GetElevation(attacker.Position.X, attacker.Position.Y);
+            int defElev = Grid.GetElevation(defender.Position.X, defender.Position.Y);
+            int unappliedWeaponBonus = attacker.WeaponBonusIncludedInToHit ? 0 : attacker.WeaponBonus;
 
             AttackOutcome outcome = CombatRules.ResolveMeleeAttack(
                 Roller,
@@ -1338,11 +1903,16 @@ namespace RealmzCore.Combat
                 attackerDamageBonus: attacker.DamageBonus,
                 defenderAc: defender.EffectiveAc,
                 isFlanking: isFlanking,
-                equippedWeaponBonus: attacker.WeaponBonus,
+                equippedWeaponBonus: unappliedWeaponBonus,
                 defenderIsEvil: defender.IsEvil,
                 attackerConditions: attacker.Conditions,
                 defenderConditions: defender.Conditions,
-                mode: Mode);
+                mode: Mode,
+                attackerElevation: attElev,
+                defenderElevation: defElev,
+                weaponBonusAlreadyIncluded: attacker.WeaponBonusIncludedInToHit,
+                defenderIsProne: defender.IsProne,
+                attackerIsProne: attacker.IsProne);
 
             if (outcome.DamageDealt > 0)
             {
@@ -1352,17 +1922,541 @@ namespace RealmzCore.Combat
             return outcome;
         }
 
+        private int ApplyElementToTiles(
+            IReadOnlyList<GridCoord> tiles,
+            string damageType,
+            string cause,
+            SpellDefinition? spell)
+        {
+            ElementKind element = ParseElementKind(damageType);
+            SurfaceType createdSurface = SurfaceType.None;
+            int createdRounds = 0;
+            if (spell != null &&
+                !string.IsNullOrWhiteSpace(spell.CreatedSurface) &&
+                Enum.TryParse<SurfaceType>(spell.CreatedSurface, ignoreCase: true, out SurfaceType parsedSurf) &&
+                parsedSurf != SurfaceType.None)
+            {
+                createdSurface = parsedSurf;
+                createdRounds = spell.CreatedSurfaceRounds != 0
+                    ? spell.CreatedSurfaceRounds
+                    : (createdSurface == SurfaceType.Water || createdSurface == SurfaceType.Oil ? -1 : 2);
+            }
+
+            if (element == ElementKind.None && createdSurface == SurfaceType.None)
+            {
+                return 0;
+            }
+
+            int totalBonusDamage = 0;
+            HashSet<string> reactionDamagedUnits = new HashSet<string>(StringComparer.Ordinal);
+            List<SurfaceChangeEvent> changes = new List<SurfaceChangeEvent>();
+
+            for (int i = 0; i < tiles.Count; i++)
+            {
+                GridCoord tile = tiles[i];
+                if (!Grid.TryGetCell(tile.X, tile.Y, out CombatGridCell? cell) || cell == null || cell.IsBlocked)
+                {
+                    continue;
+                }
+
+                if (element == ElementKind.Heat)
+                {
+                    if (cell.Surface == SurfaceType.Oil)
+                    {
+                        List<GridCoord> oilCluster = CollectContiguousSurface(tile, SurfaceType.Oil);
+                        for (int c = 0; c < oilCluster.Count; c++)
+                        {
+                            GridCoord oc = oilCluster[c];
+                            CombatGridCell oilCell = Grid.GetCell(oc);
+                            oilCell.BaseSurface = SurfaceType.None;
+                            RecordSurfaceChange(oilCell, SurfaceType.Fire, 2, "OilIgnited", changes);
+
+                            CombatantState? victim = GetLivingUnitAt(oc);
+                            if (victim != null && reactionDamagedUnits.Add(victim.Id))
+                            {
+                                int burst = RollElementalDamage(victim, "1d6", ElementKind.Heat);
+                                totalBonusDamage += burst;
+                                AppendLog(
+                                    victim.Id,
+                                    victim.Name,
+                                    "OilIgnition",
+                                    $"{victim.Name} is caught in Oil ignition burst ({burst} Heat dmg).",
+                                    new[] { victim.Id },
+                                    damageDealt: burst);
+                            }
+                        }
+                    }
+                    else if (cell.Surface == SurfaceType.Ice)
+                    {
+                        cell.BaseSurface = SurfaceType.Water;
+                        RecordSurfaceChange(cell, SurfaceType.Water, -1, "IceMelted", changes);
+                        AppendLog(string.Empty, "Surface", "SurfaceReaction", $"Ice at {tile} melts into Water.");
+                    }
+                    else if (cell.Surface == SurfaceType.Water || cell.Surface == SurfaceType.ElectrifiedWater)
+                    {
+                        cell.BaseSurface = SurfaceType.None;
+                        RecordSurfaceChange(cell, SurfaceType.SteamCloud, 2, "WaterVaporized", changes);
+                        AppendLog(string.Empty, "Surface", "SurfaceReaction", $"Water at {tile} vaporizes into SteamCloud.");
+                    }
+                    else if (cell.Surface == SurfaceType.Poison)
+                    {
+                        cell.BaseSurface = SurfaceType.None;
+                        RecordSurfaceChange(cell, SurfaceType.Fire, 1, "PoisonIgnited", changes);
+                    }
+                }
+                else if (element == ElementKind.Cold)
+                {
+                    if (cell.Surface == SurfaceType.Water || cell.Surface == SurfaceType.ElectrifiedWater)
+                    {
+                        cell.BaseSurface = SurfaceType.Water;
+                        RecordSurfaceChange(cell, SurfaceType.Ice, 3, "WaterFrozen", changes);
+                        CombatantState? occupant = GetLivingUnitAt(tile);
+                        if (occupant != null)
+                        {
+                            TryIceSlipSave(occupant, stopMovement: false);
+                        }
+                    }
+                    else if (cell.Surface == SurfaceType.Fire)
+                    {
+                        RecordSurfaceChange(cell, SurfaceType.SteamCloud, 2, "FireExtinguished", changes);
+                    }
+                }
+                else if (element == ElementKind.Electric)
+                {
+                    if (cell.Surface == SurfaceType.Water)
+                    {
+                        List<GridCoord> waterCluster = CollectContiguousSurface(tile, SurfaceType.Water);
+                        for (int w = 0; w < waterCluster.Count; w++)
+                        {
+                            GridCoord wc = waterCluster[w];
+                            CombatGridCell waterCell = Grid.GetCell(wc);
+                            waterCell.BaseSurface = SurfaceType.Water;
+                            RecordSurfaceChange(waterCell, SurfaceType.ElectrifiedWater, 2, "WaterElectrified", changes);
+
+                            CombatantState? victim = GetLivingUnitAt(wc);
+                            if (victim != null && reactionDamagedUnits.Add(victim.Id))
+                            {
+                                int shock = RollElementalDamage(victim, "1d4", ElementKind.Electric);
+                                totalBonusDamage += shock;
+                                AppendLog(
+                                    victim.Id,
+                                    victim.Name,
+                                    "ElectrifiedWater",
+                                    $"{victim.Name} is shocked by ElectrifiedWater ({shock} Electrical dmg).",
+                                    new[] { victim.Id },
+                                    damageDealt: shock);
+                            }
+                        }
+                    }
+                }
+
+                if (createdSurface != SurfaceType.None && cell.Surface == SurfaceType.None)
+                {
+                    if (createdRounds < 0 && (createdSurface == SurfaceType.Water || createdSurface == SurfaceType.Oil))
+                    {
+                        cell.BaseSurface = createdSurface;
+                    }
+
+                    RecordSurfaceChange(cell, createdSurface, createdRounds, string.IsNullOrEmpty(cause) ? "SpellSurface" : cause, changes);
+                }
+            }
+
+            NotifySurfaceChanges(changes);
+            return totalBonusDamage;
+        }
+
+        private List<GridCoord> CollectContiguousSurface(GridCoord seed, SurfaceType targetSurface)
+        {
+            List<GridCoord> cluster = new List<GridCoord>();
+            if (!Grid.InBounds(seed) || Grid.GetSurface(seed.X, seed.Y) != targetSurface)
+            {
+                return cluster;
+            }
+
+            HashSet<GridCoord> visited = new HashSet<GridCoord> { seed };
+            Queue<GridCoord> queue = new Queue<GridCoord>();
+            queue.Enqueue(seed);
+
+            while (queue.Count > 0)
+            {
+                GridCoord cur = queue.Dequeue();
+                cluster.Add(cur);
+
+                for (int dy = -1; dy <= 1; dy++)
+                {
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        if (dx == 0 && dy == 0)
+                        {
+                            continue;
+                        }
+
+                        GridCoord next = new GridCoord(cur.X + dx, cur.Y + dy);
+                        if (!Grid.InBounds(next) || visited.Contains(next))
+                        {
+                            continue;
+                        }
+
+                        CombatGridCell cell = Grid.GetCell(next);
+                        if (!cell.IsBlocked && cell.Surface == targetSurface)
+                        {
+                            visited.Add(next);
+                            queue.Enqueue(next);
+                        }
+                    }
+                }
+            }
+
+            return cluster;
+        }
+
+        private int ApplyTileSurfaceHazard(CombatantState unit, GridCoord coord, bool isStepEnter)
+        {
+            if (!unit.IsAlive || !Grid.TryGetCell(coord.X, coord.Y, out CombatGridCell? cell) || cell == null)
+            {
+                return 0;
+            }
+
+            switch (cell.Surface)
+            {
+                case SurfaceType.Fire:
+                {
+                    int dmg = RollElementalDamage(unit, "1d4", ElementKind.Heat);
+                    if (dmg > 0)
+                    {
+                        unit.HasTriggeredIrreversibleEvent = true;
+                        AppendLog(
+                            unit.Id,
+                            unit.Name,
+                            "SurfaceBurn",
+                            $"{unit.Name} takes {dmg} Heat damage from Fire surface.",
+                            new[] { unit.Id },
+                            damageDealt: dmg);
+                    }
+
+                    return dmg;
+                }
+
+                case SurfaceType.ElectrifiedWater:
+                {
+                    int dmg = RollElementalDamage(unit, "1d4", ElementKind.Electric);
+                    if (dmg > 0)
+                    {
+                        unit.HasTriggeredIrreversibleEvent = true;
+                        AppendLog(
+                            unit.Id,
+                            unit.Name,
+                            "SurfaceShock",
+                            $"{unit.Name} takes {dmg} Electrical damage from ElectrifiedWater.",
+                            new[] { unit.Id },
+                            damageDealt: dmg);
+                    }
+
+                    return dmg;
+                }
+
+                case SurfaceType.Poison:
+                {
+                    if (!IsImmuneToElement(unit, ElementKind.Chemical))
+                    {
+                        int dmg = RollElementalDamage(unit, "1d4", ElementKind.Chemical);
+                        unit.Conditions.Apply(
+                            CharConditionId.Poisoned,
+                            magnitude: 2,
+                            turnsRemaining: 2,
+                            baseRecoveryChancePercent: 25,
+                            canRecoverBySave: true,
+                            escalationStepPercent: 10);
+                        unit.HasTriggeredIrreversibleEvent = true;
+                        AppendLog(
+                            unit.Id,
+                            unit.Name,
+                            "SurfacePoison",
+                            $"{unit.Name} suffers Poison surface ({dmg} dmg, Poisoned).",
+                            new[] { unit.Id },
+                            damageDealt: dmg);
+                        return dmg;
+                    }
+
+                    return 0;
+                }
+
+                case SurfaceType.Ice:
+                {
+                    if (isStepEnter)
+                    {
+                        TryIceSlipSave(unit, stopMovement: ReferenceEquals(unit, CurrentActor));
+                    }
+
+                    return 0;
+                }
+
+                default:
+                    return 0;
+            }
+        }
+
+        private void TryIceSlipSave(CombatantState unit, bool stopMovement)
+        {
+            if (!unit.IsAlive || unit.IsProne)
+            {
+                return;
+            }
+
+            int dodgeScore = Math.Clamp(25 + (unit.Dodge * 2) + ((unit.EffectiveDexterity - 10) * 3), 10, 90);
+            int roll = Roller.NextInt(1, 101);
+            if (roll > dodgeScore)
+            {
+                unit.IsProne = true;
+                unit.PronePendingMovePenalty = true;
+                unit.HasTriggeredIrreversibleEvent = true;
+                if (stopMovement)
+                {
+                    unit.Economy.ConsumeAllMovement();
+                }
+
+                AppendLog(
+                    unit.Id,
+                    unit.Name,
+                    "IceSlip",
+                    $"{unit.Name} slips on Ice (roll {roll} > save {dodgeScore}%) and is knocked Prone!",
+                    new[] { unit.Id });
+            }
+            else
+            {
+                AppendLog(
+                    unit.Id,
+                    unit.Name,
+                    "IceSave",
+                    $"{unit.Name} keeps balance on Ice (roll {roll} <= {dodgeScore}%).",
+                    new[] { unit.Id });
+            }
+        }
+
+        private int RollElementalDamage(CombatantState target, string diceExpr, ElementKind element)
+        {
+            if (!target.IsAlive || IsImmuneToElement(target, element))
+            {
+                return 0;
+            }
+
+            int dmg = Math.Max(1, DiceSpec.Parse(diceExpr).Roll(Roller));
+            bool protectedCond = element switch
+            {
+                ElementKind.Heat => target.Conditions.Has(CharConditionId.FireProtection),
+                ElementKind.Cold => target.Conditions.Has(CharConditionId.ColdProtection),
+                ElementKind.Electric => target.Conditions.Has(CharConditionId.ElectricalProtection),
+                ElementKind.Chemical => target.Conditions.Has(CharConditionId.ChemicalProtection),
+                _ => false
+            };
+
+            if (protectedCond)
+            {
+                dmg = Math.Max(1, dmg / 2);
+            }
+
+            target.Hp = Math.Max(0, target.Hp - dmg);
+            return dmg;
+        }
+
+        private static bool IsImmuneToElement(CombatantState target, ElementKind element)
+        {
+            int idx = element switch
+            {
+                ElementKind.Charm => 0,
+                ElementKind.Heat => 1,
+                ElementKind.Cold => 2,
+                ElementKind.Electric => 3,
+                ElementKind.Chemical => 4,
+                ElementKind.Mental => 5,
+                _ => -1
+            };
+
+            return idx >= 0 && idx < target.SpellImmunities.Count && target.SpellImmunities[idx];
+        }
+
+        private void TickSurfacesOnNewRound()
+        {
+            List<SurfaceChangeEvent> changes = new List<SurfaceChangeEvent>();
+            for (int y = 0; y < Grid.Height; y++)
+            {
+                for (int x = 0; x < Grid.Width; x++)
+                {
+                    CombatGridCell cell = Grid.GetCell(x, y);
+                    if (cell.Surface == SurfaceType.None || cell.SurfaceRoundsRemaining <= 0)
+                    {
+                        continue;
+                    }
+
+                    cell.SurfaceRoundsRemaining--;
+                    if (cell.SurfaceRoundsRemaining == 0)
+                    {
+                        SurfaceType reverted = cell.BaseSurface == SurfaceType.Water
+                            ? SurfaceType.Water
+                            : SurfaceType.None;
+                        int nextRounds = reverted == SurfaceType.Water ? -1 : 0;
+                        RecordSurfaceChange(cell, reverted, nextRounds, "RoundExpired", changes);
+                    }
+                }
+            }
+
+            NotifySurfaceChanges(changes);
+        }
+
+        private static void RecordSurfaceChange(
+            CombatGridCell cell,
+            SurfaceType newSurface,
+            int roundsRemaining,
+            string cause,
+            List<SurfaceChangeEvent> changes)
+        {
+            SurfaceType prev = cell.Surface;
+            if (prev == newSurface && cell.SurfaceRoundsRemaining == roundsRemaining)
+            {
+                return;
+            }
+
+            cell.Surface = newSurface;
+            cell.SurfaceRoundsRemaining = newSurface == SurfaceType.None ? 0 : roundsRemaining;
+            changes.Add(new SurfaceChangeEvent(cell.Coord, prev, newSurface, cell.SurfaceRoundsRemaining, cause));
+        }
+
+        private void NotifySurfaceChanges(List<SurfaceChangeEvent> changes)
+        {
+            _lastSurfaceChanges.Clear();
+            if (changes.Count == 0)
+            {
+                return;
+            }
+
+            _lastSurfaceChanges.AddRange(changes);
+            SurfaceChanged?.Invoke(changes);
+        }
+
+        private int ComputeShoveSuccessChance(CombatantState actor, CombatantState target)
+        {
+            int actorScore = actor.Brawn + (actor.EffectiveToHit / 10);
+            int targetScore = target.Brawn + (target.Dodge / 10);
+            return Math.Clamp(55 + ((actorScore - targetScore) * 5), 15, 95);
+        }
+
         private int ComputeSpellSaveChance(CombatantState target, SpellDefinition spell)
         {
+            if (string.Equals(spell.SaveKind, "None", StringComparison.OrdinalIgnoreCase))
+            {
+                return 0;
+            }
+
             int saveBonus = 0;
             if (target.Saves.Count > 0)
             {
-                int idx = string.Equals(spell.SaveKind, "Mental", StringComparison.OrdinalIgnoreCase) ? 4 : 0;
+                int idx = GetSaveIndex(spell.SaveKind);
                 saveBonus = idx < target.Saves.Count ? target.Saves[idx] : target.Saves[0];
             }
 
             int total = Math.Max(0, target.MagicResistance) + Math.Max(0, saveBonus);
             return Math.Clamp(total, 0, 95);
+        }
+
+        private static int GetSaveIndex(string saveKind)
+        {
+            if (string.IsNullOrWhiteSpace(saveKind))
+            {
+                return 5;
+            }
+
+            switch (saveKind.Trim().ToLowerInvariant())
+            {
+                case "heat":
+                case "fire":
+                    return 0;
+                case "cold":
+                case "ice":
+                case "frost":
+                    return 1;
+                case "electrical":
+                case "electric":
+                case "shock":
+                case "lightning":
+                    return 2;
+                case "chemical":
+                case "poison":
+                case "acid":
+                    return 3;
+                case "mental":
+                case "mind":
+                case "psychic":
+                    return 4;
+                default:
+                    return 5;
+            }
+        }
+
+        private static ElementKind ParseElementKind(string damageType)
+        {
+            if (string.IsNullOrWhiteSpace(damageType))
+            {
+                return ElementKind.None;
+            }
+
+            switch (damageType.Trim().ToLowerInvariant())
+            {
+                case "heat":
+                case "fire":
+                    return ElementKind.Heat;
+                case "cold":
+                case "ice":
+                case "frost":
+                    return ElementKind.Cold;
+                case "electrical":
+                case "electric":
+                case "shock":
+                case "lightning":
+                    return ElementKind.Electric;
+                case "chemical":
+                case "poison":
+                case "acid":
+                    return ElementKind.Chemical;
+                case "mental":
+                case "mind":
+                case "psychic":
+                    return ElementKind.Mental;
+                case "charm":
+                    return ElementKind.Charm;
+                case "magic":
+                    return ElementKind.Magic;
+                default:
+                    return ElementKind.None;
+            }
+        }
+
+        private static bool TryGetImmunityIndex(string damageType, out int index)
+        {
+            ElementKind kind = ParseElementKind(damageType);
+            switch (kind)
+            {
+                case ElementKind.Charm:
+                    index = 0;
+                    return true;
+                case ElementKind.Heat:
+                    index = 1;
+                    return true;
+                case ElementKind.Cold:
+                    index = 2;
+                    return true;
+                case ElementKind.Electric:
+                    index = 3;
+                    return true;
+                case ElementKind.Chemical:
+                    index = 4;
+                    return true;
+                case ElementKind.Mental:
+                    index = 5;
+                    return true;
+                default:
+                    index = -1;
+                    return false;
+            }
         }
 
         private void StartCurrentActorTurn()
@@ -1377,6 +2471,23 @@ namespace RealmzCore.Combat
             actor.TurnStartPosition = actor.Position;
             actor.HasTriggeredIrreversibleEvent = false;
             actor.IsGuarding = false;
+
+            if (actor.IsProne && actor.PronePendingMovePenalty)
+            {
+                actor.Economy.ConsumeAllMovement();
+                actor.PronePendingMovePenalty = false;
+                AppendLog(
+                    actor.Id,
+                    actor.Name,
+                    "Prone",
+                    $"{actor.Name} is Prone and loses movement while rising.",
+                    new[] { actor.Id });
+            }
+
+            if (actor.IsAlive)
+            {
+                ApplyTileSurfaceHazard(actor, actor.Position, isStepEnter: false);
+            }
         }
 
         private void RebuildRoundQueue()
@@ -1435,23 +2546,40 @@ namespace RealmzCore.Combat
             else if (!anyMonsterAlive)
             {
                 Outcome = CombatOutcome.Victory;
-                int xp = 0;
-                int gold = 0;
-                for (int i = 0; i < _combatants.Count; i++)
+                if (!_victoryRewardsGranted)
                 {
-                    CombatantState c = _combatants[i];
-                    if (c.Side == CombatSide.Monster)
+                    _victoryRewardsGranted = true;
+                    int xp = 0;
+                    int gold = 0;
+                    _collectedLootItemIds.Clear();
+
+                    for (int i = 0; i < _combatants.Count; i++)
                     {
+                        CombatantState c = _combatants[i];
+                        if (c.Side != CombatSide.Monster)
+                        {
+                            continue;
+                        }
+
                         xp += c.XpReward;
                         gold += c.GoldReward;
+                        for (int l = 0; l < c.LootItemIds.Count; l++)
+                        {
+                            int lootId = c.LootItemIds[l];
+                            if (lootId > 0)
+                            {
+                                _collectedLootItemIds.Add(lootId);
+                            }
+                        }
                     }
-                }
 
-                TotalXpEarned = xp;
-                TotalGoldLoot = gold;
-                if (Party != null && gold > 0)
-                {
-                    Party.Gold += gold;
+                    TotalXpEarned = xp;
+                    TotalGoldLoot = gold;
+
+                    if (Party != null)
+                    {
+                        GrantVictoryRewardsToParty(Party);
+                    }
                 }
             }
             else
@@ -1527,7 +2655,8 @@ namespace RealmzCore.Combat
             CombatantState attacker,
             CombatantState defender,
             bool isFlanking,
-            LosResult? los)
+            LosResult? los,
+            IReadOnlyList<string>? hitModifiers = null)
         {
             List<string> tags = new List<string>();
             if (isFlanking)
@@ -1540,9 +2669,29 @@ namespace RealmzCore.Combat
                 tags.Add("GUARDING");
             }
 
-            if (los != null && los.Kind == LosKind.PartialCover)
+            if (defender.IsProne || attacker.IsProne)
+            {
+                tags.Add("PRONE");
+            }
+
+            if (los != null && los.IsSteamObscured)
+            {
+                tags.Add("STEAM_OBSCURED -20%");
+            }
+            else if (los != null && los.Kind == LosKind.PartialCover)
             {
                 tags.Add("PARTIAL_COVER");
+            }
+
+            if (hitModifiers != null)
+            {
+                for (int i = 0; i < hitModifiers.Count; i++)
+                {
+                    if (!tags.Contains(hitModifiers[i]))
+                    {
+                        tags.Add(hitModifiers[i]);
+                    }
+                }
             }
 
             IReadOnlyList<ConditionDisplayEffect> attEffects = attacker.Conditions.GetDisplayEffects();

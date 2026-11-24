@@ -1,0 +1,19 @@
+# Optional remaster art and display-name enrichments for City of Bywater.
+# Zero hardcoded coordinates; all portals, shops, battles, and encounters come from binary scenario files.
+display_name: City of Bywater
+shop_names:
+  "1": Bywater Armory and General Store
+  "4": Bywater Tannery
+  "10": Bywater Apothecary
+art_bindings:
+  pict_300: cartography_meadow_tileset
+  pict_303: cartography_castle_tileset
+  pict_304: cartography_subterranean_tileset
+  pict_309: cartography_swamp_tileset
+music_bindings:
+  overworld: outdoor
+  dungeon: dungeon
+  combat: battle
+  shop: shop
+  camp: camp
+  temple: temple

@@ -1,6 +1,9 @@
+using Realmz.Audio;
+using Realmz.Cartography;
 using Realmz.Data;
 using Realmz.Game;
 using Realmz.World;
+using RealmzCore.Data;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -13,9 +16,10 @@ using UnityEngine.SceneManagement;
 namespace Realmz.EditorTools
 {
     /// <summary>
-    /// Builds Assets/Scenes/M1_Bywater_Slice.unity with URP 3D HD-2D lighting, ACES + Bloom,
-    /// InputSystem UI EventSystem, and wired BywaterGameController + BywaterAssetCatalog.
-    /// Registers M1_Bywater_Slice.unity at index 0 in EditorBuildSettings without altering M0_HD2D_SmokeScene.unity.
+    /// Builds Assets/Scenes/M1_Bywater_Slice.unity with URP 3D HD-2D lighting, Neutral + Bloom,
+    /// single AudioListener on Main Camera, InputSystem UI EventSystem, and wired BywaterGameController
+    /// + BywaterAudioDirector + BywaterAssetCatalog.
+    /// Registers M1_Bywater_Slice.unity at index 0 in EditorBuildSettings while leaving BywaterDiorama_Proof.unity off the build list.
     /// </summary>
     public static class M1BywaterSceneBuilder
     {
@@ -62,8 +66,11 @@ namespace Realmz.EditorTools
             camData.volumeLayerMask = ~0;
             camData.antialiasing = AntialiasingMode.None;
 
+            camGo.AddComponent<AudioListener>();
+
             BywaterCameraRig cameraRig = camGo.AddComponent<BywaterCameraRig>();
-            cameraRig.SetFollowTarget(BywaterCameraRig.GridToWorld(new RealmzCore.Data.GridCoord(2, 1)), immediate: true);
+            cameraRig.SetWorldBounds(90, 90);
+            cameraRig.SetFollowTarget(CartographyWorldData.GridToWorld(new GridCoord(2, 1), 0f), immediate: true);
 
             // 3. Warm Directional Sun with grounded 3D soft shadows
             GameObject sunGo = new GameObject("Directional Sun");
@@ -187,6 +194,10 @@ namespace Realmz.EditorTools
             esGo.AddComponent<InputSystemUIInputModule>();
 
             GameObject controllerGo = new GameObject("BywaterGameController");
+            GameObject audioGo = new GameObject("BywaterAudioDirector");
+            audioGo.transform.SetParent(controllerGo.transform, false);
+            BywaterAudioDirector audioDirector = audioGo.AddComponent<BywaterAudioDirector>();
+
             BywaterGameController controller = controllerGo.AddComponent<BywaterGameController>();
             controller.assetCatalog = catalog;
             controller.worldRenderer = worldRenderer;
@@ -194,6 +205,8 @@ namespace Realmz.EditorTools
             controller.gridOverlays = gridOverlays;
             controller.hudController = hudController;
             controller.biomeAtmosphere = atmosphere;
+            controller.audioDirector = audioDirector;
+            EditorUtility.SetDirty(audioDirector);
             EditorUtility.SetDirty(controller);
 
             AssetDatabase.SaveAssets();
@@ -214,8 +227,9 @@ namespace Realmz.EditorTools
             {
                 if (!string.Equals(existing[i].path, scenePath, System.StringComparison.OrdinalIgnoreCase))
                 {
-                    // Keep SampleScene out if replaced, or keep disabled if non-M1; preserve M0 untouched in Assets/Scenes
-                    if (!existing[i].path.EndsWith("SampleScene.unity", System.StringComparison.OrdinalIgnoreCase))
+                    // Leave SampleScene.unity and BywaterDiorama_Proof.unity off the build list while keeping files intact.
+                    if (!existing[i].path.EndsWith("SampleScene.unity", System.StringComparison.OrdinalIgnoreCase) &&
+                        !existing[i].path.EndsWith("BywaterDiorama_Proof.unity", System.StringComparison.OrdinalIgnoreCase))
                     {
                         updated.Add(existing[i]);
                     }

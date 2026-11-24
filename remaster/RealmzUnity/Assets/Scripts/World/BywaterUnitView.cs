@@ -10,13 +10,16 @@ namespace Realmz.World
 {
     /// <summary>
     /// Foot-anchored HD-2D sprite unit with turn/team under-ring, billboarded world-space HUD,
-    /// stepped path coroutine animation, and rising floating combat text.
+    /// stepped path coroutine animation, combat lunge/hit-flash micro-juice, and arcing floating text.
     /// </summary>
     public sealed class BywaterUnitView : MonoBehaviour
     {
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int ColorId = Shader.PropertyToID("_Color");
+        private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
         private static readonly Color CurrentTurnGold = new Color(0.980f, 0.800f, 0.082f, 0.95f); // #FACC15
+        private static readonly Color HitFlashGoldWhite = new Color(1.0f, 0.953f, 0.690f, 1.0f); // #FFF3B0
+        private static readonly Color DeadSpriteTint = new Color(0.45f, 0.45f, 0.50f, 0.55f);
 
         private static Material _sharedRingMaterial;
         private static Texture2D _sharedRingTexture;
@@ -39,8 +42,11 @@ namespace Realmz.World
         private float _spriteSize = 1.42f;
         private bool _showHud = true;
         private bool _isAlive = true;
+        private bool _isHitFlashing;
         private float _idlePhase;
         private Coroutine _moveCoroutine;
+        private Coroutine _lungeCoroutine;
+        private Coroutine _hitFlashCoroutine;
 
         public string UnitId { get; private set; }
 
@@ -59,11 +65,19 @@ namespace Realmz.World
             _spriteSize = Mathf.Max(0.4f, spriteSize);
             _showHud = showHud;
             _isAlive = true;
+            _isHitFlashing = false;
             _idlePhase = ComputeDeterministicPhase(UnitId);
 
+            StopLungeCoroutine();
+            StopHitFlashCoroutine();
             EnsureHierarchy();
 
             ResetSpriteIdlePose();
+            if (_spriteBillboardTransform != null)
+            {
+                _spriteBillboardTransform.localPosition = Vector3.zero;
+            }
+
             _spriteRenderer.sharedMaterial = billboardMat;
             ApplySpriteTint(Color.white);
 
@@ -89,7 +103,7 @@ namespace Realmz.World
                 return;
             }
 
-            if (!_isAlive || _moveCoroutine != null)
+            if (!_isAlive || _moveCoroutine != null || _lungeCoroutine != null)
             {
                 ResetSpriteIdlePose();
                 return;
@@ -116,6 +130,11 @@ namespace Realmz.World
             transform.position = pos;
         }
 
+        public void MoveAlongPath(IReadOnlyList<Vector3> worldPoints, float stepDuration = 0.08f)
+        {
+            MoveAlongWorldPath(worldPoints, stepDuration);
+        }
+
         public void MoveAlongWorldPath(IReadOnlyList<Vector3> worldPoints, float stepDuration)
         {
             StopMoveCoroutine();
@@ -125,7 +144,7 @@ namespace Realmz.World
                 return;
             }
 
-            if (!gameObject.activeInHierarchy || stepDuration <= 0.001f)
+            if (!Application.isPlaying || !gameObject.activeInHierarchy || stepDuration <= 0.001f)
             {
                 transform.position = worldPoints[worldPoints.Count - 1];
                 return;
@@ -134,17 +153,20 @@ namespace Realmz.World
             _moveCoroutine = StartCoroutine(MovePathRoutine(worldPoints, stepDuration));
         }
 
-        public void UpdateStats(int hp, int maxHp, int sp, int maxSp, string statusBadge, bool isCurrentTurn, bool isAlive)
+        public void SetHp(int hp, int maxHp)
         {
             EnsureHierarchy();
-
             float safeMaxHp = Mathf.Max(1, maxHp);
             float hpRatio = Mathf.Clamp01(hp / safeMaxHp);
             _hpFill.rectTransform.anchorMax = new Vector2(hpRatio, 1f);
             _hpFill.color = hpRatio > 0.35f
                 ? new Color(0.20f, 0.82f, 0.36f, 1f)
                 : new Color(0.92f, 0.24f, 0.20f, 1f);
+        }
 
+        public void SetSp(int sp, int maxSp)
+        {
+            EnsureHierarchy();
             bool hasSp = maxSp > 0;
             _spBarRoot.gameObject.SetActive(hasSp);
             if (hasSp)
@@ -152,6 +174,27 @@ namespace Realmz.World
                 float spRatio = Mathf.Clamp01(sp / (float)maxSp);
                 _spFill.rectTransform.anchorMax = new Vector2(spRatio, 1f);
             }
+        }
+
+        public void SetTurnHighlight(bool isCurrentTurn)
+        {
+            EnsureHierarchy();
+            if (!_isAlive)
+            {
+                _underRingRenderer.gameObject.SetActive(false);
+                return;
+            }
+
+            _underRingRenderer.gameObject.SetActive(true);
+            ApplyRingColor(isCurrentTurn ? CurrentTurnGold : _baseRingColor);
+        }
+
+        public void UpdateStats(int hp, int maxHp, int sp, int maxSp, string statusBadge, bool isCurrentTurn, bool isAlive)
+        {
+            EnsureHierarchy();
+
+            SetHp(hp, maxHp);
+            SetSp(sp, maxSp);
 
             bool hasBadge = !string.IsNullOrEmpty(statusBadge);
             _statusBadgeLabel.gameObject.SetActive(hasBadge);
@@ -165,7 +208,10 @@ namespace Realmz.World
                 _isAlive = true;
                 _underRingRenderer.gameObject.SetActive(true);
                 ApplyRingColor(isCurrentTurn ? CurrentTurnGold : _baseRingColor);
-                ApplySpriteTint(Color.white);
+                if (!_isHitFlashing)
+                {
+                    ApplySpriteTint(Color.white);
+                }
                 _worldHudCanvas.gameObject.SetActive(_showHud);
             }
             else
@@ -173,27 +219,77 @@ namespace Realmz.World
                 _isAlive = false;
                 ResetSpriteIdlePose();
                 _underRingRenderer.gameObject.SetActive(false);
-                ApplySpriteTint(new Color(0.45f, 0.45f, 0.50f, 0.55f));
+                if (!_isHitFlashing)
+                {
+                    ApplySpriteTint(DeadSpriteTint);
+                }
                 _worldHudCanvas.gameObject.SetActive(false);
             }
         }
 
+        public void PlayAttackLunge(Vector3 targetWorldPos, float lungeDistance = 0.28f, float totalDuration = 0.07f)
+        {
+            EnsureHierarchy();
+            StopLungeCoroutine();
+
+            if (_spriteBillboardTransform == null)
+            {
+                return;
+            }
+
+            Vector3 delta = targetWorldPos - transform.position;
+            delta.y = 0f;
+            Vector3 dir = delta.sqrMagnitude > 0.0001f ? delta.normalized : Vector3.forward;
+            float clampedDistance = Mathf.Max(0f, lungeDistance);
+
+            if (!Application.isPlaying || !gameObject.activeInHierarchy || totalDuration <= 0.001f || clampedDistance <= 0.0001f)
+            {
+                _spriteBillboardTransform.localPosition = Vector3.zero;
+                return;
+            }
+
+            _lungeCoroutine = StartCoroutine(AttackLungeRoutine(dir * clampedDistance, totalDuration));
+        }
+
+        public void PlayHitFlash(float duration = 0.055f)
+        {
+            EnsureHierarchy();
+            StopHitFlashCoroutine();
+
+            if (!Application.isPlaying || !gameObject.activeInHierarchy || duration <= 0.001f)
+            {
+                _isHitFlashing = false;
+                ApplySpriteTint(GetNormalSpriteTint());
+                return;
+            }
+
+            _isHitFlashing = true;
+            ApplyHitFlashTint();
+            _hitFlashCoroutine = StartCoroutine(HitFlashRoutine(duration));
+        }
+
         public void ShowFloatingText(string message, Color color)
         {
-            if (string.IsNullOrEmpty(message))
+            ShowArcingFloatingText(message, color, isCrit: false);
+        }
+
+        public void ShowArcingFloatingText(string text, Color color, bool isCrit = false)
+        {
+            if (string.IsNullOrEmpty(text))
             {
                 return;
             }
 
             GameObject floatGo = new GameObject("FloatingText");
-            floatGo.transform.position = transform.position + new Vector3(0f, _spriteSize + 0.32f, 0f);
-            floatGo.transform.localScale = Vector3.one * 0.01f;
+            floatGo.transform.position = transform.position + new Vector3(0f, _spriteSize + 0.34f, 0f);
+            float baseScale = 0.01f;
+            floatGo.transform.localScale = Vector3.one * baseScale;
 
             Canvas canvas = floatGo.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
-            canvas.sortingOrder = 25;
+            canvas.sortingOrder = isCrit ? 30 : 25;
             RectTransform canvasRt = floatGo.GetComponent<RectTransform>();
-            canvasRt.sizeDelta = new Vector2(220f, 54f);
+            canvasRt.sizeDelta = new Vector2(260f, 64f);
 
             floatGo.AddComponent<PixelBillboard>();
 
@@ -210,16 +306,35 @@ namespace Realmz.World
             {
                 tmp.font = _font;
             }
-            tmp.text = message;
-            tmp.fontSize = 26f;
+            tmp.text = text;
+            tmp.fontSize = isCrit ? 30f : 26f;
             tmp.fontStyle = FontStyles.Bold;
             tmp.alignment = TextAlignmentOptions.Center;
             tmp.color = color;
             tmp.textWrappingMode = TextWrappingModes.NoWrap;
 
+            if (!Application.isPlaying)
+            {
+                DestroyImmediate(floatGo);
+                return;
+            }
+
             if (gameObject.activeInHierarchy)
             {
-                StartCoroutine(AnimateFloatingText(floatGo, tmp, color));
+                float horizontalDrift = UnityEngine.Random.Range(-0.22f, 0.22f);
+                Camera cam = Camera.main;
+                Vector3 driftAxis = cam != null ? cam.transform.right : Vector3.right;
+                driftAxis.y = 0f;
+                if (driftAxis.sqrMagnitude < 0.0001f)
+                {
+                    driftAxis = Vector3.right;
+                }
+                else
+                {
+                    driftAxis.Normalize();
+                }
+
+                StartCoroutine(AnimateArcingFloatingText(floatGo, tmp, color, baseScale, driftAxis * horizontalDrift, isCrit));
             }
             else
             {
@@ -251,9 +366,65 @@ namespace Realmz.World
             _moveCoroutine = null;
         }
 
-        private static IEnumerator AnimateFloatingText(GameObject floatGo, TextMeshProUGUI tmp, Color baseColor)
+        private IEnumerator AttackLungeRoutine(Vector3 peakLocalOffset, float totalDuration)
         {
-            const float duration = 0.9f;
+            float halfDuration = Mathf.Max(0.005f, totalDuration * 0.5f);
+            float elapsed = 0f;
+
+            while (elapsed < halfDuration && _spriteBillboardTransform != null)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / halfDuration);
+                float eased = 1f - ((1f - t) * (1f - t));
+                _spriteBillboardTransform.localPosition = peakLocalOffset * eased;
+                yield return null;
+            }
+
+            elapsed = 0f;
+            while (elapsed < halfDuration && _spriteBillboardTransform != null)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / halfDuration);
+                _spriteBillboardTransform.localPosition = Vector3.Lerp(peakLocalOffset, Vector3.zero, t);
+                yield return null;
+            }
+
+            if (_spriteBillboardTransform != null)
+            {
+                _spriteBillboardTransform.localPosition = Vector3.zero;
+            }
+
+            _lungeCoroutine = null;
+        }
+
+        private IEnumerator HitFlashRoutine(float duration)
+        {
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+
+            _isHitFlashing = false;
+            _hitFlashCoroutine = null;
+            ApplySpriteTint(GetNormalSpriteTint());
+        }
+
+        private static IEnumerator AnimateArcingFloatingText(
+            GameObject floatGo,
+            TextMeshProUGUI tmp,
+            Color baseColor,
+            float baseScale,
+            Vector3 horizontalOffset,
+            bool isCrit)
+        {
+            float duration = isCrit ? 1.05f : 0.88f;
+            float initialVy = isCrit ? 2.85f : 2.35f;
+            float gravity = isCrit ? 4.4f : 3.9f;
+            float popPeak = isCrit ? 1.35f : 1.14f;
+            float settleScale = isCrit ? 1.12f : 1.0f;
+
             Vector3 startPos = floatGo.transform.position;
             float elapsed = 0f;
 
@@ -261,11 +432,33 @@ namespace Realmz.World
             {
                 elapsed += Time.deltaTime;
                 float t = Mathf.Clamp01(elapsed / duration);
-                floatGo.transform.position = startPos + new Vector3(0f, t * 0.85f, 0f);
+
+                float arcY = (initialVy * elapsed) - (0.5f * gravity * elapsed * elapsed);
+                Vector3 drift = horizontalOffset * t;
+                floatGo.transform.position = startPos + drift + new Vector3(0f, arcY, 0f);
+
+                float scaleMult;
+                if (elapsed < 0.09f)
+                {
+                    float popT = elapsed / 0.09f;
+                    scaleMult = Mathf.Lerp(0.85f, popPeak, popT);
+                }
+                else if (elapsed < 0.22f)
+                {
+                    float settleT = (elapsed - 0.09f) / 0.13f;
+                    scaleMult = Mathf.Lerp(popPeak, settleScale, settleT);
+                }
+                else
+                {
+                    scaleMult = settleScale;
+                }
+                floatGo.transform.localScale = Vector3.one * (baseScale * scaleMult);
 
                 Color c = baseColor;
-                c.a = Mathf.Lerp(1f, 0f, t * t);
+                float fadeT = t > 0.55f ? (t - 0.55f) / 0.45f : 0f;
+                c.a = Mathf.Lerp(1f, 0f, fadeT * fadeT);
                 tmp.color = c;
+
                 yield return null;
             }
 
@@ -282,6 +475,36 @@ namespace Realmz.World
                 StopCoroutine(_moveCoroutine);
                 _moveCoroutine = null;
             }
+        }
+
+        private void StopLungeCoroutine()
+        {
+            if (_lungeCoroutine != null)
+            {
+                StopCoroutine(_lungeCoroutine);
+                _lungeCoroutine = null;
+            }
+
+            if (_spriteBillboardTransform != null)
+            {
+                _spriteBillboardTransform.localPosition = Vector3.zero;
+            }
+        }
+
+        private void StopHitFlashCoroutine()
+        {
+            if (_hitFlashCoroutine != null)
+            {
+                StopCoroutine(_hitFlashCoroutine);
+                _hitFlashCoroutine = null;
+            }
+
+            _isHitFlashing = false;
+        }
+
+        private Color GetNormalSpriteTint()
+        {
+            return _isAlive ? Color.white : DeadSpriteTint;
         }
 
         private void ResetSpriteIdlePose()
@@ -338,6 +561,27 @@ namespace Realmz.World
             _spritePropBlock.Clear();
             _spritePropBlock.SetColor(BaseColorId, color);
             _spritePropBlock.SetColor(ColorId, color);
+            _spriteRenderer.SetPropertyBlock(_spritePropBlock);
+        }
+
+        private void ApplyHitFlashTint()
+        {
+            if (_spriteRenderer == null)
+            {
+                return;
+            }
+
+            _spritePropBlock ??= new MaterialPropertyBlock();
+            _spritePropBlock.Clear();
+            _spritePropBlock.SetColor(BaseColorId, HitFlashGoldWhite);
+            _spritePropBlock.SetColor(ColorId, HitFlashGoldWhite);
+
+            Material mat = _spriteRenderer.sharedMaterial;
+            if (mat != null && mat.HasProperty(EmissionColorId))
+            {
+                _spritePropBlock.SetColor(EmissionColorId, new Color(1.0f, 0.92f, 0.55f, 1.0f) * 0.65f);
+            }
+
             _spriteRenderer.SetPropertyBlock(_spritePropBlock);
         }
 

@@ -35,6 +35,11 @@ Shader "Realmz/CartographyBillboard"
         _LanternPoolColor ("Lantern Pool Color", Color) = (1.0, 0.62, 0.24, 1)
         _LanternPoolIntensity ("Lantern Pool Intensity", Range(0, 3)) = 1.25
         _EmissionColor ("Optional Emission", Color) = (0, 0, 0, 1)
+        _EmissionWarmMask ("Mask Emission To Warm Bright Pixels (0/1)", Float) = 1.0
+        _EmissionMinV ("Min UV.y For Emission", Range(0, 1)) = 0.0
+        _ReceiveRootShadowOnly ("Sample Shadow At Root (0/1)", Float) = 1.0
+        _HorizonHazeColor ("North Horizon Haze Color", Color) = (0.91, 0.83, 0.70, 1)
+        _HorizonHazeStrength ("North Horizon Haze Strength", Range(0, 0.35)) = 0.08
     }
 
     SubShader
@@ -86,15 +91,32 @@ Shader "Realmz/CartographyBillboard"
             half4 _LanternPoolColor;
             half _LanternPoolIntensity;
             half4 _EmissionColor;
+            half _EmissionWarmMask;
+            half _EmissionMinV;
+            float _ReceiveRootShadowOnly;
+            half4 _HorizonHazeColor;
+            half _HorizonHazeStrength;
+        #if !defined(UNITY_INSTANCING_ENABLED)
+            float _VariantIndex;
+            float _WindPhase;
+            float4 _TintColor;
+            float _FrameCount;
+            float _AnimFps;
+        #endif
         CBUFFER_END
 
-        UNITY_INSTANCING_BUFFER_START(Props)
-            UNITY_DEFINE_INSTANCED_PROP(float, _VariantIndex)
-            UNITY_DEFINE_INSTANCED_PROP(float, _WindPhase)
-            UNITY_DEFINE_INSTANCED_PROP(float4, _TintColor)
-            UNITY_DEFINE_INSTANCED_PROP(float, _FrameCount)
-            UNITY_DEFINE_INSTANCED_PROP(float, _AnimFps)
-        UNITY_INSTANCING_BUFFER_END(Props)
+        #if defined(UNITY_INSTANCING_ENABLED)
+            UNITY_INSTANCING_BUFFER_START(Props)
+                UNITY_DEFINE_INSTANCED_PROP(float, _VariantIndex)
+                UNITY_DEFINE_INSTANCED_PROP(float, _WindPhase)
+                UNITY_DEFINE_INSTANCED_PROP(float4, _TintColor)
+                UNITY_DEFINE_INSTANCED_PROP(float, _FrameCount)
+                UNITY_DEFINE_INSTANCED_PROP(float, _AnimFps)
+            UNITY_INSTANCING_BUFFER_END(Props)
+            #define CARTO_INST_PROP(name) UNITY_ACCESS_INSTANCED_PROP(Props, name)
+        #else
+            #define CARTO_INST_PROP(name) name
+        #endif
 
         float2 ResolveCameraForwardXZ(bool allowViewMatrix)
         {
@@ -117,10 +139,10 @@ Shader "Realmz/CartographyBillboard"
 
         float2 ComputeBillboardAtlasUV(float2 localUV, float3 rootWS)
         {
-            float variant = max(0.0, floor(UNITY_ACCESS_INSTANCED_PROP(Props, _VariantIndex) + 0.5));
-            float windPhase = UNITY_ACCESS_INSTANCED_PROP(Props, _WindPhase);
-            float frameCount = max(1.0, floor(UNITY_ACCESS_INSTANCED_PROP(Props, _FrameCount) + 0.5));
-            float fps = max(0.0, UNITY_ACCESS_INSTANCED_PROP(Props, _AnimFps));
+            float variant = max(0.0, floor(CARTO_INST_PROP(_VariantIndex) + 0.5));
+            float windPhase = CARTO_INST_PROP(_WindPhase);
+            float frameCount = max(1.0, floor(CARTO_INST_PROP(_FrameCount) + 0.5));
+            float fps = max(0.0, CARTO_INST_PROP(_AnimFps));
 
             float timeSec = _Time.y + _CartographyTimeOffset;
             float gustWave = dot(rootWS.xz, _WindDir.xy) * _WindFreq + timeSec * _WindWaveSpeed;
@@ -162,23 +184,34 @@ Shader "Realmz/CartographyBillboard"
             return lerp(uvMin, uvMax, saturate(localUV));
         }
 
-        void ComputeBillboardVertex(
+        void ComputeBillboardVertexExtended(
             float3 positionOS,
             float2 uv2,
             bool allowViewMatrix,
+            bool overrideFwd,
+            float2 customFwdXZ,
+            float tiltOverrideDeg,
             out float3 positionWS,
             out float3 rootWS,
             out float3 facingNormalWS)
         {
             rootWS = TransformObjectToWorld(float3(0.0, 0.0, 0.0));
-            float2 fwdXZ2 = ResolveCameraForwardXZ(allowViewMatrix);
+            float2 fwdXZ2 = overrideFwd ? customFwdXZ : ResolveCameraForwardXZ(allowViewMatrix);
+            if (dot(fwdXZ2, fwdXZ2) > 0.0001)
+            {
+                fwdXZ2 = normalize(fwdXZ2);
+            }
+            else
+            {
+                fwdXZ2 = float2(0.0, 1.0);
+            }
             float3 fwdXZ = float3(fwdXZ2.x, 0.0, fwdXZ2.y);
             float3 rightXZ = float3(fwdXZ.z, 0.0, -fwdXZ.x);
 
-            float tiltRad = radians(_CameraPitchTiltDeg);
+            float tiltRad = radians(tiltOverrideDeg);
             float tipWeight = saturate(uv2.y);
 
-            if (_BillboardMode > 0.5)
+            if (_BillboardMode > 0.5 || overrideFwd)
             {
                 float scaleX = length(float3(UNITY_MATRIX_M[0][0], UNITY_MATRIX_M[1][0], UNITY_MATRIX_M[2][0]));
                 float scaleY = length(float3(UNITY_MATRIX_M[0][1], UNITY_MATRIX_M[1][1], UNITY_MATRIX_M[2][1]));
@@ -203,7 +236,7 @@ Shader "Realmz/CartographyBillboard"
 
             // Subtle vertex wind tip sway synchronized with traveling gust wave
             float timeSec = _Time.y + _CartographyTimeOffset;
-            float windPhase = UNITY_ACCESS_INSTANCED_PROP(Props, _WindPhase);
+            float windPhase = CARTO_INST_PROP(_WindPhase);
             float gustWave = dot(rootWS.xz, _WindDir.xy) * _WindFreq + timeSec * _WindWaveSpeed + windPhase * 6.28318;
             float sway = sin(gustWave) * _WindTipSway * (tipWeight * tipWeight);
             positionWS += rightXZ * sway;
@@ -225,6 +258,26 @@ Shader "Realmz/CartographyBillboard"
             }
 
             facingNormalWS = SafeNormalize(float3(-fwdXZ.x * cos(tiltRad), sin(tiltRad), -fwdXZ.z * cos(tiltRad)));
+        }
+
+        void ComputeBillboardVertex(
+            float3 positionOS,
+            float2 uv2,
+            bool allowViewMatrix,
+            out float3 positionWS,
+            out float3 rootWS,
+            out float3 facingNormalWS)
+        {
+            ComputeBillboardVertexExtended(
+                positionOS,
+                uv2,
+                allowViewMatrix,
+                false,
+                float2(0.0, 1.0),
+                _CameraPitchTiltDeg,
+                positionWS,
+                rootWS,
+                facingNormalWS);
         }
         ENDHLSL
 
@@ -276,6 +329,7 @@ Shader "Realmz/CartographyBillboard"
                 float3 tangentWS : TEXCOORD4;
                 half fogFactor : TEXCOORD5;
                 float4 shadowCoord : TEXCOORD6;
+                float3 rootWS : TEXCOORD7;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -294,6 +348,7 @@ Shader "Realmz/CartographyBillboard"
                 float3 rightXZ = float3(camFwdXZ.y, 0.0, -camFwdXZ.x);
 
                 output.positionWS = positionWS;
+                output.rootWS = rootWS;
                 output.positionCS = TransformWorldToHClip(positionWS);
                 output.uv = ComputeBillboardAtlasUV(input.uv0, rootWS);
                 output.rootInfo = input.uv1;
@@ -301,8 +356,9 @@ Shader "Realmz/CartographyBillboard"
                 output.tangentWS = rightXZ;
                 output.fogFactor = ComputeFogFactor(output.positionCS.z);
 
+                float3 shadowSampleWS = lerp(positionWS, rootWS + float3(0.0, 0.08, 0.0), saturate(_ReceiveRootShadowOnly));
                 #if defined(REQUIRES_VERTEX_SHADOW_COORD_INTERPOLATOR)
-                    output.shadowCoord = TransformWorldToShadowCoord(positionWS);
+                    output.shadowCoord = TransformWorldToShadowCoord(shadowSampleWS);
                 #else
                     output.shadowCoord = float4(0, 0, 0, 0);
                 #endif
@@ -315,7 +371,7 @@ Shader "Realmz/CartographyBillboard"
                 UNITY_SETUP_INSTANCE_ID(input);
 
                 half4 baseSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv);
-                half4 instTint = (half4)UNITY_ACCESS_INSTANCED_PROP(Props, _TintColor);
+                half4 instTint = (half4)CARTO_INST_PROP(_TintColor);
                 half4 albedoAlpha = baseSample * instTint;
                 clip(albedoAlpha.a - _Cutoff);
 
@@ -326,10 +382,11 @@ Shader "Realmz/CartographyBillboard"
                 half3 normalTS = UnpackNormalScale(SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, input.uv), _BumpScale);
                 float3 baseN = SafeNormalize(input.normalWS);
                 float3 tang = SafeNormalize(input.tangentWS);
-                float3 bitang = SafeNormalize(cross(baseN, tang));
+                float3 bitang = SafeNormalize(cross(tang, baseN));
                 half3 normalWS = SafeNormalize(normalTS.x * tang + normalTS.y * bitang + normalTS.z * baseN);
 
                 float3 viewDirWS = GetWorldSpaceNormalizeViewDir(input.positionWS);
+                float3 shadowSampleWS = lerp(input.positionWS, input.rootWS + float3(0.0, 0.08, 0.0), saturate(_ReceiveRootShadowOnly));
 
                 InputData inputData = (InputData)0;
                 inputData.positionWS = input.positionWS;
@@ -340,7 +397,7 @@ Shader "Realmz/CartographyBillboard"
                 #if defined(REQUIRES_VERTEX_SHADOW_COORD_INTERPOLATOR)
                     inputData.shadowCoord = input.shadowCoord;
                 #elif defined(MAIN_LIGHT_CALCULATE_SHADOWS)
-                    inputData.shadowCoord = TransformWorldToShadowCoord(input.positionWS);
+                    inputData.shadowCoord = TransformWorldToShadowCoord(shadowSampleWS);
                 #else
                     inputData.shadowCoord = float4(0, 0, 0, 0);
                 #endif
@@ -352,7 +409,7 @@ Shader "Realmz/CartographyBillboard"
                     topDownLM = SAMPLE_TEXTURE2D(_TopDownLightmapTex, sampler_TopDownLightmapTex, lmUV);
                 }
 
-                Light mainLight = GetMainLight(inputData.shadowCoord, input.positionWS, half4(1, 1, 1, 1));
+                Light mainLight = GetMainLight(inputData.shadowCoord, shadowSampleWS, half4(1, 1, 1, 1));
                 half mainAtten = saturate(mainLight.distanceAttenuation * mainLight.shadowAttenuation);
                 half wrapDiffuse = saturate(dot(normalWS, mainLight.direction) * 0.65h + 0.35h);
                 half backLit = pow(saturate(dot(-mainLight.direction, viewDirWS)), 2.5h) * _Translucency * tipFactor;
@@ -387,7 +444,19 @@ Shader "Realmz/CartographyBillboard"
 
                 half3 lanternPool = albedo * _LanternPoolColor.rgb * (topDownLM.a * _LanternPoolIntensity);
 
-                half3 color = ambientColor + directLight + addLighting + lanternPool + _EmissionColor.rgb;
+                half warmBright = smoothstep(0.68h, 0.88h, albedoAlpha.r)
+                                * smoothstep(0.45h, 0.72h, albedoAlpha.g)
+                                * smoothstep(0.22h, 0.45h, albedoAlpha.r - albedoAlpha.b);
+                half vMask = smoothstep((half)_EmissionMinV - 0.04h, (half)_EmissionMinV + 0.04h, tipFactor);
+                half emissionMask = lerp(1.0h, warmBright * vMask, saturate((half)_EmissionWarmMask));
+                half3 emission = _EmissionColor.rgb * albedoAlpha.rgb * emissionMask;
+
+                half3 color = ambientColor + directLight + addLighting + lanternPool + emission;
+                if (_TopDownLightmapBounds.w > 0.00001)
+                {
+                    half northFrac = saturate((half)((input.positionWS.z - _TopDownLightmapBounds.y) * _TopDownLightmapBounds.w));
+                    color = lerp(color, _HorizonHazeColor.rgb, smoothstep(0.76h, 1.0h, northFrac) * _HorizonHazeStrength);
+                }
                 color = clamp(color, half3(0.0h, 0.0h, 0.0h), half3(64.0h, 64.0h, 64.0h));
                 color = MixFog(color, input.fogFactor);
 
@@ -448,11 +517,20 @@ Shader "Realmz/CartographyBillboard"
                 float3 positionWS;
                 float3 rootWS;
                 float3 facingNormalWS;
-                ComputeBillboardVertex(input.positionOS.xyz, input.uv1, false, positionWS, rootWS, facingNormalWS);
-
-                #if _CASTING_PUNCTUAL_LIGHT_SHADOW
+                #if defined(_CASTING_PUNCTUAL_LIGHT_SHADOW)
+                    ComputeBillboardVertex(input.positionOS.xyz, input.uv1, false, positionWS, rootWS, facingNormalWS);
                     float3 lightDirectionWS = normalize(_LightPosition - positionWS);
                 #else
+                    ComputeBillboardVertexExtended(
+                        input.positionOS.xyz,
+                        input.uv1,
+                        false,
+                        true,
+                        -_LightDirection.xz,
+                        0.0,
+                        positionWS,
+                        rootWS,
+                        facingNormalWS);
                     float3 lightDirectionWS = _LightDirection;
                 #endif
 
@@ -465,7 +543,7 @@ Shader "Realmz/CartographyBillboard"
             half4 ShadowFrag(ShadowVaryings input) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(input);
-                half alpha = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv).a * (half)UNITY_ACCESS_INSTANCED_PROP(Props, _TintColor).a;
+                half alpha = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv).a * (half)CARTO_INST_PROP(_TintColor).a;
                 clip(alpha - _Cutoff);
                 return 0;
             }
@@ -526,7 +604,7 @@ Shader "Realmz/CartographyBillboard"
             half DepthFrag(DepthVaryings input) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(input);
-                half alpha = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv).a * (half)UNITY_ACCESS_INSTANCED_PROP(Props, _TintColor).a;
+                half alpha = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv).a * (half)CARTO_INST_PROP(_TintColor).a;
                 clip(alpha - _Cutoff);
                 return input.positionCS.z;
             }

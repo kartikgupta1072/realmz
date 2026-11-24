@@ -1,0 +1,3399 @@
+{
+  "scenario": "City of Bywater",
+  "total_slots": 881,
+  "non_empty_count": 848,
+  "strings": [
+    {
+      "id": 0,
+      "text": "Do Not Use"
+    },
+    {
+      "id": 1,
+      "text": "You detect no signs of a trap."
+    },
+    {
+      "id": 2,
+      "text": "You have checked the lock and are sure that it is not trapped."
+    },
+    {
+      "id": 3,
+      "text": "You have failed to pick the lock."
+    },
+    {
+      "id": 4,
+      "text": "The lock is now open."
+    },
+    {
+      "id": 5,
+      "text": "You have been successful at disarming the trap."
+    },
+    {
+      "id": 6,
+      "text": "You have failed to disarm the trap."
+    },
+    {
+      "id": 7,
+      "text": "Your inspection has detected a trap!"
+    },
+    {
+      "id": 8,
+      "text": "Who will attempt to break the door down?"
+    },
+    {
+      "id": 9,
+      "text": "After making a hell of a lot of noise nothing happens."
+    },
+    {
+      "id": 10,
+      "text": "Nothing happens. "
+    },
+    {
+      "id": 11,
+      "text": "You have found a secret passage.  Do you enter?"
+    },
+    {
+      "id": 12,
+      "text": "This passage leads to the surface."
+    },
+    {
+      "id": 13,
+      "text": "This passage leads to the underdark."
+    },
+    {
+      "id": 14,
+      "text": "You find nothing of value."
+    },
+    {
+      "id": 15,
+      "text": "Who is so brave as to volunteer?"
+    },
+    {
+      "id": 16,
+      "text": "This gate is locked."
+    },
+    {
+      "id": 17,
+      "text": "You could easily barricade this door and rest in this room undisturbed."
+    },
+    {
+      "id": 18,
+      "text": "Your attempt at forcing the door has failed.  It is wedged shut. "
+    },
+    {
+      "id": 19,
+      "text": "You collect anything you find on your vanquished foe before heading for the prize table to collect your winnings. "
+    },
+    {
+      "id": 20,
+      "text": "You see some dinosaurs in the distance grazing on small cave plants.  Do you wish to attack them?"
+    },
+    {
+      "id": 21,
+      "text": "You spot some fish-like creatures.  They seem to be looking for dead fish that have washed up on the rocks.  Do you want to attack them?"
+    },
+    {
+      "id": 22,
+      "text": "This cave continues off into the distance.  There is a pretty strong breeze of less than fresh air."
+    },
+    {
+      "id": 23,
+      "text": "You see a small band of ogres in the distance.  Do you wish to attack them?"
+    },
+    {
+      "id": 24,
+      "text": "You see a group of Dogre in the distance.  Do you want to attack them?"
+    },
+    {
+      "id": 25,
+      "text": "You see the corpses of over 3 dozen Dogre.  Many are nothing but armor stretched over withered bones but several are considerably more fresh.  Even though, the flesh on some seems to be withered as if aged hundreds of years in just moments."
+    },
+    {
+      "id": 47,
+      "text": "You need to finish the quest.                                                                                                                                                                                                                                  "
+    },
+    {
+      "id": 48,
+      "text": "You have finished the quest."
+    },
+    {
+      "id": 50,
+      "text": "You enter the guard house outside the main gate to Castle Anthrax.  Several guards keep a wary eye on you as you approach the head Magistrate.  He is a stately looking man in fine robes."
+    },
+    {
+      "id": 51,
+      "text": "Judging by the man's large girth, robes are not all he fancies.  You approach his fine oak desk.  \"Present your invitation so I may validate it for passage to yon castle.\""
+    },
+    {
+      "id": 52,
+      "text": "The lump of a man leans close so the guards do not hear.  \"For 300 Gold, I shall give you an invitation, but you must swear to use it but once.  To do so more than once will raise my ire.\""
+    },
+    {
+      "id": 53,
+      "text": "In a booming voice, he pronounces you valid petitioners and bids the guards to let you pass into Castle Anthrax."
+    },
+    {
+      "id": 54,
+      "text": "He takes your clever forgery and looks it over carefully.  Ere he hands it back to you his eyes go wide and he summons the guards.  \"Hold these fools, they attempt deception.\"  Guards rush to apprehend you."
+    },
+    {
+      "id": 55,
+      "text": "The sergeant of the guard grins in anticipation.  \"You shall swing from the gallows ere today's sun bids us farewell.\"  The battle is joined."
+    },
+    {
+      "id": 56,
+      "text": "The Magistrate screeches in fear.  \"Hold men, for I fear they have foul intentions!\"  With your hostage you manage to beat a hasty retreat from the guardhouse and disappear.  Twas a difficult task with such bulk in tow."
+    },
+    {
+      "id": 57,
+      "text": "With the reluctant aid of the Magistrate you find your way to a secluded alley.  From the shouts you here in the streets, it would seem the whole kingdom is in search of your whereabouts. "
+    },
+    {
+      "id": 58,
+      "text": "The guards begin to pursue when you here the Magistrate bellow with laughter as he calls them back.  \"Run foul vermin, for we are far too busy to chase the likes of you!\"  It would seem they did not take you as too serious a threat. "
+    },
+    {
+      "id": 59,
+      "text": "After you explain that you only want to gain entrance to the court on honest business, the Magistrate is so amused that he lets you enter.  \"Since you chose not to resist, I deem you to be honest folk, and this is an honest kingdom.  Enter as you will.\""
+    },
+    {
+      "id": 60,
+      "text": "He hands you an invitation to the Castle Anthrax.                                                                                                                                                                                         "
+    },
+    {
+      "id": 61,
+      "text": "He bids you farewell as you make your way from the gate house.                                                                                                                                                                                          "
+    },
+    {
+      "id": 62,
+      "text": "The lump of a man leans close so the guards do not hear.  \"For 300 Gold, I shall give you a writ of entrance, but you will be able to use it but once.\""
+    },
+    {
+      "id": 63,
+      "text": "The Magistrate gazes at you and speaks \"Without an invitation you will not be allowed through the main gate.  Perhaps we can work something out.\"                                                                                                              "
+    },
+    {
+      "id": 64,
+      "text": "\"Very well then.   Guards!  Show these fine people to the door, they have no valid business in the castle this day.  Farewell good people.\""
+    },
+    {
+      "id": 65,
+      "text": "The gate guards check your invitation and wave you through.                                                                                                                                                                                                    "
+    },
+    {
+      "id": 66,
+      "text": "\"Sorry citizen, without a formal invitation, the only way into the castle is in chains.  See the magistrate in yon building, he can explain all.  Now be off.\""
+    },
+    {
+      "id": 67,
+      "text": "You approach the main gate to Castle Anthrax.  As you near, the gate guard bars your path and asks to see your formal invitation."
+    },
+    {
+      "id": 68,
+      "text": "The corporal of the watch shouts \"Be sure to check in with the Magistrate in the guard house before entering.\""
+    },
+    {
+      "id": 69,
+      "text": "The town patrol waves you through as they hand you a map showing where you can buy provisions."
+    },
+    {
+      "id": 70,
+      "text": "You send him to the gods.  In his dying whispers he says a prayer to an unfamiliar god.  It would seem he has cursed you with his last gasp.  One might hope he was not held in high regard by his deity.  You search the body."
+    },
+    {
+      "id": 71,
+      "text": "You take all his possessions as you strip him down to his breeches.  \"You ruffians shall pay dearly for this!  The King will spare no expense at expunging you and your kind!\" he cries."
+    },
+    {
+      "id": 72,
+      "text": "\"Well, I should guess so.  I shall explain the error of your ways to the city guard.  It is fortunate for you that I am a patient man.  Now be gone, for I must return to my duties.\"                                                                          "
+    },
+    {
+      "id": 73,
+      "text": "As he flees, he shouts to no one in particular.  \"Help, I am being waylaid.  Help....Help!\"  Unfortunately for you, the streets are filled with troops searching for you and they stream towards you.  They do not even ask you to throw down your arms.       "
+    },
+    {
+      "id": 74,
+      "text": "Town guards rush towards you.  The corporal in charge screams, \"They are the ones who murdered the good Magistrate.  Kill them!\"  Troops are upon you before you can make good your escape."
+    },
+    {
+      "id": 75,
+      "text": "You have entered a rather fine tavern filled with only the best citizens of Bywater.  Most of the tables are filled with patrons eating spiced potatoes and engaged in interesting discussions.  You find yourself a table near the back."
+    },
+    {
+      "id": 76,
+      "text": "You are standing in a tavern."
+    },
+    {
+      "id": 77,
+      "text": "\"The way I see it, those trolls need to be taught a lesson.  If the king won't take care of it, then the town council should.  I'm telling ya.  Someone better do something right quick.  People are afraid to leave town and travel the roads at night.\""
+    },
+    {
+      "id": 78,
+      "text": "\"Steven says there is a rat cult under the Glowing Coal Inn.  I says he's crazy, that's what I say.  Steven and a few of his men are planing to set out and find that cult and put it to rest.  I says, 'I'll watch the women folk while your gone fools!'\""
+    },
+    {
+      "id": 79,
+      "text": "\"Seems like everybody in town be saying that those Gnath down south be getting too big fer der breeches.  I be agreeing.  Two merchants due today didn't show and one of dem was supposed to be a Wizard.  'Tis bad times when Wizards start to disappear.\""
+    },
+    {
+      "id": 80,
+      "text": "\"I hear there be an old underground city called Waterford southeast of town.  Been buried for a hundred years, maybe more.  Full of treasure for he who's brave enough to go get it. Master Thew the librarian has been tellin everybody seen it.\""
+    },
+    {
+      "id": 81,
+      "text": "\"King Sevren's daughter disappeared a few days ago.  Rumor has it she turned into a Dragon and flew out of the tall tower.  I'm thinking too many people have been drinking too much grog.\""
+    },
+    {
+      "id": 82,
+      "text": "\"I hear the city council is planning on taking on King Sevren for rule of the whole province.  I'm telling ya, there be some sparks flying soon!\"                                                                                                              "
+    },
+    {
+      "id": 83,
+      "text": "\"My sister's new boyfriend is the sergeant of the south gate.  He says the King's men captured a monster and have it chained beneath the guards' quarters.  A big brute it is, all green and scaly.  He set his mages to work on picking its brains.\""
+    },
+    {
+      "id": 84,
+      "text": "\"Word has it, there's a 5,000 gold piece reward for the capture of the leader of a band of Orcs that have been raiding the village of Sestoon.  I believe it, too.  A big band of mercenaries arrived today to set out and claim that reward.\""
+    },
+    {
+      "id": 85,
+      "text": "\"Thanks friend.\"  He pockets the coins and pats you on the back.  He seems a bit more friendly to you.                                                                                                                                                         "
+    },
+    {
+      "id": 86,
+      "text": "\"Oh, I don't really know much.\"  She smiles and points to the seedy looking man.  \"Ask him, he's been telling me all kinds of stories all day.\"                                                                                                                "
+    },
+    {
+      "id": 87,
+      "text": "As you approach the table, he places his palm on the hilt of a rusty looking sword.   You realize he is not a man but a Half Orc.  And judging by the bulk under his worn tunic, a strong one at that.                            "
+    },
+    {
+      "id": 88,
+      "text": "\"What you want?\"   \"Me no make trouble! Good King say me no have to leave!\"  His panic quickly subsides as it begins to dawn in his puny mind that you are not the King's men and you are not there to kick him out of town."
+    },
+    {
+      "id": 89,
+      "text": "\"Targ no go out of town.  Targ being chased.  You help Targ?\"  He grasps at your sleeve as he stands.  \"Me go with you, tell big secret.  We go to see big iron box near lake and...AAAARRRRGGGG!!\"  You see a steel point sprout from his chest."
+    },
+    {
+      "id": 90,
+      "text": "He pitches forward with a red feathered shaft growing from his back.  As bile spews from his slack jaw, he thrusts a slip of paper into your grasp.  You see his assassins at the bar.  Three very large orcs smiling a toothy grin and brandishing weapons."
+    },
+    {
+      "id": 91,
+      "text": "They make for the door in haste, yelling, \"Targ the thief has gotten his due! Any man who follows us shall join him in Hades!\"  Apparently, they did not see the slip of paper Targ gave you."
+    },
+    {
+      "id": 92,
+      "text": "As you step from the door, you meet a hailstorm of arrows.  They seem to appear from  nowhere and pin you down in the doorway.  You are forced to retreat inside.   By now, they have surely made it to safety.                                                "
+    },
+    {
+      "id": 93,
+      "text": "His body is filthy and unwashed.  You find several copper coins that are all but worthless.  In your haste to search him you take less caution than is wise and prick yourself on a poison needle concealed in his sleeve.                     "
+    },
+    {
+      "id": 94,
+      "text": "You are at your table when the town guards show up.  Luckily, nobody wants to get so involved as to implicate you in any manner.  The guards bind Targ's arms to his chest and drag him from the inn.                    "
+    },
+    {
+      "id": 95,
+      "text": "As you examine the slip of paper, you see that it's a map describing the location of an old crypt in the graveyard."
+    },
+    {
+      "id": 96,
+      "text": "The town guard is quick to arrive.  You explain your view of what happened.  The guards prepare to leave with the body and  begin a search for his assassins. "
+    },
+    {
+      "id": 97,
+      "text": "The man in charge of the guards is known by the name of Haikur.  He invites you to visit him at the guard's barracks.  He hands you a paper.  \"This will allow you to enter Castle Anthrax so you may visit.  I believe we have much in common.  Good day.\""
+    },
+    {
+      "id": 98,
+      "text": "Who will do it?                                                                                                                                                                                                                                                "
+    },
+    {
+      "id": 99,
+      "text": "You enter the barracks of the town guard."
+    },
+    {
+      "id": 100,
+      "text": "As you enter, you hear sharp words being exchanged from two high-ranking men.  It would seem the guardsmen are split into two factions.  One faction appears to be headed by a man by the name of Haikur, the other by a man named Thurfur.                    "
+    },
+    {
+      "id": 101,
+      "text": "Before you catch too much of the argument, the barracks falls silent as all heads turn to you.  Thurfur comes over and demands to know your business for being there.  Not satisfied with your answer, he orders you to leave.  Do you leave?"
+    },
+    {
+      "id": 102,
+      "text": "\"We ask you to leave one last final time, citizens.  This area is restricted to you.  Do not make us take you by force.\"  Judging by the atmosphere in the barracks, you get the feeling they may attack if you stay any longer.  Do you leave?                "
+    },
+    {
+      "id": 103,
+      "text": "\"Very well.  Now is a rather poor time to test my never plentiful supply of patience.\"  Thurfur draws steel and falls upon you. "
+    },
+    {
+      "id": 104,
+      "text": "Haikur recognizes you and walks over to greet you.  He introduces you to Thurfur who seems to take an immediate liking to you.  It is obvious both men have a certain distaste for each other, but a strong sense of duty keeps them from all out bloodshed."
+    },
+    {
+      "id": 105,
+      "text": "There have been several threats to Bywater as of late and disagreements on how to handle the situation.  You sit at a table and listen to both men as they tell their stories in an effort to win your assistance.    "
+    },
+    {
+      "id": 106,
+      "text": "Haikur speaks, \"There have always been Goblin raids on some of the more far-flung southern farmsteads, but recently they grow more and more bold.  In days past, they would steal a pig or two but would never harm the farmers.\""
+    },
+    {
+      "id": 107,
+      "text": "\"Yestereve, we discovered two farmsteads burned to cinders and nothing can be found of the peasants that worked the land.  I say we should squelch these foul vermin before they begin raiding some of the smaller hamlets.\"                                   "
+    },
+    {
+      "id": 108,
+      "text": "Thurfur speaks, \"That can wait Haikur.  Our more immediate threat is to the east.  Orc tribes have been raiding our eastern provinces.  Just last week, Vesba was sacked and nearly fifty people lost their lives.  These orcs must pay for their crimes!\""
+    },
+    {
+      "id": 109,
+      "text": "Both men are determined to take their troops and engage the enemy.  What do you do?"
+    },
+    {
+      "id": 110,
+      "text": "Both men are determined to complete their quest on their own and bid you good day.  They set about making preparations for their upcoming battles.                                                                                                             "
+    },
+    {
+      "id": 111,
+      "text": "Thurfur scowls as he walks away.  \"So be it, fools.  The kingdom shall not suffer for your foolish choice.  Men, we march east in a few days.  With or without Haikur and his friends!  Gather your gear and assemble at the east gate!  Good day citizens.\""
+    },
+    {
+      "id": 112,
+      "text": "Haikur scowls as he walks away.  \"Very well.  I count you amongst fools for not seeing the more serious danger.  There seems little I can do.  My men march south.  All right men! Fall out to the south gate!  Good day fine people, to you as well Thurfur.\""
+    },
+    {
+      "id": 113,
+      "text": "You enter a pleasant little shop that seems well stocked.  The shopkeeper smiles and asks you to look around at his fine wares.   (To enter shops, click the button labeled SHOP at the bottom right of the game screen.)"
+    },
+    {
+      "id": 114,
+      "text": "This is a temple dedicated to Sestuona, goddess of nature.  A portly-looking man wearing a green robe approaches and speaks.  \"Welcome travelers, to this most holy of temples.  If you like, you may partake of our healing skills.\""
+    },
+    {
+      "id": 115,
+      "text": "You come upon a shocking scene.  You spy a small group of town bullies attacking an old woman.  It would seem they are after a dagger she is clutching to her chest.  Do you wish to intervene on her behalf?"
+    },
+    {
+      "id": 116,
+      "text": "The bullies do not have the stomach to fight and flee at your approach.  The old hag scowls at you, \"Stay away!  You can't have it!\"  The dagger she is clutching is rather ornate and seems very likely to be magical in nature.  What do you do?"
+    },
+    {
+      "id": 117,
+      "text": "\"You young whelps!  You shall rot in hell for your evil ways!\"  Having lost the dagger she shuffles away."
+    },
+    {
+      "id": 118,
+      "text": "As you walk away, she yells, \"Come and see me at my shop.  I will give you a special price!\"  She quickly disappears around a corner before you realize that you do not even know where her shop is.                                                           "
+    },
+    {
+      "id": 119,
+      "text": "You notice a small wooden sign near the window.  It's so old and faded as to be almost illegible.  It reads, \"Madam Osswel's Specialty Shop.\"  It appears to be closed.                                                     "
+    },
+    {
+      "id": 120,
+      "text": "Madam Osswel's specialty shop appears to be open.  As you glance in through the window, you recognize Madam Osswel as the old hag you saved from the ruffians."
+    },
+    {
+      "id": 121,
+      "text": "This is an old abandoned well.  It looks to be a long ways down.  The bucket and crank are almost rotted out.  This well has not been in use for quite some time."
+    },
+    {
+      "id": 122,
+      "text": "You hear the yip of a frightened dog followed by a howl and barking.  A dog appears to be in distress somewhere close by.  Hopefully, someone does not intend to dine on poor man's filet mignon tonight.                                          "
+    },
+    {
+      "id": 123,
+      "text": "A wretched young gutter snipe runs up to you and begins crying so loud you can barely make out what he is saying.  \"Oh, please help me, please, please!  My dog has fallen into the old well and I can't get him out.  Please help!\"  What do you do?"
+    },
+    {
+      "id": 124,
+      "text": "\"Oh, thank you so much!  Come, this way.  Hurry! Hurry!\"  He leads you to the old abandoned well.  At the bottom, you see a miserable little mutt covered in mud.  The bucket for drawing water is so old it's completely useless."
+    },
+    {
+      "id": 125,
+      "text": "The sides of the well are slick with green slime.  You estimate it to be about 50 feet to the bottom.  It is amazing that the mutt survived such a fall.                                                                                              "
+    },
+    {
+      "id": 126,
+      "text": "Your attempt at climbing down the well has failed.  You lose your grip and fall to the bottom.  Now you need to be rescued as well.  The boy bursts out in tears all over again.  What have you gotten into?                                "
+    },
+    {
+      "id": 127,
+      "text": "You have been successful and have retrieved the mutt.  The boy looks at you with misty eyes as he thanks you.  Somewhere a passionate deity looks down and smiles.   You are invited to come play in the old cave.  \"What cave?\" you ask.         "
+    },
+    {
+      "id": 128,
+      "text": "You now need to be rescued.  This is not how a hero should go about this.  In the well, you find an old rope ladder.  You throw one end up and climb out.   As you exit, the dog jumps out and runs off.  A screaming boy follows behind."
+    },
+    {
+      "id": 129,
+      "text": "As you are bumbling about at trying to rescue the dog, the town guard shows up.  After much laughter at your expense, they produce a rope and complete the rescue.  This does not do much to raise your status as a hero.                                      "
+    },
+    {
+      "id": 130,
+      "text": "You come upon an inn and cookhouse.  The smell of hot meals and the sounds of good conversation waft to you from inside.   Do you step inside?"
+    },
+    {
+      "id": 131,
+      "text": "As you try the fare, disappointment is king. The aroma far outshines the taste.  Most of the food is very bland indeed. Some is outright awful.  The cook approaches you.  \"Well, good patrons,  how is my fine meal today?\""
+    },
+    {
+      "id": 132,
+      "text": "The cook's face grows red as veins bulge from his neck.  He produces a meat cleaver and charges you yelling obscenities.  You easily hold him at bay until other patrons pull him into the kitchen.  You decide that now is a good time to leave."
+    },
+    {
+      "id": 133,
+      "text": "He smiles a toothy grin, \"Ah, thank you fine people.  For a very special price of but 10 Gold,  I will let you taste this fine wine.\"  He pulls a rather crusty looking bottle from a pocket and offers it to you.  What do you do?  "
+    },
+    {
+      "id": 134,
+      "text": "\"Very well.  Please feel free to visit this humble house of finery again.\"  The cook retreats to the kitchen as you decide to leave the remnants of your meal to feed the squalor bins."
+    },
+    {
+      "id": 135,
+      "text": "Before you drink the wine, you read the label.  It is Bordeaux Sal La Sal,  House of Chalingrad, Waterford, 1423.  You mention to the cook that you believed the city of Waterford to be but a legend."
+    },
+    {
+      "id": 136,
+      "text": "\"Oh, well. I guess not.  I don't really know much about such things.  I was given this bottle by Master Thew, the chief librarian across the street.\"  The cook bids you good day and departs for the kitchen.                                                 "
+    },
+    {
+      "id": 137,
+      "text": "You enter the town archives.  An old withered man with dried leather for skin sits perched behind a sturdy desk.  He is scratching at some parchment with an ink quill.  As you approach, he frowns and looks up with a furrowed brow.  \"Sssshhhh!\""
+    },
+    {
+      "id": 138,
+      "text": "\"You people make more noise than a herd of rampaging Trollocs.\"  He continues with a sour look upon his face, \"What is it that you want?  We are very busy here.  You may look around, but do not bother me unless I am needed.\""
+    },
+    {
+      "id": 139,
+      "text": "\"Waterford was supposed to be but a legend.  I have discovered in my days of research through volumes of forgotten lore that it did exist.  In fact, it lies through a secret cave in the mountains east of here.  Only the best of wines were made there.\""
+    },
+    {
+      "id": 140,
+      "text": "You discover one tome to be very different than the rest.  It appears to be magical.  You easily slip it under your clothing and make off with your theft.                                                                                                     "
+    },
+    {
+      "id": 141,
+      "text": "You browse through many volumes of text.  If nothing else, you feel more enlightened.                                                                                                                                                                          "
+    },
+    {
+      "id": 142,
+      "text": "You are standing in the town archives."
+    },
+    {
+      "id": 143,
+      "text": "You are attacked by a band of Goblins.                                                                                                                                                                                                                         "
+    },
+    {
+      "id": 144,
+      "text": "You have the pick of their equipment.  Most of it is shoddy and stinks of Goblin-  an odor most find almost unbearable.                                                                                                                                        "
+    },
+    {
+      "id": 145,
+      "text": "You have the pick of their equipment.  It is well-made and will last for years to come.                                                                                                                                                                        "
+    },
+    {
+      "id": 146,
+      "text": "You engage the Royal Guard.  Two of the King's commanders number among your foe."
+    },
+    {
+      "id": 147,
+      "text": "You are attacked by the Royal Guard headed by a corporal."
+    },
+    {
+      "id": 148,
+      "text": "You are attacked by the Royal Guard led by a lieutenant.                                                                                                                                                                                                       "
+    },
+    {
+      "id": 149,
+      "text": "You are attacked by the Royal Guard led by a sergeant.                                                                                                                                                                                                         "
+    },
+    {
+      "id": 150,
+      "text": "You are attacked by a small group of Orcs.                                                                                                                                                                                                                     "
+    },
+    {
+      "id": 151,
+      "text": "You are attacked by a large group of Orcs.                                                                                                                                                                                                                     "
+    },
+    {
+      "id": 152,
+      "text": "You collect their equipment searching for valuables worthy enough to keep.                                                                                                                                                                   "
+    },
+    {
+      "id": 153,
+      "text": "\"I sought it out many years ago and brought some wine back, but I have not been there in many years.  The exact location of the city is lost to me.  I only recall the way into the Grimwall mountains.\""
+    },
+    {
+      "id": 154,
+      "text": "Thurfur turns to you, \"He is but a fool!  We have many preparations to make.  Meet me at the east gate when you are ready to depart.  We shall teach these foolish Orc tribes that we are their betters! Remember, the east gate.  May Adon smile upon us!"
+    },
+    {
+      "id": 155,
+      "text": "Haikur turns to you, \"Thurfur has always had a hot temper.  He seldom sees things clearly as do I.  Let us prepare for the upcoming battle!  Meet me and my men at the south gate when you are ready to depart.  These evil goblin folk shall rue this day!\""
+    },
+    {
+      "id": 156,
+      "text": "Thurfur and his men are at the east gate preparing to leave as you approach.  Many colored banners flap in the breeze depicting the King's standard-a huge gold dragon with a pair of swords clenched in its fists."
+    },
+    {
+      "id": 157,
+      "text": "\"Ah!  Our heroes have come to join the fun!  Let us set out to crush the rabble!\"  You make acquaintance with Thurfur's lieutenants and sergeants.  Amongst great fanfare from the townsfolk, you set out on your mission."
+    },
+    {
+      "id": 158,
+      "text": "At long last, your column comes to a halt.  You see an Orc village in the distance.  Thurfur rides up alongside, \"I deem this to be the very tribe that waylaid Sestoon.  Let us charge in.  Surprise shall be a formidable ally to lead our just cause."
+    },
+    {
+      "id": 159,
+      "text": "Thurfur raises a mail-clad arm to signal the bugle to sound the charge.  Your mounts churn up dust as they dash into the village.  Unaccustomed to fighting on horseback, you dismount once you're in the fray to fight on solid ground."
+    },
+    {
+      "id": 160,
+      "text": "You have come to the town brothel.  Perfume fills the air and covers any original odor that may come from this former boarding house.  A sign outside the building gives prices for various races and sexes."
+    },
+    {
+      "id": 161,
+      "text": "It appears to be well-managed and doing a lot of business.  There is a steady stream of customers going in the front door and another coming out the back."
+    },
+    {
+      "id": 162,
+      "text": "As you step inside, you are instructed by several thugs to see a small scruffy- looking dwarf behind a desk.  You step up to the desk, as he smiles at you displaying more gold teeth than ivory."
+    },
+    {
+      "id": 163,
+      "text": "The dwarf thanks you for your interest and asks you to look around.  \"Ha Ha Ha!  You'll come back.  They always do.\"                                                                                                                                           "
+    },
+    {
+      "id": 164,
+      "text": "As you rejoin the group, you notice you feel a little strange.  It becomes apparent that you have caught some kind of disease.  It would seem a trip to the Blue Temple is in order.  What would your mother say?"
+    },
+    {
+      "id": 165,
+      "text": "\"You're cute, honey!  Hey, are you one of them mercenary types that's here to collect that 5000 gold piece reward I been hearing about?  How much of that 5000 do you get?  You know, I kinda like you.\"                                                     "
+    },
+    {
+      "id": 166,
+      "text": "\"I don't believe all this scare-talk about trolls, do you?  My cousin says she started that rumor just so her boyfriend would walk her home at night.\""
+    },
+    {
+      "id": 167,
+      "text": "\"Did you see that big green monster the king's men were dragging into the guards' quarters last night?  Probably not. It happened late at night.  Not too many people of honest professions up that late.  Not that what I do isn't honest.  Just late hours.\""
+    },
+    {
+      "id": 168,
+      "text": "\"I hear master Thew over at the library is giving away wine from Waterford.  I always thought that place was just a legend.  If your interested I'm sure master Thew could tell you all about the place.\"                     "
+    },
+    {
+      "id": 169,
+      "text": "He looks around to see that nobody else is watching too closely.  He whispers, \"Follow me upstairs.  The treasure is ready to be split up.\""
+    },
+    {
+      "id": 170,
+      "text": "You follow him to a room upstairs.  You are standing in the room with seven large men.  The door behind you slams shut and you hear a jam being placed behind it.  It would seem you have walked into a trap.                       "
+    },
+    {
+      "id": 171,
+      "text": "You push on the door to attempt a quick escape but it's no use.  Your stuck in this room and will have to fight for your lives.                                                                                                                 "
+    },
+    {
+      "id": 172,
+      "text": "You notice a large iron box under a loose floorboard.  It would appear that you have found the profits from the brothel.                                    "
+    },
+    {
+      "id": 173,
+      "text": "You have entered the blacksmith's shop.  The smith is hard at work on repairing the bellows.  His face is covered with soot except for a clean streak leading down each cheek.  It would appear he has been crying.                                           "
+    },
+    {
+      "id": 174,
+      "text": "\"Hello.  Good people, what can I do for you today?\"  You ask him where his apprentice is that he must stoop to fixing the bellows.  \"My son was slain several days ago in the Barren mountains.  We found his body defiled by the evil sluk that live there.\""
+    },
+    {
+      "id": 175,
+      "text": "\"I cannot get the King's men to rout out these foul vermin, and I do not have the gold to purchase retribution from mercenaries.  All I have is the sweat of my brow, and that buys little justice these days.  You would seem to be of hardy stock.\""
+    },
+    {
+      "id": 176,
+      "text": "If you were to send these foul sluk to the pits that spawned them, I would be eternally grateful.\"  What do you do?"
+    },
+    {
+      "id": 177,
+      "text": "\"I bid you good day then, for I have much work to do and can ill afford to waste my time telling my problems to every wayward band.\"                                                                                                                     "
+    },
+    {
+      "id": 178,
+      "text": "You end the misery of the poor sod who fell victim to this foul state.  As you search the area you see a blood-stained diary.  Most of the pages have been torn out and are nowhere to be found.  One page remains and it reads..."
+    },
+    {
+      "id": 179,
+      "text": "You see a small village in the distance.  It appears to be vacant.  Many of the straw huts have fallen into total decay.  Pieces of broken crockery and cooking utensils lie scattered about.  Whoever lived here seems to have beaten a hasty retreat."
+    },
+    {
+      "id": 180,
+      "text": "This appears to be the site of a rather large cavern that has recently caved in."
+    },
+    {
+      "id": 181,
+      "text": "You have only managed to bring fresh debris down around you.                                                                                                                                            "
+    },
+    {
+      "id": 182,
+      "text": "It is a sickly sight to see living flesh growing out of the very rock.  However, your spell is far too feeble to move such large quantities of earth.                                                                                                          "
+    },
+    {
+      "id": 183,
+      "text": "You have succeeded in uncovering the passage behind the cave-in.  It is now  possible to traverse the passage to wherever it may take you.                                                                                                            "
+    },
+    {
+      "id": 184,
+      "text": "As you stand pondering the situation, you here a deep rumble.  You look skyward and see the whole slope begin to slide towards you.  You manage to get away from the area with only slight damage.  However, the old site is hopelessly buried.                "
+    },
+    {
+      "id": 185,
+      "text": "The tunnel continues west.  You smell decaying flesh.  The odor is almost overwhelming.                                                                                                                                                                        "
+    },
+    {
+      "id": 186,
+      "text": "You find the slain bodies of several goblins.  Their bodies have been scattered about the area.  You also see a small pile of what looks to be polished stones.  As you kick the pile around you notice a gem among them.  Do you wish to look for more?"
+    },
+    {
+      "id": 187,
+      "text": "You search the remains of the cavern and find nothing of interest."
+    },
+    {
+      "id": 188,
+      "text": "You kick around the stones and a small treasure of gems is revealed."
+    },
+    {
+      "id": 189,
+      "text": "Do you wish to look for more gems?"
+    },
+    {
+      "id": 190,
+      "text": "As you are rummaging around in the polished stones, you hear a bizarre sound.  From around a large stalagmite a group of large cave bears come to investigate your scent."
+    },
+    {
+      "id": 191,
+      "text": "You manage to flee the cavern.  The speed of these huge creatures is amazing, and they dog your heels all the way to the entrance.  You get into the open, but it is of no use.  You will have to face these mighty foes."
+    },
+    {
+      "id": 192,
+      "text": "You finish your search of the stones and find a few remaining gems."
+    },
+    {
+      "id": 193,
+      "text": "This is an ancient secret passage into the courtyard of castle Anthrax."
+    },
+    {
+      "id": 194,
+      "text": "\"Why, the old cave that leads into the castle courtyard.\"  He draws you a map on a piece of parchment.  You kindly turn down the chance to play with him, and he skips off with his happy, but muddy friend."
+    },
+    {
+      "id": 195,
+      "text": "The gate stands unguarded.  A notice from the king is posted.  It reads, \"Stanchion burial lands are closed until further notice.  All those that enter do so of their own accord and at their own risk.\" "
+    },
+    {
+      "id": 196,
+      "text": "The graveyard has fallen into a state of total disrepair.  Most of the graves and crypts have been looted.  The caretakers have not been busy for quite some time."
+    },
+    {
+      "id": 197,
+      "text": "The stench of death assaults you as you are attacked by zombies."
+    },
+    {
+      "id": 198,
+      "text": "The reek of death and decaying flesh hang heavy in the air as you are attacked by zombies and ghouls.                                                                                                                                                          "
+    },
+    {
+      "id": 199,
+      "text": "You search the putrid bodies but find nothing of value."
+    },
+    {
+      "id": 200,
+      "text": "The doors on this crypt are broken as are most in the graveyard.  As you peer in, you happen to see a small crack in the floor.  Your investigation reveals that it is a trap door that leads to a subterranean crypt."
+    },
+    {
+      "id": 201,
+      "text": "This room lies undisturbed.  As you stand in the doorway, you feel a strong desire to leave this room.  That might explain why thieves have not pilfered the coffin in this room.  It lies covered in centuries'  old dust.  Do you approach it?"
+    },
+    {
+      "id": 202,
+      "text": "The coffin is made of solid stone with a stone lid.  Dust leaps into the air as you pass across the floor.  You are the first person to enter this crypt in countless years.  The coffin must contain one of the first occupants of this now decrepit tomb."
+    },
+    {
+      "id": 203,
+      "text": "You lift off the lid and peer inside, but it appears to be empty after all."
+    },
+    {
+      "id": 204,
+      "text": "You FEEL rather than see a corpse in the coffin.  You come to the conclusion that the corpse inside must be invisible.  You feel around the corpse and discover a necklace.  You remove it and the corpse reappears.  You find keys as well.                   "
+    },
+    {
+      "id": 205,
+      "text": "In the process of demolishing the coffin, a corpse appears out of nowhere.  It was in the coffin wearing an ornate necklace that has slipped off its neck.  A large piece of stone has destroyed the necklace.  However, you do find some iron keys."
+    },
+    {
+      "id": 206,
+      "text": "You carefully place the lid as it was and stand back.  Except for the disturbed dust,  all is as it was before you entered."
+    },
+    {
+      "id": 207,
+      "text": "You see a small notch carved into the wall.  It holds an iron chest bolted to the wall."
+    },
+    {
+      "id": 208,
+      "text": "Your attempt at dislodging the box has failed.  You have triggered a trap."
+    },
+    {
+      "id": 209,
+      "text": "With the trap triggered, the lock is quickly defeated.  Inside, you find treasure.                                                                                                                                                                             "
+    },
+    {
+      "id": 210,
+      "text": "You hear a click as a trap disarms and the lock opens.  Inside you find treasure.                                                                                                                                                                          "
+    },
+    {
+      "id": 211,
+      "text": "Nothing seems to happen.                                                                                                                                                                                                        "
+    },
+    {
+      "id": 212,
+      "text": "You come upon some fresh excavation.  It would seem that someone or something has burrowed up from below.  The tunnel is considerable in size and looks to be frequently used.  You venture inside."
+    },
+    {
+      "id": 213,
+      "text": "This hole leads to Stanchion graveyard."
+    },
+    {
+      "id": 214,
+      "text": "You descend approximately 60 feet below the surface by means of a well-trod slope.  It would take countless shuffling feet to compact the earth to such a flat and hard surface.  It is likely that you are not alone below the city of Bywater."
+    },
+    {
+      "id": 215,
+      "text": "A group of subterranean creatures attack you."
+    },
+    {
+      "id": 216,
+      "text": "You find nothing of value."
+    },
+    {
+      "id": 217,
+      "text": "This chamber has been looted.  You find nothing of interest."
+    },
+    {
+      "id": 218,
+      "text": "The door to this chamber is locked.  It is made of quite solid oak."
+    },
+    {
+      "id": 219,
+      "text": "As the echoes fade from your pounding, you hear a faint shuffling.  It would seem you have gained the attention of some of the denizens of this crypt."
+    },
+    {
+      "id": 220,
+      "text": "This wall is but an illusion.  Behind its fake facade is an earthen tunnel.  It leads to an underground cavern."
+    },
+    {
+      "id": 221,
+      "text": "This large cavern appears to be used as both a laboratory and a place of ritual.   Several pedestals have been built.  Their appearance suggests they've been used  to strap human-sized beings in place for experiments. "
+    },
+    {
+      "id": 222,
+      "text": "All are stained with dried blood and ichor.  Off to one side of the cave you see a decomposing pile of human appendages-  arms, legs, heads and all manner of organs.  It would appear that someone has been experimenting on bodies."
+    },
+    {
+      "id": 223,
+      "text": "One of the pedestals still has a body strapped to it.  The flesh on half of its body has decomposed so badly that it is literally falling off the bones.  Next to the body is a tray of long thin knives. Some madman has been flaying flesh."
+    },
+    {
+      "id": 224,
+      "text": "As you stand in witness to this awful carnal scene, the body on the pedestal begins to move slowly.  It makes no attempt to escape its bonds for it would appear to be a zombie.  Its creator has left it to decompose over the centuries.  Do you approach?"
+    },
+    {
+      "id": 225,
+      "text": "\"The chamber has grown too small for my army.  I have to locate a larger cavern to continue my preparation of the assault on  Spider Tower.  In addition, I need more supplies from the king.  He seems reluctant to meet with his end of the bargain.\""
+    },
+    {
+      "id": 226,
+      "text": "You happen upon a group of myconids.  They do not see you.  Do you wish to attack them?                                                                                                                                                                        "
+    },
+    {
+      "id": 227,
+      "text": "You stand at the entrance to an enormous cave.  Zombies mill around in great numbers.  Towards the center of the cave, you see a cleric standing over a dead body chanting arcane words.  Suddenly, the dead body shudders and rises.  It shuffles off."
+    },
+    {
+      "id": 228,
+      "text": "He suddenly sees you and calls zombies to stand between him and you.  In a very strange tone of voice he says, \"Where have you been?  I'm almost out of bodies and the time for attack grows nigh.\""
+    },
+    {
+      "id": 229,
+      "text": "He shouts, \"You shall pay for your interference!  You are a minor problem to deal with!\"  Zombies shuffle forth to attack you.  Their forces are bolstered by myconids and a few ghouls.                                                    "
+    },
+    {
+      "id": 230,
+      "text": "Now that the cleric has perished, the remaining ghouls flee.  All the remaining zombies collapse in heaps.  One zombie, however, does not collapse.  In fact, it turns to you and speaks."
+    },
+    {
+      "id": 231,
+      "text": "\"Thank you, fools!  I was imprisoned by this foppish man and bound to do his bidding.  Now that you have set me free of his bonds, I shall take my revenge-not on him, but on ALL the living.\"  He waves his hands and disappears in a ball of flame."
+    },
+    {
+      "id": 232,
+      "text": "You gather together the dead bodies and burn them.  It would seem there is a new enemy-one who is both undead and magical."
+    },
+    {
+      "id": 233,
+      "text": "\"I assume that you are not here to deliver bodies.  My name is Arrock, high priest of the king's archdiocese.  He has tasked me to rid the city of that accursed Spider Tower in any manner I see fit.  My army of undead will deal the fatal blow.\""
+    },
+    {
+      "id": 234,
+      "text": "\"The days of that foul Spider cult are at an end.  In fact, I was expecting one final shipment of bodies to add to my army before I commenced my attack.  However, if you were to join me, we would be more than strong enough to attack now.  What say ye?"
+    },
+    {
+      "id": 235,
+      "text": "\"Excellent! After this final batch, my army shall be more than strong enough to defeat the puny defenses of that accursed Spider Tower.  Bring them in here and lay them next to the wall.\"                                                                    "
+    },
+    {
+      "id": 236,
+      "text": "\"In any case, I have waited far too long for the last shipment of bodies.  I depart now to deal with this foul tower.  Farewell.  Tell the king he shall once again be sole master of this fine city.\"  He marches out with his army of undead."
+    },
+    {
+      "id": 237,
+      "text": "\"Good! Good!  Let us be off to mete out the king's justice.  I have had my forces digging a tunnel under the Spider Tower for several weeks.  Now all is ready to seal their doom.  Ha!  We shall arrive at their very doorstep.\"                   "
+    },
+    {
+      "id": 238,
+      "text": "This is the gate to enter the Spider Tower.  Herein dwells an evil cult bent on total dominance of the world by arachnids and others of their ilk.  The gates are massive, and the walls are guarded by fierce creatures.  Do you wish to attack?"
+    },
+    {
+      "id": 239,
+      "text": "You are immersed in a veritable cacophony of spider beasts, all of them quite hostile to you.                                                                                                                                                                  "
+    },
+    {
+      "id": 240,
+      "text": "You have managed to battle your way past the gate.  Something tells you that the tough battles are yet to come."
+    },
+    {
+      "id": 241,
+      "text": "After the thrashing you gave the creatures at the gate before, the gate is now only lightly guarded."
+    },
+    {
+      "id": 242,
+      "text": "The courtyard is filled will small groups of arachnids.  They scurry about in all directions.  A small group crosses your path and attacks."
+    },
+    {
+      "id": 243,
+      "text": "You move away as their bodies drip ichor from punctured exoskeletons."
+    },
+    {
+      "id": 244,
+      "text": "You enter the spider tower.  The main level is shaped like a spider.  Inside, two clerics have prepared for your arrival.  They have heard the clamor outside, and have prepared for battle.  You face a large force of eight legged foes."
+    },
+    {
+      "id": 245,
+      "text": "You have defeated the keepers of the Spider Tower.  The remaining arachnids in the area wander off to nooks and crannies in the surrounding countryside."
+    },
+    {
+      "id": 246,
+      "text": "The chest is full of valuable treasure and magical items. "
+    },
+    {
+      "id": 247,
+      "text": "You burrow up through the last few feet of earth and emerge at the very foot of the tower.  You rush inside with your undead allies.  You come upon two clerics  discussing business.  There is a sizable contingent of arachnids in attendance."
+    },
+    {
+      "id": 248,
+      "text": "They see you and your undead army rush in.  They command their sickly army to destroy you.  Arachnids and undead mix in a ghastly battle that can only resemble a freak show."
+    },
+    {
+      "id": 249,
+      "text": "You have walked into a tannery.  Many fine quality leather goods are made and sold here."
+    },
+    {
+      "id": 250,
+      "text": "The blacksmith hands you a map showing the location where they found his son's body.  As you depart he says, \"Thank you, good people.  Return when you have cleansed the land of these foul vermin, and we shall celebrate.\""
+    },
+    {
+      "id": 251,
+      "text": "In this hut there is a wounded goblin lying on the floor.  Blood leaks slowly between his fingers as he clutches at his chest.  He sees you and his eyes grow wide in horror.  He topples over dead, his face locked in a horrible grimace."
+    },
+    {
+      "id": 252,
+      "text": "You search his body and turn up a map scribbled on a piece of bark.  What it represents, no one will ever know.  As you prepare to leave, you hear a loud thump. A  party of krise storm the village behind you."
+    },
+    {
+      "id": 253,
+      "text": "Among the items, you find a sack with personal items belonging to the blacksmith's son.  It would seem you have killed the very group who had slain the smith's son."
+    },
+    {
+      "id": 254,
+      "text": "You spot a group of goblins before they spot you.  Do you wish to attack them?"
+    },
+    {
+      "id": 255,
+      "text": "You spot a group of orcs before they spot you.  Do you wish to attack them?"
+    },
+    {
+      "id": 256,
+      "text": "You burst into the most flamboyant hut in the village.  The goblin king is inside with several of his most prominent warriors.  They jump in front of the king ready to attack.  However, the king barks out a sharp command to call off his dogs of war."
+    },
+    {
+      "id": 257,
+      "text": "He speaks in surprisingly good common, \"Why you come my land.  Me no have war with human king.  We no raid human village.  We only have war with krise sluk.  We fight sluk well.  We good warriors.  Why you no like goblin?\""
+    },
+    {
+      "id": 258,
+      "text": "His goblin dogs rush you, literally bowling you over and out the door before you can set up a good defensive position.  Goblins join the fray from every direction.  It would seem that you have made a gross miscalculation of the goblin king's forces."
+    },
+    {
+      "id": 259,
+      "text": "You have defeated the goblin king's strongest warriors.  The remaining goblins in the village flee in panic.  Inside his hut, the goblin king awaits his fate.  As you approach, he begs your mercy as only a goblin could.  Do you grant it?"
+    },
+    {
+      "id": 260,
+      "text": "You execute the goblin king and gather whatever you find in the shack as spoils of war.  It appears he lived more like a pauper than a king."
+    },
+    {
+      "id": 261,
+      "text": "He whimpers in excitement at being spared and speaks, \"My people stand no chance now.  We must flee, for the krise  sluk are too numerous.  I show you where they live so you shall know where not to go as well.\"  He gives you a map."
+    },
+    {
+      "id": 262,
+      "text": "\"I let you go if you pay.  You pay king 500 gold and me let you go.  You no pay, me have warriors kill you and take gold.  PAY!\"  Do you pay?"
+    },
+    {
+      "id": 263,
+      "text": "\"Me king! Lead sneak attack now.  You come.\"  He stands and dons his armor and weapons and leads his force to a secret cave just west of the great iron door.  \"We sneak here.  Krise not know we come.  We kill them from behind. \""
+    },
+    {
+      "id": 264,
+      "text": "\"Goblin and krise always fight.  Now krise have powerful wizard.  They kill many goblin.  We need kill all krise, but they hide behind great iron door.  We no can break it down.  Now we find secret cave and sneak up behind.  We kill all krise.\""
+    },
+    {
+      "id": 265,
+      "text": "He leads the war party into a long, twisting, turning crevasse.  It is barely wide enough to squeeze through.  You exit into a large alcove.  Once the entire force is assembled, the goblin king leads a small scouting party ahead to set up the ambush."
+    },
+    {
+      "id": 266,
+      "text": "You come upon a small band of krise manning a great iron door.  It is massive and obviously beyond their building capabilities.  The goblin king believes it is the work of a wizard who made a pact with the krise and has helped them kill many goblins."
+    },
+    {
+      "id": 267,
+      "text": "Plans are laid, and the rest of the force is brought up.  On the king's command, goblins storm the iron door in great force.  The puny krise seem to stand little chance."
+    },
+    {
+      "id": 268,
+      "text": "It appears the krise were waiting for the wizard to show up while they stood guard over a reinforced chest.  The goblin king shows little interest in this chest."
+    },
+    {
+      "id": 269,
+      "text": "He turns to you and speaks,  \"You go. We kill krise now.  We need your help no more.  You go.\"  He turns and leads his forces deeper into the caves in search of krise to kill."
+    },
+    {
+      "id": 270,
+      "text": "Your fumbling around with the box has caused some vials of liquid to break inside.  Liquid oozes out of the box and seeps into the ground.  The smell is repugnant.  Most likely the vials contained magic potions.  What a pity!"
+    },
+    {
+      "id": 271,
+      "text": "With the glass already broken, you smash the box open.  There are several smashed vials and a pair of scrolls.  They are now soaked and worthless."
+    },
+    {
+      "id": 272,
+      "text": "As you hit the box, you hear glass break.  Inside are several smashed vials and a pair of scrolls.  They are now soaked and worthless."
+    },
+    {
+      "id": 273,
+      "text": "The chest pops open revealing several vials and a pair of scrolls."
+    },
+    {
+      "id": 274,
+      "text": "You turn your attention to the chest.  You tip it slightly and hear several objects made of glass clink together."
+    },
+    {
+      "id": 275,
+      "text": "You spot a group of undead stumbling about.  Do you wish to attack them?"
+    },
+    {
+      "id": 276,
+      "text": "At the bottom of the well, you find an old rope ladder.  It is very old but usable.  You throw one end up and climb out.   As you exit the well, the dog jumps out of your arms and runs off.  A screaming boy is right behind."
+    },
+    {
+      "id": 277,
+      "text": "There are two caskets in this chamber.  One is still sealed, the other empty. The lids contain inscriptions bearing the  occupants' names along with a declaration of their mutual devotion.  Although the door was locked, one body is missing."
+    },
+    {
+      "id": 278,
+      "text": "You search the chamber for signs of a secret entrance or exit but find nothing."
+    },
+    {
+      "id": 279,
+      "text": "This is the cave that leads to the sunken city of Waterford."
+    },
+    {
+      "id": 280,
+      "text": "You step into a large valley.  It is completely shut out from the outside world by high peaks.  Towards the east you can make out a large cave in the distance."
+    },
+    {
+      "id": 281,
+      "text": "You find a cave behind a stone outcropping.  It is practically invisible unless you're right in front of the opening. This passage has lain hidden for ages.  It winds east through a jagged crevasse."
+    },
+    {
+      "id": 282,
+      "text": "You have found the sunken city of Waterford.  Legend has it that a great crack rent the earth and swallowed the city.  No one managed to escape before the massive fissure collapsed in upon the city and buried it forever."
+    },
+    {
+      "id": 283,
+      "text": "The entire city was thought to have been destroyed.  You now see that large sections of the city have survived remarkably well.  There are signs of some type of two-footed creature having been in the area.  The prints are large and clawed."
+    },
+    {
+      "id": 284,
+      "text": "You are attacked by a band of ogres."
+    },
+    {
+      "id": 285,
+      "text": "Their guts smell to high heaven.  It makes one wonder what they have eaten in the past."
+    },
+    {
+      "id": 286,
+      "text": "You see a group of ogres.  Do you wish to fight them?"
+    },
+    {
+      "id": 287,
+      "text": "You hear growls.  Suddenly, there appears an ogre.  It is being chased by a beast even more fierce-a giant troll.  Do you wish to attempt to save the ogre from its obvious fate or do you stand back and enjoy evil destroying evil?"
+    },
+    {
+      "id": 288,
+      "text": "You come upon a building that appears to have been an armory.  It must have been closed during the catastrophe.  The door is still bolted shut."
+    },
+    {
+      "id": 289,
+      "text": "You have set the building on fire.  Something causes the old building to explode."
+    },
+    {
+      "id": 290,
+      "text": "Most of the shop's goods have fallen into total ruin.  However, some items did survive along with a tidy sum of gold."
+    },
+    {
+      "id": 291,
+      "text": "You enter Anthrax castle.  The herald announces your arrival to the king who is holding audience.  As your names are called, there are puzzled looks.  It is obvious that you are newcomers.  King Steven's motions you to approach."
+    },
+    {
+      "id": 292,
+      "text": "\"Hail, good people!  What brings you here this fine day?  You are obviously not from Bywater, for your manner of dress is most foreign.\"  You explain to the king that you are but simple travelers in search of adventure."
+    },
+    {
+      "id": 293,
+      "text": "\"Adventure!  Well, my good citizens.  This is the place!  Many strange happenings have been taking place of late.  Many, I'm sure, the direct result of that accursed Spider Tower that has sprung up at the east end of town.\""
+    },
+    {
+      "id": 294,
+      "text": "\"But this is a peaceful land, which claims hatred towards no one who does no direct harm.  As of yet, there has been no evil which can be proven to have originated from that foul spire.  Come, meet with me in my chambers.\""
+    },
+    {
+      "id": 295,
+      "text": "With little fanfare, he calls an end to court and bids his patrons good day.  You retreat with the king to a chamber adjoining the main hall.  The door is closed, and you are surrounded by only the king and his closest advisors.  The king speaks."
+    },
+    {
+      "id": 296,
+      "text": "\"My good fellows.  Dark times have befallen this fair city.  Alas, politics prevent me from declaring so in public.  This foul spider cult is sapping the very strength of our bustling city.  I would see this vile cult rousted from my kingdom, "
+    },
+    {
+      "id": 297,
+      "text": "but my own decrees of fairness prevent me from doing so. If you rid this town of this accursed tower, I could not reward you publicly.  In private, however, is another matter.  I charge you to rid Bywater of this foul cult!\""
+    },
+    {
+      "id": 298,
+      "text": "\"What say you?  Will you accept my plea of help for this fair city?\""
+    },
+    {
+      "id": 299,
+      "text": "\"If that is your wish, then so be it.  I bid you good day then, for a king has many duties-duties that I neglect even now.  Steward, show these fine people to the door.\"  You are briskly ushered out the door."
+    },
+    {
+      "id": 300,
+      "text": "You enter Castle Anthrax.  Scant attention is paid to your presence."
+    },
+    {
+      "id": 301,
+      "text": "\"Good!  It's settled then.  There is another secret agent of mine that is striving toward a similar goal.  If you cross paths, I decree you to help rather than hinder each other's efforts.  Well!  We all have much to do.\""
+    },
+    {
+      "id": 302,
+      "text": "The steward tells you of the armory and asks you to take your pick of equipment.  He also gives you an item. \"Use this magic crown to return to the front gate of our fair castle.  It will work but 3 times so use it only in time of great need.\""
+    },
+    {
+      "id": 303,
+      "text": "You relay the status of your mission to the king's steward who promises to pass it on to the king."
+    },
+    {
+      "id": 304,
+      "text": "You are jumped by a pack of thieves, intent on slitting more than just your purse."
+    },
+    {
+      "id": 305,
+      "text": "As you top a knoll, you come upon an Orc female giving birth.  She looks quite pale, and is so weak she doesn't even notice you.  The baby is breached and will die if you do not help.  Do you aid her?"
+    },
+    {
+      "id": 306,
+      "text": "You are successful at delivering the baby.  The mother only has time to see the face of her healthy newborn boy, before she slips into a coma and dies.  It would seem you have become parents by default.  What do you do?"
+    },
+    {
+      "id": 307,
+      "text": "You wrap the babe in a blanket and secure him to your back."
+    },
+    {
+      "id": 308,
+      "text": "You stumble upon an old Orc burial mound.   Several of the mounds seem to be untouched, but many have been dug up. Do you wish to excavate them in search for valuables?"
+    },
+    {
+      "id": 309,
+      "text": "You break into several mounds and find nothing of value.  As you are excavating another mound, you feel a chill in the air.  A spirit rises from one of the mounds that is yet untouched and speaks in a voice that resembles leaves rustling."
+    },
+    {
+      "id": 310,
+      "text": "\"This most sacred ground has been disturbed for the last time!  Foolish mortals, now you shall wish for the  everlasting peace that you so cruelly deny us!\"  The spirit sweeps a wispy hand over the mounds.  The earth erupts as corpses rise."
+    },
+    {
+      "id": 311,
+      "text": "The air is filled with a musty smell as the dead stumble forth to attack."
+    },
+    {
+      "id": 312,
+      "text": "You hear the sound of battle in the distance.  You see a band of orcs being attacked by a large group of goblins.  The orcs appear doomed unless you help.  The battle spreads out to engulf you.  Do you stand with the orcs or attack both parties?"
+    },
+    {
+      "id": 313,
+      "text": "This is the shack belonging to the village chief.  His features are clouded by a worried expression.  During your conversation, you learn that his pregnant daughter is missing.  \"If you find my daughter, I will reward you.\"  He sends you on your way."
+    },
+    {
+      "id": 314,
+      "text": "You come to a village of orcs.  Normally nomadic, it appears they have set up a temporary village.  You question some of the villagers as to why they have settled down."
+    },
+    {
+      "id": 315,
+      "text": "They tell of the chief's daughter who is pregnant.  The chief has ordered them to make camp for several weeks until his daughter gives birth.  Now the chief is worried, for his daughter has disappeared."
+    },
+    {
+      "id": 316,
+      "text": "The village chief greets you and asks you how the search for his daughter is going."
+    },
+    {
+      "id": 317,
+      "text": "\"You keep looking!  I give big reward if you find daughter.  Now go!\"  He shoves you out the door."
+    },
+    {
+      "id": 318,
+      "text": "The chief takes the babe and grins.  \"This  babe will be a mighty warrior like his gamp!  You are welcome to travel in my territory.\"  He lifts a fur rug from the floor revealing a pit."
+    },
+    {
+      "id": 319,
+      "text": "From the pit, he pulls out two objects wrapped in animal skins.  He uncovers a set of throwing daggers and a throwing ax.  \"You take!  Strong magic!  You take!\"  He hands you the gifts and goes off to find his grandson a wet nurse."
+    },
+    {
+      "id": 320,
+      "text": "You happen upon a troll dining on a grizzly meal of krise.  The krise corpse is wearing a backpack.  The troll is eating so greedily that it is swallowing krise, backpack, and anything else it can stuff into its huge maw."
+    },
+    {
+      "id": 321,
+      "text": "You figure that the beast will completely consume the corpse in short order unless you interfere."
+    },
+    {
+      "id": 322,
+      "text": "As you search the remains of the troll and goblin, you discover one item of value.  A scroll case is jammed in the backpack.  It is an odd item for a krise to be carrying."
+    },
+    {
+      "id": 323,
+      "text": "You leave the ugly brute to dine on his meal.  You weren't hungry anyway."
+    },
+    {
+      "id": 324,
+      "text": "As the troll finishes his meal with a loud belch, he pulls something from a tooth.  It appears to be a ribbon commonly used to bind scrolls.  His meal included more than first met the eye.  The troll wanders off."
+    },
+    {
+      "id": 325,
+      "text": "You stand before a great iron door set into the side of the mountain."
+    },
+    {
+      "id": 326,
+      "text": "Small sliders open in the face of the door.  Crossbow bolts and rocks hail down on you.  Behind the door, you can hear the harsh guttural laughter and sneers of krise."
+    },
+    {
+      "id": 327,
+      "text": "You move through a great iron door.  It connects the underworld with the surface."
+    },
+    {
+      "id": 328,
+      "text": "Deep within a crevasse, you see a pentigram.  It has been drawn with the blood from a krise's dead body lying nearby.  At each crux of the pentigram is a disk made of gold etched with arcane runes.  The bludgeoned body of a wizard lies near the krise. "
+    },
+    {
+      "id": 329,
+      "text": "Searching the chamber and bodies, you find several items of interest.  One such item is a bloody page from some arcane text.  It describes the ritual for summoning the demon Rewop and binding him to your service."
+    },
+    {
+      "id": 330,
+      "text": "It would seem that this poor wretch was not up to the task, lost control of his servant, and paid the price.  Do you wish to take the gold disks for their treasure value, or do you wish to attempt the summoning yourself?"
+    },
+    {
+      "id": 331,
+      "text": "You collect the disks, scatter the blood-soaked earth, and burn the page that describes the summoning.  It is a wise choice.  You collect the other items of interest in the cave."
+    },
+    {
+      "id": 332,
+      "text": "As you follow the rites described on the page, you see the gold disks begin to glow.  A tendril of smoke wisps up from the center of the pentigram followed by a  spire of flame.  Your eyes widen as a huge sand demon steps from the flames."
+    },
+    {
+      "id": 333,
+      "text": "\"I see the lackeys of the fool I dispatched earlier have arrived. You shall pay dearly for disturbing me!  I shall feast well on your lifeblood this day!\"  He mutters a few words in some unknown tongue and summons two of his lieutenants."
+    },
+    {
+      "id": 334,
+      "text": "With the demise of these foul creatures, you collect the treasure in the area.  The page on which the demon's name was inscribed explodes into flames."
+    },
+    {
+      "id": 335,
+      "text": "A net drops over you from above.  A large group of krise quickly pounce with such numbers that any resistance is quickly squelched. You are trussed up and roughly dragged through a long set of tunnels."
+    },
+    {
+      "id": 336,
+      "text": "You are battered and bruised, but not seriously hurt.  They finally dump their cargo unceremoniously at the feet of their ruler.  You are unable to clearly understand their discussion, but you get the general gist.  You are to be today's entertainment."
+    },
+    {
+      "id": 337,
+      "text": "They plan on dumping you into a pit.  Apparently, the pit is filled with nasty beasts of the underworld.  No one has ever left the pit alive.  They drag you kicking and screaming into the pit and toss you in."
+    },
+    {
+      "id": 338,
+      "text": "You land in the bottom with a loud thump.  Whatever is in the pit must be foul indeed, for they did not even bother to disarm            you."
+    },
+    {
+      "id": 339,
+      "text": "The pit has only two exits.  Both disappear into the blackness of the underworld.  Do you choose the left pit or the right?"
+    },
+    {
+      "id": 340,
+      "text": "The reason no one has ever returned from this pit is that this tunnel leads to the surface!  The krise must have been so afraid of whatever dwells in the other tunnel, they never investigated this one!"
+    },
+    {
+      "id": 341,
+      "text": "The real reason no one has ever returned from this pit is because this tunnel leads to the surface!  You suspect that former victims of this evil band were immediately killed.  Those who weren't, probably  escaped to the surface through this very tunnel."
+    },
+    {
+      "id": 342,
+      "text": "As you delve deeper into the tunnel, you begin to think the cave uninhabited.  Soon, a putrid smell surrounds you.  The cave is inhabited!"
+    },
+    {
+      "id": 343,
+      "text": "You encounter a party of krise.  They do not see you.  Do you wish to attack them?"
+    },
+    {
+      "id": 344,
+      "text": "You encounter a group of krise.  They attack you on sight."
+    },
+    {
+      "id": 345,
+      "text": "At battles end, the leader of the king's men turns to you and speaks, \"I shall mention your good deeds to the king.  Now we ride on to rout out any stragglers.\""
+    },
+    {
+      "id": 346,
+      "text": "You see a huge iron gate in the distance.  It is guarded by a small party of krise who are gathered around a reinforced chest.  They spot you and attack before you can slip back into the tunnels."
+    },
+    {
+      "id": 347,
+      "text": "The blacksmith weeps as you hand him his son's possessions. \"Thank you, friends.  Now, no one else will have to know what it is to lose a loved one to these vermin.   If I'd only been a younger man, I would have ventured forth myself to right this wrong."
+    },
+    {
+      "id": 348,
+      "text": "\"But alas, I am old and withered.  I was saving these for when my son left the shelter of my home.  Now you may have them as payment.\"  He hands you a cloth  bundle containing leather goods and retreats to a back room to weep."
+    },
+    {
+      "id": 349,
+      "text": "The king sees you immediately.  \"Ah! Our mighty heroes.  This fine day you have done a great service indeed.  Your efforts  shall be rewarded with great treasure.\"  He orders three chests brought out.  \"You may select one chest as your reward.\""
+    },
+    {
+      "id": 350,
+      "text": "The king's cleric takes charge of the situation.  He turns to you and says, \"See the king for any reward you may have coming.  You are great friends of this kingdom.\""
+    },
+    {
+      "id": 351,
+      "text": "The king races off to make plans for a celebration in your name.  "
+    },
+    {
+      "id": 352,
+      "text": "You enter an immense building.  It was once a temple dedicated to Malkelae, god of magic."
+    },
+    {
+      "id": 353,
+      "text": "You enter the sleeping chamber of a high priest.  The quarters are modest except  for a large ornate pillar that supports the ceiling."
+    },
+    {
+      "id": 354,
+      "text": "You enter the main hall of worship.  Many columns support the high ceiling.  This room is vast indeed.  Old moth-eaten tapestries cover the walls.  You expect there to be a thick coating of dust on the floor, but that is not the case."
+    },
+    {
+      "id": 355,
+      "text": "You see the tracks of many clawed feet.  Many appear to be recent.  The temple is not abandoned as you first thought."
+    },
+    {
+      "id": 356,
+      "text": "This room is rather large and cluttered with religious paraphernalia.  Do you wish to rummage around to look for valuables?"
+    },
+    {
+      "id": 357,
+      "text": "You search through the musty equipment and artifacts in search of anything worth its weight in copper."
+    },
+    {
+      "id": 358,
+      "text": "Under some old rotting robes, you find a small box.  Its hinges are rusty and crumble easily.  Inside, you find a necklace with a small key.  It appears to be quite valuable."
+    },
+    {
+      "id": 359,
+      "text": "This room is very ordinary.  There are many pegs on the walls-some with robes still hanging on them.  It was once a simple cloak room."
+    },
+    {
+      "id": 360,
+      "text": "As you walk by this wall full of old rotting cloaks, you notice one that appears to have survived the ravages of time."
+    },
+    {
+      "id": 361,
+      "text": "You enter the quarters which housed several acolytes.  The bunks have long since rotted and collapsed.  A quick glance inside the room reveals nothing of interest."
+    },
+    {
+      "id": 362,
+      "text": "This was an old storehouse.  Most of the provisions have long since decayed to uselessness.  You do, however, find some dried rations that were stored here in case of great need.  They have survived all these years."
+    },
+    {
+      "id": 363,
+      "text": "You find barrels upon barrels of wine.  In addition, you find several cases of very fine wine.  The label reads, \"Bordeaux Sal La Sal,  House of Chalingrad, Waterford, 1423.\""
+    },
+    {
+      "id": 364,
+      "text": "You enter a large prayer room."
+    },
+    {
+      "id": 365,
+      "text": "You stand at the foot of a massive gate.  It stands some 30 feet high, but it has been shattered by the sundering that rocked this city so long ago.  A gaping hole  enables you to pass through."
+    },
+    {
+      "id": 366,
+      "text": "The door to a large ornate palace stands unlocked."
+    },
+    {
+      "id": 367,
+      "text": "This large, semicircular room is dominated by a stairway.  The room is totally empty except for a large creature that patrols the room.  It keeps a respectable distance."
+    },
+    {
+      "id": 368,
+      "text": "When you approach the stairs, the creature attacks you.  Obviously, this creature has been put here to keep anybody from ascending the stairs."
+    },
+    {
+      "id": 369,
+      "text": "The chamber at this level is smaller.  The room is also guarded by a fierce beast.  The only way up is blocked by this monstrosity.  It attacks you without fear."
+    },
+    {
+      "id": 370,
+      "text": "You see a wizard who is hunched over a large book.  \"Well, well! Still alive!  I have listened to your progress with interest.  Unfortunately for you, it shall stop here and now.\""
+    },
+    {
+      "id": 371,
+      "text": "He utters an arcane word and a secret panel slides over.  Another monstrous beast stands between you and the wizard.  At his command, it attacks you with total abandon."
+    },
+    {
+      "id": 372,
+      "text": "\"You have defeated all my pets.  I can enslave more, I assure you.  After I have disposed of you, I shall do just that!\""
+    },
+    {
+      "id": 373,
+      "text": "Your search of the wizard and his workshop reveals a treasure of magical items."
+    },
+    {
+      "id": 374,
+      "text": "This room is patrolled by a group of repulsive creatures.  Their odor is so foul  it almost makes you retch."
+    },
+    {
+      "id": 375,
+      "text": "You find the temple treasury.  Do you wish to take the treasure?"
+    },
+    {
+      "id": 376,
+      "text": "The floor opens up underneath you.  Those that do not perform an acrobatic act, fall in and take damage."
+    },
+    {
+      "id": 377,
+      "text": "You quickly scale the rough sides of the pit and get out. "
+    },
+    {
+      "id": 378,
+      "text": "This is a rather ornate building.   Do you wish to explore the inside of the building?"
+    },
+    {
+      "id": 379,
+      "text": "You notice a coating of dust on the floor disturbed only by the footprints of many clawed feet.  In the center of the room is a wooden chair.   A small leather pouch has been set on it.  Do you take it?"
+    },
+    {
+      "id": 380,
+      "text": "As you lift the pouch, the floor gives way.  You have triggered a trap door.  You fall into a smooth tunnel and slide down an unknown distance.  You hear the floor above spring back into place and reset for the next victim."
+    },
+    {
+      "id": 381,
+      "text": "As you try to lift the pouch, you feel it resist and the floor shifts slightly.  It would seem you have discovered a trap.  Do you wish to trigger the trap and see what is below?"
+    },
+    {
+      "id": 382,
+      "text": "As you reach the bottom of the pit, you hear the tunnel above collapse.  You are trapped down below."
+    },
+    {
+      "id": 383,
+      "text": "You are in a dark cave.  As you search the immediate area, you notice numerous piles of ogre bones.  This trap has obviously trapped many before you and may have no exit.   With the tunnel's collapse, you could very well be its last victim."
+    },
+    {
+      "id": 384,
+      "text": "You come upon a large group of gaunt- looking ogres.  They have been digging a tunnel in an attempt to escape.  The tunnel is almost complete, but they are too weak from hunger and fighting slime worms to complete the job.  Do you help?"
+    },
+    {
+      "id": 385,
+      "text": "With your help, you easily finish the tunnel.  The sickly ogres shuffle off to recover in their own hellholes.  The purpose of the trap is unknown and has died with its maker."
+    },
+    {
+      "id": 386,
+      "text": "You are attacked by the scavengers of the deep.  They would like to add some fresh meat to their diet."
+    },
+    {
+      "id": 387,
+      "text": "You pass a small group of ogres fighting against slime worms.   The ogres will surely lose in the long run."
+    },
+    {
+      "id": 388,
+      "text": "You see a large group of slime worms feeding on ogre carcasses."
+    },
+    {
+      "id": 389,
+      "text": "The collapse of the tunnel beneath the floor has caused a deep shift in the foundation of the building above it.  As a result, a portion of one wall has collapsed   to reveal a small, iron box.  It contains many items of worth."
+    },
+    {
+      "id": 390,
+      "text": "You discover a large, rickety, old building.  Inside are the remains of an old wizard's lab.  There are numerous cages along the walls that contain skeletons of various creatures long since starved to death."
+    },
+    {
+      "id": 391,
+      "text": "You also see a human skeleton on the floor.  It is covered by an old rotting robe.   You search the corpse and find a ring and a set of gauntlets.  In addition, you find a pair of vials in a cabinet.  They may contain magical potions."
+    },
+    {
+      "id": 392,
+      "text": "One of the cages is huge and encompasses a large pool of water.  The lock on the cage is so old that it practically falls apart in your hands.  As you stand at the edge of the water, you see a myriad of fish swimming in a vast, underground lake."
+    },
+    {
+      "id": 393,
+      "text": "About forty feet down, you see a short tunnel that radiates light.  It obviously surfaces somewhere, but you cannot hold your breath long enough to reach it.  You must turn back."
+    },
+    {
+      "id": 394,
+      "text": "With your increased ability to breathe freely, you search the entire pool and notice many large bones of bipeds littering the bottom.  This pool has proved to be a watery grave for more than one unlucky adventurer."
+    },
+    {
+      "id": 395,
+      "text": "You move through an underground tunnel and emerge into a cave that is totally immersed in a strange, green light.  The light comes from a strange moss-type plant that covers the walls forming a thick mat."
+    },
+    {
+      "id": 396,
+      "text": "You engage in combat with giant shantiles."
+    },
+    {
+      "id": 397,
+      "text": "You are attacked by shantiles."
+    },
+    {
+      "id": 398,
+      "text": "You spot a group of reptilian creatures.  Do you wish to attack them?"
+    },
+    {
+      "id": 399,
+      "text": "You see a large hole that measures six feet across and six feet deep."
+    },
+    {
+      "id": 400,
+      "text": "You spot a large group of Mush Men under attack by an even larger group of reptile like creatures.  It would seem the reptiles are literally eating the Mush Men alive.  Do you with in jump in the fray?"
+    },
+    {
+      "id": 402,
+      "text": "An old man pokes his head out of the window. \"Hulloooo!  Oh my, I thought I was the only human left alive in the whole world.  Come in! Come in!\"  You enter his modest abode.  He tells his tale of how his ancestors were stranded during the catastrophe."
+    },
+    {
+      "id": 403,
+      "text": "Down through the years, his family kept alive.  However, inbreeding eventually caused all the children to be born so deformed that few survived.  He is the last.  \"I thought the world destroyed,\" cries the old man."
+    },
+    {
+      "id": 404,
+      "text": "\"At first, my great, great, great grandpap and his kin looked for a way out, but we never found one.  Then the ogres came and we holed up inside whatever building we could find.  Now I am the last, and I have all but given up.\""
+    },
+    {
+      "id": 405,
+      "text": "\"I have spent my time in devotion to Steneck, the god of travel.  Alas, my prayers are never answered.\"  He is so happy when you tell him the location of the cave entrance leading to the surface,  he breaks out in tears."
+    },
+    {
+      "id": 406,
+      "text": "\"Finally! My prayers have been answered.  Here, take these.  My ancestors gathered them during the years we searched for a way out.  I have no use for them, and they may do you some good.\""
+    },
+    {
+      "id": 407,
+      "text": "\"You are welcome to rest here as long as you like.  One of my ancestors knew some magic.  A permanent protection spell has been cast on this area.  Ogres and other creatures will not come near.\""
+    },
+    {
+      "id": 408,
+      "text": "You are standing at the edge of the pool of water that leads out of this area."
+    },
+    {
+      "id": 409,
+      "text": "You see a hill giant slumped against a tree.  He is wounded and is nearly dead.  He speaks, \"Ranthog fight big bear.  Ranthog hurt.  You help Ranthog?\"      What do you do?"
+    },
+    {
+      "id": 410,
+      "text": "\"Ranthog thank you.  Ranthog give you big treasure.\"  He sketches a map on a piece of papyrus showing the location of a large, hollowed out tree.  He says the treasure is hidden inside the tree.  \"Ranthog go home.  Ranthog tired.\"  He limps away."
+    },
+    {
+      "id": 411,
+      "text": "As you approach him, he sighs with a mighty wind and hoists himself up.  He does not plan on going down without a fight."
+    },
+    {
+      "id": 412,
+      "text": "Just as Ranthog had promised, you find a sizable treasure larder.  Most of this stuff looks incredibly valuable.  Ranthog must have had no idea how valuable it was, or he would never have given it away."
+    },
+    {
+      "id": 413,
+      "text": "You spot an adult hill giant teaching the finer points of setting up ambush to a small group of youngsters.  Do you wish to teach them a valuable lesson and set an ambush of your own?"
+    },
+    {
+      "id": 414,
+      "text": "The students have paid very close attention to their teacher.  Your ambush is spotted by one of them.  You are surprised as they set upon you.  They act as if they are seasoned veterans, not the greenhorn youngsters you expected them to be. "
+    },
+    {
+      "id": 415,
+      "text": "You spot what appears to be three young hill giants tormenting a large proto-badger.  Do you help the proto-badger against these evil folk?"
+    },
+    {
+      "id": 416,
+      "text": "You engage in combat with a small group of giants."
+    },
+    {
+      "id": 417,
+      "text": "You spot a small group of hill giants.  Do you wish to attack them?"
+    },
+    {
+      "id": 418,
+      "text": "This crypt is occupied by the undead.  Several ghouls are feasting on a corpse they have dragged from a stone crypt.  They quickly leap at the chance of dining on a fresh corpse.  Yours!"
+    },
+    {
+      "id": 419,
+      "text": "This room has been recently disturbed.  All the bodies that occupied the crypt are missing, and there are many footprints of  booted and unbooted feet."
+    },
+    {
+      "id": 420,
+      "text": "Standing in the doorway of this room, you are overcome by a strange sensation. It's as if something is running down your spine.  A cold draft of very dank and musty air is coursing through, and you are unable to decipher which direction it's coming from."
+    },
+    {
+      "id": 421,
+      "text": "This temple has been recently desecrated.  The footprints in the dust suggest that a large group of people wearing steel-shod boots are the culprits."
+    },
+    {
+      "id": 422,
+      "text": "This small alcove held supplies for the caretaker of the burial crypt.  They were seldom used, for they are covered with a thick layer of dust.  Do you wish to search the supplies for anything of worth?"
+    },
+    {
+      "id": 423,
+      "text": "You are just about to continue on, when you notice an old piece of folded parchment jutting out from the equipment.  It is a map showing the location of a secret wall and passage."
+    },
+    {
+      "id": 424,
+      "text": "You notice a small cave opening along the shoreline.  A putrid smell pours out of the entrance. You suspect some creature must be living down there in its own offal.  Do you enter?"
+    },
+    {
+      "id": 425,
+      "text": "You are attacked by strange blob-like creatures."
+    },
+    {
+      "id": 426,
+      "text": "You see a small group of blob creatures slithering in the mire.  Do you want to attack them?"
+    },
+    {
+      "id": 427,
+      "text": "You stumble into the most bizarre battle you have ever seen.  It appears to be a civil war between jelly-like monsters.  If you hadn't been dragged into its midst, you might have even been amused by the situation."
+    },
+    {
+      "id": 428,
+      "text": "You see enormous flightless birds in the distance.  At this distance, you are not certain how many there are.  You can still  escape before you are noticed.  Do you choose to engage them in combat?"
+    },
+    {
+      "id": 429,
+      "text": "The river flows into a large cave.  Shortly after entering the cave, the river disappears underground and becomes  subterranean.  The cave is not completely without interest.  The creatures that attack you can attest to this!"
+    },
+    {
+      "id": 430,
+      "text": "A river emerges from below and flows out of the cave entrance.  You can smell the stench of some creature living inside.  Towards the back of the main chamber, there is a whole network of caves leading in various directions.  Do you enter?"
+    },
+    {
+      "id": 431,
+      "text": "You are attacked by a group of huge reptiles.  They are of such great size they could easily crush you under foot if you were not so agile."
+    },
+    {
+      "id": 432,
+      "text": "You smell a foul odor so strong, it gives away the location of a group of disgusting monsters.  They are large reptiles.  Do you wish to attack them?"
+    },
+    {
+      "id": 433,
+      "text": "You find an old shack.  Only Adon knows why it is buried so deep in these monster-infested caves.  You look through  a window and see that it is empty.  Do you enter?"
+    },
+    {
+      "id": 434,
+      "text": "Inside, you see a small cot with the skeletal figure of the former occupant.  Judging by the state of the corpse, he has been dead for many years.  With the exception of several books that stand out from the rest, the shack contains nothing of interest."
+    },
+    {
+      "id": 435,
+      "text": "You see a group of krise.  They have not noticed you yet.  Do you wish to engage them in combat?"
+    },
+    {
+      "id": 436,
+      "text": "This shallow cave is an abode for a family of krise.  In defense of their home, those that are here quickly rise to attack. "
+    },
+    {
+      "id": 437,
+      "text": "This cave is empty.  You search the area quickly but find nothing of interest."
+    },
+    {
+      "id": 438,
+      "text": "This cave is much larger than the others. Strewn about are items that do not appear krise in origin.  Bones of enormous creatures litter the floor.  This would seem to be the abode of a great wizard who lives with the krise."
+    },
+    {
+      "id": 439,
+      "text": "You come upon a campsite of a group of ogres.  They are roasting a krise on a spit.  They do not see you.  Do you attack?"
+    },
+    {
+      "id": 440,
+      "text": "Everything these brutes possessed was crude and nearly worthless.  However, you do find a peculiar-looking stone in a small leather pouch."
+    },
+    {
+      "id": 441,
+      "text": "This is an old inn and cookhouse.  There is very little left.  This part of the city did not fare very well during the catastrophe."
+    },
+    {
+      "id": 442,
+      "text": "This is an old temple.  It is in remarkable shape compared to many of the surrounding buildings.  You enter through a large bronze door."
+    },
+    {
+      "id": 443,
+      "text": "You step into a foyer that has not seen use in countless years.  A heavy gloom settles over you.  This once holy place has taken on an atmosphere of despair.  You feel great evil is afoot."
+    },
+    {
+      "id": 444,
+      "text": "This is an old storeroom that now contains nothing but rot and decay.  A few casks of wine still remain, but a sampling shows that it has long since gone bad."
+    },
+    {
+      "id": 445,
+      "text": "Numerous cots with rotted legs have collapsed into termite-infested heaps."
+    },
+    {
+      "id": 446,
+      "text": "As you pass through the door, a strong wave of evil washes over you. You almost bolt for the door.  Whatever lies beyond must be pure evil.  Pure evil radiates outward. "
+    },
+    {
+      "id": 447,
+      "text": "A huge crystal sphere is being held aloft  by a net of strands.  These strands appear to be made from living, scaled flesh that has materialized out of thin air.  Inside the sphere, you see a whirling vortex of mist."
+    },
+    {
+      "id": 448,
+      "text": "This seems to be the source of the evil  you have felt throughout the temple.   A shimmering, impenetrable energy field surrounds the sphere.   Demonic symbols are engraved on the floor to the sides of the energy field."
+    },
+    {
+      "id": 449,
+      "text": "The symbols are large enough for four people to kneel inside.  Do four members of the party wish to step inside?"
+    },
+    {
+      "id": 450,
+      "text": "Upon kneeling on the symbols, a magical display of energy sweeps across the floor. Energy beams of light in a myriad of colors appear from all directions.  They strike all those not within the symbols."
+    },
+    {
+      "id": 451,
+      "text": "After the discharge of light beams, the protective energy field vanishes.  Inside the sphere, the vortex of mist forms the visage of a hideous beast.  It stares intently into your eyes and begins to communicate telepathically."
+    },
+    {
+      "id": 452,
+      "text": "\"Who dares summon me with the help of my very own scrying crystal?  AHHHH! It is foolish mortals.  How entertaining!  What rash passions can drive such frail beings such as yourselves to the point of utter insanity?\""
+    },
+    {
+      "id": 453,
+      "text": "Unstoppable, the beast's hideous laughter courses throughout your brain. \"Ha! Ha! Ha! Ha!  Run, puny insects!  Run, while you may!  You shall soon see that it is already far too late!\"  As evil permeates the room, you manage to safely reach the doorway."
+    },
+    {
+      "id": 454,
+      "text": "Just as you are about to make contact with the sphere, the living flesh net that holds it aloft forms into a hideous demon.  It immediately attacks you."
+    },
+    {
+      "id": 455,
+      "text": "The sphere fades as the beast speaks one last time.  \"Fear for your short lives, mortals!  You will be hard-pressed to escape my house alive.  Hard-pressed, indeed!\""
+    },
+    {
+      "id": 456,
+      "text": "\"I think not, puny mortals.  Your destruction is beneath the likes of me.  However, it is not beneath the duty of my lieutenants!\"  The beast's hideous laugh courses through your brain.  At the same time you hear a low growl sound behind you."
+    },
+    {
+      "id": 457,
+      "text": "\"How dare you treat me as inferior!  Now you shall know why mortals fear death!\"  The beast materializes before you.  It stands nearly 13 feet at the shoulder.  You may have made a very big mistake in enraging the creature to this point."
+    },
+    {
+      "id": 458,
+      "text": "You have done a great deed this day.  You have destroyed the body of this foul demon.  Though not permanently dead, it will be many years before it may torment the Realmz again."
+    },
+    {
+      "id": 459,
+      "text": "You are attacked by a horde of disgusting creatures.  They are being herded in your direction by some winged beasts."
+    },
+    {
+      "id": 460,
+      "text": "This room is inhabited by both the dead and the undead.  Several ghouls are feasting on some of the fresher corpses.  They intend to feast on you as well."
+    },
+    {
+      "id": 461,
+      "text": "The statue comes alive, turns towards the defiler and speaks, \"You have taken that which is freely given and offended me.  You shall not partake of my gifts again.\"  Along with the pool of water, the statue fades into nothingness."
+    },
+    {
+      "id": 462,
+      "text": "The statue comes alive, turns toward the defiler, and speaks, \"Your base attitude shall beget you nothing.\"  A sudden flash of light overtakes the vandal, just before statue fades into nothingness.  "
+    },
+    {
+      "id": 463,
+      "text": "Magic courses throughout your body.  You are healed."
+    },
+    {
+      "id": 464,
+      "text": "You feel a deep, warm, tingling sensation.  The calluses on your travel-weary feet slowly disappear."
+    },
+    {
+      "id": 465,
+      "text": "You come upon a stone statue of a man.  In one hand he grasps a staff.  The other outstretched hand holds a bowl.  Water continually pours from this bowl, forming a shallow pool at the statue's feet."
+    },
+    {
+      "id": 466,
+      "text": "This room is the only area so far that does not emanate a strong aura of evil.  In the center of this large room, is a tall stone statue.   There is an air of peace about this place that suggests you could rest here safely."
+    },
+    {
+      "id": 467,
+      "text": "You happen upon a herd of dinosaurs.  They viciously defend their meager home."
+    },
+    {
+      "id": 468,
+      "text": "You approach a goblin village. If you slip from hut to hut, it is possible to avoid contact with most of the dwellers.  You surmise that the goblin king lives towards the south in a hut noticeably larger than the rest."
+    },
+    {
+      "id": 469,
+      "text": "This tunnel is inhabited by one of the world's mightiest of creatures.  A red dragon sits atop a vast pile of wealth.  The dragon is sleeping soundly but would be sure to awaken if you enter.  Do you enter?"
+    },
+    {
+      "id": 470,
+      "text": "I hope you know what you are doing!"
+    },
+    {
+      "id": 471,
+      "text": "The world is a safer place with the demise of this foul creature."
+    },
+    {
+      "id": 472,
+      "text": "A very powerful animal must have feasted here.  Several bones litter the floor.  You  recognize some of the bones.  They were originally from trolls and giants.  You shudder to think of the immense creature capable of feasting on such beasts as these."
+    },
+    {
+      "id": 473,
+      "text": "A complete search of the area turns up nothing of value.  However, you discover red scales scattering the ground.  They could only have been shed from a red dragon.  You know that such a creature could easily devour trolls and giants."
+    },
+    {
+      "id": 474,
+      "text": "They pull large weapons from leather thongs at their waists.  They attack without mercy."
+    },
+    {
+      "id": 475,
+      "text": "You have entered a rather fine tavern filled with only the best citizens of Bywater.  Most of the tables are filled with patrons eating spiced potatoes and engaged in interesting discussions.  You find yourself a table near the back."
+    },
+    {
+      "id": 476,
+      "text": "This room is occupied by small, fluttering shapes not native to the Realmz.  They immediately swarm upon you."
+    },
+    {
+      "id": 477,
+      "text": "You are attacked by a group of winged servants."
+    },
+    {
+      "id": 478,
+      "text": "You are attacked by a group of slime demons.   They are being herded in your direction by a some of devilish herdsmen."
+    },
+    {
+      "id": 479,
+      "text": "This hidden room contains the old bones of many small rodents.  You have a creepy feeling that you are being watched."
+    },
+    {
+      "id": 480,
+      "text": "You hear a whisper that seems to come from nowhere and everywhere.  \"Free us!  Our souls languish in eternal torment.\"  The whisper fades, but everyone seems to have heard the same thing."
+    },
+    {
+      "id": 481,
+      "text": "You step into a secret passage that leads to a large cave."
+    },
+    {
+      "id": 483,
+      "text": "You see a group of devil kin.  They do not see you, however.  Do you wish to attack them?"
+    },
+    {
+      "id": 484,
+      "text": "You find a secret passage into the courtyard of the spider tower."
+    },
+    {
+      "id": 485,
+      "text": "Haikur is at the gate awaiting your arrival.  \"Good, good.  Now, let us be off and rid the land of these foul goblins.\"  Several hours into the journey, you feel the hair on your neck prick.  Suddenly, you are ambushed by goblins.  This looks grim."
+    },
+    {
+      "id": 486,
+      "text": "Your force has been too badly wounded to continue.  Rumblings arise from the wounded.  They claim that you are cursed.  Haikur has no choice.  To avoid a mutiny, he casts you out.  You are now on your own, deep in no man's land."
+    },
+    {
+      "id": 487,
+      "text": "You find the remains of an old grave.  It has been dug up and pilfered.  The bones of the buried lie about the area.  Do you bury the bones or leave them where they lay?"
+    },
+    {
+      "id": 488,
+      "text": "A whisper from nowhere thanks you."
+    },
+    {
+      "id": 489,
+      "text": "You enter the gaming arena.  The master of the games asks if you wish to pit your skills in combat against dire creatures for a wager.  Do you wish to enter the games?"
+    },
+    {
+      "id": 490,
+      "text": "Let the games begin!"
+    },
+    {
+      "id": 491,
+      "text": "A sign above the front gate reads,  \"Official Sanctioned Gaming Arena.\"  From inside you here the cheers of an excited crowd and the moans of the wounded and dying."
+    },
+    {
+      "id": 492,
+      "text": "A man approaches you and speaks in a hushed voice.  \"My aides have told me of the arrival of an adventurous band.  Hear my offer before you leave.\"  He tells a story of an evil man who has a stable of wild beastmen."
+    },
+    {
+      "id": 493,
+      "text": "The man asks if you would eliminate the stable of beastmen for monetary compensation.  He offers you 400 gold pieces if you kill the foul creatures.  Do you agree?"
+    },
+    {
+      "id": 494,
+      "text": "You find the small cave that leads to the stable.  You creep inside to see a large corral of beastmen.  They number a  baker's dozen.  This won't be easy.  Do you wish to attack these vermin now?"
+    },
+    {
+      "id": 495,
+      "text": "Having completed your handiwork, the man contacts you as planned.  He hands you a sizable leather pouch.  \"Here is the price as we agreed.  I have given ye a little something extra for your trouble.\""
+    },
+    {
+      "id": 496,
+      "text": "The man gives you a map showing the location of a hidden cave just outside the town walls.   \"Good luck friends.  I shall seek ye out and reward thee when the deed is done.  Now, good day to you.\""
+    },
+    {
+      "id": 497,
+      "text": "You see a group of giant rats.  Do you wish to attack them?"
+    },
+    {
+      "id": 498,
+      "text": "An old woman pokes her head out a window.  As soon as she sees you she screams, \"Get ye away!  You stole my dagger!  I don't sell my wares to thieves such as you!  Now, begone before I call the guard!\"  She slams the window shut."
+    },
+    {
+      "id": 499,
+      "text": "You stumble into a cave inhabited by huge cave beetles.  They scurry forth and attack."
+    },
+    {
+      "id": 500,
+      "text": "As you prepare to leave the area, you also notice that the bones seem to be picked clean.  Those responsible seem to boil from a crack in the side of the cave."
+    },
+    {
+      "id": 501,
+      "text": "As you are standing near a large group of huge shrub-like plants you hear a loud buzzing.  Before long huge wasps descend from above.  You must fight or end up as food for their larvae."
+    },
+    {
+      "id": 502,
+      "text": "You see a large iron door set into the mountain.  Inscribed into the steel of the door are strange runes.  They are an ancient but familiar script.  It tells of a great evil that has been banished beyond the mighty portal.  Do you open it?"
+    },
+    {
+      "id": 503,
+      "text": "A blast of stale air pours forth.  Along with a vile creature."
+    },
+    {
+      "id": 504,
+      "text": "This was the room of a low level priest.  Now however it is the home of a group of cacodeamons."
+    },
+    {
+      "id": 505,
+      "text": "This column appears to be hollow.  You discover a small panel that open to reveal a shaft inside the column.  It's large enough for a person to crawl inside.  A ladder of rusty iron rings protrude from one side of the shaft.  Does somebody wish to enter?"
+    },
+    {
+      "id": 506,
+      "text": "At the bottom of the shaft is a large pile of gold coins.  Do you wish to take them?"
+    },
+    {
+      "id": 507,
+      "text": "This cave leads back into a completely dark and enclosed path.  You feel a strange vibration coming from the floor.  The cave continues east."
+    },
+    {
+      "id": 508,
+      "text": "Large rocks break loose from the ceiling.  Those who are not quick enough fail to get out of the way and take damage."
+    },
+    {
+      "id": 509,
+      "text": "Even as you watch many eggs are hatching.  Crawling around these eggs are hundreds of strange lizard creatures.  Some mistake you for food."
+    },
+    {
+      "id": 510,
+      "text": "You have stumbled into some sort of nightmarish nursery.  Thousands of eggs litter the ground.  Some are hatching even as you watch with slack jaws."
+    },
+    {
+      "id": 511,
+      "text": "You see huge piles of cracked and shattered bones.  They seem to be from the creatures you saw in the nursery.  It is hard to believe, but it seems like something is using THEM as livestock.  Hard to believe until you see what that something is."
+    },
+    {
+      "id": 512,
+      "text": "These dragons appear to have been trapped down hear by some great earthquake.  Unable to escape they survived over the many years by living off the creatures in the nursery."
+    },
+    {
+      "id": 513,
+      "text": "You have found the dragons treasure.  Sad to say that it is not as wondrous as one might expect."
+    },
+    {
+      "id": 514,
+      "text": "You step into a rather large cave only to find 8 eyes staring at you from 4 thick necks."
+    },
+    {
+      "id": 515,
+      "text": "You see the footprints of some two footed creatures with clawed feet.  Blood is smeared from floor to ceiling.  The bodies of several farmers have been ripped limb from limb and partially eaten."
+    },
+    {
+      "id": 516,
+      "text": "A bloody trail leads from the shack to the east.  Someone has been dragged from the shack kicking and screaming."
+    },
+    {
+      "id": 517,
+      "text": "As you walk in the small shack you witness a scene out of your worst nightmares.  Nailed to the walls are the half eaten corpses of a farmer and his wife.  From the way the blood has pooled at their feet it is obvious they were eaten alive."
+    },
+    {
+      "id": 518,
+      "text": "On a small table lies the remains of a small 10 year old girl.  Her arms and feet have been nailed to the table in order to make easy pickings for whatever has chosen to dine on her."
+    },
+    {
+      "id": 519,
+      "text": "You find the remains of a small boy.  The flesh on his face is about the only portion that has not been peeled away in strips.  Most of his body seems to be here so whatever did this, did it for the pure joy of it."
+    },
+    {
+      "id": 520,
+      "text": "You see the remains of yet another small child.  Blood still trickles from a jugular  recently opened to let this innocent child's life leak away.  Do you wish to dig the child a grave."
+    },
+    {
+      "id": 521,
+      "text": "That will be one foul meal that shall go untasted.  Whatever could prey on helpless farmers and small children deserves this grave far more than this poor child."
+    },
+    {
+      "id": 522,
+      "text": "As you are leaving the cave you hear a loud roar behind you.  It comes from where you found the small child.  As you attempt to determine the identity of the creatures you see a group of large trolls running in your direction on flapping feet."
+    },
+    {
+      "id": 523,
+      "text": "The noise of this battle is sure to attract more trolls if there are any in the immediate area."
+    },
+    {
+      "id": 524,
+      "text": "Nothing special seems to happen."
+    },
+    {
+      "id": 525,
+      "text": "You notice nothing different."
+    },
+    {
+      "id": 526,
+      "text": "You are unable to see any results."
+    },
+    {
+      "id": 527,
+      "text": "Nothing happens."
+    },
+    {
+      "id": 528,
+      "text": "What do you want to do?"
+    },
+    {
+      "id": 529,
+      "text": "You see several dozen dead orcs strewn about the cave.  Most of the bodies have been nibbled on somewhat by some creature that must be quiet large.  The cave continues off to the back.  You hear heavy breathing and the shuffling of great feet."
+    },
+    {
+      "id": 530,
+      "text": "Do you wish to move to the back of the cave to investigate?"
+    },
+    {
+      "id": 531,
+      "text": "You discover that this cave is inhabited by a mated pair of trolls.  Though you have approached with the stealth of a clemidian devil cat, the trolls can smell you as if you had sacks of bacon strapped to your backs.  Trolls like bacon!!!"
+    },
+    {
+      "id": 532,
+      "text": "You discover what can only be described as a nest for lack of a better word.  The bodies of even more orcs are heaped in mounds about the cave.  Beasts such as trolls need to eat a lot.  Why so many look to be hardly touched is a mystery."
+    },
+    {
+      "id": 533,
+      "text": "As you continue to look around for anything of interest you hear the wail of a baby troll coming from the west."
+    },
+    {
+      "id": 534,
+      "text": "In this end of the cave is a very frightened young troll. The babe must have witnessed you killing its parents.  Its eyes bulge like saucers as it looks at you in total fear. Suddenly the babe begins to relax.  The fear subsides for an unknown reason."
+    },
+    {
+      "id": 535,
+      "text": "Unknown, that is, until you look behind you.  The babe's brothers and sisters have stalked up on you.  They charge you in an attempt to revenge their fallen parents and save their baby brother."
+    },
+    {
+      "id": 536,
+      "text": "During the melee the babe has disappeared.  The remainder of the cave has nothing of interest."
+    },
+    {
+      "id": 537,
+      "text": "As you travel deeper into the cavern you find that the skeletal giant had a trio of rather nasty pets."
+    },
+    {
+      "id": 538,
+      "text": "You see a group of cacodeamon warriors.  Do you wish to engage them in combat?"
+    },
+    {
+      "id": 539,
+      "text": "You spot a small cave in the side of the mountain.  When you proceed inside to investigate the source of a strong acrid odor you are confronted by the true ruler of the Spider Tower - a powerful spider queen."
+    },
+    {
+      "id": 540,
+      "text": "As you are journey through a grove of oaks, large snakes drop from the branches.  They intend to make an easy meal of you."
+    },
+    {
+      "id": 541,
+      "text": "The cave dead ends here.  Chained on the wall are the remains of a hill giant that has been partially devoured.  You are unable to tell if the body parts were consumed before being chained to the wall or if it simply fell prey to scavengers."
+    },
+    {
+      "id": 542,
+      "text": "You emerge into the musty confines of a large cavern.  It would appear the hapless giant was to be milk and cookies for the beast resting here.  Resting that is, until now!"
+    },
+    {
+      "id": 543,
+      "text": "You stand toe-to-toe with a blue dragon.  It looks at you and clasps its bony hands.  \"Mmmmmmmm, you have arrived just in time.  I grow ever so hungry.  Thank you kind people for your generosity.\""
+    },
+    {
+      "id": 544,
+      "text": "Your skin prickles, and your hair stands completely on end as if you are rubbing your feet furiously on a bearskin rug while wearing wool socks."
+    },
+    {
+      "id": 545,
+      "text": "There must be a powerful source of electrical energy nearby."
+    },
+    {
+      "id": 546,
+      "text": "You find a sizable cache of wealth and a small sack with a group of 4 daggers."
+    },
+    {
+      "id": 547,
+      "text": "You have found your way to the alley behind the combat arena.  You see a large shack in the distance that you had not seen before."
+    },
+    {
+      "id": 548,
+      "text": "As you approach the shack, a man wearing a leather harness exits from the hut and approaches.  \"What are you doing here?  This area is off limits.\"  He turns to go back inside when suddenly a huge creature bursts from the shack."
+    },
+    {
+      "id": 549,
+      "text": "The creature bears the remains of shackles.  Blood-soaked chains, wrapped about its fists, create crude but effective weapons.  The man in the leather harness yells, \"Look out!  It's loose!\" In hot pursuit, several armed men storm out the door."
+    },
+    {
+      "id": 550,
+      "text": "You discover a scroll inside the shack.  It contains orders that the corporal train the troll to fight in the arena.  Bad idea!"
+    },
+    {
+      "id": 551,
+      "text": "Holes have been ripped into the thatched roof of an abandoned shack.  Bloodstains on the floor bear witness that the former occupant suffered a violent death."
+    },
+    {
+      "id": 552,
+      "text": "The creatures that caused the demise of the former occupant are now back searching for more food."
+    },
+    {
+      "id": 553,
+      "text": "This spacious valley is inhabited by immense herds of giant boars.  Viewing you as a threat, a group of them attacks you."
+    },
+    {
+      "id": 554,
+      "text": "Large piles of bones litter the cave's entrance to the south."
+    },
+    {
+      "id": 555,
+      "text": "A small side cave leads to the lair of a group of Mush-Men.  They are less than pleased with your invasion."
+    },
+    {
+      "id": 556,
+      "text": "A giant ant colony lives in the area.   Escorted by a few warriors, a stream of workers blocks your path.  Burdened under the remains of a large animal, they disappear into holes built into the cavern walls.  Do you attempt to pass this phalanx of death?"
+    },
+    {
+      "id": 557,
+      "text": "Fresh water is a rare find in the underworld.  When it is available, it's usually claimed and carefully guarded. "
+    },
+    {
+      "id": 558,
+      "text": "A small gnome mining detail worked here. Now, nothing but their bones litter the ground.  One skeletal hand holds a precious bauble."
+    },
+    {
+      "id": 559,
+      "text": "This dead-end cavern is occupied by some unfriendly shantiles."
+    },
+    {
+      "id": 560,
+      "text": "Large boulders careen downwards from a ridge above.  Those not fast enough to avoid the rocks are crushed beneath a hail of missiles."
+    },
+    {
+      "id": 561,
+      "text": "The hail of boulders forces you to take up a defensive position.  Gnath seize the opportunity to close ranks and attack."
+    },
+    {
+      "id": 562,
+      "text": "They carried little of value.  This was a perfect position for setting up an ambush.  Be careful of similar attacks in the future. "
+    },
+    {
+      "id": 563,
+      "text": "You round the corner. Someone yells at you from behind.  Spinning around, you come face-to-face with seven young men.  Huge cats accompany them, and they look like wizards' apprentices.  Fanning out, they begin to cast spells."
+    },
+    {
+      "id": 564,
+      "text": "Welcome to \"The City of Bywater\", a scenario for use with the Realmz Scenario Driver.  If you enjoy playing Realmz and would like to see more scenarios developed, please support us by sending in your registration fee."
+    },
+    {
+      "id": 565,
+      "text": "Once you have registered this copy of Realmz, you will also be able to play test other scenarios BEFORE having to register them.  The fee for each additional scenario are $13 each.  For information on how to register, see chapter 3 of the Realmz Manual."
+    },
+    {
+      "id": 566,
+      "text": "Once you have registered this copy of Realmz, you will be able to play the entire scenario.  This scenario is very loose.  It does not have a strong plot line.  You can adventure where you want for as long as you want."
+    },
+    {
+      "id": 567,
+      "text": "Other scenarios utilize the capabilities of the Realmz scenario driver to a greater extent.  These scenarios feature a definite plot line, new monsters, new magical items and more dangerous encounters."
+    },
+    {
+      "id": 568,
+      "text": "You approach the gates of a huge citadel.  A large group of Dogre guard the entrance.  Upon your arrival, they draw weapons and charge."
+    },
+    {
+      "id": 569,
+      "text": "Now unguarded, you gain easy access to the fortress before you."
+    },
+    {
+      "id": 570,
+      "text": "The stale underground air comes as a welcome relief compared to the stench emitted by the inhabitants of this foul place."
+    },
+    {
+      "id": 571,
+      "text": "You are in a storage room.  With a minimum of effort, the door could easily be barricaded providing you with limited protection against roaming bands of Dogre."
+    },
+    {
+      "id": 572,
+      "text": "The sturdy, massive door to this storage room has been viciously wrenched from its hinges.  The unidentifiable remains of its scattered contents rotted and withered away long ago."
+    },
+    {
+      "id": 573,
+      "text": "In the corner, half a dozen large Dogre snooze with indolent abandon.  They are resplendently decked out with an impressive array of new weapons.  Do you wish to attack them?"
+    },
+    {
+      "id": 574,
+      "text": "One of the brutes owns a small leather pouch that contains an interesting item."
+    },
+    {
+      "id": 575,
+      "text": "An impressive cache of wealth has been stored at one end of this room.   Appearances would suggest that these pillagers have been hoarding and adding to this treasure for quite some time."
+    },
+    {
+      "id": 576,
+      "text": "Two gigantic Dogre stand guard.  One of them quickly jerks down on a heavy, braided rope.  Before you can engage the Dogre in battle, you must first handle a head-on confrontation against some of their voracious pets."
+    },
+    {
+      "id": 577,
+      "text": "The clamor of weapons attracts attention. Just seconds too late, several of the Dogres' comrades burst into the room.  Incensed, they strike out furiously to avenge their comrades' recent deaths."
+    },
+    {
+      "id": 578,
+      "text": "You discover several dead gnaths strapped to large racks.  Blood still drips from fresh wounds on several of the gnath's necks.  You suspect that your arrival brought immediate doom to these poor saps."
+    },
+    {
+      "id": 579,
+      "text": "For their own twisted amusement, the Dogre had tortured the gnaths for information.  Upon hearing the clash of arms, they probably assumed that a rescue attempt was in progress and  abruptly killed the gnath in an all-out massacre."
+    },
+    {
+      "id": 580,
+      "text": "A spacious room stretches before you.  The walls appear to be draped with  gauze, and the floor lies covered with an undisturbed, thick coating of dust.  For mysterious reasons, the Dogre have not dared to enter this area of the fortress. "
+    },
+    {
+      "id": 581,
+      "text": "Upon closer inspection, you realize that the gauze actually consists of several wispy forms billowing softly along the  room walls.  They do not appear to be attached.  They are hovering freely in midair.  Do you approach?"
+    },
+    {
+      "id": 582,
+      "text": "A manifestation takes the shape of a  ghostly human figure.  It is manacled against the wall by smoky, ethereal iron chains.  A shimmering blue energy curtain envelops the figure."
+    },
+    {
+      "id": 583,
+      "text": "The prisoner begins to wail and moan.  The energy curtain shimmers intensely in an  attempt to block the ghost's powerful magic.  Your head begins to throb painfully.  You feel overwhelmed by a piercing migraine headache."
+    },
+    {
+      "id": 584,
+      "text": "Deep in your mind you hear a silky smooth, beguiling voice.  \"Free me!  Destroy these bonds!  I shall reward you with the greatest gift a mortal could ever dream of.\""
+    },
+    {
+      "id": 585,
+      "text": "A small jet black vial sits at the foot of the energy barrier.  It emits a foul black mist that forms the shimmering energy curtain.  Do you smash the vial and set the ghostly apparition free?"
+    },
+    {
+      "id": 586,
+      "text": "Free after so many centuries of bondage,  the ghostly apparition begins to wail forcefully.  Stabbing pain shoots up your spine and throughout your mind."
+    },
+    {
+      "id": 587,
+      "text": "Staggering about in pain, you are fallen upon by a host of ethereal beings intent on your destruction.  \"Foolish mortals!  Now I shall give you your great gift-the eternal peace of death!\""
+    },
+    {
+      "id": 588,
+      "text": "Though you have defeated this group of beings, the bond that imprisoned others of their kind to this room has been destroyed.  Dozens of wispy forms flee from the room."
+    },
+    {
+      "id": 589,
+      "text": "Soon, ghostly wailing and the agonizing growls of dead and dying Dogre fills the halls.  Within minutes, the carnage is over.  The ghosts have sated their appetite for life. They return to the nether regions from which they have so long been absent."
+    },
+    {
+      "id": 590,
+      "text": "The corpses of over three dozen Dogre litter the ground.  Their armor protects nothing but frail bodies of dried, withered skin stretched over brittle bones.  Their flesh appears to have aged hundreds of years within a matter of minutes."
+    },
+    {
+      "id": 591,
+      "text": "You enter a large hall.  An old Dogre in long flowing robes stands alone at the far end.  Her back is to the door and she is unaware of your presence.  Do you approach?"
+    },
+    {
+      "id": 592,
+      "text": "With difficulty, an aged Dogre mage awkwardly turns to eye your approach.  She stands hunched over and despondent.  When you're close, she speaks in broken common. \"I expect you desire vengeance for your fallen comrades.  I'll not defend myself.\""
+    },
+    {
+      "id": 593,
+      "text": "\"I am too old to be a threat to you.  I look forward to being rid of my duties and ending this miserable life.\"  She rambles listlessly and reveals that the clan chief, lord of this castle, strongly despises and fears all magic."
+    },
+    {
+      "id": 594,
+      "text": "This mage Bregwart, once renowned for healing, has been confined here for years by the clan chieftain to perform cruel experiments on captured humans and gnath to gain knowledge for war purposes.  Do you offer to help her kill the chieftain?"
+    },
+    {
+      "id": 595,
+      "text": "\"Well then, don't waste more of my time.  No one cares about old Bregwart.  I expect many believe that I disappeared from sight and died long ago.  I might as well end it all.\"  Clapping her hands twice, she disappears in a flash of smoke and sulfur."
+    },
+    {
+      "id": 596,
+      "text": "\"Excellent!  I have long dreamt of the day where I could face Cragentooth and crush him.  Night and day, he is constantly  surrounded by many warriors.  With the aid of your strength, I will finally be able to unseat him from power.\""
+    },
+    {
+      "id": 597,
+      "text": "Bregwart leads you to a cleverly hidden passage.  \"This way leads to his private chambers.  Cragentooth believes that only he and his most trusted bodyguards are aware of its existence.  I discovered it several years ago.\""
+    },
+    {
+      "id": 598,
+      "text": "\"Have your blades drawn.  Be prepared with magic on your lips.  His warriors are quick of wit and blade.  Our advantage of surprise shall not last long.  He is located just west of here.\""
+    },
+    {
+      "id": 599,
+      "text": "You descend the passageway to Cragentooth's quarters.  Bregwart steps on a false floor tile.  The ground beneath her collapses.  She plunges to a bloody death, her body ravaged by spikes. You leap the gap to face Cragentooth and his warriors.  To battle!"
+    },
+    {
+      "id": 600,
+      "text": "You enter a massive building.  It appears to be an endless maze of hallways and corridors."
+    },
+    {
+      "id": 601,
+      "text": "You descend a flight of stairs and  face a long, colorless hallway.  The lifeless air is close and stifling.  Your heels kick up ancient dust."
+    },
+    {
+      "id": 602,
+      "text": "You dead end at a set of primarily empty chambers.  Some warped spears and a set of rusty armor lay in an abandoned heap in the far left corner of this chamber."
+    },
+    {
+      "id": 603,
+      "text": "You rummage about the old pile of armor and weapons and find one item of interest.  A large sack of barbed jacks.  As you rummage around, you stir up a thick cloud of dust and are overtaken by a severe sneezing fit."
+    },
+    {
+      "id": 604,
+      "text": "A ghostly apparition now stands at the room's center.  Raising a smoky tendril-like arm in your direction, it speaks in the ancient fespian tongue. \"Seek! Ye shall find only death here.\""
+    },
+    {
+      "id": 605,
+      "text": "The figure disappears into the cracks of  the wall farthest away from you.  As soon as it fades from sight, the wall completely crumbles.  A small hidden chamber is revealed.  Intent on protecting their final resting place, undead guardians stream forth."
+    },
+    {
+      "id": 606,
+      "text": "Old rotted bodies lay about the room like an army of broken rag dolls-a twitching arm, a disembodied head- scattered parts are all that remain of this ungodly army.  Before you can regain your full strength, yet another figure emerges from the alcove."
+    },
+    {
+      "id": 607,
+      "text": "Unlike the others, this figure must stoop to enter the room.  It is a massive zombie heading up a multitude of lesser zombies."
+    },
+    {
+      "id": 608,
+      "text": "Do you wish to investigate the alcove that the ghostly figure retreated to?"
+    },
+    {
+      "id": 609,
+      "text": "You search the dead and mangled bodies but discover nothing of interest."
+    },
+    {
+      "id": 610,
+      "text": "If you were in search of treasure, you are sadly disappointed.  If you desired to meet the ghostly figure, you're in luck."
+    },
+    {
+      "id": 611,
+      "text": "You enter a large storage room.  It contains few items of any real use.  However, you sense something so slight, it is barely perceptible.  A sense of evil seems to pervade this room.  You cannot deny it's presence, and you shiver uncontrollably."
+    },
+    {
+      "id": 612,
+      "text": "You enter the town jail.  Six cells have been sectioned off.  Two of the local town drunks can be heard snoring loudly, sleeping off their regular overindulgence of merriment.  Low, restless growling emanates from the other cells."
+    },
+    {
+      "id": 613,
+      "text": "At a table near the jail's entrance, a pair of burly guards play a rousing game of bloody knuckles.  One brusquely demands that you state your business.  Used to curiosity seekers, they readily grant you permission to ogle at the caged beast prisoners."
+    },
+    {
+      "id": 614,
+      "text": "\"Yah!  We got orders from Captain Richards to see that these varmints get transported to the gladiator games.  Well,   dragging them through the streets is just begging for trouble.  Me and Ramius don't ache to risk our lives.  These be nasty beasties.\""
+    },
+    {
+      "id": 615,
+      "text": "The guards watch you closely and exchange covert looks.  One suggests casually, \"Looks like you could use some extra coin.  Want to take on the job?\"  Do you offer to take the beasts to the gladiator games in exchange for 100 Gold Zembulian Zelots?"
+    },
+    {
+      "id": 616,
+      "text": "\"Fair enough.  We don't blame you.  It's not a job we're looking forward to.  Our pay barely makes the task worth the risk, but there are few good paying jobs around here to choose from.\""
+    },
+    {
+      "id": 617,
+      "text": "\"Praise the maker, we have a taker!   We'll fetch the critters right quick.  Don't want to give you time enough to change your mind!\"  The guards round up three large beasts imprisoned by heavy manacles. Chains link all three beasts together."
+    },
+    {
+      "id": 618,
+      "text": "They provide you with a map that shows  the location of the slave gladiator prison.  \"Take them here.  You can give this note to Corporal Sampson.  He will be the one that pays you.  Good luck, but beware!  These beasts are not as dumb as they look!"
+    },
+    {
+      "id": 619,
+      "text": "As your head clears from the initial impact of the spell, you catch a glimpse of the cleric swiftly disappearing behind the  temple's fortified door."
+    },
+    {
+      "id": 620,
+      "text": "You enter the slave prison.  A potbellied Corporal Sampson is slumped over a shaky table.  He's slept through the entire ordeal that just took place outside.  The smell of elderberry wine permeates his clothes.  You try to rouse him to collect your fee."
+    },
+    {
+      "id": 621,
+      "text": "Sampson awakens with a jolt and sits up quickly.  An offensive stream of drool has slid across his left cheek.  Heavy bags underneath his eyes imply he hasn't slept well lately.  \"What's this?  Can a man have no rest?\" You promptly display your contract."
+    },
+    {
+      "id": 622,
+      "text": "Sampson swiftly scans the contract with disbelief.  \"I see that you have been promised the sum of 100 gold Zelots.  Well, there is not that many gold Zelots in all of Bywater!  You may be very brave, but you are also very gullible!\""
+    },
+    {
+      "id": 623,
+      "text": "\"I can offer you a few silver for your trouble.  That is the best I can do.\"  He begins to search his belongings for a few paltry coins.  Suddenly, a nasty brawl breaks out between two of the beasts. "
+    },
+    {
+      "id": 624,
+      "text": "During the battle with the mad troll, one of the troll's hands had been severed.  One of your charges hungrily snatched it up to eat.  However, another beast greedily attempted to steal the tender morsel.  This attempt has provoked an all-out brawl."
+    },
+    {
+      "id": 625,
+      "text": "Before you are able to get the situation under control, the beasts erupt explosively into a convulsing ball of fur and slashing claws.  You are immediately  pulled into the fray."
+    },
+    {
+      "id": 626,
+      "text": "Corporal Sampson is badly wounded during the melee.  He asks you to take him to the village healers."
+    },
+    {
+      "id": 627,
+      "text": "\"Thank you, good people.  I didn't look forward to facing Father Yenovich.   Years ago, I ran off with his sister and ended up exposing her to the black sickness.  She died soon afterwards, and I returned to the city alone.  He's never forgiven me.\""
+    },
+    {
+      "id": 628,
+      "text": "He thanks you and rewards you with a huge amount of coin.  \"I bid you a well and safe journey.\" You feel awkward about this magnanimous offering.  You suspect that it is all he owns.  However, local customs dictate that it would be improper to refuse."
+    },
+    {
+      "id": 629,
+      "text": "\"Vipers!  You shall hang for this!  You yellow dogs have not seen the last of me!\""
+    },
+    {
+      "id": 630,
+      "text": "Never one to miss an opportunity, you snatch up one of the dead beast's claws and slash Sampson's throat.  His life blood  gushes out to drench the trampled grass."
+    },
+    {
+      "id": 631,
+      "text": "In his last dying moments, he gazes up at you with eyes of pure hatred.  \"You will regret this.  My dying image shall haunt your nightmares again and again.  I vow to avenge myself for the sake of my children, now forced to grow up fatherless.\""
+    },
+    {
+      "id": 632,
+      "text": "With the death of the cleric, the magical enchantments that animates his mindless undead army fades.  Without the magic to sustain them, the corpses collapse to the ground."
+    },
+    {
+      "id": 633,
+      "text": "You transport him to the village temple for healing.  A cleric is immediately summoned.  Upon seeing that the injured party is Sampson, his eyes narrow with recognition.  He demands, \"Is this man a friend of yours?\"  What is your reply?"
+    },
+    {
+      "id": 634,
+      "text": "\"You have made a poor choice.  Though I may be a man of the cloth, I cannot condone this man's past actions.  Your decision to be friends of this fiend has condemned you all to suffering.\"  Before you can respond, he casts a spell upon you."
+    },
+    {
+      "id": 635,
+      "text": "\"You're wise not to associate with this man and his sordid past.\"  Two young priests are quickly appointed to carry Sampson off.  \"Leave now!  Your business is done.\" He withdraws back into the temple.  There are sounds of the door being heavily barred."
+    },
+    {
+      "id": 636,
+      "text": "Frenzied shouting suddenly breaks out.  A patrol of men rapidly approach your position.  \"They're the ones!  They left Corporal Sampson to die like a wretched beast!  Seize them!\""
+    },
+    {
+      "id": 637,
+      "text": "You arrive at a temple dedicated to Sestuona, goddess of nature.  You will be permitted entry only if you are willing to pay an outrageous price for the temple's services.  Your presence here is opposed by a powerful enemy within the sect."
+    },
+    {
+      "id": 638,
+      "text": "You enter the outer office of the city's head magistrate.  Her assistant at the front desk is drowning in paperwork.  He inquires about your business. \"So, you seek adventure.\"  He informs the magistrate of your presence. \"You may see her now.\""
+    },
+    {
+      "id": 639,
+      "text": "You enter a spacious, well-organized office.  The city magistrate is an imposing woman dressed in rich velvet robes.  You state your desire for adventure.  She asks you a number of probing questions.  You detail your background and capabilities."
+    },
+    {
+      "id": 640,
+      "text": "She informs you, \"Some rather nasty business needs to be handled.  If you wish to contract with me, I can offer you a generous sum for your services.  There are a number of commissions to choose from.\"  She considers her case files thoughtfully."
+    },
+    {
+      "id": 641,
+      "text": "\"Ah!  This looks like a job that could fulfill your desire for adventure.\"  She hands you a file to look over.  \"Read this thoroughly.  It details the assignment and your compensation.  If you find the terms acceptable, sign and date the final sheet.\""
+    },
+    {
+      "id": 642,
+      "text": "Notorious Bindwart Bigbelly is wanted for the murder of Vladimir, a captain in the Royal Brigade.  You'll be rewarded in gold talons for his successful capture or if you can provide proof of his death by your hands.  Do you accept the commission?"
+    },
+    {
+      "id": 643,
+      "text": "\"Excellent!  Bigbelly regularly frequents a grog and mead house known as \"Newt's Landing\".  It's located in the northeastern part of the city.  Careful! It's a rough hangout.  Report back here when you have successfully completed your assignment.\""
+    },
+    {
+      "id": 644,
+      "text": "You enter a sleazy tavern known as \"Newt's Landing\".  The title suits this damp, dirty place.  Only a newt should want to hang out with his friends in such a dump."
+    },
+    {
+      "id": 645,
+      "text": "In the back corner, near a large table piled high with roast mutton, a large Orc warrior pounds down a crock of mead.  He fits Bindwart Bigbelly's description.  A second Orc notices your unveiled interest and points it out to him."
+    },
+    {
+      "id": 646,
+      "text": "Large armed Orc warriors crowd the tavern.  The boisterous din turns suddenly silent.  They all seem to be waiting for your next move."
+    },
+    {
+      "id": 647,
+      "text": "No one attempts to stop you as you rush after Bigbelly in hot pursuit.  You approach the tavern's back door and come to an abrupt halt.  Bigbelly stands in front of you, his back to a large stack of barrels.  His gleaming sword is drawn."
+    },
+    {
+      "id": 648,
+      "text": "From behind you, several heavily armed orcs approach.  Congratulations!  It appears that with just a minimum amount of forethought, you have managed to wedge yourself between a rock and a hard place. "
+    },
+    {
+      "id": 649,
+      "text": "The magistrate's assistant informs her of your success.  He's given authorization to pay you.  You sign a receipt, receive your gold talons, and are quickly ushered back into the magistrate's office.  "
+    },
+    {
+      "id": 650,
+      "text": "The magistrate thanks you gracefully.  She is notably impressed by your achievement and hopes that you will consider taking on another commission.  You proceed to look over another file."
+    },
+    {
+      "id": 651,
+      "text": "A rabid beast is wreaking havoc among the king's vast private gardens.  Two servants are dead.  One of the king's dear friends was attacked.  You will be rewarded handsomely if you destroy the beast.   Will you take this commission?"
+    },
+    {
+      "id": 652,
+      "text": "You are just about to enter the king's private gardens.  Someone has posted a message at the front gate.  \"Closed until further notice.  Do not enter under any circumstances.  You have been warned!\""
+    },
+    {
+      "id": 653,
+      "text": "You enter the king's gardens and begin to stalk for signs of the rabid beast.  Several  plants have been uprooted or mutilated.  You hear something up ahead on your right.  There are indications that the beast may not be alone.  Do you wish to continue?"
+    },
+    {
+      "id": 654,
+      "text": "You're shocked.  A sudden thought races through your head.  \"The magistrate better pay extra for this!\"  There is not one beast.  Instead, circumstances require you to engage no less than six ferocious beasts at once."
+    },
+    {
+      "id": 655,
+      "text": "Do you ask for more money because of the additional work you were required to perform in the king's gardens?  OR   Do you accept the original contract amount?"
+    },
+    {
+      "id": 656,
+      "text": "The magistrate sees to it that you are rewarded handsomely with a bonus.  \"You have earned it, my brave friends.  Come back later.  I may be able to offer you something in the future.\""
+    },
+    {
+      "id": 657,
+      "text": "\"You fools!  Your instructions were to kill one pet beast that had been infected with rabies. Instead, you have killed all of the king's pets. The king is beside himself! You have made a mockery of our contract and deserve nothing.  Leave!\""
+    },
+    {
+      "id": 658,
+      "text": "\"If you don't exit this office immediately,  I shall summon my guards and have you thrown into prison.\"  You beat a hasty retreat out the door."
+    },
+    {
+      "id": 659,
+      "text": "\"Hey!  No one is allowed beyond this point.  You will have to leave.\"  Guards escort you to a door outside the cell block."
+    },
+    {
+      "id": 660,
+      "text": "You climb up a staircase.  This appears to be the surface level."
+    },
+    {
+      "id": 661,
+      "text": "A drunk dwarf has passed out on a bed of dry straw.  All your attempts to wake him fail utterly."
+    },
+    {
+      "id": 662,
+      "text": "Opening the door to this cell was not a wise decision.  Several large fungus creatures sense their chance at freedom.  They appear eager and willing to destroy you if it will enable their escape. "
+    },
+    {
+      "id": 663,
+      "text": "Your attempt at unlawful entry to the town jail brings guards running.  They draw steel as they approach. \"Planning to break out those miserable dunderheads we caught snooping around the graveyard?  Well, consider a cell your new home!\""
+    },
+    {
+      "id": 664,
+      "text": "Except for a few boxes stacked in the corner, the cell is empty.  You discover that the boxes contain numerous pamphlets.  They all promise benefits to those who worship Vixies, the Spider Goddess."
+    },
+    {
+      "id": 665,
+      "text": "You open the door from the outside without difficulty."
+    },
+    {
+      "id": 666,
+      "text": "You enter an area that bustles with clerks and aides.  They carry out their work with a self-important air.  Some sit at tables scribbling furiously.  Others struggle with armfuls of official-looking documents and sealed scrolls."
+    },
+    {
+      "id": 667,
+      "text": "The air has become bitterly cold.   However, a soft glow emanates from the back of the room.  You are drawn to its suggestive promise of warmth."
+    },
+    {
+      "id": 668,
+      "text": "Drawn to the soft glow, you edge your way slowly towards the far wall.  You find that you're shivering uncontrollably now.  Without any warning, the door behind you suddenly slams shut.  An icy draft sprints down your back."
+    },
+    {
+      "id": 669,
+      "text": "The mortar, which bonds the floor's stone blocks together, glows with an unnatural light.  Will someone volunteer to touch the floor?"
+    },
+    {
+      "id": 670,
+      "text": "A green ball of light shoots out from the floor. Stunned, your volunteer collapses in a daze. The ball explodes into particles across the floor. Your feet feel an electrical surge. It zips through your bodies, shocking you like lab rats in a metal cage."
+    },
+    {
+      "id": 671,
+      "text": "Coursing across the floor from the room's outer walls, the electric bolts of energy converge at a centralized point. Light particles swirl and swell upward forming a nebulous humanoid shape. Pointing an amorphous limb in your direction, it casts a spell."
+    },
+    {
+      "id": 672,
+      "text": "From deep within the ground, you hear a  rumbling.  The stone floor begins to shake unsteadily.  Large cracks begin to split the stone surface.  Suddenly, the floor erupts into rubble.  An army of huge insects boil up out of the floor."
+    },
+    {
+      "id": 673,
+      "text": "The summoner of this plague of centipedes has disappeared from sight."
+    },
+    {
+      "id": 674,
+      "text": "You pause and listen intently.  The sounds are muffled and repetitive.  You suspect that they are the sounds of shuffling feet.  A strong odor of rotting, decaying flesh assaults your nostrils.  There can only be one explanation.  Zombies must be nearby. "
+    },
+    {
+      "id": 675,
+      "text": "You stumble into a swarming hive of zombies.  Several of them must have been created quite recently.  The place is bursting at the seams and appears hardly able to accommodate such a large number."
+    },
+    {
+      "id": 676,
+      "text": "An old, mummified corpse sits in a corner.  Its right arm has been ripped off just below the elbow, and rats have gnawed off its feet."
+    },
+    {
+      "id": 677,
+      "text": "You find Cragentooth's cot.  The mattress is infested by maggots, fleas, and spiders.  Disgusted, you broaden your search.  The place crawls with loathsome critters.  These conditions are repulsive.  You quickly determine that nothing valuable is here."
+    },
+    {
+      "id": 678,
+      "text": "You are overcome by a bout of dizziness.  For some inexplicable reason, your compass appears unable to provide you with an accurate reading."
+    },
+    {
+      "id": 679,
+      "text": "Created out of solid bronze, an imposing nine foot tall idol stands just in front of you.  The idol is in the image of a Anti'id.  Do you wish to destroy it?"
+    },
+    {
+      "id": 680,
+      "text": "With the figure destroyed, a small passage is revealed.  It had been secretly hidden beneath the base of the figure."
+    },
+    {
+      "id": 681,
+      "text": "You descend into a tunnel.  Several clawed footprints have been left in the sand.  You proceed cautiously.  This tunnel may be used quite regularly."
+    },
+    {
+      "id": 682,
+      "text": "Apparently, Cragentooth worshipped a graven deity in private.  You wonder what his followers' reaction would have been had they been aware of Cragentooth's lack of devotion to their own god.  He probably would have literally been skinned alive."
+    },
+    {
+      "id": 683,
+      "text": "The idol crashes to the floor and splits in two.  A stream of small, glittering gems pour out of the broken figure."
+    },
+    {
+      "id": 684,
+      "text": "You are just about to slip through the secret door to Cragentooth's quarters, when a brilliant light bolts down from above.  It heavily impacts the ground behind you.  You turn your head.  An eight foot figure stares over your shoulder."
+    },
+    {
+      "id": 685,
+      "text": "The being looks very much like the idol you just destroyed.  It raises a tentacled head and speaks to you telepathically.   \"Puny mortals!  I have been sent to take revenge on the desecrators of Xycloxyio's holy sanctuary.\""
+    },
+    {
+      "id": 686,
+      "text": "\"I expect to enjoy devouring your minds as much as Xycloxyio will enjoy devouring your bodies.  Xycloxyio will be most pleased with your capture.\""
+    },
+    {
+      "id": 687,
+      "text": "The magistrate listens with courtesy as you relate your tale of progress.  When you have finished, she responds simply, \"I assure you that you will receive your reward as soon as you have successfully cleared out the beast.\""
+    },
+    {
+      "id": 688,
+      "text": "The place is stock full of provisions.  With a minimum of effort, you could securely barricade the door using some of these heavy crates.  For awhile, this could serve as a temporary resting place."
+    },
+    {
+      "id": 689,
+      "text": "The circular room contains walls which are entirely devoted to scenes of carnage.  There are numerous depictions of large creatures with tentacled heads.  They're often shown attaching these tentacles to helpless victims' skulls."
+    },
+    {
+      "id": 690,
+      "text": "Dwarves, elves, ogres, orcs and even  gnomes are shown having their brains extracted by the strange creatures.   Humans are depicted in only one scene. It's possible that the scenes are   chronological pictographs representing this race's history."
+    },
+    {
+      "id": 691,
+      "text": "Humans are a young race, and they do not appear until the last scene.  Here,   humans are shown engaged in battle with the strange creatures.  The humans are fighting the creatures using highly developed mental capabilities, and they are winning."
+    },
+    {
+      "id": 692,
+      "text": "Perhaps, Realmz owes its existence to the human race.  These numerous strange creatures were in the process of destroying all other races until humans appeared.  Somehow, humans were able to develop their psychic abilities to defeat them on their level."
+    },
+    {
+      "id": 693,
+      "text": "Many ancient songs and stories have proclaimed that the gods created the human race to ensure the survival of the elder races. "
+    },
+    {
+      "id": 694,
+      "text": "After the devastating threat to the elder races had been eliminated, the gods supposedly lost interest in humankind.  The race had fulfilled its original purpose.  It was physically weak and unintelligent.  They agreed that it would probably die out."
+    },
+    {
+      "id": 695,
+      "text": "However, one goddess did take pity on the puny race.  She granted humans the power to learn and the ability to work together.  While preoccupied over these ancient myths, you utterly fail to notice the arrival of several strange, tentacled beings."
+    },
+    {
+      "id": 696,
+      "text": "There's no doubt that these creatures could have virtually destroyed Realmz and its inhabitants.  Their tentacles try to attach as you strain your sword skills to the limits.  Although you manage to defeat them, you shrink at the mere thought of an army."
+    },
+    {
+      "id": 697,
+      "text": "Those that inhabit the Realmz are fortunate that these horrendous creatures no longer exist in such vast numbers."
+    },
+    {
+      "id": 698,
+      "text": "As soon as you step into the hidden passage, you are assaulted by a mental attack.  It is a psychic barrier used to prevent weak-minded Dogre from entering this area of the fortress.  Your magical energy drains from your body."
+    },
+    {
+      "id": 699,
+      "text": "You come across a large tentacled creature.  It is slowly dissecting a live Dogre, carefully removing and labeling various body parts.  Still conscious, the Dogre is unable to shriek or move.  It is gagged and immobilized by large leather straps."
+    },
+    {
+      "id": 700,
+      "text": "You enter a large room filled with several unfamiliar objects.  Curious, you begin to experiment with several of the devices attempting to figure out what they're used for.  Suddenly, four creatures converge upon your party from opposite directions."
+    },
+    {
+      "id": 701,
+      "text": "The Mush Men fight for their lives.  They have become completely surrounded."
+    },
+    {
+      "id": 702,
+      "text": "You greet a passing wizard who smiles warmly at you.  You strike up a wonderful conversation and become friends.  He asks about your travels and would like to know if he may accompany you on your exploits?"
+    },
+    {
+      "id": 703,
+      "text": "You return to his small shack to gather his things before you set off with your new found friend.  His name is Vodalian and he states that he simply loves adventure."
+    },
+    {
+      "id": 704,
+      "text": "A seedy looking group of gnomes are sitting at a vomit stained table.  They are swilling cheap grog from a clay jug.  They seem more concerned with getting more than their share of the wine and pay you little attention."
+    },
+    {
+      "id": 705,
+      "text": "Just as you're about to dismiss the group,  Vodalian rears up a glinting dagger and charges against one of the gnomes.  \"Murderous scum!  I shall avenge my sweet Alex this very day!\""
+    },
+    {
+      "id": 706,
+      "text": "You burst forth in an attempt to restrain Vodalian.   Gnomes rush from the shadows to aid their drunken friends."
+    },
+    {
+      "id": 707,
+      "text": "Vodalian thanks you for your aid.  \"This vermin slew my son.  Alex was an extremely intelligent and talented pupil.  He could have grown to become a powerful mage.  This foul creature deserved a more cruel demise.\""
+    },
+    {
+      "id": 708,
+      "text": "The goblins scatter.  The body of their chief lies broken and still.  Blood gurgles forth amid the lonely quiet."
+    },
+    {
+      "id": 709,
+      "text": "A large group of flesh fiends stand on the far side of the small stream.  They seem reluctant to approach the water.  If you venture across, they will surely attack."
+    },
+    {
+      "id": 710,
+      "text": "Upon the destruction of the mush mound, the surrounding podlings wither and die."
+    },
+    {
+      "id": 711,
+      "text": "You plow through thick clumps of fungus. Movement flashes at your side.  You halt and warily eye the surroundings.  A constant, steady rustling seems to come from all directions.  You feel quite on edge.  There's something odd about these plants."
+    },
+    {
+      "id": 712,
+      "text": "Huge fungus-like plants grow throughout the area.  Each fungus is surrounded by small podlings attached by long vines.  The podlings slither in your direction."
+    },
+    {
+      "id": 713,
+      "text": "A faint smell begins to permeate the air. It slowly gains strength.  You toy with the idea of capturing one of the creatures.  A wizard would pay dearly to use such a  plant in experiments.  The nasty odor hastily devours this thought."
+    },
+    {
+      "id": 714,
+      "text": "Open grassland is marred by a dark, gaping pit.  Muted bubbling fizzles below.  A large log lies near the pit's edge.  It might be possible to use it as a crude, makeshift ladder.  Do you push the log in and attempt to enter the pit?"
+    },
+    {
+      "id": 715,
+      "text": "The cleric emits a low, guttural chant.  Near the cavern wall, corpses twitch and writhe.  Compelled to serve as  reinforcements to the cleric's unholy army, the grotesque bodies awkwardly disentangle themselves."
+    },
+    {
+      "id": 716,
+      "text": "You start to slowly clamber down the log.  With a heavy thump, the log shifts to the right and begins to shake with violent force.  Clinging for dear life, you scramble your way back up out of the pit.  Massive slime creatures slither up the log."
+    },
+    {
+      "id": 717,
+      "text": "Your movements attract the attention of another mush mound."
+    },
+    {
+      "id": 718,
+      "text": "The clamor of battle attracts the attention of several krise.  They rush to the aid of their clansmen."
+    },
+    {
+      "id": 719,
+      "text": "Several warriors from the village rush to defend their chief."
+    },
+    {
+      "id": 720,
+      "text": "Several krise arrive on the scene.  The sounds of battle reverberating throughout the caverns have brought them running to investigate the commotion. "
+    },
+    {
+      "id": 721,
+      "text": "With the annihilation of Rewop, his companions are no longer able to remain in the Realmz.  They quickly fade away, returning to the smoky Abyss of their true home."
+    },
+    {
+      "id": 722,
+      "text": "Rewop summons a minor demon to fight at his side.  He is an intimidating, powerful foe."
+    },
+    {
+      "id": 723,
+      "text": "Fire fiends attack.  Their yellow fangs ooze steaming ichor as they lunge from every direction."
+    },
+    {
+      "id": 724,
+      "text": "Deep crags and pits of sulfurous lava make the footing treacherous.  Periodically, growls belch from the hot inner recesses.  It's difficult to believe that some creature could breathe and survive these steamy, molten pits."
+    },
+    {
+      "id": 725,
+      "text": "More centipedes boil up from beneath the floor tiles.  Without a pause, they crunch over the dead husks of their own kind in their relentless pursuit of you."
+    },
+    {
+      "id": 726,
+      "text": "The Widow of the Web possesses the ability to control lesser arachnids.  She draws on this power to compel her lesser cousins to aid her in battle."
+    },
+    {
+      "id": 727,
+      "text": "At the death of their leader, troopers begin to scatter and run.  You repeatedly bellow out orders for them to stand their ground.  The situation deteriorates into panic and disorder."
+    },
+    {
+      "id": 728,
+      "text": "You walk down a dimly lit passage.  The odor of cheap wine intermingles with   spiced potatoes.  The raucous din of drunken patrons swells the close, musty hallway."
+    },
+    {
+      "id": 729,
+      "text": "A worn carpet has been stained by  countless mugs of spilled ale.  Patches of mold grow in dark corners of the room.  The rotting remains of potatoes have been ground into the carpeting."
+    },
+    {
+      "id": 730,
+      "text": "You head towards Bigbelly.  An Orc warrior steps forward and offers to buy you a drink.  The moment your attention is diverted, Bigbelly bolts for the bar's back door.  At this second, the path of pursuit is free and clear.  Do you dash after him?"
+    },
+    {
+      "id": 731,
+      "text": "You enter the musty, dank cellar.  Immense, dirty claw prints trail off into the distance.  From somewhere up ahead, growls rumble in a low-toned threat."
+    },
+    {
+      "id": 732,
+      "text": "Encouraged by countless mugs of ale, a few of Bigbelly's buddies rise to attack."
+    },
+    {
+      "id": 733,
+      "text": "It's pretty dark down here.  You may want to cast some light.  Click the TORCH button  OR   Cast a light spell if you have one.    -The Protector-"
+    },
+    {
+      "id": 734,
+      "text": "Several inches of rancid water cover the floor.  A cruddy drain is clogged by accumulated filth and grime."
+    },
+    {
+      "id": 735,
+      "text": "You pry the warped trap door up by a huge iron ring.  The rusty hinges groan in protest.  Beneath the door is a small pit that holds a large leather sack.  The bottom of the sack has rotted away, but the contents are as valuable as ever."
+    },
+    {
+      "id": 736,
+      "text": "A large pit slowly drains the stagnant water from this room.  In the bottom of the pit you see a large green pool.  It quivers as each drop of water hits it's surface.  Do you throw an object in the well to test it's depth?"
+    },
+    {
+      "id": 737,
+      "text": "You kick a large stone into the well.  It does not land with the expected splash.  Instead, it hits the green pool with a loud slap.  It sounds as if the stone has hit a large blob of clay.  If only that was the case..."
+    },
+    {
+      "id": 738,
+      "text": "A old ladder leads down a small pit.  You enter the small hole only to emerge into a small room."
+    },
+    {
+      "id": 739,
+      "text": "A loud growl to the west alerts you that you are not alone.  With luck, this is knowledge the creature who made the growl does not have."
+    },
+    {
+      "id": 740,
+      "text": "A number of flasks are in a crate near a barrel.  The barrel is full of lamp oil.  It's an easy task to fill the flasks with oil."
+    },
+    {
+      "id": 741,
+      "text": "The rations in this sack seem fit for consumption.  They appear to be pilfered from the tavern above.  Obviously, the minotaurs must sneak to the surface and steal them."
+    },
+    {
+      "id": 742,
+      "text": "Suddenly the floor gives way.  A large pit opens beneath your feet.  Those that do not DETECT TRAP do not see the danger in time and fall in."
+    },
+    {
+      "id": 743,
+      "text": "The noise of the trap attracts the creatures that lives here.  As you manage to gather yourself together a pair of large minotaur rushes you from the west."
+    },
+    {
+      "id": 744,
+      "text": "The foot locker is locked but it's easily defeated."
+    },
+    {
+      "id": 745,
+      "text": "A large lever sticks from a pillar.  Do you move the lever?"
+    },
+    {
+      "id": 746,
+      "text": "The lava begins to drain from the pool.  It seeps into what must be an underground storage tank."
+    },
+    {
+      "id": 747,
+      "text": "The pool of water drains through a drain in the wall.  It must be headed for an underground storage chamber."
+    },
+    {
+      "id": 748,
+      "text": "The minotaurs must have used the lava for heat and the cool water to drink.  However, with both the lava and water in the storage tank below, a great gush of steam fills the room.  You are literally cooking alive."
+    },
+    {
+      "id": 749,
+      "text": "With both levers thrown, you feel a low rumble below ground.  In now dawns on you that fire and water don't mix."
+    },
+    {
+      "id": 750,
+      "text": "You throw the switch.  A loud bang sounds from nearby."
+    },
+    {
+      "id": 751,
+      "text": "Several dead and mutilated bodies are scattered about the area.  Most look to have been slain patrons of the seedy bar above.  A few carrion slugs are cleansing the area of all dead flesh.  Your living flesh will be a welcome treat."
+    },
+    {
+      "id": 752,
+      "text": "The room is filled with many provisions.  All of which are now rotten and useless."
+    },
+    {
+      "id": 753,
+      "text": "Many tables and chairs are stacked in the corner.  At one time they must have been of some worth, but they have been rotting here for so long they are now worthless."
+    },
+    {
+      "id": 754,
+      "text": "An old sump near the back of the room must lead to some underground cavern.  A few denizens of the deep have found their way to this room.  They are feasting on the sacks of rotting wheat in the corner of the room."
+    },
+    {
+      "id": 755,
+      "text": "This lever is rusted so bad it will not budge."
+    },
+    {
+      "id": 756,
+      "text": "This lever looks to have been oiled recently.  Do you wish to throw it and see what happens?"
+    },
+    {
+      "id": 757,
+      "text": "There are several potions of worth on this table."
+    },
+    {
+      "id": 758,
+      "text": "You spot a group of the vermin that infest this decrepit cellar.  Do you wish to attack them?"
+    },
+    {
+      "id": 759,
+      "text": "As you eye a stairwell that leads to the root cellar, a nearby scullery maid speaks to you.  \"I would not go down there.  Quite a few that do never come back up.  Olif has abandoned that cellar long ago.  Something's down there."
+    },
+    {
+      "id": 760,
+      "text": "Olif has offered a generous reward of gold to anybody who can root it out.  So far none of the takers have returned.\"  Do you wish to enter the abandoned root cellar?"
+    },
+    {
+      "id": 761,
+      "text": "Olif, the owner of this sleaze pit rushes up to you.  Having heard the noise from below he speaks out, \"I don't believe what I'm seeing  Thought for sure that whatever was down there had got you too. "
+    },
+    {
+      "id": 762,
+      "text": "I suppose your wanting to collect the reward I have out for the killing of what was down there.  I tell you what.  How about I give you a choice.  I can give you the gold, or I can give you what I have in my pocket.  What do you say?\""
+    },
+    {
+      "id": 763,
+      "text": "\"If that is your choice.\"  Olif hands you a heavy bag of coin.  Olif pulls out his hand and reveals a ring with a large glowing gem.  He plays with it absentmindedly.  Do you ask him to reconsider and ask for what he has in his pocket?"
+    },
+    {
+      "id": 764,
+      "text": "Olif ponders for a moment and then nods.  \"Very well, since you are so sure of yourself, you can indeed have what I have in my pocket.\""
+    },
+    {
+      "id": 765,
+      "text": "Olif reaches in his pocket and pulls out a bright copper tarsk.  He flips it at your feet and walks away, \"Don't spend it all in one place!\""
+    },
+    {
+      "id": 766,
+      "text": "He grudgingly hands you the sack of coins.  \"If I were you, I would be moving on.  Quite a few in this fine establishment would not mind slitting your throat for that coin.  Now be gone before I have you thrown out!\""
+    },
+    {
+      "id": 767,
+      "text": "A pack of ghouls is devouring a man in the corner.  From the blood stained remnants of his cloak, he appeared to be one of the town guards.  With a sneer on their blood stained lips, they attack like a pack of wild dogs."
+    },
+    {
+      "id": 768,
+      "text": "The remains of the man are scattered about the room.  He appears to have been a fine warrior in his day for he possessed a keen edged weapon."
+    },
+    {
+      "id": 769,
+      "text": "Many mangled corpses and gnawed bones are heaped in the corner of the room.  A macabre site if you ever saw one."
+    },
+    {
+      "id": 770,
+      "text": "As you prepare to leave the dead in peace, you notice one pile of bodies seems to shift.  From beneath the pile of bodies you can hear a grunting noise.  Do you investigate?"
+    },
+    {
+      "id": 771,
+      "text": "As you pull several bodies from the pile it begins to topple.  As the grotesque and misshapen forms slide from the pile you uncover several carrion feeders."
+    },
+    {
+      "id": 772,
+      "text": "As you wipe the gore from your blades you spot a small ledger near the back of the room.  To read the ledger, select \"Ledger\" from the Maps/Notes Menu."
+    },
+    {
+      "id": 773,
+      "text": "From somewhere behind you, near where you came in, you hear what sounds like a high pitched moaning.  The hair on the back of your neck begins to stand as you contemplate the source."
+    },
+    {
+      "id": 774,
+      "text": "You see a trap door in the floor.  Below is a smooth sloping shaft.  Do you wish to slide down?"
+    },
+    {
+      "id": 775,
+      "text": "Do you push the lever?"
+    },
+    {
+      "id": 776,
+      "text": "A grimy drain, and a way to move about."
+    },
+    {
+      "id": 777,
+      "text": "Many apprentice wizards are about the drudgery of taking inventory of their food stores.  Each apprentice will strive his best to prove themselves to their master by being the first to slay you."
+    },
+    {
+      "id": 778,
+      "text": "You have found the animal pen.  The beasts within do not recognize you as their masters and attack before you can close the door behind you."
+    },
+    {
+      "id": 779,
+      "text": "The very orderly quarters of the apprentices stands before you.  Most of those that call this home are gone.  However, a few are completing some studies.  They are quick to respond to your intrusion."
+    },
+    {
+      "id": 780,
+      "text": "You enter the semi private quarters of the headmaster.  On a small table near the bed you see his daily diary.  The instructions on the cover are for the headmaster to fill out a daily report on the training of his students."
+    },
+    {
+      "id": 781,
+      "text": "Each day that page must be ripped out and delivered to the grand wizard by the student who has performed poorly for that day.  Today's log is only partially filled in."
+    },
+    {
+      "id": 782,
+      "text": "A gruesome site indeed.  The remains of some sacrificed individual lies heaped in the corner to rot.  A loud buzzing comes from the corpse as a plague of pests and zephyr flies feed on the corpse."
+    },
+    {
+      "id": 783,
+      "text": "Two identical statues are in each corner of the room.  However, the statue on the right seems to have a soft white glow."
+    },
+    {
+      "id": 784,
+      "text": "Inscribed in stone at the base of the statue are the instructions for a sacrificial ritual.  The eerie glow about the statue almost gives you the impression that it's alive.  In fact it's undead."
+    },
+    {
+      "id": 785,
+      "text": "The noise has alerted a nearby Dogre patrol."
+    },
+    {
+      "id": 786,
+      "text": "You approach the headmaster who waits patiently for your arrival.  A dead apprentice lies at his feet like a rag doll.  His body and face charred like overdone ribs.  He answers your question before you can even ask."
+    },
+    {
+      "id": 787,
+      "text": "\"I am not a believer in the old saying,  'Don't punish the messenger'.  If he had done his job, there would have been only good news to report.\"  With that said he seats himself in his fine silk chair."
+    },
+    {
+      "id": 788,
+      "text": "\"So you have slain my master.  No matter.  It only saves me the time of having to destroy that feeble man myself.  For many months now I have planned to overthrow him.  You only rob me of the pleasure that would have given me."
+    },
+    {
+      "id": 789,
+      "text": "My enemy is dead, but you shall substitute in his place.\"  With lightning quick reflexes, he smashes a pair of amber crystals at his feet.  As you clear the smoke from your eyes you stair at the a pair of immense beings."
+    },
+    {
+      "id": 790,
+      "text": "You find the secret treasure of the headmaster.  He has been massing his wealth and fortune for some time in anticipation of overthrowing his master.  This money would have gone a long way towards bribing the apprentices."
+    },
+    {
+      "id": 791,
+      "text": "Though you have set me back with your wanton destruction of my students, I fear that battling you can only further weaken my position.  If you leave my quarters in peace I shall let you live.  Otherwise I shall deal with you harshly.  Do you leave?"
+    },
+    {
+      "id": 792,
+      "text": "You are very unceremoniously dumped on the floor like sack of wheat.  Your pride is not the only thing bruised this day."
+    },
+    {
+      "id": 793,
+      "text": "You unwise decision to pull the lever has not only caused you to suffer searing pain, but has attracted the attention of a nearby group of apprentices."
+    },
+    {
+      "id": 794,
+      "text": "This room is empty save a strong smell of perfume."
+    },
+    {
+      "id": 795,
+      "text": "You interrupt a woman.  \"Get out!  I shall have the town guard throw you in prison for this!\"  You narrowly dodge a vase that is thrown at you."
+    },
+    {
+      "id": 796,
+      "text": "You walk in as a rather embarrassed man finishes buttoning up his robe.  He mills about gathering his things and leaves in a hurry."
+    },
+    {
+      "id": 797,
+      "text": "A storeroom.  Nothing of interest as far as you can see.  You could rest in here without being found."
+    },
+    {
+      "id": 798,
+      "text": "A gnome is surprised by your boldness.  \"I will ask you to leave.  I have friends in the town militia.  It would be best if I did not have to give them your names.\"  Do you leave?"
+    },
+    {
+      "id": 799,
+      "text": "Having called his bluff, he gives you a stern look and stomps out of the room.  \"You shall regret your hasty decision!\""
+    },
+    {
+      "id": 800,
+      "text": "Waiting for you at the bottom of the stairs is the small gnome you so rudely interrupted upstairs.  Behind him is a large group of armed militia.  \"That's them Boron!  That group right there.  Now if you want your gold, you will have to earn it.\""
+    },
+    {
+      "id": 801,
+      "text": "As you clean your blades on the tunics of the fallen, you hear one of the employees of this establishment yell out the door to a group of nearby town militia.  She is calling for help.  You hear the clank of weapons and armor as they come running."
+    },
+    {
+      "id": 802,
+      "text": "You hear the same woman call to yet another group.  However, they are far off and this gives you ample time to scram."
+    },
+    {
+      "id": 803,
+      "text": "A burley dwarven warrior is snoring loudly on the bunk.  Several empty flagons of ale are scattered about the room.  Do you wake him?"
+    },
+    {
+      "id": 804,
+      "text": "He awakes with a start.  As he shakes the cobwebs from his head he begins to pat his belt.  Suddenly he stands and begins to shout, \"Hey!  Who stole me purse!\" Without hesitation he grabs a nearby ax and begins to swing."
+    },
+    {
+      "id": 805,
+      "text": "\"Me be tinkin me be knowing who has me purse!  Me be tinkin on getting it back, just quick.\""
+    },
+    {
+      "id": 806,
+      "text": "Suddenly Reppep Rd stops attacking. \"Oie!  Me be sorry folks. I guess I lost me head.  Twas the girl who me thinks took me coin.  Perhaps you will let me travel with you for a while. Tis a dangerous place to be traveling alone. Tink I tag along with ye.\""
+    },
+    {
+      "id": 807,
+      "text": "\"Oie!  Tis a good ting you be doing.  Me name is 'Reppep Rd'  Me been waiting in Bywater fer tree days for me mate to show.   Lookin be he not be showin.\""
+    },
+    {
+      "id": 808,
+      "text": "Throw the lever?"
+    },
+    {
+      "id": 809,
+      "text": "Do you want to take the top off of the coffin?"
+    },
+    {
+      "id": 810,
+      "text": "At first the coffin appears to be empty.  The bottom appears to be a shinny black silk.  Suddenly the silk begins to move.  It's not silk after all but a solid mass of tiny black spiders."
+    },
+    {
+      "id": 811,
+      "text": "The spiders begin to grow in size.  You quickly attempt to smash them with your weapons but there are just too many.  Dozens of large spiders pour out of the coffin as they become too big to fit inside."
+    },
+    {
+      "id": 812,
+      "text": "With gore still dripping from your blades, more spiders continue to pour from the coffin."
+    },
+    {
+      "id": 813,
+      "text": "The coffin is buried in spider flesh.  Many of the spiders did not escape in time and were crushed by the growing bodies of their fellow spiders.  A sickly ooze of crushed spider flesh hangs on the coffin."
+    },
+    {
+      "id": 814,
+      "text": "You scrape the disgusting site clear and find a small skeletal figure.  The figure is without any ornaments save a leather belt, a wand clasped in one hand, and a scroll case in the other."
+    },
+    {
+      "id": 815,
+      "text": "The scroll case holds writings that predict the rule of the Realmz by Vixies.  The spider god."
+    },
+    {
+      "id": 816,
+      "text": "A large group of spiders is in the corner.  They make no move to attack."
+    },
+    {
+      "id": 817,
+      "text": "As you approach the lever, the spiders attack."
+    },
+    {
+      "id": 818,
+      "text": "The spiders have been tasked to guard the treasure with their lives.  They do so."
+    },
+    {
+      "id": 819,
+      "text": "With the Widow of the Web banished from the Realmz, her powers to keep the temple also in the Realmz fails.  The Widow will have to face Vixies and explain her failure to achieve victory over a few puny mortals."
+    },
+    {
+      "id": 820,
+      "text": "A small pile of wealth and valuables."
+    },
+    {
+      "id": 821,
+      "text": "At the far end of the hall is the town magistrate.  She is glowering at you.  \"What are you doing here!  Now you shall see why curiosity has killed the cat!\"  She pushes a button on a nearby wall."
+    },
+    {
+      "id": 822,
+      "text": "A sliding door opens to reveal a small animal pen beyond.  Seven large boars exit and begin to nuzzle the magistrates legs.  \"You are not fit for swine, yet it looks as if you shall have to do this day.\""
+    },
+    {
+      "id": 823,
+      "text": "A squad of Dogre are bunked here.  Most are off somewhere, but a few are lazing around sharpening their weapons."
+    },
+    {
+      "id": 824,
+      "text": "As you enter this door you feel large powerful hands grasp you and toss you towards the center of the room.  You are surrounded by several large squads of gnath warriors."
+    },
+    {
+      "id": 825,
+      "text": "The leader restrains his troops from falling on you immediately. \"What you do here,  you not Dogre?\" You take the opportunity to lie your way out of this dire situation and buy yourself some time. They are satisfied that your no friends to the Dogre."
+    },
+    {
+      "id": 826,
+      "text": "These gnath are here to rescue some of their warriors that have been captured.  One of the warriors is the son of their chief.  They have been ordered to free the chiefs sun or die in the attempt."
+    },
+    {
+      "id": 827,
+      "text": "The room is littered with the dead bodies of over two dozen Dogre and a few gnath as well.  It looks as if they have been hiding from the Dogre in this room and picking off the patrols as they leave for duty from nearby barracks quarters."
+    },
+    {
+      "id": 828,
+      "text": "Even with the great advantage of surprise on their side, they cannot hope to defeat the entire force of Dogre.  \"You help, we help you.  We know big secret, but we too big to fit.  You help us?\"  Do you ally with the gnath for now?"
+    },
+    {
+      "id": 829,
+      "text": "\"You no can tell  we here.  You are bad!\"  The gnath warriors jump on you like a ton of bricks."
+    },
+    {
+      "id": 830,
+      "text": "The few gnath that were wounded and did not engage you right away are pressed to attack."
+    },
+    {
+      "id": 831,
+      "text": "The gnath sketches out a crude map that shows a secret tunnel.  He claims there is treasure on the other side but they are too big to fit through the tunnel.  \"Now you come with us.  We attack now why we still can.\""
+    },
+    {
+      "id": 832,
+      "text": "You travel with your large but smelly friends past several turns in the hall.  \"Behind is great Dogre army.  We surprise and kill all we can.  Then no more Dogre.\""
+    },
+    {
+      "id": 833,
+      "text": "With the help of two strong gnath, you smash the door in.  Beyond is a large force of Dogre.  Perhaps too many.  Even the surprise on the gnath leaders face says that there are more Dogre than he anticipated."
+    },
+    {
+      "id": 834,
+      "text": "Loosing no time, you and your gnath friends wade into the throng and cut down as many as you can before they can form up.  However, there are so many that things soon turn against you."
+    },
+    {
+      "id": 835,
+      "text": "The gnath was no liar.  There is a huge pile of coins that almost staggers the imagination.  However, the bulk of the coin is copper and is far too heavy to be of any real worth.  Even so, the gold you find is still quite a tidy sum."
+    },
+    {
+      "id": 836,
+      "text": "A massive force of Dogre is stationed in this large barracks."
+    },
+    {
+      "id": 837,
+      "text": "The steward informs the kings provisioner to allow you to have anything you want from the kings storeroom.  \"You will find the storeroom near the entrance.  Fair thee well.\""
+    },
+    {
+      "id": 838,
+      "text": "A large group of  armed men prevent you from going upstairs.  \"Those are the private chambers of the castle.  You are not allowed there citizen!\""
+    },
+    {
+      "id": 839,
+      "text": "The kings provisioner has learned of your alliance with the king and allows you to take whatever you wish."
+    },
+    {
+      "id": 840,
+      "text": "You find the corpse of a dead human.  His leg is swollen and infected from some type of animal bite.  The scavengers have not yet taken their toll, so the body is pretty fresh.  On his person you find nothing but a small scrap of paper."
+    },
+    {
+      "id": 841,
+      "text": "Below the door in the floor are several small cases sealed in wax.  Inside are stacks of parchment."
+    },
+    {
+      "id": 842,
+      "text": "On the floor at your feet is a dust covered whip.  As you brush the dust away you can see that the leather underneath is in fine condition."
+    },
+    {
+      "id": 843,
+      "text": "In the far corner of the room is a large skeleton of some demonic beast.  Centuries of dust cover it's now decimated body.  It has something gripped in it's clawed hand."
+    },
+    {
+      "id": 844,
+      "text": "Pulling the items from the creatures clenched fist you find a long bull whip.  The leather is in perfect condition after all these years.  It's obviously magical in nature."
+    },
+    {
+      "id": 845,
+      "text": "You are hurled back by the ferocity of the evil within."
+    },
+    {
+      "id": 846,
+      "text": "You discover a small hidden shaft behind some crates.  As you enter the tight tunnel you hear loud squeaking from the far end of the shaft.  The stench of decay and rot is more than you can stand as you paint your shoes the color of your breakfast."
+    },
+    {
+      "id": 847,
+      "text": "As you continue to listen you determine that the squeaks come from giant rats.  They seem to be worked up about something."
+    },
+    {
+      "id": 848,
+      "text": "You can now see in the dim light."
+    },
+    {
+      "id": 849,
+      "text": "The light fades leaving you in darkness."
+    },
+    {
+      "id": 850,
+      "text": "You enter an ancient temple.  The floor is covered in a sea of giant rats.  A few of the largest rats appear to be gnawing at a stone coffin at the far end of the room.  Within seconds the rats take notice of you and begin to scurry your way."
+    },
+    {
+      "id": 851,
+      "text": "Even before the first wave of vermin reach you the rats succeed in pulling the lid off of the coffin.  As the lid tumbles to the floor every rat in the room suddenly becomes quiet and sniffs the air."
+    },
+    {
+      "id": 852,
+      "text": "Whatever is in the coffin seems to be of some importance to them.  Slowly a figure begins to rise from the coffin.  The only way to describe it would be to say some sort of Rat Man creature.  It slowly floats over the room."
+    },
+    {
+      "id": 853,
+      "text": "Suddenly without warning the creature opens it's blood red eyes as it comes to a standing position before you.  With a high pitched squeal it commands it's minions to gnaw the very flesh from your bones."
+    },
+    {
+      "id": 854,
+      "text": "The Rat Demi-Lord summons more rats to fight at it's side."
+    },
+    {
+      "id": 855,
+      "text": "Inside the coffin you find a small leather pouch with a few tiny glass mice."
+    },
+    {
+      "id": 856,
+      "text": "You hear rustling feet behind you.  As you spin around in the darkness you see a strange black shadow creeping along the floor.  It nears the edge of your visible light.  Suddenly the dead corpse of the Rat Demi-Lord looms in front of you. "
+    },
+    {
+      "id": 857,
+      "text": "Strange glowing eyes tell you that it has entered the realm of the nether world.  It has summoned a sea of rats and sends them after the treasure you stole from its coffin."
+    },
+    {
+      "id": 858,
+      "text": "Strange footprints trail off to the east.  Something else would appear to live deeper within the cave."
+    },
+    {
+      "id": 859,
+      "text": "The evil feeling runs so deep as to prevent any Priest or Crusader from turning."
+    },
+    {
+      "id": 860,
+      "text": "Strange footprints trail off to the east.  Something else would appear to live deeper within the cave."
+    },
+    {
+      "id": 861,
+      "text": "Strange footprints trail off to the east.  Something else would appear to live deeper within the cave."
+    },
+    {
+      "id": 862,
+      "text": "Strange footprints trail off to the east.  Something else would appear to live deeper within the cave."
+    },
+    {
+      "id": 863,
+      "text": "Strange footprints trail off to the east.  Something else would appear to live deeper within the cave."
+    },
+    {
+      "id": 864,
+      "text": "Strange footprints trail off to the east.  Something else would appear to live deeper within the cave."
+    },
+    {
+      "id": 865,
+      "text": "Strange footprints trail off to the east.  Something else would appear to live deeper within the cave."
+    },
+    {
+      "id": 866,
+      "text": "Strange footprints trail off to the east.  Something else would appear to live deeper within the cave."
+    },
+    {
+      "id": 867,
+      "text": "You arrived in Bywater just in time as a winter storm has just covered the entire region in a thick blanket of snow."
+    },
+    {
+      "id": 868,
+      "text": "An ancient crypt guarded by those that now call it home."
+    },
+    {
+      "id": 869,
+      "text": "Propped up against the corner of the crypt is a shield that sports an interesting design."
+    },
+    {
+      "id": 870,
+      "text": "A small orcish dwelling that belongs to the local witch doctor.  The owner gives you a toothless grin and offers to sell you a few potions and trinkets."
+    },
+    {
+      "id": 871,
+      "text": "You pause and listen intently.  The sounds are muffled and repetitive.  You suspect that they are the sounds of shuffling feet.  A strong odor of rotting, decaying flesh assaults your nostrils.  There can only be one explanation.  Zombies must be nearby. "
+    }
+  ]
+}

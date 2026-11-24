@@ -53,6 +53,13 @@ namespace Realmz.EditorTools.Cartography
             CreateOrUpdateTerrainMaterial(albedoArray, normalArray);
             CreateOrUpdateFoliageMaterial();
             CreateOrUpdateWaterMaterial();
+            foreach (CartographyPropKind kind in Enum.GetValues(typeof(CartographyPropKind)))
+            {
+                if (kind != CartographyPropKind.None)
+                {
+                    LoadOrCreatePropMaterial(kind, out _);
+                }
+            }
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -214,10 +221,11 @@ namespace Realmz.EditorTools.Cartography
         {
             int sliceCount = TerrainLayerNames.Length;
 
-            albedoArray = AssetDatabase.LoadAssetAtPath<Texture2DArray>(AlbedoArrayAssetPath);
-            bool createAlbedo = albedoArray == null || albedoArray.width != TileLayerSize ||
-                                albedoArray.height != TileLayerSize || albedoArray.depth != sliceCount;
-            if (createAlbedo)
+            Texture2DArray existingAlbedo = AssetDatabase.LoadAssetAtPath<Texture2DArray>(AlbedoArrayAssetPath);
+            bool createAlbedo = existingAlbedo == null || existingAlbedo.width != TileLayerSize ||
+                                existingAlbedo.height != TileLayerSize || existingAlbedo.depth != sliceCount;
+            bool copyIntoExistingAlbedo = !createAlbedo && !existingAlbedo.isReadable;
+            if (createAlbedo || copyIntoExistingAlbedo)
             {
                 albedoArray = new Texture2DArray(
                     TileLayerSize,
@@ -232,11 +240,16 @@ namespace Realmz.EditorTools.Cartography
                     wrapMode = TextureWrapMode.Repeat
                 };
             }
+            else
+            {
+                albedoArray = existingAlbedo;
+            }
 
-            normalArray = AssetDatabase.LoadAssetAtPath<Texture2DArray>(NormalArrayAssetPath);
-            bool createNormal = normalArray == null || normalArray.width != TileLayerSize ||
-                                normalArray.height != TileLayerSize || normalArray.depth != sliceCount;
-            if (createNormal)
+            Texture2DArray existingNormal = AssetDatabase.LoadAssetAtPath<Texture2DArray>(NormalArrayAssetPath);
+            bool createNormal = existingNormal == null || existingNormal.width != TileLayerSize ||
+                                existingNormal.height != TileLayerSize || existingNormal.depth != sliceCount;
+            bool copyIntoExistingNormal = !createNormal && !existingNormal.isReadable;
+            if (createNormal || copyIntoExistingNormal)
             {
                 normalArray = new Texture2DArray(
                     TileLayerSize,
@@ -250,6 +263,10 @@ namespace Realmz.EditorTools.Cartography
                     filterMode = FilterMode.Point,
                     wrapMode = TextureWrapMode.Repeat
                 };
+            }
+            else
+            {
+                normalArray = existingNormal;
             }
 
             for (int slice = 0; slice < sliceCount; slice++)
@@ -269,15 +286,22 @@ namespace Realmz.EditorTools.Cartography
 
             albedoArray.filterMode = FilterMode.Point;
             albedoArray.wrapMode = TextureWrapMode.Repeat;
-            albedoArray.Apply(updateMipmaps: false, makeNoLongerReadable: false);
+            albedoArray.Apply(updateMipmaps: false, makeNoLongerReadable: true);
 
             normalArray.filterMode = FilterMode.Point;
             normalArray.wrapMode = TextureWrapMode.Repeat;
-            normalArray.Apply(updateMipmaps: false, makeNoLongerReadable: false);
+            normalArray.Apply(updateMipmaps: false, makeNoLongerReadable: true);
 
             if (createAlbedo)
             {
                 AssetDatabase.CreateAsset(albedoArray, AlbedoArrayAssetPath);
+            }
+            else if (copyIntoExistingAlbedo)
+            {
+                EditorUtility.CopySerialized(albedoArray, existingAlbedo);
+                UnityEngine.Object.DestroyImmediate(albedoArray);
+                albedoArray = existingAlbedo;
+                EditorUtility.SetDirty(albedoArray);
             }
             else
             {
@@ -287,6 +311,13 @@ namespace Realmz.EditorTools.Cartography
             if (createNormal)
             {
                 AssetDatabase.CreateAsset(normalArray, NormalArrayAssetPath);
+            }
+            else if (copyIntoExistingNormal)
+            {
+                EditorUtility.CopySerialized(normalArray, existingNormal);
+                UnityEngine.Object.DestroyImmediate(normalArray);
+                normalArray = existingNormal;
+                EditorUtility.SetDirty(normalArray);
             }
             else
             {
@@ -319,6 +350,10 @@ namespace Realmz.EditorTools.Cartography
             if (mat.HasProperty("_MacroScale")) mat.SetFloat("_MacroScale", 0.085f);
             if (mat.HasProperty("_MacroStrength")) mat.SetFloat("_MacroStrength", 0.10f);
             if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.06f);
+            if (mat.HasProperty("_GroundValueScale")) mat.SetFloat("_GroundValueScale", 0.76f);
+            if (mat.HasProperty("_RoadValueBoost")) mat.SetFloat("_RoadValueBoost", 0.86f);
+            if (mat.HasProperty("_HorizonHazeColor")) mat.SetColor("_HorizonHazeColor", new Color(0.91f, 0.83f, 0.70f, 1f));
+            if (mat.HasProperty("_HorizonHazeStrength")) mat.SetFloat("_HorizonHazeStrength", 0.09f);
 
             EditorUtility.SetDirty(mat);
             return mat;
@@ -369,7 +404,7 @@ namespace Realmz.EditorTools.Cartography
             if (mat.HasProperty("_FrameCount")) mat.SetFloat("_FrameCount", 8f);
             if (mat.HasProperty("_AnimFps")) mat.SetFloat("_AnimFps", 7f);
             if (mat.HasProperty("_Cutoff")) mat.SetFloat("_Cutoff", 0.42f);
-            if (mat.HasProperty("_RootTint")) mat.SetColor("_RootTint", new Color(0.50f, 0.56f, 0.46f, 1f));
+            if (mat.HasProperty("_RootTint")) mat.SetColor("_RootTint", new Color(0.44f, 0.52f, 0.42f, 1f));
             if (mat.HasProperty("_TintColor")) mat.SetColor("_TintColor", Color.white);
 
             EditorUtility.SetDirty(mat);
@@ -379,7 +414,6 @@ namespace Realmz.EditorTools.Cartography
         public static Material CreateOrUpdateWaterMaterial()
         {
             Shader shader = Shader.Find("Realmz/CartographyWater")
-                ?? Shader.Find("Realmz/BywaterShimmerWater")
                 ?? Shader.Find("Universal Render Pipeline/Lit");
             Material mat = AssetDatabase.LoadAssetAtPath<Material>(WaterMaterialPath);
             if (mat == null)
@@ -405,9 +439,9 @@ namespace Realmz.EditorTools.Cartography
 
             if (mat.HasProperty("_BaseMap") && waterAlbedo != null) mat.SetTexture("_BaseMap", waterAlbedo);
             if (mat.HasProperty("_BumpMap") && waterNormal != null) mat.SetTexture("_BumpMap", waterNormal);
-            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", new Color(0.54f, 0.82f, 0.94f, 1f));
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", new Color(0.16f, 0.38f, 0.46f, 1f));
             if (mat.HasProperty("_ShimmerColor")) mat.SetColor("_ShimmerColor", new Color(0.94f, 0.99f, 1.0f, 1f));
-            if (mat.HasProperty("_ShimmerStrength")) mat.SetFloat("_ShimmerStrength", 0.30f);
+            if (mat.HasProperty("_ShimmerStrength")) mat.SetFloat("_ShimmerStrength", 0.34f);
             if (mat.HasProperty("_WaveScale")) mat.SetFloat("_WaveScale", 2.0f);
 
             EditorUtility.SetDirty(mat);
@@ -438,11 +472,12 @@ namespace Realmz.EditorTools.Cartography
 
             bool is4FrameSheet = tex != null && tex.height > 0 && tex.width >= tex.height * 3;
             bool isBridge = kind == CartographyPropKind.StoneBridge;
+            bool isStoneFenceV = kind == CartographyPropKind.StoneFenceV;
             bool isTree = kind == CartographyPropKind.TreeOakA || kind == CartographyPropKind.TreeOakB ||
                           kind == CartographyPropKind.TreePineA || kind == CartographyPropKind.TreePineB ||
                           kind == CartographyPropKind.TreeWillowA;
 
-            mat.enableInstancing = true;
+            mat.enableInstancing = false;
             if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", tex);
             if (mat.HasProperty("_BumpMap") && normalTex != null) mat.SetTexture("_BumpMap", normalTex);
             if (mat.HasProperty("_IsTwoBankAtlas")) mat.SetFloat("_IsTwoBankAtlas", 0f);
@@ -454,7 +489,8 @@ namespace Realmz.EditorTools.Cartography
             if (mat.HasProperty("_BillboardMode")) mat.SetFloat("_BillboardMode", 0f);
             if (mat.HasProperty("_CameraPitchTiltDeg"))
             {
-                mat.SetFloat("_CameraPitchTiltDeg", isBridge ? 4f : (isTree ? 14f : 12f));
+                float pitchTiltDeg = isStoneFenceV ? 30f : (isBridge ? 4f : (isTree ? 14f : 12f));
+                mat.SetFloat("_CameraPitchTiltDeg", pitchTiltDeg);
             }
             if (mat.HasProperty("_WindTipSway")) mat.SetFloat("_WindTipSway", isTree ? 0.028f : 0f);
             if (mat.HasProperty("_TrampleStrength")) mat.SetFloat("_TrampleStrength", 0f);
@@ -462,11 +498,26 @@ namespace Realmz.EditorTools.Cartography
             if (mat.HasProperty("_RootTint")) mat.SetColor("_RootTint", new Color(0.68f, 0.70f, 0.68f, 1f));
             if (mat.HasProperty("_TintColor")) mat.SetColor("_TintColor", Color.white);
             if (mat.HasProperty("_Cutoff")) mat.SetFloat("_Cutoff", 0.45f);
+            if (mat.HasProperty("_ReceiveRootShadowOnly")) mat.SetFloat("_ReceiveRootShadowOnly", 1f);
 
-            if (kind == CartographyPropKind.TorchBrazier && mat.HasProperty("_EmissionColor"))
+            Color emissionColor = Color.black;
+            float emissionWarmMask = 1f;
+            float emissionMinV = 0f;
+            if (kind == CartographyPropKind.TorchBrazier)
             {
-                mat.SetColor("_EmissionColor", new Color(0.35f, 0.16f, 0.04f, 1f));
+                emissionColor = new Color(2.4f, 1.15f, 0.30f, 1f);
+                emissionWarmMask = 1f;
+                emissionMinV = 0.44f;
             }
+            else if (kind == CartographyPropKind.BywaterInn)
+            {
+                emissionColor = new Color(0.85f, 0.56f, 0.18f, 1f);
+                emissionWarmMask = 1f;
+                emissionMinV = 0.16f;
+            }
+            if (mat.HasProperty("_EmissionColor")) mat.SetColor("_EmissionColor", emissionColor);
+            if (mat.HasProperty("_EmissionWarmMask")) mat.SetFloat("_EmissionWarmMask", emissionWarmMask);
+            if (mat.HasProperty("_EmissionMinV")) mat.SetFloat("_EmissionMinV", emissionMinV);
 
             EditorUtility.SetDirty(mat);
             return mat;

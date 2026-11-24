@@ -1,0 +1,549 @@
+{
+  "schema": "ScenarioPackageJson",
+  "schema_version": "1.0.0",
+  "exporter": "realmz-exporter.scenario_exporter",
+  "scenario": "Prelude to Pestilence",
+  "source_scenario_name": "Prelude to Pestilence",
+  "slug": "prelude_to_pestilence",
+  "header": {
+    "recommended_level": 30,
+    "max_level": 36,
+    "start_land_level": 1,
+    "start_look_x": 9,
+    "start_look_y": 62,
+    "file_size_bytes": 316
+  },
+  "map_names": [
+    "Mountain View",
+    "Tresandra Map",
+    "Monk's Map",
+    "Map to Payment",
+    "Map of \"Secret\" hideout.",
+    "Ropols Belongings",
+    "Lost Treasure of Krintol",
+    "The Mountain View Vicinity",
+    "Green Dragon Lair",
+    "An old dungeon.",
+    "Sunken Caverns.",
+    "Thief's lost treasure.",
+    "The little girls home.",
+    "--------------------",
+    "--------------------",
+    "--------------------",
+    "--------------------",
+    "--------------------",
+    "--------------------",
+    "--------------------"
+  ],
+  "maps_md2": [
+    {
+      "index": 0,
+      "startx": 5,
+      "starty": 1,
+      "level": 0,
+      "pictid": 0,
+      "iconsize": 16,
+      "show": 1,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "Posting on the main gate of Mountain View showing the locations of various shops and pubs within the city."
+    },
+    {
+      "index": 1,
+      "startx": 0,
+      "starty": 5,
+      "level": 0,
+      "pictid": 0,
+      "iconsize": 32,
+      "show": 1,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 5
+      },
+      "note": "Map showing entrance to Griloch hideout."
+    },
+    {
+      "index": 2,
+      "startx": 30,
+      "starty": 25,
+      "level": 0,
+      "pictid": 0,
+      "iconsize": 16,
+      "show": 0,
+      "isdungeon": true,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 8224
+      },
+      "note": "Map found on the body of a monk.  A handwritten message reads, \"Wipe out this Berhune hideout, get 1,000gp from Brinham.\"                                "
+    },
+    {
+      "index": 3,
+      "startx": 0,
+      "starty": 32,
+      "level": 0,
+      "pictid": 0,
+      "iconsize": 16,
+      "show": 1,
+      "isdungeon": true,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "Inscribed on the map are the words, \"At the 'x' speak the word 'Protheon' and the way will be cleared to the treasure.  Forget to say that word and death awaits you.\""
+    },
+    {
+      "index": 4,
+      "startx": 50,
+      "starty": 80,
+      "level": 0,
+      "pictid": 0,
+      "iconsize": 32,
+      "show": 1,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 30
+      },
+      "note": "A map showing where the entrance to the Griloch dungeon is."
+    },
+    {
+      "index": 5,
+      "startx": 60,
+      "starty": 20,
+      "level": 0,
+      "pictid": 0,
+      "iconsize": 32,
+      "show": 1,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "Ropol's map showing where he has hidden his valuables."
+    },
+    {
+      "index": 6,
+      "startx": 25,
+      "starty": 55,
+      "level": 1,
+      "pictid": 0,
+      "iconsize": 32,
+      "show": 0,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "Map showing the location of the lost treasure of Krintol."
+    },
+    {
+      "index": 7,
+      "startx": 0,
+      "starty": 0,
+      "level": 0,
+      "pictid": 0,
+      "iconsize": 4,
+      "show": 1,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "The City of Mountain view and its surrounding topography."
+    },
+    {
+      "index": 8,
+      "startx": 30,
+      "starty": 70,
+      "level": 0,
+      "pictid": 0,
+      "iconsize": 16,
+      "show": 0,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "Entrance into Green dragon territory and location of last known nesting sight."
+    },
+    {
+      "index": 9,
+      "startx": 30,
+      "starty": 50,
+      "level": 0,
+      "pictid": 0,
+      "iconsize": 16,
+      "show": 0,
+      "isdungeon": true,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "Underground dungeon."
+    },
+    {
+      "index": 10,
+      "startx": 15,
+      "starty": 0,
+      "level": 1,
+      "pictid": 0,
+      "iconsize": 8,
+      "show": 1,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "Sunken Caverns.  X marks a secret cave."
+    },
+    {
+      "index": 11,
+      "startx": 1,
+      "starty": 40,
+      "level": 0,
+      "pictid": 0,
+      "iconsize": 16,
+      "show": 1,
+      "isdungeon": true,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "Map to a thief's long lost treasure."
+    },
+    {
+      "index": 12,
+      "startx": 0,
+      "starty": 55,
+      "level": 0,
+      "pictid": 0,
+      "iconsize": 32,
+      "show": 1,
+      "isdungeon": false,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "The little girls home."
+    },
+    {
+      "index": 13,
+      "startx": 1,
+      "starty": 40,
+      "level": 0,
+      "pictid": 0,
+      "iconsize": 16,
+      "show": 1,
+      "isdungeon": true,
+      "spare": 0,
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "right": 0
+      },
+      "note": "Map to a thief's long lost treasure."
+    },
+    {
+      "index": 14,
+      "startx": 4692,
+      "starty": -19521,
+      "level": 939,
+      "pictid": -12138,
+      "iconsize": 2412,
+      "show": -12260,
+      "isdungeon": true,
+      "spare": 30661,
+      "rect": {
+        "top": 18825,
+        "left": -32355,
+        "bottom": -29199,
+        "right": 11347
+      },
+      "note": "ä⁄É2≤…Z⁄¬%®üÌW=ÖÂ\\›Ä·ÔÃ’π•nålï˘xˆ,¨BiÉŒ¯.’U∏€SB Hå‡~®LâŒ\nÒƒØ)î@£Y¿âˆ»MQ8É˝≈hKÎ¬(€ûÇ@eü”÷çŸ`\\-nD˜≈êÑ≠aü≥0\nm(∆hçñ÷ÂF\"ÃL€%q≤&gn©ÌÃ(me^d˚⁄⁄¥±¯0\t∞ï6ÖÅ¬M§≠∫M»eCè≤¥?p‚Æ≥‘-Ê/b<T·≈á≈Ã]dÂ·˚˙-∞¥7øW≈"
+    },
+    {
+      "index": 15,
+      "startx": -6579,
+      "starty": 30551,
+      "level": 17232,
+      "pictid": 29403,
+      "iconsize": -24115,
+      "show": 7367,
+      "isdungeon": true,
+      "spare": -14971,
+      "rect": {
+        "top": -31474,
+        "left": -25932,
+        "bottom": -6837,
+        "right": -31859
+      },
+      "note": "Ù<ùoh°ﬁ}=¥œßèÌéó{Çâ%œë}%≠‘‚jx8î“k†ÒˇUƒ#`•ƒüüK&6úÛjHPa/@ÆœÉÁgç“πË\nü∏¥ﬁA,4zÜàÆzimâ-ò3Åœ]-§∞0à[ÀÖ˝µ4ll3_Ã≈ı$¸lnèGÔ¸Û˜‘mûäpa¸Ã◊±u °\\c}’]ÿ_ÈÅ¿‡tPT\t=5Ÿ¬¨aÉå≈∂$œËcı}õ”ˇß-ÁåFcbı#\tM˙¥‡;Qcaª\tX2Ÿ°$æM¸hﬂ?ÚÆ…⁄é'"
+    },
+    {
+      "index": 16,
+      "startx": 12882,
+      "starty": -17913,
+      "level": 14244,
+      "pictid": -83,
+      "iconsize": -15751,
+      "show": 11362,
+      "isdungeon": true,
+      "spare": 15915,
+      "rect": {
+        "top": 20467,
+        "left": -28850,
+        "bottom": -30768,
+        "right": -11392
+      },
+      "note": "{üc|^á†üˆ-GFÁ¸ˇB∏ßo⁄{˚\nmı√wﬂÇ¬43ú†Õúh+MÑ?Z∏›ûÚ)œ“ÅoóKd°nªÅ`Ôsˇêû][m¥˛ﬁÔ»∂Îˇ5YayÉqÉ¬‹™=ÛEl"
+    },
+    {
+      "index": 17,
+      "startx": 9383,
+      "starty": 10423,
+      "level": -30135,
+      "pictid": 24348,
+      "iconsize": -8450,
+      "show": 3605,
+      "isdungeon": true,
+      "spare": 17491,
+      "rect": {
+        "top": -27722,
+        "left": -20102,
+        "bottom": -24640,
+        "right": 2350
+      },
+      "note": "ıÂöH§„c‡É´ÙmôaõÕﬁÁ¿‘Ôx~ªÒºâwªI¬ÙQ\nBwÉ√OfÓ,Œœq…)˝t¸¬©Øêf»±îüπîäûˆ∑ÚÖœsÁÂ7H¬O Rùe>è}ùá•fŒµ”älLÑ¬Ä-¥±˝„©‘•Ö≈»ï¶Ù åg„Î‡GQ◊˝ÏocÏgtÒ≤VøTkßÃl7é˚(‰cvn0%øZ◊ H]uu0eÎ˚ﬂ¸„"
+    },
+    {
+      "index": 18,
+      "startx": -32110,
+      "starty": 10387,
+      "level": 9409,
+      "pictid": 9513,
+      "iconsize": -10149,
+      "show": 6589,
+      "isdungeon": true,
+      "spare": -1130,
+      "rect": {
+        "top": 8132,
+        "left": -8484,
+        "bottom": -13891,
+        "right": -31714
+      },
+      "note": "b¯˜FÊJ∂∂q∫Í}Kÿ}O©|rﬁˇÂ˙>Æ‚·‡\tŒÂAˆ}m≈¨ÖÙ¬1ùC∞“=ﬂÙ‰GZ»_ †R|¶GGÆv¥h C≠âq¿˝‡sá©`•Ã§#NóÌ$ù“$†uE•∂û˚(Ê[ÂÔb-⁄Yox;¢Ì0xá[˛˜Ö¡Z<ih"
+    },
+    {
+      "index": 19,
+      "startx": -5165,
+      "starty": 397,
+      "level": 19838,
+      "pictid": -31829,
+      "iconsize": 2667,
+      "show": 13310,
+      "isdungeon": true,
+      "spare": -903,
+      "rect": {
+        "top": -12973,
+        "left": -6305,
+        "bottom": 1230,
+        "right": -4042
+      },
+      "note": "<º≥Ω≥Z£≤‹∆{a:∏û~„Fà-ü†eÛZÿö&<Ín7öCIü>bå-#,OÉpjËÉèYMH8¶fn#EÅ7¯¡ãqkıo‰±pÒ∫7”øz\t#rjH$∫8xﬁâÏ°˙Ã÷[ÂYI´·nN∏œ[gÈXr¢ÎÌ,®∫±÷ßãŒ|µ‹Ã£;‚}ˇüﬂÇ[;¸¡À(˙>4Íúù„ôπ∑¡Ú/#ùt»‰Ô|ººLh=y≈óÀmâÛ·⁄◊ãı©v¿‡⁄!z4I˚ì≥§ê.Á\\-'ìÎlI/-¨í˘zõgëÿ"
+    },
+    {
+      "index": 20,
+      "startx": -2125,
+      "starty": -23667,
+      "level": -3076,
+      "pictid": 6943,
+      "iconsize": 9073,
+      "show": -14656,
+      "isdungeon": true,
+      "spare": -628,
+      "rect": {
+        "top": -4743,
+        "left": -24817,
+        "bottom": -5166,
+        "right": -3867
+      },
+      "note": "©Q•Ez4˜§e9Û√-∆tÙqüO@(c-ÁüÈ‰◊&o°Ó3"
+    }
+  ],
+  "counts": {
+    "land_levels": 5,
+    "dungeon_levels": 1,
+    "monsters_valid": 161,
+    "battles_total": 219,
+    "battles_valid": 167,
+    "shops": 21,
+    "treasures": 56,
+    "strings_total": 734,
+    "strings_non_empty": 732,
+    "portals": 6,
+    "ap_doors": 232,
+    "custom_items": 23,
+    "edcd_records": 616
+  },
+  "land_levels": [
+    {
+      "level": 0,
+      "map_id": "land_0",
+      "name": "Mountain View",
+      "file": "land_levels/land_0.json",
+      "landlook": 0,
+      "tileset_pict_id": 300,
+      "tileset_bd_file": "Data P BD",
+      "is_dark": false,
+      "use_los": false,
+      "portal_count": 2,
+      "shop_trigger_count": 2,
+      "battle_trigger_count": 0,
+      "treasure_trigger_count": 4,
+      "encounter_zone_count": 17,
+      "ap_door_count": 75
+    },
+    {
+      "level": 1,
+      "map_id": "land_1",
+      "name": "Tresandra Map",
+      "file": "land_levels/land_1.json",
+      "landlook": 3,
+      "tileset_pict_id": 303,
+      "tileset_bd_file": "Data Castle BD",
+      "is_dark": true,
+      "use_los": false,
+      "portal_count": 0,
+      "shop_trigger_count": 0,
+      "battle_trigger_count": 6,
+      "treasure_trigger_count": 3,
+      "encounter_zone_count": 14,
+      "ap_door_count": 46
+    },
+    {
+      "level": 2,
+      "map_id": "land_2",
+      "name": "Monk's Map",
+      "file": "land_levels/land_2.json",
+      "landlook": 3,
+      "tileset_pict_id": 303,
+      "tileset_bd_file": "Data Castle BD",
+      "is_dark": true,
+      "use_los": false,
+      "portal_count": 0,
+      "shop_trigger_count": 0,
+      "battle_trigger_count": 2,
+      "treasure_trigger_count": 0,
+      "encounter_zone_count": 4,
+      "ap_door_count": 4
+    },
+    {
+      "level": 3,
+      "map_id": "land_3",
+      "name": "Map to Payment",
+      "file": "land_levels/land_3.json",
+      "landlook": 0,
+      "tileset_pict_id": 300,
+      "tileset_bd_file": "Data P BD",
+      "is_dark": false,
+      "use_los": false,
+      "portal_count": 0,
+      "shop_trigger_count": 0,
+      "battle_trigger_count": 0,
+      "treasure_trigger_count": 0,
+      "encounter_zone_count": 3,
+      "ap_door_count": 5
+    },
+    {
+      "level": 4,
+      "map_id": "land_4",
+      "name": "Map of \"Secret\" hideout.",
+      "file": "land_levels/land_4.json",
+      "landlook": 4,
+      "tileset_pict_id": 304,
+      "tileset_bd_file": "Data SUB BD",
+      "is_dark": false,
+      "use_los": true,
+      "portal_count": 0,
+      "shop_trigger_count": 0,
+      "battle_trigger_count": 0,
+      "treasure_trigger_count": 7,
+      "encounter_zone_count": 6,
+      "ap_door_count": 17
+    }
+  ],
+  "dungeon_levels": [
+    {
+      "level": 0,
+      "map_id": "dungeon_0",
+      "file": "dungeon_levels/dungeon_0.json",
+      "tileset_pict_id": 300,
+      "is_dark": true,
+      "use_los": true,
+      "portal_count": 4,
+      "battle_trigger_count": 1,
+      "treasure_trigger_count": 8,
+      "encounter_zone_count": 12,
+      "ap_door_count": 85
+    }
+  ],
+  "files": {
+    "battles": "battles.json",
+    "monsters": "monsters.json",
+    "shops": "shops.json",
+    "treasures": "treasures.json",
+    "strings": "strings.json",
+    "portals": "portals.json",
+    "custom_items": "custom_items.json"
+  },
+  "overrides": {
+    "source": "",
+    "art_bindings": {},
+    "music_bindings": {}
+  }
+}

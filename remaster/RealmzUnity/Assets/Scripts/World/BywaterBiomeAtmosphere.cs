@@ -94,6 +94,11 @@ namespace Realmz.World
             RenderSettings.ambientEquatorColor = new Color(0.36f, 0.38f, 0.35f, 1f);
             RenderSettings.ambientGroundColor = new Color(0.22f, 0.21f, 0.18f, 1f);
             RenderSettings.ambientIntensity = 0.90f;
+            RenderSettings.fog = true;
+            RenderSettings.fogMode = FogMode.Linear;
+            RenderSettings.fogColor = new Color(0.54f, 0.68f, 0.84f, 1f);
+            RenderSettings.fogStartDistance = 38f;
+            RenderSettings.fogEndDistance = 95f;
 
             if (targetCamera != null)
             {
@@ -140,7 +145,12 @@ namespace Realmz.World
             RenderSettings.ambientSkyColor = new Color(0.20f, 0.25f, 0.42f, 1f);
             RenderSettings.ambientEquatorColor = new Color(0.14f, 0.19f, 0.32f, 1f);
             RenderSettings.ambientGroundColor = new Color(0.09f, 0.12f, 0.22f, 1f);
-            RenderSettings.ambientIntensity = 1.0f;
+            RenderSettings.ambientIntensity = 0.68f;
+            RenderSettings.fog = true;
+            RenderSettings.fogMode = FogMode.Linear;
+            RenderSettings.fogColor = new Color(0.045f, 0.055f, 0.098f, 1f);
+            RenderSettings.fogStartDistance = 16f;
+            RenderSettings.fogEndDistance = 42f;
 
             if (targetCamera != null)
             {

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using RealmzCore.Combat;
 using RealmzCore.Data;
 using RealmzCore.Rules;
 
@@ -15,6 +16,42 @@ namespace RealmzCore.Exploration
         EncounterZone = 5
     }
 
+    public sealed class ExplorationStepResult
+    {
+        public ExplorationStepResult(
+            bool moved,
+            GridCoord position,
+            ExplorationHaltReason haltReason,
+            MapPortal? portal = null,
+            MapPointOfInterest? pointOfInterest = null,
+            EncounterZoneData? triggeredZone = null,
+            int? triggeredBattleId = null,
+            int torchTurnsRemaining = 0,
+            bool torchExpiredThisStep = false)
+        {
+            Moved = moved;
+            Position = position;
+            HaltReason = haltReason;
+            Portal = portal;
+            PointOfInterest = pointOfInterest;
+            TriggeredZone = triggeredZone;
+            TriggeredBattleId = triggeredBattleId;
+            TorchTurnsRemaining = torchTurnsRemaining;
+            TorchExpiredThisStep = torchExpiredThisStep;
+        }
+
+        public bool Moved { get; }
+        public GridCoord Position { get; }
+        public ExplorationHaltReason HaltReason { get; }
+        public MapPortal? Portal { get; }
+        public MapPointOfInterest? PointOfInterest { get; }
+        public EncounterZoneData? TriggeredZone { get; }
+        public int? TriggeredBattleId { get; }
+        public int TorchTurnsRemaining { get; }
+        public bool TorchExpiredThisStep { get; }
+        public bool ShouldHalt => HaltReason != ExplorationHaltReason.None;
+    }
+
     public sealed class ExplorationMoveResult
     {
         public ExplorationMoveResult(
@@ -25,7 +62,8 @@ namespace RealmzCore.Exploration
             MapPortal? portal = null,
             MapPointOfInterest? pointOfInterest = null,
             EncounterZoneData? triggeredZone = null,
-            int? triggeredBattleId = null)
+            int? triggeredBattleId = null,
+            IReadOnlyList<ExplorationStepResult>? stepEvents = null)
         {
             MovedSteps = movedSteps;
             FinalPosition = finalPosition;
@@ -35,6 +73,7 @@ namespace RealmzCore.Exploration
             PointOfInterest = pointOfInterest;
             TriggeredZone = triggeredZone;
             TriggeredBattleId = triggeredBattleId;
+            StepEvents = stepEvents ?? Array.Empty<ExplorationStepResult>();
         }
 
         public int MovedSteps { get; }
@@ -45,19 +84,25 @@ namespace RealmzCore.Exploration
         public MapPointOfInterest? PointOfInterest { get; }
         public EncounterZoneData? TriggeredZone { get; }
         public int? TriggeredBattleId { get; }
+        public IReadOnlyList<ExplorationStepResult> StepEvents { get; }
     }
 
     public sealed class ExplorationSession
     {
         private readonly Dictionary<string, TileMapData> _maps;
         private readonly IDiceRoller _roller;
+        private readonly AStarPathfinder _pathfinder;
+        private readonly HashSet<string> _clearedEncounterIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         public ExplorationSession(
             IReadOnlyDictionary<string, TileMapData> maps,
             string initialMapId,
             PartyState party,
             IDiceRoller? roller = null,
-            GridCoord? startPosition = null)
+            GridCoord? startPosition = null,
+            string? initialFacing = null,
+            int initialTurnCount = 0,
+            IEnumerable<string>? clearedEncounterIds = null)
         {
             if (maps == null)
             {
@@ -78,8 +123,22 @@ namespace RealmzCore.Exploration
             CurrentMap = initialMap;
             Party = party;
             _roller = roller ?? new DeterministicDiceRoller(0x5245414C4D5AUL);
+            _pathfinder = new AStarPathfinder(
+                Math.Max(90, initialMap.Width),
+                Math.Max(90, initialMap.Height));
             Position = startPosition ?? initialMap.StartSpawn;
-            Facing = "South";
+            Facing = string.IsNullOrWhiteSpace(initialFacing) ? "South" : initialFacing!;
+            TurnCount = Math.Max(0, initialTurnCount);
+            if (clearedEncounterIds != null)
+            {
+                foreach (string id in clearedEncounterIds)
+                {
+                    if (!string.IsNullOrWhiteSpace(id))
+                    {
+                        _clearedEncounterIds.Add(id);
+                    }
+                }
+            }
         }
 
         public IReadOnlyDictionary<string, TileMapData> Maps => _maps;
@@ -88,6 +147,181 @@ namespace RealmzCore.Exploration
         public GridCoord Position { get; private set; }
         public string Facing { get; private set; }
         public int TurnCount { get; private set; }
+        public IDiceRoller Roller => _roller;
+        public IReadOnlyCollection<string> ClearedEncounterIds => _clearedEncounterIds;
+
+        public static string GetEncounterZoneKey(string mapId, EncounterZoneData zone)
+        {
+            if (zone == null)
+            {
+                throw new ArgumentNullException(nameof(zone));
+            }
+
+            return $"{mapId}:zone:{zone.Slot}";
+        }
+
+        public void MarkEncounterCleared(string encounterId)
+        {
+            if (!string.IsNullOrWhiteSpace(encounterId))
+            {
+                _clearedEncounterIds.Add(encounterId);
+            }
+        }
+
+        public bool IsEncounterCleared(string encounterId)
+        {
+            return !string.IsNullOrWhiteSpace(encounterId) && _clearedEncounterIds.Contains(encounterId);
+        }
+
+        public void RestorePersistenceState(int turnCount, IEnumerable<string>? clearedEncounterIds)
+        {
+            TurnCount = Math.Max(0, turnCount);
+            _clearedEncounterIds.Clear();
+            if (clearedEncounterIds != null)
+            {
+                foreach (string id in clearedEncounterIds)
+                {
+                    if (!string.IsNullOrWhiteSpace(id))
+                    {
+                        _clearedEncounterIds.Add(id);
+                    }
+                }
+            }
+        }
+
+        public PathResult PlanPath(GridCoord target, bool allowDiagonal = true)
+        {
+            if (target == Position)
+            {
+                return new PathResult(true, 0, Array.Empty<GridCoord>());
+            }
+
+            return _pathfinder.FindPathCore(
+                CurrentMap,
+                Position,
+                target,
+                allowDiagonal: allowDiagonal,
+                hasBoat: Party.HasBoat);
+        }
+
+        public ExplorationStepResult StepOneTile(GridCoord nextTile, bool autoHaltOnEvents = true)
+        {
+            if (nextTile == Position)
+            {
+                return new ExplorationStepResult(
+                    moved: false,
+                    position: Position,
+                    haltReason: ExplorationHaltReason.Arrived,
+                    torchTurnsRemaining: Party.TorchTurnsRemaining);
+            }
+
+            if (!CurrentMap.InBounds(nextTile) ||
+                Position.ChebyshevDistance(nextTile) != 1 ||
+                !CurrentMap.IsPassable(nextTile.X, nextTile.Y, Party.HasBoat))
+            {
+                return new ExplorationStepResult(
+                    moved: false,
+                    position: Position,
+                    haltReason: ExplorationHaltReason.Blocked,
+                    torchTurnsRemaining: Party.TorchTurnsRemaining);
+            }
+
+            int dx = nextTile.X - Position.X;
+            int dy = nextTile.Y - Position.Y;
+            if (Math.Abs(dx) == 1 && Math.Abs(dy) == 1 &&
+                !CurrentMap.IsPassable(Position.X + dx, Position.Y, Party.HasBoat) &&
+                !CurrentMap.IsPassable(Position.X, Position.Y + dy, Party.HasBoat))
+            {
+                return new ExplorationStepResult(
+                    moved: false,
+                    position: Position,
+                    haltReason: ExplorationHaltReason.Blocked,
+                    torchTurnsRemaining: Party.TorchTurnsRemaining);
+            }
+
+            UpdateFacing(Position, nextTile);
+            Position = nextTile;
+            TurnCount++;
+
+            bool torchExpired = false;
+            if (Party.TorchTurnsRemaining > 0)
+            {
+                Party.TorchTurnsRemaining--;
+                torchExpired = Party.TorchTurnsRemaining == 0;
+            }
+
+            if (!autoHaltOnEvents)
+            {
+                return new ExplorationStepResult(
+                    moved: true,
+                    position: Position,
+                    haltReason: ExplorationHaltReason.None,
+                    torchTurnsRemaining: Party.TorchTurnsRemaining,
+                    torchExpiredThisStep: torchExpired);
+            }
+
+            MapPortal? portal = CurrentMap.GetPortalAt(nextTile.X, nextTile.Y);
+            if (portal != null)
+            {
+                return new ExplorationStepResult(
+                    moved: true,
+                    position: Position,
+                    haltReason: ExplorationHaltReason.Portal,
+                    portal: portal,
+                    torchTurnsRemaining: Party.TorchTurnsRemaining,
+                    torchExpiredThisStep: torchExpired);
+            }
+
+            MapPointOfInterest? poi = CurrentMap.GetPointOfInterestAt(nextTile.X, nextTile.Y);
+            if (poi != null)
+            {
+                return new ExplorationStepResult(
+                    moved: true,
+                    position: Position,
+                    haltReason: ExplorationHaltReason.PointOfInterest,
+                    pointOfInterest: poi,
+                    torchTurnsRemaining: Party.TorchTurnsRemaining,
+                    torchExpiredThisStep: torchExpired);
+            }
+
+            IReadOnlyList<EncounterZoneData> zones = CurrentMap.GetZonesAt(nextTile.X, nextTile.Y);
+            for (int z = 0; z < zones.Count; z++)
+            {
+                EncounterZoneData zone = zones[z];
+                string encounterKey = GetEncounterZoneKey(CurrentMap.MapId, zone);
+                if (zone.Percent <= 0 || _clearedEncounterIds.Contains(encounterKey))
+                {
+                    continue;
+                }
+
+                int roll = _roller.NextInt(1, 101);
+                if (roll <= zone.Percent)
+                {
+                    int? battleId = null;
+                    if (zone.BattleIds.Count > 0)
+                    {
+                        int pick = _roller.NextInt(0, zone.BattleIds.Count);
+                        battleId = zone.BattleIds[pick];
+                    }
+
+                    return new ExplorationStepResult(
+                        moved: true,
+                        position: Position,
+                        haltReason: ExplorationHaltReason.EncounterZone,
+                        triggeredZone: zone,
+                        triggeredBattleId: battleId,
+                        torchTurnsRemaining: Party.TorchTurnsRemaining,
+                        torchExpiredThisStep: torchExpired);
+                }
+            }
+
+            return new ExplorationStepResult(
+                moved: true,
+                position: Position,
+                haltReason: ExplorationHaltReason.None,
+                torchTurnsRemaining: Party.TorchTurnsRemaining,
+                torchExpiredThisStep: torchExpired);
+        }
 
         public ExplorationMoveResult MoveAlongPath(GridCoord target, bool autoHaltOnEvents = true)
         {
@@ -100,12 +334,7 @@ namespace RealmzCore.Exploration
                     pathTaken: Array.Empty<GridCoord>());
             }
 
-            PathResult path = AStarPathfinder.FindPath(
-                CurrentMap,
-                Position,
-                target,
-                allowDiagonal: true,
-                hasBoat: Party.HasBoat);
+            PathResult path = PlanPath(target, allowDiagonal: true);
 
             if (!path.Found || path.Steps.Count == 0)
             {
@@ -117,74 +346,38 @@ namespace RealmzCore.Exploration
             }
 
             List<GridCoord> taken = new List<GridCoord>(path.Steps.Count);
+            List<ExplorationStepResult> stepEvents = new List<ExplorationStepResult>(path.Steps.Count);
 
             for (int i = 0; i < path.Steps.Count; i++)
             {
-                GridCoord step = path.Steps[i];
-                UpdateFacing(Position, step);
-                Position = step;
-                taken.Add(step);
-                TurnCount++;
-
-                if (Party.TorchTurnsRemaining > 0)
-                {
-                    Party.TorchTurnsRemaining--;
-                }
-
-                if (!autoHaltOnEvents)
-                {
-                    continue;
-                }
-
-                MapPortal? portal = CurrentMap.GetPortalAt(step.X, step.Y);
-                if (portal != null)
+                ExplorationStepResult stepRes = StepOneTile(path.Steps[i], autoHaltOnEvents);
+                if (!stepRes.Moved)
                 {
                     return new ExplorationMoveResult(
                         movedSteps: taken.Count,
                         finalPosition: Position,
-                        haltReason: ExplorationHaltReason.Portal,
+                        haltReason: stepRes.HaltReason == ExplorationHaltReason.None
+                            ? ExplorationHaltReason.Blocked
+                            : stepRes.HaltReason,
                         pathTaken: taken,
-                        portal: portal);
+                        stepEvents: stepEvents);
                 }
 
-                MapPointOfInterest? poi = CurrentMap.GetPointOfInterestAt(step.X, step.Y);
-                if (poi != null)
+                taken.Add(stepRes.Position);
+                stepEvents.Add(stepRes);
+
+                if (stepRes.ShouldHalt)
                 {
                     return new ExplorationMoveResult(
                         movedSteps: taken.Count,
                         finalPosition: Position,
-                        haltReason: ExplorationHaltReason.PointOfInterest,
+                        haltReason: stepRes.HaltReason,
                         pathTaken: taken,
-                        pointOfInterest: poi);
-                }
-
-                IReadOnlyList<EncounterZoneData> zones = CurrentMap.GetZonesAt(step.X, step.Y);
-                for (int z = 0; z < zones.Count; z++)
-                {
-                    EncounterZoneData zone = zones[z];
-                    if (zone.Percent <= 0)
-                    {
-                        continue;
-                    }
-
-                    int roll = _roller.NextInt(1, 101);
-                    if (roll <= zone.Percent)
-                    {
-                        int? battleId = null;
-                        if (zone.BattleIds.Count > 0)
-                        {
-                            int pick = _roller.NextInt(0, zone.BattleIds.Count);
-                            battleId = zone.BattleIds[pick];
-                        }
-
-                        return new ExplorationMoveResult(
-                            movedSteps: taken.Count,
-                            finalPosition: Position,
-                            haltReason: ExplorationHaltReason.EncounterZone,
-                            pathTaken: taken,
-                            triggeredZone: zone,
-                            triggeredBattleId: battleId);
-                    }
+                        portal: stepRes.Portal,
+                        pointOfInterest: stepRes.PointOfInterest,
+                        triggeredZone: stepRes.TriggeredZone,
+                        triggeredBattleId: stepRes.TriggeredBattleId,
+                        stepEvents: stepEvents);
                 }
             }
 
@@ -192,7 +385,8 @@ namespace RealmzCore.Exploration
                 movedSteps: taken.Count,
                 finalPosition: Position,
                 haltReason: ExplorationHaltReason.Arrived,
-                pathTaken: taken);
+                pathTaken: taken,
+                stepEvents: stepEvents);
         }
 
         public bool UsePortalAtCurrentTile()
@@ -216,6 +410,36 @@ namespace RealmzCore.Exploration
             }
 
             return true;
+        }
+
+        public void SyncAfterCombat(TacticalCombatSession combat, bool floorDeadToOne = false)
+        {
+            if (combat == null)
+            {
+                throw new ArgumentNullException(nameof(combat));
+            }
+
+            for (int i = 0; i < Party.Members.Count; i++)
+            {
+                PartyMemberState member = Party.Members[i];
+                CombatantState? unit = combat.GetCombatant(member.Id);
+                if (unit == null)
+                {
+                    continue;
+                }
+
+                member.Hp = floorDeadToOne
+                    ? Math.Max(1, Math.Min(member.MaxHp, unit.Hp))
+                    : Math.Clamp(unit.Hp, 0, member.MaxHp);
+                member.Sp = Math.Clamp(unit.Sp, 0, member.MaxSp);
+                member.ExhaustionStacks = unit.ExhaustionStacks;
+                member.CurseStacks = unit.CurseStacks;
+            }
+
+            if (combat.Outcome == CombatOutcome.Victory)
+            {
+                combat.GrantVictoryRewardsToParty(Party);
+            }
         }
 
         public bool TriggerTempleHeal(int goldCost = 25)

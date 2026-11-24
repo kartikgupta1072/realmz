@@ -497,7 +497,8 @@ namespace RealmzCore.Data
                     vitality: GetFirstInt(attrs, 10, "vitality", "constitution"),
                     luck: GetFirstInt(attrs, 10, "luck"),
                     equippedIds: ParseIntArray(obj, "equipped_ids", "equippedIds"),
-                    knownSpellIds: ParseIntArray(obj, "known_spell_ids", "knownSpellIds")));
+                    knownSpellIds: ParseIntArray(obj, "known_spell_ids", "knownSpellIds"),
+                    xp: GetFirstInt(obj, 0, "xp", "experience")));
             }
 
             return heroes;
@@ -634,7 +635,9 @@ namespace RealmzCore.Data
                         appliedCondition: appliedCondition,
                         conditionDuration: GetFirstInt(obj, 0, "condition_duration", "conditionDuration"),
                         baseRecoveryPct: GetFirstInt(obj, 20, "base_recovery_pct", "baseRecoveryPct"),
-                        saveKind: GetFirstString(obj, "Magic", "save_kind", "saveKind"));
+                        saveKind: GetFirstString(obj, "Magic", "save_kind", "saveKind"),
+                        createdSurface: GetFirstString(obj, string.Empty, "created_surface", "createdSurface"),
+                        createdSurfaceRounds: GetFirstInt(obj, 0, "created_surface_rounds", "createdSurfaceRounds", "surface_rounds", "surfaceRounds"));
                     spells[spell.Id] = spell;
                 }
             }

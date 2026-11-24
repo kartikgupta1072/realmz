@@ -39,10 +39,14 @@ Material:
     - _CameraPitchTiltDeg: 22
     - _Cols: 1
     - _Cutoff: 0.42
+    - _EmissionMinV: 0
+    - _EmissionWarmMask: 1
     - _FrameCount: 8
+    - _HorizonHazeStrength: 0.08
     - _IsTwoBankAtlas: 1
     - _LanternPoolIntensity: 1.25
     - _NormalUpBias: 0.72
+    - _ReceiveRootShadowOnly: 1
     - _Rows: 1
     - _TrampleRadius: 0.9
     - _TrampleStrength: 0.28
@@ -55,8 +59,9 @@ Material:
     - _WindWaveSpeed: 1.15
     m_Colors:
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
+    - _HorizonHazeColor: {r: 0.91, g: 0.83, b: 0.7, a: 1}
     - _LanternPoolColor: {r: 1, g: 0.62, b: 0.23999995, a: 1}
-    - _RootTint: {r: 0.5, g: 0.56, b: 0.46, a: 1}
+    - _RootTint: {r: 0.44, g: 0.52, b: 0.42, a: 1}
     - _TintColor: {r: 1, g: 1, b: 1, a: 1}
     - _WindDir: {r: 0.86, g: 0.51, b: 0, a: 0}
   m_BuildTextureStacks: []

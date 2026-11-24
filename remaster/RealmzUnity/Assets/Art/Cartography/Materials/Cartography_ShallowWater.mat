@@ -34,11 +34,11 @@ Material:
     m_Ints: []
     m_Floats:
     - _BumpScale: 0.85
-    - _ShimmerStrength: 0.3
+    - _ShimmerStrength: 0.34
     - _Smoothness: 0.72
     - _WaveScale: 2
     m_Colors:
-    - _BaseColor: {r: 0.54, g: 0.82, b: 0.94, a: 1}
+    - _BaseColor: {r: 0.16, g: 0.38, b: 0.46, a: 1}
     - _ScrollSpeedA: {r: 0.045, g: 0.025, b: 0, a: 0}
     - _ScrollSpeedB: {r: -0.032, g: 0.04, b: 0, a: 0}
     - _ShimmerColor: {r: 0.94, g: 0.99, b: 1, a: 1}

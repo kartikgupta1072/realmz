@@ -807,3 +807,84 @@ def parse_sd2_strings(data_sd2_path: Path) -> List[str]:
     raw = Path(data_sd2_path).read_bytes()
     count = len(raw) // SD2_BYTES
     return [decode_pstr(raw[i * SD2_BYTES : (i + 1) * SD2_BYTES]) for i in range(count)]
+
+
+TREASURE_BYTES = 48
+
+
+def parse_treasures(data_td_path: Path) -> List[Dict[str, Any]]:
+    """Parse 48-byte (24 short) treasure table records from Data TD."""
+    raw = Path(data_td_path).read_bytes()
+    count = len(raw) // TREASURE_BYTES
+    treasures: List[Dict[str, Any]] = []
+    for idx in range(count):
+        vals = struct.unpack(">24h", raw[idx * TREASURE_BYTES : (idx + 1) * TREASURE_BYTES])
+        item_ids = [v for v in vals[:20] if v > 0]
+        treasures.append(
+            {
+                "treasure_id": idx,
+                "item_ids": item_ids,
+                "gold": max(0, vals[20]),
+                "gems": max(0, vals[21]),
+                "jewelry": max(0, vals[22]),
+                "flags": vals[23],
+            }
+        )
+    return treasures
+
+
+def parse_battles_tactical(
+    data_bd_path: Path,
+    max_monster_index: int = 500,
+) -> List[Dict[str, Any]]:
+    """Parse 346-byte Data BD records including 13x13 row-major tactical placement grids."""
+    raw = Path(data_bd_path).read_bytes()
+    count = len(raw) // BATTLE_BYTES
+    battles: List[Dict[str, Any]] = []
+    for idx in range(count):
+        rec = raw[idx * BATTLE_BYTES : (idx + 1) * BATTLE_BYTES]
+        flat = struct.unpack(">169h", rec[:338])
+        dist = rec[338]
+        msg_before, msg_after, macro = struct.unpack(">3h", rec[340:346])
+
+        # Realmz stores battle grids column-major [x][y] on a 13x13 board.
+        grid_yx: List[List[int]] = [[0] * 13 for _ in range(13)]
+        placements: List[Dict[str, Any]] = []
+        monster_indices: List[int] = []
+        is_valid = True
+
+        for x in range(13):
+            col_off = x * 13
+            for y in range(13):
+                val = flat[col_off + y]
+                grid_yx[y][x] = val
+                if val != 0:
+                    abs_val = abs(val)
+                    if abs_val > max_monster_index:
+                        is_valid = False
+                    else:
+                        monster_indices.append(abs_val)
+                        placements.append(
+                            {
+                                "x": x,
+                                "y": y,
+                                "monster_index": abs_val,
+                                "raw_value": val,
+                                "is_negative": val < 0,
+                            }
+                        )
+
+        battles.append(
+            {
+                "battle_id": idx,
+                "is_valid": is_valid,
+                "dist": dist,
+                "message_before": msg_before,
+                "message_after": msg_after,
+                "macro": macro,
+                "monster_indices": monster_indices if is_valid else [],
+                "placements": placements if is_valid else [],
+                "tactical_grid_13x13": grid_yx if is_valid else [[0] * 13 for _ in range(13)],
+            }
+        )
+    return battles

@@ -720,6 +720,8 @@ def validate_outputs(
     normal_1x: np.ndarray,
     palette_rgb: np.ndarray,
     is_tile: bool = False,
+    asset_kind: str | None = None,
+    enforce_qa: bool = False,
 ) -> dict:
     active = (sprite_1x[..., 3] > 0) if is_tile else (sprite_1x[..., 3] == 255)
     alpha_vals = sorted(int(v) for v in np.unique(sprite_1x[..., 3]))
@@ -751,7 +753,75 @@ def validate_outputs(
     }
     if is_tile:
         stats["seam_ratio"] = compute_tile_seam_ratio(sprite_1x)
+    else:
+        max_sq = compute_flat_blob_max_square(sprite_1x)
+        flat_blob_max_run_pct = round(
+            100.0 * float(max_sq * max_sq) / float(max(1, stats["opaque_pixels"])),
+            2,
+        )
+        sky_bleed = count_sky_bleed_pixels(sprite_1x)
+        stats["flat_blob_max_square"] = max_sq
+        stats["flat_blob_max_run_pct"] = flat_blob_max_run_pct
+        stats["flat_blob_ok"] = bool(max_sq < 10)
+        stats["sky_bleed_pixels"] = sky_bleed
+        stats["sky_bleed_check"] = {
+            "passed": bool(sky_bleed == 0),
+            "pixels": int(sky_bleed),
+        }
+        if enforce_qa:
+            if asset_kind in (None, "tree", "foliage", "prop", "structure") and max_sq >= 10:
+                raise ValueError(
+                    f"QA failed flat_blob_max_run_pct: largest flat square {max_sq}x{max_sq} >= 10x10 ({flat_blob_max_run_pct}%)"
+                )
+            if asset_kind in ("tree", "foliage") and sky_bleed > 0:
+                raise ValueError(
+                    f"QA failed sky_bleed_check: {sky_bleed} trapped sky-blue pixels"
+                )
     return stats
+
+
+def compute_flat_blob_max_square(sprite_1x: np.ndarray) -> int:
+    """Largest solid k x k square of identical opaque RGB values (catches flat MS-Paint foliage blobs)."""
+    h, w, _ = sprite_1x.shape
+    op = sprite_1x[..., 3] == 255
+    if not np.any(op):
+        return 0
+    rgb = sprite_1x[..., :3]
+    eq_top = np.zeros((h, w), dtype=bool)
+    eq_left = np.zeros((h, w), dtype=bool)
+    eq_diag = np.zeros((h, w), dtype=bool)
+    eq_top[1:, :] = np.all(rgb[1:, :] == rgb[:-1, :], axis=-1) & op[1:, :] & op[:-1, :]
+    eq_left[:, 1:] = np.all(rgb[:, 1:] == rgb[:, :-1], axis=-1) & op[:, 1:] & op[:, :-1]
+    eq_diag[1:, 1:] = np.all(rgb[1:, 1:] == rgb[:-1, :-1], axis=-1) & op[1:, 1:] & op[:-1, :-1]
+    match_all = eq_top & eq_left & eq_diag
+
+    dp = np.where(op, 1, 0).astype(np.int32)
+    max_sq = 1
+    for y in range(1, h):
+        row_m = match_all[y]
+        if not np.any(row_m):
+            continue
+        prev_row = dp[y - 1]
+        cur_row = dp[y]
+        for x in range(1, w):
+            if row_m[x]:
+                val = 1 + min(int(prev_row[x]), int(cur_row[x - 1]), int(prev_row[x - 1]))
+                cur_row[x] = val
+                if val > max_sq:
+                    max_sq = val
+    return int(max_sq)
+
+
+def count_sky_bleed_pixels(sprite_1x: np.ndarray) -> int:
+    """Count opaque royal/sky-blue foreground pixels trapped inside gaps (B > R+35, B > G+15, B > 110)."""
+    op = sprite_1x[..., 3] == 255
+    if not np.any(op):
+        return 0
+    r = sprite_1x[..., 0].astype(np.int16)
+    g = sprite_1x[..., 1].astype(np.int16)
+    b = sprite_1x[..., 2].astype(np.int16)
+    sky = op & ((b - r) > 35) & ((b - g) > 15) & (b > 110)
+    return int(np.sum(sky))
 
 
 def process_sprite(

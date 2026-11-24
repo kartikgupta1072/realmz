@@ -43,9 +43,12 @@ namespace RealmzCore.Exploration
 
     public sealed class PartyMemberState
     {
+        public const int MaxLevel = 30;
+
         private readonly Dictionary<EquipmentSlot, InventoryItem> _equipped =
             new Dictionary<EquipmentSlot, InventoryItem>();
         private readonly List<int> _knownSpellIds;
+        private IReadOnlyDictionary<int, ItemDefinition>? _catalog;
 
         public PartyMemberState(HeroPresetData preset, IReadOnlyDictionary<int, ItemDefinition>? catalog = null)
         {
@@ -54,6 +57,7 @@ namespace RealmzCore.Exploration
                 throw new ArgumentNullException(nameof(preset));
             }
 
+            _catalog = catalog;
             Id = preset.Id;
             Name = preset.Name;
             Archetype = preset.Archetype;
@@ -61,7 +65,8 @@ namespace RealmzCore.Exploration
             RaceName = preset.RaceName;
             CasteId = preset.CasteId;
             CasteName = preset.CasteName;
-            Level = preset.Level;
+            Level = Math.Max(1, preset.Level);
+            Xp = Math.Max(GetXpRequiredForLevel(Level), preset.Xp);
             Hp = preset.Hp;
             MaxHp = Math.Max(1, preset.MaxHp);
             Sp = preset.Sp;
@@ -105,14 +110,16 @@ namespace RealmzCore.Exploration
         public int CasteId { get; }
         public string CasteName { get; }
         public int Level { get; set; }
+        public int Xp { get; set; }
+        public int XpForNextLevel => Level >= MaxLevel ? GetXpRequiredForLevel(MaxLevel) : GetXpRequiredForLevel(Level + 1);
         public int Hp { get; set; }
         public int MaxHp { get; set; }
         public int Sp { get; set; }
         public int MaxSp { get; set; }
         public int BaseAc { get; }
-        public int BaseToHit { get; }
+        public int BaseToHit { get; set; }
         public int Dodge { get; }
-        public int BaseMissile { get; }
+        public int BaseMissile { get; set; }
         public int BaseMovementMax { get; }
         public double AttacksPerRound { get; }
         public int IconId { get; }
@@ -130,29 +137,93 @@ namespace RealmzCore.Exploration
         public IReadOnlyDictionary<EquipmentSlot, InventoryItem> Equipped => _equipped;
         public bool IsAlive => Hp > 0;
 
+        public int EffectiveAc => GetEffectiveAc(_catalog);
+        public int EffectiveMeleeToHit => GetEffectiveMeleeToHit(_catalog);
+        public int EffectiveRangedToHit => GetEffectiveRangedToHit(_catalog);
+
+        public static int GetXpRequiredForLevel(int level)
+        {
+            if (level <= 1)
+            {
+                return 0;
+            }
+
+            return (level - 1) * level * 100;
+        }
+
+        public int AddXp(int amount)
+        {
+            if (amount <= 0)
+            {
+                return 0;
+            }
+
+            Xp += amount;
+            int levelsGained = 0;
+            while (Level < MaxLevel && Xp >= GetXpRequiredForLevel(Level + 1))
+            {
+                Level++;
+                levelsGained++;
+
+                int hpGain = Math.Max(2, 4 + Math.Max(0, (Vitality - 10) / 2));
+                MaxHp += hpGain;
+                if (Hp > 0)
+                {
+                    Hp = Math.Min(MaxHp, Hp + hpGain);
+                }
+
+                if (MaxSp > 0)
+                {
+                    int casterStat = Math.Max(Knowledge, Judgment);
+                    int spGain = Math.Max(2, 3 + Math.Max(0, (casterStat - 10) / 2));
+                    MaxSp += spGain;
+                    Sp = Math.Min(MaxSp, Sp + spGain);
+                }
+
+                BaseToHit += 2;
+                if (BaseMissile > 0)
+                {
+                    BaseMissile += 2;
+                }
+            }
+
+            return levelsGained;
+        }
+
         public InventoryItem? GetEquipped(EquipmentSlot slot)
         {
             return _equipped.TryGetValue(slot, out InventoryItem? item) ? item : null;
         }
 
-        internal void SetEquippedInternal(EquipmentSlot slot, InventoryItem item)
+        internal void SetEquippedInternal(EquipmentSlot slot, InventoryItem item, IReadOnlyDictionary<int, ItemDefinition>? catalog = null)
         {
+            if (catalog != null)
+            {
+                _catalog = catalog;
+            }
+
             _equipped[slot] = item;
         }
 
-        internal bool RemoveEquippedInternal(EquipmentSlot slot)
+        internal bool RemoveEquippedInternal(EquipmentSlot slot, IReadOnlyDictionary<int, ItemDefinition>? catalog = null)
         {
+            if (catalog != null)
+            {
+                _catalog = catalog;
+            }
+
             return _equipped.Remove(slot);
         }
 
         public int GetEffectiveAc(IReadOnlyDictionary<int, ItemDefinition>? catalog)
         {
+            IReadOnlyDictionary<int, ItemDefinition>? lookup = catalog ?? _catalog;
             int ac = BaseAc;
-            if (catalog != null)
+            if (lookup != null)
             {
                 foreach (InventoryItem equipped in _equipped.Values)
                 {
-                    if (catalog.TryGetValue(equipped.ItemId, out ItemDefinition? item))
+                    if (lookup.TryGetValue(equipped.ItemId, out ItemDefinition? item))
                     {
                         ac += item.ArmorClassBonus;
                     }
@@ -165,9 +236,29 @@ namespace RealmzCore.Exploration
 
         public int GetEffectiveToHit(IReadOnlyDictionary<int, ItemDefinition>? catalog)
         {
+            return GetEffectiveMeleeToHit(catalog);
+        }
+
+        public int GetEffectiveMeleeToHit(IReadOnlyDictionary<int, ItemDefinition>? catalog)
+        {
+            IReadOnlyDictionary<int, ItemDefinition>? lookup = catalog ?? _catalog;
             int toHit = BaseToHit;
-            if (catalog != null && _equipped.TryGetValue(EquipmentSlot.Weapon, out InventoryItem? weapon) &&
-                catalog.TryGetValue(weapon.ItemId, out ItemDefinition? item))
+            if (lookup != null && _equipped.TryGetValue(EquipmentSlot.Weapon, out InventoryItem? weapon) &&
+                lookup.TryGetValue(weapon.ItemId, out ItemDefinition? item))
+            {
+                toHit += item.WeaponBonus * 5;
+            }
+
+            toHit -= (ExhaustionStacks + CurseStacks) * 2;
+            return toHit;
+        }
+
+        public int GetEffectiveRangedToHit(IReadOnlyDictionary<int, ItemDefinition>? catalog)
+        {
+            IReadOnlyDictionary<int, ItemDefinition>? lookup = catalog ?? _catalog;
+            int toHit = BaseMissile > 0 ? BaseMissile : BaseToHit;
+            if (lookup != null && _equipped.TryGetValue(EquipmentSlot.MissileWeapon, out InventoryItem? missile) &&
+                lookup.TryGetValue(missile.ItemId, out ItemDefinition? item))
             {
                 toHit += item.WeaponBonus * 5;
             }
@@ -178,8 +269,21 @@ namespace RealmzCore.Exploration
 
         public int GetEffectiveWeaponBonus(IReadOnlyDictionary<int, ItemDefinition>? catalog)
         {
-            if (catalog != null && _equipped.TryGetValue(EquipmentSlot.Weapon, out InventoryItem? weapon) &&
-                catalog.TryGetValue(weapon.ItemId, out ItemDefinition? item))
+            IReadOnlyDictionary<int, ItemDefinition>? lookup = catalog ?? _catalog;
+            if (lookup != null && _equipped.TryGetValue(EquipmentSlot.Weapon, out InventoryItem? weapon) &&
+                lookup.TryGetValue(weapon.ItemId, out ItemDefinition? item))
+            {
+                return item.WeaponBonus;
+            }
+
+            return 0;
+        }
+
+        public int GetEffectiveRangedWeaponBonus(IReadOnlyDictionary<int, ItemDefinition>? catalog)
+        {
+            IReadOnlyDictionary<int, ItemDefinition>? lookup = catalog ?? _catalog;
+            if (lookup != null && _equipped.TryGetValue(EquipmentSlot.MissileWeapon, out InventoryItem? missile) &&
+                lookup.TryGetValue(missile.ItemId, out ItemDefinition? item))
             {
                 return item.WeaponBonus;
             }
@@ -189,8 +293,9 @@ namespace RealmzCore.Exploration
 
         public string GetEffectiveDamageDice(IReadOnlyDictionary<int, ItemDefinition>? catalog)
         {
-            if (catalog != null && _equipped.TryGetValue(EquipmentSlot.Weapon, out InventoryItem? weapon) &&
-                catalog.TryGetValue(weapon.ItemId, out ItemDefinition? item) &&
+            IReadOnlyDictionary<int, ItemDefinition>? lookup = catalog ?? _catalog;
+            if (lookup != null && _equipped.TryGetValue(EquipmentSlot.Weapon, out InventoryItem? weapon) &&
+                lookup.TryGetValue(weapon.ItemId, out ItemDefinition? item) &&
                 !string.IsNullOrWhiteSpace(item.DamageDice))
             {
                 return item.DamageDice;
@@ -201,8 +306,9 @@ namespace RealmzCore.Exploration
 
         public int GetEffectiveRangedRange(IReadOnlyDictionary<int, ItemDefinition>? catalog)
         {
-            if (catalog != null && _equipped.TryGetValue(EquipmentSlot.MissileWeapon, out InventoryItem? missile) &&
-                catalog.TryGetValue(missile.ItemId, out ItemDefinition? item) &&
+            IReadOnlyDictionary<int, ItemDefinition>? lookup = catalog ?? _catalog;
+            if (lookup != null && _equipped.TryGetValue(EquipmentSlot.MissileWeapon, out InventoryItem? missile) &&
+                lookup.TryGetValue(missile.ItemId, out ItemDefinition? item) &&
                 item.Range > 1)
             {
                 return item.Range;
@@ -213,8 +319,9 @@ namespace RealmzCore.Exploration
 
         public string GetEffectiveRangedDice(IReadOnlyDictionary<int, ItemDefinition>? catalog)
         {
-            if (catalog != null && _equipped.TryGetValue(EquipmentSlot.MissileWeapon, out InventoryItem? missile) &&
-                catalog.TryGetValue(missile.ItemId, out ItemDefinition? item) &&
+            IReadOnlyDictionary<int, ItemDefinition>? lookup = catalog ?? _catalog;
+            if (lookup != null && _equipped.TryGetValue(EquipmentSlot.MissileWeapon, out InventoryItem? missile) &&
+                lookup.TryGetValue(missile.ItemId, out ItemDefinition? item) &&
                 !string.IsNullOrWhiteSpace(item.DamageDice))
             {
                 return item.DamageDice;
@@ -225,12 +332,13 @@ namespace RealmzCore.Exploration
 
         public int GetEffectiveMovementMax(IReadOnlyDictionary<int, ItemDefinition>? catalog)
         {
+            IReadOnlyDictionary<int, ItemDefinition>? lookup = catalog ?? _catalog;
             int move = BaseMovementMax;
-            if (catalog != null)
+            if (lookup != null)
             {
                 foreach (InventoryItem equipped in _equipped.Values)
                 {
-                    if (catalog.TryGetValue(equipped.ItemId, out ItemDefinition? item))
+                    if (lookup.TryGetValue(equipped.ItemId, out ItemDefinition? item))
                     {
                         move += item.MovementMod;
                     }
@@ -439,7 +547,7 @@ namespace RealmzCore.Exploration
             if (slot == EquipmentSlot.Weapon && def.IsTwoHanded &&
                 hero.Equipped.TryGetValue(EquipmentSlot.Shield, out InventoryItem? prevShield))
             {
-                hero.RemoveEquippedInternal(EquipmentSlot.Shield);
+                hero.RemoveEquippedInternal(EquipmentSlot.Shield, catalog);
                 AddItemToStash(prevShield.ItemId, prevShield.Quantity, prevShield.IsIdentified, prevShield.RemainingCharges);
             }
             else if (slot == EquipmentSlot.Shield &&
@@ -447,11 +555,11 @@ namespace RealmzCore.Exploration
                      catalog.TryGetValue(prevWeapon.ItemId, out ItemDefinition? prevWeaponDef) &&
                      prevWeaponDef.IsTwoHanded)
             {
-                hero.RemoveEquippedInternal(EquipmentSlot.Weapon);
+                hero.RemoveEquippedInternal(EquipmentSlot.Weapon, catalog);
                 AddItemToStash(prevWeapon.ItemId, prevWeapon.Quantity, prevWeapon.IsIdentified, prevWeapon.RemainingCharges);
             }
 
-            hero.SetEquippedInternal(slot, toEquip);
+            hero.SetEquippedInternal(slot, toEquip, catalog);
             return true;
         }
 
@@ -473,7 +581,7 @@ namespace RealmzCore.Exploration
                 return false;
             }
 
-            hero.RemoveEquippedInternal(slot);
+            hero.RemoveEquippedInternal(slot, catalog);
             AddItemToStash(equipped.ItemId, equipped.Quantity, equipped.IsIdentified, equipped.RemainingCharges);
             return true;
         }

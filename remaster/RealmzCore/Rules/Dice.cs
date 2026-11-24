@@ -247,6 +247,8 @@ namespace RealmzCore.Rules
             _state = seed;
         }
 
+        public ulong State => _state;
+
         public ulong NextUInt64()
         {
             _state += 0x9E3779B97F4A7C15UL;

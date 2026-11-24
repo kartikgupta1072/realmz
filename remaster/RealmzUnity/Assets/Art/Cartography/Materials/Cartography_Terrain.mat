@@ -35,15 +35,19 @@ Material:
     m_Floats:
     - _BumpScale: 1
     - _CreaseAOStrength: 1
+    - _GroundValueScale: 0.76
+    - _HorizonHazeStrength: 0.09
     - _LanternPoolIntensity: 1.35
     - _MacroScale: 0.085
     - _MacroStrength: 0.1
     - _NoiseBlendSharpness: 18
     - _NoiseMaskStrength: 0.55
+    - _RoadValueBoost: 0.86
     - _Smoothness: 0.06
     - _TexelResolution: 128
     - _WorldTexelScale: 0.5
     m_Colors:
+    - _HorizonHazeColor: {r: 0.91, g: 0.83, b: 0.7, a: 1}
     - _LanternPoolColor: {r: 1, g: 0.62, b: 0.23999995, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
