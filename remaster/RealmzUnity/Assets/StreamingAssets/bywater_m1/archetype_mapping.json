@@ -1,0 +1,1253 @@
+{
+  "scenario": "city_of_bywater",
+  "total_monsters": 133,
+  "mapped_count": 133,
+  "w234_archetypes_reused": 7,
+  "pack2_new_archetypes": 36,
+  "bonus_ranged_archetypes": [
+    "monster_skeleton_archer"
+  ],
+  "archetype_usage_counts": {
+    "w234:monster_giant_frog": 1,
+    "monster_giant_centipede": 1,
+    "monster_cave_lizard": 8,
+    "monster_ogre_brute": 5,
+    "monster_demon_lord": 9,
+    "monster_carrion_grub": 3,
+    "monster_giant_scorpion": 2,
+    "monster_dragon_wyrm": 6,
+    "monster_giant_snake": 2,
+    "monster_giant_spider": 7,
+    "monster_minotaur": 4,
+    "monster_cave_troll": 4,
+    "monster_skeletal_beast": 1,
+    "monster_skeletal_giant": 1,
+    "monster_kobold_skirmisher": 6,
+    "monster_sabre_feline": 2,
+    "monster_wolf_worg": 1,
+    "monster_evil_mage": 7,
+    "monster_cave_bear": 3,
+    "monster_mush_creature": 8,
+    "monster_dark_cultist": 4,
+    "monster_widow_spider": 1,
+    "monster_hill_giant": 2,
+    "monster_town_guard": 8,
+    "monster_giant_bat": 1,
+    "monster_slime_ooze": 5,
+    "monster_mummy": 1,
+    "w234:monster_skeleton_warrior": 1,
+    "monster_ghoul": 2,
+    "monster_zombie": 2,
+    "monster_giant_boar": 1,
+    "monster_wraith_spectre": 2,
+    "w234:monster_orc_warrior": 3,
+    "w234:monster_goblin_raider": 3,
+    "w234:monster_bandit_cutthroat": 2,
+    "monster_giant_wasp": 3,
+    "monster_giant_beetle": 2,
+    "monster_goblin_shaman": 2,
+    "monster_orc_shaman": 2,
+    "w234:monster_giant_rat": 2,
+    "w234:monster_goblin_archer": 1,
+    "monster_rat_demilord": 2
+  },
+  "records": [
+    {
+      "monster_index": 0,
+      "name": "Giant Frog",
+      "icon_id": 392,
+      "hd": 3,
+      "size": 2,
+      "archetype": "w234:monster_giant_frog",
+      "source": "w234"
+    },
+    {
+      "monster_index": 1,
+      "name": "Giant Centipede",
+      "icon_id": 393,
+      "hd": 2,
+      "size": 2,
+      "archetype": "monster_giant_centipede",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 2,
+      "name": "Cave Lizard",
+      "icon_id": 394,
+      "hd": 5,
+      "size": 2,
+      "archetype": "monster_cave_lizard",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 3,
+      "name": "Dogre",
+      "icon_id": 395,
+      "hd": 6,
+      "size": 3,
+      "archetype": "monster_ogre_brute",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 4,
+      "name": "Minor Demon",
+      "icon_id": 444,
+      "hd": 7,
+      "size": 3,
+      "archetype": "monster_demon_lord",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 5,
+      "name": "Dragon Lizard",
+      "icon_id": 420,
+      "hd": 15,
+      "size": 3,
+      "archetype": "monster_cave_lizard",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 6,
+      "name": "Larva",
+      "icon_id": 398,
+      "hd": 7,
+      "size": 2,
+      "archetype": "monster_carrion_grub",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 7,
+      "name": "Whip Scorpion",
+      "icon_id": 399,
+      "hd": 8,
+      "size": 2,
+      "archetype": "monster_giant_scorpion",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 8,
+      "name": "Kisk Dragon",
+      "icon_id": 400,
+      "hd": 16,
+      "size": 3,
+      "archetype": "monster_dragon_wyrm",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 9,
+      "name": "Giant Wyrm",
+      "icon_id": 401,
+      "hd": 10,
+      "size": 2,
+      "archetype": "monster_giant_snake",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 10,
+      "name": "Rock Spider",
+      "icon_id": 402,
+      "hd": 8,
+      "size": 2,
+      "archetype": "monster_giant_spider",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 11,
+      "name": "Dune Spider",
+      "icon_id": 403,
+      "hd": 10,
+      "size": 2,
+      "archetype": "monster_giant_spider",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 12,
+      "name": "Rewop",
+      "icon_id": 454,
+      "hd": 18,
+      "size": 3,
+      "archetype": "monster_demon_lord",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 13,
+      "name": "Hell Dragon",
+      "icon_id": 405,
+      "hd": 20,
+      "size": 3,
+      "archetype": "monster_dragon_wyrm",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 14,
+      "name": "Minotaur",
+      "icon_id": 407,
+      "hd": 8,
+      "size": 3,
+      "archetype": "monster_minotaur",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 15,
+      "name": "Minotaur",
+      "icon_id": 406,
+      "hd": 11,
+      "size": 3,
+      "archetype": "monster_minotaur",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 16,
+      "name": "Giant Troll",
+      "icon_id": 408,
+      "hd": 12,
+      "size": 3,
+      "archetype": "monster_cave_troll",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 17,
+      "name": "Skeletal Beast",
+      "icon_id": 409,
+      "hd": 12,
+      "size": 3,
+      "archetype": "monster_skeletal_beast",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 18,
+      "name": "Horvath",
+      "icon_id": 410,
+      "hd": 11,
+      "size": 3,
+      "archetype": "monster_minotaur",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 19,
+      "name": "Skeletal Giant",
+      "icon_id": 411,
+      "hd": 13,
+      "size": 3,
+      "archetype": "monster_skeletal_giant",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 20,
+      "name": "Proto-Shantile",
+      "icon_id": 412,
+      "hd": 9,
+      "size": 3,
+      "archetype": "monster_kobold_skirmisher",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 21,
+      "name": "Silt Spider",
+      "icon_id": 413,
+      "hd": 5,
+      "size": 2,
+      "archetype": "monster_giant_spider",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 22,
+      "name": "Vesp Spider",
+      "icon_id": 414,
+      "hd": 6,
+      "size": 2,
+      "archetype": "monster_giant_spider",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 23,
+      "name": "Proto-Vrack",
+      "icon_id": 415,
+      "hd": 8,
+      "size": 3,
+      "archetype": "monster_sabre_feline",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 24,
+      "name": "Proto-Hyena",
+      "icon_id": 416,
+      "hd": 9,
+      "size": 3,
+      "archetype": "monster_wolf_worg",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 25,
+      "name": "Great Wizard",
+      "icon_id": 417,
+      "hd": 12,
+      "size": 0,
+      "archetype": "monster_evil_mage",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 26,
+      "name": "Dinosaur",
+      "icon_id": 418,
+      "hd": 16,
+      "size": 3,
+      "archetype": "monster_cave_lizard",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 27,
+      "name": "Cave Bear",
+      "icon_id": 419,
+      "hd": 9,
+      "size": 3,
+      "archetype": "monster_cave_bear",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 28,
+      "name": "Terror Beast",
+      "icon_id": 420,
+      "hd": 16,
+      "size": 3,
+      "archetype": "monster_dragon_wyrm",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 29,
+      "name": "Mush Man",
+      "icon_id": 458,
+      "hd": 7,
+      "size": 0,
+      "archetype": "monster_mush_creature",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 30,
+      "name": "Apprentice",
+      "icon_id": 417,
+      "hd": 4,
+      "size": 0,
+      "archetype": "monster_dark_cultist",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 31,
+      "name": "Widow of the Web",
+      "icon_id": 423,
+      "hd": 16,
+      "size": 3,
+      "archetype": "monster_widow_spider",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 32,
+      "name": "Guardian Spider",
+      "icon_id": 424,
+      "hd": 10,
+      "size": 3,
+      "archetype": "monster_giant_spider",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 33,
+      "name": "Giant Snake",
+      "icon_id": 425,
+      "hd": 10,
+      "size": 3,
+      "archetype": "monster_giant_snake",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 34,
+      "name": "Dinosaur",
+      "icon_id": 426,
+      "hd": 6,
+      "size": 2,
+      "archetype": "monster_cave_lizard",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 35,
+      "name": "Mush Mound",
+      "icon_id": 456,
+      "hd": 15,
+      "size": 1,
+      "archetype": "monster_mush_creature",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 36,
+      "name": "Sabre Feline",
+      "icon_id": 428,
+      "hd": 8,
+      "size": 2,
+      "archetype": "monster_sabre_feline",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 37,
+      "name": "Podling",
+      "icon_id": 458,
+      "hd": 3,
+      "size": 0,
+      "archetype": "monster_mush_creature",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 38,
+      "name": "Red Dragon",
+      "icon_id": 430,
+      "hd": 14,
+      "size": 3,
+      "archetype": "monster_dragon_wyrm",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 39,
+      "name": "Blue Dragon",
+      "icon_id": 431,
+      "hd": 12,
+      "size": 3,
+      "archetype": "monster_dragon_wyrm",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 40,
+      "name": "Green Dragon",
+      "icon_id": 432,
+      "hd": 9,
+      "size": 3,
+      "archetype": "monster_dragon_wyrm",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 41,
+      "name": "Mush Mound",
+      "icon_id": 456,
+      "hd": 15,
+      "size": 1,
+      "archetype": "monster_mush_creature",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 42,
+      "name": "Podling",
+      "icon_id": 458,
+      "hd": 3,
+      "size": 0,
+      "archetype": "monster_mush_creature",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 43,
+      "name": "Mush Mound",
+      "icon_id": 456,
+      "hd": 15,
+      "size": 1,
+      "archetype": "monster_mush_creature",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 44,
+      "name": "Podling",
+      "icon_id": 458,
+      "hd": 3,
+      "size": 0,
+      "archetype": "monster_mush_creature",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 45,
+      "name": "Fire Fiend",
+      "icon_id": 478,
+      "hd": 7,
+      "size": 3,
+      "archetype": "monster_demon_lord",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 46,
+      "name": "Carrion Slug",
+      "icon_id": 398,
+      "hd": 3,
+      "size": 2,
+      "archetype": "monster_carrion_grub",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 47,
+      "name": "Proto-Badger",
+      "icon_id": 439,
+      "hd": 3,
+      "size": 2,
+      "archetype": "monster_cave_bear",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 48,
+      "name": "Hill Giant",
+      "icon_id": 440,
+      "hd": 8,
+      "size": 1,
+      "archetype": "monster_hill_giant",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 49,
+      "name": "Cavalry Trooper",
+      "icon_id": 441,
+      "hd": 3,
+      "size": 1,
+      "archetype": "monster_town_guard",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 50,
+      "name": "Cavalry Officer",
+      "icon_id": 442,
+      "hd": 5,
+      "size": 1,
+      "archetype": "monster_town_guard",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 51,
+      "name": "Dinosaur",
+      "icon_id": 443,
+      "hd": 4,
+      "size": 1,
+      "archetype": "monster_cave_lizard",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 52,
+      "name": "Secret Cleric",
+      "icon_id": 417,
+      "hd": 8,
+      "size": 0,
+      "archetype": "monster_dark_cultist",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 53,
+      "name": "Ogre",
+      "icon_id": 445,
+      "hd": 4,
+      "size": 1,
+      "archetype": "monster_ogre_brute",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 54,
+      "name": "Dinosaur",
+      "icon_id": 446,
+      "hd": 6,
+      "size": 2,
+      "archetype": "monster_cave_lizard",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 55,
+      "name": "Young Hill Giant",
+      "icon_id": 440,
+      "hd": 5,
+      "size": 1,
+      "archetype": "monster_hill_giant",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 56,
+      "name": "Gnath",
+      "icon_id": 397,
+      "hd": 4,
+      "size": 3,
+      "archetype": "monster_kobold_skirmisher",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 57,
+      "name": "Dinosaur",
+      "icon_id": 448,
+      "hd": 4,
+      "size": 1,
+      "archetype": "monster_cave_lizard",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 58,
+      "name": "Cacodeamon Warlord",
+      "icon_id": 450,
+      "hd": 7,
+      "size": 3,
+      "archetype": "monster_demon_lord",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 59,
+      "name": "Hell Bat",
+      "icon_id": 451,
+      "hd": 6,
+      "size": 2,
+      "archetype": "monster_giant_bat",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 60,
+      "name": "Dinosaur",
+      "icon_id": 452,
+      "hd": 14,
+      "size": 3,
+      "archetype": "monster_cave_lizard",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 61,
+      "name": "Huge Slime",
+      "icon_id": 465,
+      "hd": 4,
+      "size": 3,
+      "archetype": "monster_slime_ooze",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 62,
+      "name": "Small Slime",
+      "icon_id": 465,
+      "hd": 1,
+      "size": 0,
+      "archetype": "monster_slime_ooze",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 63,
+      "name": "Winged Devil",
+      "icon_id": 455,
+      "hd": 3,
+      "size": 0,
+      "archetype": "monster_demon_lord",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 64,
+      "name": "Dogre Champion",
+      "icon_id": 438,
+      "hd": 9,
+      "size": 3,
+      "archetype": "monster_ogre_brute",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 65,
+      "name": "Mummy",
+      "icon_id": 457,
+      "hd": 8,
+      "size": 1,
+      "archetype": "monster_mummy",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 66,
+      "name": "Mad Troll",
+      "icon_id": 408,
+      "hd": 15,
+      "size": 3,
+      "archetype": "monster_cave_troll",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 67,
+      "name": "Troll",
+      "icon_id": 408,
+      "hd": 9,
+      "size": 3,
+      "archetype": "monster_cave_troll",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 68,
+      "name": "Hag",
+      "icon_id": 460,
+      "hd": 6,
+      "size": 1,
+      "archetype": "monster_dark_cultist",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 69,
+      "name": "Cragentooth",
+      "icon_id": 438,
+      "hd": 16,
+      "size": 3,
+      "archetype": "monster_ogre_brute",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 70,
+      "name": "Skeletal Warrior",
+      "icon_id": 505,
+      "hd": 1,
+      "size": 0,
+      "archetype": "w234:monster_skeleton_warrior",
+      "source": "w234"
+    },
+    {
+      "monster_index": 71,
+      "name": "Vodalian",
+      "icon_id": 466,
+      "hd": 6,
+      "size": 0,
+      "archetype": "monster_evil_mage",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 72,
+      "name": "Slime",
+      "icon_id": 464,
+      "hd": 1,
+      "size": 0,
+      "archetype": "monster_slime_ooze",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 73,
+      "name": "Slime",
+      "icon_id": 465,
+      "hd": 1,
+      "size": 0,
+      "archetype": "monster_slime_ooze",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 74,
+      "name": "Human Mage",
+      "icon_id": 466,
+      "hd": 4,
+      "size": 0,
+      "archetype": "monster_evil_mage",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 75,
+      "name": "Ghoul",
+      "icon_id": 467,
+      "hd": 3,
+      "size": 0,
+      "archetype": "monster_ghoul",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 76,
+      "name": "Giant Spider",
+      "icon_id": 468,
+      "hd": 1,
+      "size": 0,
+      "archetype": "monster_giant_spider",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 77,
+      "name": "Anti'id",
+      "icon_id": 475,
+      "hd": 15,
+      "size": 0,
+      "archetype": "monster_demon_lord",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 78,
+      "name": "Zombie",
+      "icon_id": 470,
+      "hd": 2,
+      "size": 0,
+      "archetype": "monster_zombie",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 79,
+      "name": "Trigwig",
+      "icon_id": 482,
+      "hd": 8,
+      "size": 3,
+      "archetype": "monster_mush_creature",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 80,
+      "name": "Krise",
+      "icon_id": 494,
+      "hd": 1,
+      "size": 0,
+      "archetype": "monster_kobold_skirmisher",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 81,
+      "name": "Giant Boar",
+      "icon_id": 473,
+      "hd": 9,
+      "size": 2,
+      "archetype": "monster_giant_boar",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 82,
+      "name": "Human Mage",
+      "icon_id": 466,
+      "hd": 7,
+      "size": 0,
+      "archetype": "monster_evil_mage",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 83,
+      "name": "Slime Demon",
+      "icon_id": 475,
+      "hd": 1,
+      "size": 0,
+      "archetype": "monster_slime_ooze",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 84,
+      "name": "Ghost",
+      "icon_id": 435,
+      "hd": 9,
+      "size": 0,
+      "archetype": "monster_wraith_spectre",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 85,
+      "name": "Spectre",
+      "icon_id": 435,
+      "hd": 15,
+      "size": 3,
+      "archetype": "monster_wraith_spectre",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 86,
+      "name": "Giant Zombie",
+      "icon_id": 436,
+      "hd": 7,
+      "size": 3,
+      "archetype": "monster_zombie",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 87,
+      "name": "Recluse Wizard",
+      "icon_id": 417,
+      "hd": 12,
+      "size": 0,
+      "archetype": "monster_evil_mage",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 88,
+      "name": "Wizard Headmaster",
+      "icon_id": 466,
+      "hd": 15,
+      "size": 0,
+      "archetype": "monster_evil_mage",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 89,
+      "name": "Demon Lord",
+      "icon_id": 444,
+      "hd": 15,
+      "size": 3,
+      "archetype": "monster_demon_lord",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 90,
+      "name": "Reppep Rd",
+      "icon_id": 492,
+      "hd": 8,
+      "size": 0,
+      "archetype": "monster_town_guard",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 91,
+      "name": "Orc Warrior",
+      "icon_id": 515,
+      "hd": 1,
+      "size": 0,
+      "archetype": "w234:monster_orc_warrior",
+      "source": "w234"
+    },
+    {
+      "monster_index": 92,
+      "name": "Goblin",
+      "icon_id": 384,
+      "hd": 1,
+      "size": 0,
+      "archetype": "w234:monster_goblin_raider",
+      "source": "w234"
+    },
+    {
+      "monster_index": 93,
+      "name": "Goblin Hero",
+      "icon_id": 387,
+      "hd": 5,
+      "size": 0,
+      "archetype": "w234:monster_goblin_raider",
+      "source": "w234"
+    },
+    {
+      "monster_index": 94,
+      "name": "Vixies Spider",
+      "icon_id": 423,
+      "hd": 8,
+      "size": 3,
+      "archetype": "monster_giant_spider",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 95,
+      "name": "Royal Guard",
+      "icon_id": 486,
+      "hd": 1,
+      "size": 0,
+      "archetype": "monster_town_guard",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 96,
+      "name": "Royal Corporal",
+      "icon_id": 487,
+      "hd": 2,
+      "size": 0,
+      "archetype": "monster_town_guard",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 97,
+      "name": "Royal Sergeant",
+      "icon_id": 488,
+      "hd": 3,
+      "size": 0,
+      "archetype": "monster_town_guard",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 98,
+      "name": "Royal Lieutenant",
+      "icon_id": 489,
+      "hd": 4,
+      "size": 0,
+      "archetype": "monster_town_guard",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 99,
+      "name": "Royal Captain",
+      "icon_id": 490,
+      "hd": 7,
+      "size": 0,
+      "archetype": "monster_town_guard",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 100,
+      "name": "Flesh Fiend",
+      "icon_id": 461,
+      "hd": 6,
+      "size": 0,
+      "archetype": "monster_ghoul",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 101,
+      "name": "Cacodaemon Warrior",
+      "icon_id": 493,
+      "hd": 2,
+      "size": 0,
+      "archetype": "monster_demon_lord",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 102,
+      "name": "Carrion Beast",
+      "icon_id": 479,
+      "hd": 5,
+      "size": 3,
+      "archetype": "monster_cave_bear",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 103,
+      "name": "Mercenary Villain",
+      "icon_id": 496,
+      "hd": 5,
+      "size": 0,
+      "archetype": "w234:monster_bandit_cutthroat",
+      "source": "w234"
+    },
+    {
+      "monster_index": 104,
+      "name": "Thief",
+      "icon_id": 495,
+      "hd": 1,
+      "size": 0,
+      "archetype": "w234:monster_bandit_cutthroat",
+      "source": "w234"
+    },
+    {
+      "monster_index": 105,
+      "name": "Magistrate",
+      "icon_id": 481,
+      "hd": 8,
+      "size": 0,
+      "archetype": "monster_evil_mage",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 108,
+      "name": "Demon",
+      "icon_id": 500,
+      "hd": 4,
+      "size": 0,
+      "archetype": "monster_demon_lord",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 109,
+      "name": "Giant Wasp",
+      "icon_id": 501,
+      "hd": 2,
+      "size": 0,
+      "archetype": "monster_giant_wasp",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 110,
+      "name": "Shantile",
+      "icon_id": 502,
+      "hd": 3,
+      "size": 0,
+      "archetype": "monster_kobold_skirmisher",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 111,
+      "name": "High Priest",
+      "icon_id": 386,
+      "hd": 12,
+      "size": 0,
+      "archetype": "monster_dark_cultist",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 112,
+      "name": "Young Troll",
+      "icon_id": 504,
+      "hd": 3,
+      "size": 0,
+      "archetype": "monster_cave_troll",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 114,
+      "name": "Mental Flea",
+      "icon_id": 506,
+      "hd": 5,
+      "size": 0,
+      "archetype": "monster_giant_wasp",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 115,
+      "name": "Giant Beetle",
+      "icon_id": 507,
+      "hd": 2,
+      "size": 0,
+      "archetype": "monster_giant_beetle",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 116,
+      "name": "Goblin Shaman",
+      "icon_id": 508,
+      "hd": 3,
+      "size": 0,
+      "archetype": "monster_goblin_shaman",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 117,
+      "name": "Slime Worm",
+      "icon_id": 398,
+      "hd": 3,
+      "size": 2,
+      "archetype": "monster_carrion_grub",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 118,
+      "name": "Giant Scorpion",
+      "icon_id": 510,
+      "hd": 4,
+      "size": 2,
+      "archetype": "monster_giant_scorpion",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 119,
+      "name": "Troglodyte",
+      "icon_id": 502,
+      "hd": 3,
+      "size": 0,
+      "archetype": "monster_kobold_skirmisher",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 120,
+      "name": "Orc Champion",
+      "icon_id": 512,
+      "hd": 5,
+      "size": 0,
+      "archetype": "w234:monster_orc_warrior",
+      "source": "w234"
+    },
+    {
+      "monster_index": 121,
+      "name": "Orc Shaman",
+      "icon_id": 385,
+      "hd": 3,
+      "size": 0,
+      "archetype": "monster_orc_shaman",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 122,
+      "name": "Orc Warrior",
+      "icon_id": 512,
+      "hd": 4,
+      "size": 0,
+      "archetype": "w234:monster_orc_warrior",
+      "source": "w234"
+    },
+    {
+      "monster_index": 123,
+      "name": "Beast Man",
+      "icon_id": 514,
+      "hd": 3,
+      "size": 0,
+      "archetype": "monster_minotaur",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 124,
+      "name": "Gnome Warrior",
+      "icon_id": 437,
+      "hd": 3,
+      "size": 0,
+      "archetype": "monster_kobold_skirmisher",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 125,
+      "name": "Monstrous Rat",
+      "icon_id": 511,
+      "hd": 3,
+      "size": 2,
+      "archetype": "w234:monster_giant_rat",
+      "source": "w234"
+    },
+    {
+      "monster_index": 126,
+      "name": "Orc Archer",
+      "icon_id": 513,
+      "hd": 1,
+      "size": 0,
+      "archetype": "monster_orc_shaman",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 127,
+      "name": "Giant Bee",
+      "icon_id": 391,
+      "hd": 2,
+      "size": 0,
+      "archetype": "monster_giant_wasp",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 128,
+      "name": "Giant Worker Ant",
+      "icon_id": 516,
+      "hd": 2,
+      "size": 0,
+      "archetype": "monster_giant_beetle",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 129,
+      "name": "Goblin Champion",
+      "icon_id": 390,
+      "hd": 3,
+      "size": 0,
+      "archetype": "w234:monster_goblin_raider",
+      "source": "w234"
+    },
+    {
+      "monster_index": 130,
+      "name": "Goblin Archer",
+      "icon_id": 388,
+      "hd": 1,
+      "size": 0,
+      "archetype": "w234:monster_goblin_archer",
+      "source": "w234"
+    },
+    {
+      "monster_index": 131,
+      "name": "Goblin Chief",
+      "icon_id": 389,
+      "hd": 4,
+      "size": 0,
+      "archetype": "monster_goblin_shaman",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 132,
+      "name": "Bigbelly",
+      "icon_id": 389,
+      "hd": 5,
+      "size": 0,
+      "archetype": "monster_ogre_brute",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 133,
+      "name": "Giant Rat",
+      "icon_id": 449,
+      "hd": 1,
+      "size": 0,
+      "archetype": "w234:monster_giant_rat",
+      "source": "w234"
+    },
+    {
+      "monster_index": 134,
+      "name": "Rat Demi-Lord",
+      "icon_id": 434,
+      "hd": 9,
+      "size": 1,
+      "archetype": "monster_rat_demilord",
+      "source": "pack2"
+    },
+    {
+      "monster_index": 135,
+      "name": "Undead Rat Demi-Lord",
+      "icon_id": 434,
+      "hd": 15,
+      "size": 1,
+      "archetype": "monster_rat_demilord",
+      "source": "pack2"
+    }
+  ]
+}

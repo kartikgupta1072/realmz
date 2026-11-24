@@ -91,33 +91,134 @@ MonoBehaviour:
   cartographyTerrainMaterial: {fileID: 2100000, guid: d33ebfacf7448a9418c266b973279ab9, type: 2}
   cartographyWaterMaterial: {fileID: 2100000, guid: 90ab25e0ba89d804faf000f07d2b34b1, type: 2}
   cartographyFoliageMaterial: {fileID: 2100000, guid: 846bcf7afaebbe445bce7f588a6edae7, type: 2}
+  cartographyDungeonTerrainMaterial: {fileID: 2100000, guid: 793ee55ea35fec04ebf3c2cfeea2a915, type: 2}
+  cartographyDungeonWaterMaterial: {fileID: 2100000, guid: a5a9121478948d440babe9bdb70d24b5, type: 2}
+  cartographyDungeonFoliageMaterial: {fileID: 2100000, guid: b3ea1888f5725b34ab25c358eb281bdd, type: 2}
+  cartographyMarshFoliageMaterial: {fileID: 2100000, guid: 9bc4f0f6ddd99b448b14ae6ceb174a0a, type: 2}
   cartographyPropMaterials:
   - kind: 1
     material: {fileID: 2100000, guid: 7c185625934ab384a8067e4a8c247b63, type: 2}
+    sizeMeters: {x: 5, y: 4}
   - kind: 2
     material: {fileID: 2100000, guid: 9fc607fb3e97c3343b9f76fbd8b37a86, type: 2}
+    sizeMeters: {x: 4, y: 3}
   - kind: 3
     material: {fileID: 2100000, guid: 3c11552d9aeda014e9fd1bf726ad1040, type: 2}
+    sizeMeters: {x: 2, y: 2}
   - kind: 4
     material: {fileID: 2100000, guid: 2cde2317094ac9b43925aa7296fd1b81, type: 2}
+    sizeMeters: {x: 2, y: 2}
   - kind: 5
     material: {fileID: 2100000, guid: 1affa877c2f8e4348ad21f3f1fa125df, type: 2}
+    sizeMeters: {x: 2, y: 2}
   - kind: 6
     material: {fileID: 2100000, guid: afcd8343fcbea8e4aa69a0ec3df911f5, type: 2}
+    sizeMeters: {x: 2, y: 2}
   - kind: 7
     material: {fileID: 2100000, guid: 418b20d084e313e4e96575f323641737, type: 2}
+    sizeMeters: {x: 3.5, y: 3.5}
   - kind: 8
     material: {fileID: 2100000, guid: ebf3379adaecf4d4284cc9210b10898e, type: 2}
+    sizeMeters: {x: 3.5, y: 3.5}
   - kind: 9
     material: {fileID: 2100000, guid: 578926fe6fce29e44978955d336c4f01, type: 2}
+    sizeMeters: {x: 3, y: 4}
   - kind: 10
     material: {fileID: 2100000, guid: e394a5d474afd084ab5c30a95bbc6888, type: 2}
+    sizeMeters: {x: 3, y: 4}
   - kind: 11
     material: {fileID: 2100000, guid: 9c834e352b478a743845a3bc2ba02053, type: 2}
+    sizeMeters: {x: 4, y: 4}
   - kind: 12
     material: {fileID: 2100000, guid: 984f3864e54c74c4ab279d5ed319aa68, type: 2}
+    sizeMeters: {x: 2, y: 2}
   - kind: 13
     material: {fileID: 2100000, guid: f5d3c13ac2fbe444e8f20cd26e18a0a4, type: 2}
+    sizeMeters: {x: 2, y: 1.75}
+  - kind: 14
+    material: {fileID: 2100000, guid: 7dca53c85ce6c0949910de97f1cf186b, type: 2}
+    sizeMeters: {x: 5, y: 4}
+  - kind: 15
+    material: {fileID: 2100000, guid: 4941d350599968a4aafd2811882d56fe, type: 2}
+    sizeMeters: {x: 4.5, y: 4}
+  - kind: 16
+    material: {fileID: 2100000, guid: 0da065741cfb42b4fa63c0f3a673ecac, type: 2}
+    sizeMeters: {x: 5, y: 5}
+  - kind: 17
+    material: {fileID: 2100000, guid: 8d5ca9c486f23fe4ea77671e4423bbdb, type: 2}
+    sizeMeters: {x: 6, y: 5}
+  - kind: 18
+    material: {fileID: 2100000, guid: 067e128147aefc04b9328a1d56102a2a, type: 2}
+    sizeMeters: {x: 4, y: 4}
+  - kind: 19
+    material: {fileID: 2100000, guid: 19884a47d31469440a352b4ff1afeee1, type: 2}
+    sizeMeters: {x: 4, y: 4}
+  - kind: 20
+    material: {fileID: 2100000, guid: f749d6ca505104641a6363871a89d369, type: 2}
+    sizeMeters: {x: 4, y: 5}
+  - kind: 21
+    material: {fileID: 2100000, guid: 5428da90fea90c946889ed5de5f83b3d, type: 2}
+    sizeMeters: {x: 2.5, y: 2.25}
+  - kind: 22
+    material: {fileID: 2100000, guid: c3c51a5f9b1deb84bad69971dd497de8, type: 2}
+    sizeMeters: {x: 2.5, y: 2.25}
+  - kind: 23
+    material: {fileID: 2100000, guid: cc1c0c0ac4413f7419cf642f8c413d79, type: 2}
+    sizeMeters: {x: 2, y: 2.25}
+  - kind: 24
+    material: {fileID: 2100000, guid: f99981ef1c34b0e4e99e8aa66c19d6e7, type: 2}
+    sizeMeters: {x: 1.5, y: 2}
+  - kind: 25
+    material: {fileID: 2100000, guid: 9f820129ad74f484384b59b043a8cfb8, type: 2}
+    sizeMeters: {x: 3, y: 2.25}
+  - kind: 26
+    material: {fileID: 2100000, guid: 9c88fbbe0b0d9194f91bdb0bcde1090d, type: 2}
+    sizeMeters: {x: 2, y: 1.75}
+  - kind: 27
+    material: {fileID: 2100000, guid: 2f333cbd185b9d746867bb65adf0e262, type: 2}
+    sizeMeters: {x: 2.5, y: 2}
+  - kind: 28
+    material: {fileID: 2100000, guid: 7c4e8fb40abd43b4681fe503a43952e5, type: 2}
+    sizeMeters: {x: 2.5, y: 2.25}
+  - kind: 29
+    material: {fileID: 2100000, guid: 1c315a220a77c0245bc018ecbdf94270, type: 2}
+    sizeMeters: {x: 2, y: 2.75}
+  - kind: 30
+    material: {fileID: 2100000, guid: 8a2c3473b4b8141438b42b918433a1b4, type: 2}
+    sizeMeters: {x: 2, y: 2}
+  - kind: 31
+    material: {fileID: 2100000, guid: fa4e531da43b1af498fc7412cba971d0, type: 2}
+    sizeMeters: {x: 1.5, y: 1.5}
+  - kind: 32
+    material: {fileID: 2100000, guid: fd19831814424f644a411e9ba4d12e62, type: 2}
+    sizeMeters: {x: 1.5, y: 1.5}
+  - kind: 33
+    material: {fileID: 2100000, guid: 00812cfadd896864eacc09901c692173, type: 2}
+    sizeMeters: {x: 2.25, y: 2.75}
+  - kind: 34
+    material: {fileID: 2100000, guid: c51e1a16f97b4384791d78b33a5fa1a4, type: 2}
+    sizeMeters: {x: 2.25, y: 2.75}
+  - kind: 35
+    material: {fileID: 2100000, guid: d4f4cb9a62a0f8043bc99da54f8be2d0, type: 2}
+    sizeMeters: {x: 1.5, y: 3}
+  - kind: 36
+    material: {fileID: 2100000, guid: 7b68b7ccea0fbfd498c43d25d6b9b4ad, type: 2}
+    sizeMeters: {x: 2.5, y: 2.5}
+  - kind: 37
+    material: {fileID: 2100000, guid: 3720bd27cd82b5541a692dca000ad7d8, type: 2}
+    sizeMeters: {x: 2.5, y: 2.5}
+  - kind: 38
+    material: {fileID: 2100000, guid: 71a491f14a9e0bf4aabdf30be1a67652, type: 2}
+    sizeMeters: {x: 2, y: 2}
+  - kind: 39
+    material: {fileID: 2100000, guid: 7e36838da27c86640a8ce9ec4ef3f36b, type: 2}
+    sizeMeters: {x: 2.5, y: 2.25}
+  - kind: 40
+    material: {fileID: 2100000, guid: ab6db51442401b442905e240e2461281, type: 2}
+    sizeMeters: {x: 2, y: 2}
+  - kind: 41
+    material: {fileID: 2100000, guid: f664c7fee7af16748b2ff91f5605b55f, type: 2}
+    sizeMeters: {x: 2, y: 2}
   hotbarIcons:
   - key: sword
     sprite: {fileID: 21300000, guid: 71ec1dd8bf9850e42a4dec5e3d69d155, type: 3}
@@ -196,7 +297,7 @@ MonoBehaviour:
     billboardMaterial: {fileID: 2100000, guid: ee720a9db0940ac41a3bbef61f187a05, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: ee720a9db0940ac41a3bbef61f187a05, type: 2}
     sprite: {fileID: 6155189297643300040, guid: 4e99ff8f4abd9b84e9db9e4043e88f7b, type: 3}
-    portrait: {fileID: 21300000, guid: 39f36b74c1cd5be4ab227ae0d2f6a701, type: 3}
+    portrait: {fileID: 21300000, guid: ebe3918acdf63cd4e9d07cc82eefd211, type: 3}
   - id: hero_cleric
     archetype: Cleric
     iconId: 9072
@@ -204,7 +305,7 @@ MonoBehaviour:
     billboardMaterial: {fileID: 2100000, guid: 561e660dd67fe8745b959c5ff6425e93, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 561e660dd67fe8745b959c5ff6425e93, type: 2}
     sprite: {fileID: -2544846493698475345, guid: d676b223d1e189143bf90a39fa6d9416, type: 3}
-    portrait: {fileID: 21300000, guid: d4af185f2bd45004bb44c68d6e3f61c6, type: 3}
+    portrait: {fileID: 21300000, guid: d978bf091fc67954b84d2fcfae9b7550, type: 3}
   - id: hero_ranger
     archetype: Ranger
     iconId: 9047
@@ -212,7 +313,7 @@ MonoBehaviour:
     billboardMaterial: {fileID: 2100000, guid: eaba74c95ea5e30439910c615b20eca2, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: eaba74c95ea5e30439910c615b20eca2, type: 2}
     sprite: {fileID: -7868594803492491795, guid: f4de9dc345e76fb41a162e178be08092, type: 3}
-    portrait: {fileID: 21300000, guid: 3573c8a37ca123d4fa23014fb41e5862, type: 3}
+    portrait: {fileID: 21300000, guid: dec1736c140f033498ce3c95a42f2c2d, type: 3}
   - id: hero_mage
     archetype: Mage
     iconId: 9084
@@ -220,7 +321,7 @@ MonoBehaviour:
     billboardMaterial: {fileID: 2100000, guid: 84ed66dec8232e64e97fb31cb0a43d4b, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 84ed66dec8232e64e97fb31cb0a43d4b, type: 2}
     sprite: {fileID: 410388864010854235, guid: e09de461fbb75bb4a859ebf4d353fe9c, type: 3}
-    portrait: {fileID: 21300000, guid: be5fc5596490e6a49a6ef2f5aac9cc66, type: 3}
+    portrait: {fileID: 21300000, guid: a94932be15c350942938e299bbe33ef2, type: 3}
   - id: hero_paladin
     archetype: Paladin
     iconId: 9054
@@ -228,7 +329,7 @@ MonoBehaviour:
     billboardMaterial: {fileID: 2100000, guid: 4e05b11445e441b4dbed25250a6cafdb, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 4e05b11445e441b4dbed25250a6cafdb, type: 2}
     sprite: {fileID: -1787679304370085976, guid: ce83e150187eb2e4aa0aac77087f178a, type: 3}
-    portrait: {fileID: 21300000, guid: ee498c09d50eaad4283b9366b336a667, type: 3}
+    portrait: {fileID: 21300000, guid: 14fcb011401eca442965b5162a1bd177, type: 3}
   - id: hero_rogue
     archetype: Rogue
     iconId: 9106
@@ -236,40 +337,2471 @@ MonoBehaviour:
     billboardMaterial: {fileID: 2100000, guid: 54aa26f282a371c49abfebac5dc8a097, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 54aa26f282a371c49abfebac5dc8a097, type: 2}
     sprite: {fileID: 102566648275596218, guid: 400cb035fa86f9e4a8f8ac7023ec8933, type: 3}
-    portrait: {fileID: 21300000, guid: 8a0a9ff7d3444814f994b12fb3906969, type: 3}
+    portrait: {fileID: 21300000, guid: c71600a3633077041b4d238ab89137c5, type: 3}
   monsters:
   - key: monster_giant_frog
     displayName: Giant Frog
     billboardMaterial: {fileID: 2100000, guid: d399d93badd43a249977e43b09fa9c38, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: d399d93badd43a249977e43b09fa9c38, type: 2}
     sprite: {fileID: -7631220298004938683, guid: 133e6ab5929f79847bc4a76d21060ebc, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 29
+      y: 0
+      width: 68
+      height: 68
+    archetypeKey: monster_giant_frog
   - key: monster_goblin_raider
     displayName: Goblin Raider
     billboardMaterial: {fileID: 2100000, guid: 3d19e413858a62e479bdd8ba26dec931, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 3d19e413858a62e479bdd8ba26dec931, type: 2}
     sprite: {fileID: -2508873913612103028, guid: 6e2f801152d60f240bff57ad1bcaaa56, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 38
+      y: 22
+      width: 49
+      height: 49
+    archetypeKey: monster_goblin_raider
   - key: monster_goblin_archer
     displayName: Goblin Archer
     billboardMaterial: {fileID: 2100000, guid: 2be12826b4fd8f94cbedfa6fcb03ba03, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 2be12826b4fd8f94cbedfa6fcb03ba03, type: 2}
     sprite: {fileID: 2760720447104234719, guid: 9cab83d46d58f7042af10dc03ca09a69, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 43
+      y: 31
+      width: 40
+      height: 40
+    archetypeKey: monster_goblin_archer
   - key: monster_orc_warrior
     displayName: Orc Warrior
     billboardMaterial: {fileID: 2100000, guid: 4c09501a196dcba46afe3a74190639d2, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 4c09501a196dcba46afe3a74190639d2, type: 2}
     sprite: {fileID: -1738930717127524091, guid: 4dd062d66d9d4c14da0556b7a9b8833f, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 28
+      y: 34
+      width: 69
+      height: 69
+    archetypeKey: monster_orc_warrior
   - key: monster_giant_rat
     displayName: Giant Rat
     billboardMaterial: {fileID: 2100000, guid: d8e4c930813b079429b1c6626e25ce54, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: d8e4c930813b079429b1c6626e25ce54, type: 2}
     sprite: {fileID: -3246495356005557760, guid: 03915c8b00ed84a4a9453863fe45ed35, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 29
+      y: 0
+      width: 69
+      height: 69
+    archetypeKey: monster_giant_rat
   - key: monster_skeleton_warrior
     displayName: Skeleton Warrior
     billboardMaterial: {fileID: 2100000, guid: 14c5298476660d347a84e30d8663c9d3, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 14c5298476660d347a84e30d8663c9d3, type: 2}
     sprite: {fileID: -1368396221391136136, guid: d491bc10c3cfd5e45b89877a0628a827, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 37
+      y: 36
+      width: 53
+      height: 53
+    archetypeKey: monster_skeleton_warrior
   - key: monster_bandit_cutthroat
     displayName: Bandit Cutthroat
     billboardMaterial: {fileID: 2100000, guid: c8ec63096eb3a3e48a969785c831d317, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: c8ec63096eb3a3e48a969785c831d317, type: 2}
     sprite: {fileID: 9146512343708235907, guid: c47fc4b9508c1e942bf1b7ed3e5fd53c, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 32
+      y: 24
+      width: 63
+      height: 63
+    archetypeKey: monster_bandit_cutthroat
+  extraHeroes:
+  - id: hero_archer
+    archetype: Archer
+    iconId: 0
+    portraitId: 0
+    billboardMaterial: {fileID: 2100000, guid: 83a2ea3713a0c2542a61c1568f94b772, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 83a2ea3713a0c2542a61c1568f94b772, type: 2}
+    sprite: {fileID: 7481747477788541286, guid: 69566144393f34f44a628c34f30d13d0, type: 3}
+    portrait: {fileID: 21300000, guid: f47c2d87aef5fe347849a29f07abc341, type: 3}
+  - id: hero_assassin
+    archetype: Assassin
+    iconId: 0
+    portraitId: 0
+    billboardMaterial: {fileID: 2100000, guid: 5ba2f5093046d5c45ad2eaa1d0236453, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 5ba2f5093046d5c45ad2eaa1d0236453, type: 2}
+    sprite: {fileID: -2566361393268529990, guid: c9e0865e4fb8adb41aaa0e960181a500, type: 3}
+    portrait: {fileID: 21300000, guid: 01d2444c4ad2b614a916e6c878f30349, type: 3}
+  - id: hero_barbarian
+    archetype: Barbarian
+    iconId: 0
+    portraitId: 0
+    billboardMaterial: {fileID: 2100000, guid: 3236d022414e16246a571ffbc34d3ebc, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 3236d022414e16246a571ffbc34d3ebc, type: 2}
+    sprite: {fileID: -8150205889363191576, guid: a3c5f0a3ca1071140b375ff2879f53e3, type: 3}
+    portrait: {fileID: 21300000, guid: d7ef17e7019c525489370fa884e857b4, type: 3}
+  - id: hero_druid
+    archetype: Druid
+    iconId: 0
+    portraitId: 0
+    billboardMaterial: {fileID: 2100000, guid: 300cdf3712d4be140862562081e8799e, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 300cdf3712d4be140862562081e8799e, type: 2}
+    sprite: {fileID: 7183124212861438544, guid: f8028f663db790d4fa2cb5b8394f1248, type: 3}
+    portrait: {fileID: 21300000, guid: fef8735172b71fc4c919339c82abe5dd, type: 3}
+  - id: hero_enchanter
+    archetype: Enchanter
+    iconId: 0
+    portraitId: 0
+    billboardMaterial: {fileID: 2100000, guid: 477f417901f9cf3498b0137aac2dc913, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 477f417901f9cf3498b0137aac2dc913, type: 2}
+    sprite: {fileID: 5687990352248190393, guid: 70f869aa32aa33d4c93f13541e908a5a, type: 3}
+    portrait: {fileID: 21300000, guid: d1351150710e8a745bcbef73c8eac7b2, type: 3}
+  - id: hero_monk
+    archetype: Monk
+    iconId: 0
+    portraitId: 0
+    billboardMaterial: {fileID: 2100000, guid: cbcac3d10d71c914abb52cf282553b88, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: cbcac3d10d71c914abb52cf282553b88, type: 2}
+    sprite: {fileID: -1664421014446581825, guid: cd151c1d5e69c524eafde9d81a2dcddc, type: 3}
+    portrait: {fileID: 21300000, guid: c7abbe9b3d1d09340a6782e9cc30a5cf, type: 3}
+  unifiedPortraits:
+  - key: archer
+    sprite: {fileID: 21300000, guid: f47c2d87aef5fe347849a29f07abc341, type: 3}
+  - key: assassin
+    sprite: {fileID: 21300000, guid: 01d2444c4ad2b614a916e6c878f30349, type: 3}
+  - key: barbarian
+    sprite: {fileID: 21300000, guid: d7ef17e7019c525489370fa884e857b4, type: 3}
+  - key: cleric
+    sprite: {fileID: 21300000, guid: d978bf091fc67954b84d2fcfae9b7550, type: 3}
+  - key: druid
+    sprite: {fileID: 21300000, guid: fef8735172b71fc4c919339c82abe5dd, type: 3}
+  - key: enchanter
+    sprite: {fileID: 21300000, guid: d1351150710e8a745bcbef73c8eac7b2, type: 3}
+  - key: knight
+    sprite: {fileID: 21300000, guid: ebe3918acdf63cd4e9d07cc82eefd211, type: 3}
+  - key: mage
+    sprite: {fileID: 21300000, guid: a94932be15c350942938e299bbe33ef2, type: 3}
+  - key: monk
+    sprite: {fileID: 21300000, guid: c7abbe9b3d1d09340a6782e9cc30a5cf, type: 3}
+  - key: paladin
+    sprite: {fileID: 21300000, guid: 14fcb011401eca442965b5162a1bd177, type: 3}
+  - key: ranger
+    sprite: {fileID: 21300000, guid: dec1736c140f033498ce3c95a42f2c2d, type: 3}
+  - key: rogue
+    sprite: {fileID: 21300000, guid: c71600a3633077041b4d238ab89137c5, type: 3}
+  expandedMonsters:
+  - key: monster_bandit_cutthroat
+    displayName: Bandit Cutthroat
+    billboardMaterial: {fileID: 2100000, guid: c8ec63096eb3a3e48a969785c831d317, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: c8ec63096eb3a3e48a969785c831d317, type: 2}
+    sprite: {fileID: 9146512343708235907, guid: c47fc4b9508c1e942bf1b7ed3e5fd53c, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 32
+      y: 24
+      width: 63
+      height: 63
+    archetypeKey: monster_bandit_cutthroat
+  - key: monster_carrion_grub
+    displayName: Carrion Grub
+    billboardMaterial: {fileID: 2100000, guid: a27e46e9e62fd794e89f2db2be313af4, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: a27e46e9e62fd794e89f2db2be313af4, type: 2}
+    sprite: {fileID: 8424494968956445617, guid: 21a90bf8aef20654bb6bd89df518642c, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 20
+      y: 0
+      width: 87
+      height: 87
+    archetypeKey: monster_carrion_grub
+  - key: monster_cave_bear
+    displayName: Cave Bear
+    billboardMaterial: {fileID: 2100000, guid: 5e70e650305f6a54c829e7fd4a42347b, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 5e70e650305f6a54c829e7fd4a42347b, type: 2}
+    sprite: {fileID: 3530259241310773449, guid: 05ae15fa9421be5448285584e40a0213, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 40
+      y: 42
+      width: 47
+      height: 47
+    archetypeKey: monster_cave_bear
+  - key: monster_cave_lizard
+    displayName: Cave Lizard
+    billboardMaterial: {fileID: 2100000, guid: b0c5052d00a2c734b892fa3c202749d3, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: b0c5052d00a2c734b892fa3c202749d3, type: 2}
+    sprite: {fileID: 5543713750232288245, guid: 28ab8099b136f5a4da2b9ac0ea611f59, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 18
+      y: 0
+      width: 92
+      height: 92
+    archetypeKey: monster_cave_lizard
+  - key: monster_cave_troll
+    displayName: Cave Troll
+    billboardMaterial: {fileID: 2100000, guid: de99a4ef5f313a04ab9e81a7f9dc29d6, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: de99a4ef5f313a04ab9e81a7f9dc29d6, type: 2}
+    sprite: {fileID: -1292063101765268366, guid: b7c22135cbe561e48810e3fcadcf1ce5, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 26
+      y: 36
+      width: 75
+      height: 75
+    archetypeKey: monster_cave_troll
+  - key: monster_dark_cultist
+    displayName: Dark Cultist
+    billboardMaterial: {fileID: 2100000, guid: 28992c9f4d47957488b09aaa76762ec2, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 28992c9f4d47957488b09aaa76762ec2, type: 2}
+    sprite: {fileID: -5121336456687923913, guid: 7f387b649a8c8714fb8985c9784c1f98, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 39
+      y: 43
+      width: 48
+      height: 48
+    archetypeKey: monster_dark_cultist
+  - key: monster_demon_lord
+    displayName: Demon Lord
+    billboardMaterial: {fileID: 2100000, guid: d7c8993a65bfb1247b2fbd5a11730750, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: d7c8993a65bfb1247b2fbd5a11730750, type: 2}
+    sprite: {fileID: 222002721491654487, guid: 09c194e7bb6d148459fba52624b0d402, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 28
+      y: 37
+      width: 72
+      height: 72
+    archetypeKey: monster_demon_lord
+  - key: monster_dragon_wyrm
+    displayName: Dragon Wyrm
+    billboardMaterial: {fileID: 2100000, guid: 7097e8fafdcdd224cbe14d0ab8245c21, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 7097e8fafdcdd224cbe14d0ab8245c21, type: 2}
+    sprite: {fileID: 1263496446602428089, guid: 8ec2034006aace1498b0ffb3744bcc9b, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 20
+      y: 20
+      width: 87
+      height: 87
+    archetypeKey: monster_dragon_wyrm
+  - key: monster_evil_mage
+    displayName: Evil Mage
+    billboardMaterial: {fileID: 2100000, guid: 614058e16b418c64a9c990587f4df754, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 614058e16b418c64a9c990587f4df754, type: 2}
+    sprite: {fileID: 4586936416759649645, guid: 98b5bf2dc8324244a815ffe94d2fbab4, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 39
+      y: 44
+      width: 49
+      height: 49
+    archetypeKey: monster_evil_mage
+  - key: monster_ghoul
+    displayName: Ghoul
+    billboardMaterial: {fileID: 2100000, guid: 654953047fd33e145a0e0081f6015e75, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 654953047fd33e145a0e0081f6015e75, type: 2}
+    sprite: {fileID: 5395461353538515996, guid: 89707c14df891e342a1e5e712e079f66, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 39
+      y: 40
+      width: 47
+      height: 47
+    archetypeKey: monster_ghoul
+  - key: monster_giant_bat
+    displayName: Giant Bat
+    billboardMaterial: {fileID: 2100000, guid: 003fb7f9a601f3b40bd340f55978fb26, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 003fb7f9a601f3b40bd340f55978fb26, type: 2}
+    sprite: {fileID: -6074367537873315661, guid: 1f54b4305d7f965488224c287deb00ff, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 24
+      y: 0
+      width: 77
+      height: 77
+    archetypeKey: monster_giant_bat
+  - key: monster_giant_beetle
+    displayName: Giant Beetle
+    billboardMaterial: {fileID: 2100000, guid: 1a5fc45a0909e7242a21794aa74b652a, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 1a5fc45a0909e7242a21794aa74b652a, type: 2}
+    sprite: {fileID: 3809046594702418333, guid: 80b70421884c90b42b318d1a9a95777f, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 37
+      y: 13
+      width: 52
+      height: 52
+    archetypeKey: monster_giant_beetle
+  - key: monster_giant_boar
+    displayName: Giant Boar
+    billboardMaterial: {fileID: 2100000, guid: b583bdd21b2d439418ba5c411b11c684, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: b583bdd21b2d439418ba5c411b11c684, type: 2}
+    sprite: {fileID: 1826565787040340114, guid: 0b256e5b282aca84c90612dc1b0619ec, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 40
+      y: 26
+      width: 47
+      height: 47
+    archetypeKey: monster_giant_boar
+  - key: monster_giant_centipede
+    displayName: Giant Centipede
+    billboardMaterial: {fileID: 2100000, guid: 571c8d4cce28c1e4ea72599b208cbdde, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 571c8d4cce28c1e4ea72599b208cbdde, type: 2}
+    sprite: {fileID: 7787722373306900694, guid: 9799cf15f43e637478f26a1fddb9cf76, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 18
+      y: 0
+      width: 90
+      height: 90
+    archetypeKey: monster_giant_centipede
+  - key: monster_giant_frog
+    displayName: Giant Frog
+    billboardMaterial: {fileID: 2100000, guid: d399d93badd43a249977e43b09fa9c38, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: d399d93badd43a249977e43b09fa9c38, type: 2}
+    sprite: {fileID: -7631220298004938683, guid: 133e6ab5929f79847bc4a76d21060ebc, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 29
+      y: 0
+      width: 68
+      height: 68
+    archetypeKey: monster_giant_frog
+  - key: monster_giant_rat
+    displayName: Giant Rat
+    billboardMaterial: {fileID: 2100000, guid: d8e4c930813b079429b1c6626e25ce54, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: d8e4c930813b079429b1c6626e25ce54, type: 2}
+    sprite: {fileID: -3246495356005557760, guid: 03915c8b00ed84a4a9453863fe45ed35, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 29
+      y: 0
+      width: 69
+      height: 69
+    archetypeKey: monster_giant_rat
+  - key: monster_giant_scorpion
+    displayName: Giant Scorpion
+    billboardMaterial: {fileID: 2100000, guid: 626766d59d22923499d456286a017283, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 626766d59d22923499d456286a017283, type: 2}
+    sprite: {fileID: -4452153808678118066, guid: af2dafd497a04384f9458ed4e8e4db5a, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 38
+      y: 22
+      width: 51
+      height: 51
+    archetypeKey: monster_giant_scorpion
+  - key: monster_giant_snake
+    displayName: Giant Snake
+    billboardMaterial: {fileID: 2100000, guid: 2641c70970e9312448d7484b9cc414be, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 2641c70970e9312448d7484b9cc414be, type: 2}
+    sprite: {fileID: 8684503345605705329, guid: 146013bcf56a5a34bab3c6c6a2f44736, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 34
+      y: 10
+      width: 59
+      height: 59
+    archetypeKey: monster_giant_snake
+  - key: monster_giant_spider
+    displayName: Giant Spider
+    billboardMaterial: {fileID: 2100000, guid: e3b8040da6bcade46a0ce7a2ad2e31f4, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: e3b8040da6bcade46a0ce7a2ad2e31f4, type: 2}
+    sprite: {fileID: 5848720855175241531, guid: 55c012f1f844435488b05ef41aa679ad, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 28
+      y: 0
+      width: 70
+      height: 70
+    archetypeKey: monster_giant_spider
+  - key: monster_giant_wasp
+    displayName: Giant Wasp
+    billboardMaterial: {fileID: 2100000, guid: b9853b32fdad8444a89f552f5ab48b63, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: b9853b32fdad8444a89f552f5ab48b63, type: 2}
+    sprite: {fileID: -2577235305787871326, guid: feb358848048d5f44a2ea53fa0a73ab7, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 32
+      y: 11
+      width: 62
+      height: 62
+    archetypeKey: monster_giant_wasp
+  - key: monster_goblin_archer
+    displayName: Goblin Archer
+    billboardMaterial: {fileID: 2100000, guid: 2be12826b4fd8f94cbedfa6fcb03ba03, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 2be12826b4fd8f94cbedfa6fcb03ba03, type: 2}
+    sprite: {fileID: 2760720447104234719, guid: 9cab83d46d58f7042af10dc03ca09a69, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 43
+      y: 31
+      width: 40
+      height: 40
+    archetypeKey: monster_goblin_archer
+  - key: monster_goblin_raider
+    displayName: Goblin Raider
+    billboardMaterial: {fileID: 2100000, guid: 3d19e413858a62e479bdd8ba26dec931, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 3d19e413858a62e479bdd8ba26dec931, type: 2}
+    sprite: {fileID: -2508873913612103028, guid: 6e2f801152d60f240bff57ad1bcaaa56, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 38
+      y: 22
+      width: 49
+      height: 49
+    archetypeKey: monster_goblin_raider
+  - key: monster_goblin_shaman
+    displayName: Goblin Shaman
+    billboardMaterial: {fileID: 2100000, guid: 28d958a579e3fba48b642860fb75ce7c, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 28d958a579e3fba48b642860fb75ce7c, type: 2}
+    sprite: {fileID: 1309301592392449272, guid: 48ec927b88ac6be45967e58c21bd0416, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 44
+      y: 35
+      width: 38
+      height: 38
+    archetypeKey: monster_goblin_shaman
+  - key: monster_hill_giant
+    displayName: Hill Giant
+    billboardMaterial: {fileID: 2100000, guid: 851b01a113ee02344825b1cb560d0cb2, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 851b01a113ee02344825b1cb560d0cb2, type: 2}
+    sprite: {fileID: -3091486958581683229, guid: cdc4134434f92964aaa543a75b55bf21, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 32
+      y: 54
+      width: 63
+      height: 63
+    archetypeKey: monster_hill_giant
+  - key: monster_kobold_skirmisher
+    displayName: Kobold Skirmisher
+    billboardMaterial: {fileID: 2100000, guid: 9da6ff7dc9adaa740a1eb3ed3f2bec04, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 9da6ff7dc9adaa740a1eb3ed3f2bec04, type: 2}
+    sprite: {fileID: 425520087542665605, guid: e6aeaeec2cda8564682edae7666bd649, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 41
+      y: 25
+      width: 44
+      height: 44
+    archetypeKey: monster_kobold_skirmisher
+  - key: monster_minotaur
+    displayName: Minotaur
+    billboardMaterial: {fileID: 2100000, guid: 11273ff6a76a40647943ca0e50915126, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 11273ff6a76a40647943ca0e50915126, type: 2}
+    sprite: {fileID: 4572981067780276238, guid: 40bf54c3d7d4a3946b91dce8ac205773, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 34
+      y: 51
+      width: 58
+      height: 58
+    archetypeKey: monster_minotaur
+  - key: monster_mummy
+    displayName: Mummy
+    billboardMaterial: {fileID: 2100000, guid: e72b732e7771032488892bbdd3339452, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: e72b732e7771032488892bbdd3339452, type: 2}
+    sprite: {fileID: -3252037265851407744, guid: 144986f34e09f6046ba531d6bf3b27f1, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 38
+      y: 42
+      width: 49
+      height: 49
+    archetypeKey: monster_mummy
+  - key: monster_mush_creature
+    displayName: Mush Creature
+    billboardMaterial: {fileID: 2100000, guid: 16fe01b3a578228448ccca52f51c9ba5, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 16fe01b3a578228448ccca52f51c9ba5, type: 2}
+    sprite: {fileID: -3484798178821990445, guid: 8ffe61eb5fe9dba4795096b8a99a9435, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 42
+      y: 25
+      width: 44
+      height: 44
+    archetypeKey: monster_mush_creature
+  - key: monster_ogre_brute
+    displayName: Ogre Brute
+    billboardMaterial: {fileID: 2100000, guid: 208a4375a5f35f34b9fe7401387bdb44, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 208a4375a5f35f34b9fe7401387bdb44, type: 2}
+    sprite: {fileID: 649241296540711285, guid: bab6d5869d2206243bfe5a86aac9d7eb, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 34
+      y: 51
+      width: 58
+      height: 58
+    archetypeKey: monster_ogre_brute
+  - key: monster_orc_shaman
+    displayName: Orc Shaman
+    billboardMaterial: {fileID: 2100000, guid: 57dc9367478b8b6448f19d1a316f068f, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 57dc9367478b8b6448f19d1a316f068f, type: 2}
+    sprite: {fileID: 7890915234171356457, guid: 5a039ad887333ce43ab6e61f1b71cc37, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 36
+      y: 46
+      width: 53
+      height: 53
+    archetypeKey: monster_orc_shaman
+  - key: monster_orc_warrior
+    displayName: Orc Warrior
+    billboardMaterial: {fileID: 2100000, guid: 4c09501a196dcba46afe3a74190639d2, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 4c09501a196dcba46afe3a74190639d2, type: 2}
+    sprite: {fileID: -1738930717127524091, guid: 4dd062d66d9d4c14da0556b7a9b8833f, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 28
+      y: 34
+      width: 69
+      height: 69
+    archetypeKey: monster_orc_warrior
+  - key: monster_rat_demilord
+    displayName: Rat Demilord
+    billboardMaterial: {fileID: 2100000, guid: 29f48ae5d70c3d14396a4b7746ae7f1c, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 29f48ae5d70c3d14396a4b7746ae7f1c, type: 2}
+    sprite: {fileID: 2211111085963001323, guid: 3740ed735cb5752429b76d02818fd583, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 32
+      y: 35
+      width: 62
+      height: 62
+    archetypeKey: monster_rat_demilord
+  - key: monster_sabre_feline
+    displayName: Sabre Feline
+    billboardMaterial: {fileID: 2100000, guid: 6d6caf3c2f4f4bd4dbf188b69de02e1d, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 6d6caf3c2f4f4bd4dbf188b69de02e1d, type: 2}
+    sprite: {fileID: -5797477988151075341, guid: 010a13ab779a208499f7900e34d191d6, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 41
+      y: 28
+      width: 45
+      height: 45
+    archetypeKey: monster_sabre_feline
+  - key: monster_skeletal_beast
+    displayName: Skeletal Beast
+    billboardMaterial: {fileID: 2100000, guid: af7aeedb33ccb2b4280b4955225831ec, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: af7aeedb33ccb2b4280b4955225831ec, type: 2}
+    sprite: {fileID: 7052001527884100781, guid: 0f8f7fb002de99d41ad8aeceb52fdd2b, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 39
+      y: 23
+      width: 48
+      height: 48
+    archetypeKey: monster_skeletal_beast
+  - key: monster_skeletal_giant
+    displayName: Skeletal Giant
+    billboardMaterial: {fileID: 2100000, guid: 17ba036a94b0477489d646c6767a5060, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 17ba036a94b0477489d646c6767a5060, type: 2}
+    sprite: {fileID: 4778567476878718981, guid: ad466d6d75f9e9945bd62a59fb470150, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 32
+      y: 51
+      width: 62
+      height: 62
+    archetypeKey: monster_skeletal_giant
+  - key: monster_skeleton_archer
+    displayName: Skeleton Archer
+    billboardMaterial: {fileID: 2100000, guid: e429bed89d8ea674ebe6fee051ae3fdb, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: e429bed89d8ea674ebe6fee051ae3fdb, type: 2}
+    sprite: {fileID: 2058713861568744319, guid: d14134cdd511f69418a4f8aace7751e0, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 40
+      y: 42
+      width: 47
+      height: 47
+    archetypeKey: monster_skeleton_archer
+  - key: monster_skeleton_warrior
+    displayName: Skeleton Warrior
+    billboardMaterial: {fileID: 2100000, guid: 14c5298476660d347a84e30d8663c9d3, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 14c5298476660d347a84e30d8663c9d3, type: 2}
+    sprite: {fileID: -1368396221391136136, guid: d491bc10c3cfd5e45b89877a0628a827, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 37
+      y: 36
+      width: 53
+      height: 53
+    archetypeKey: monster_skeleton_warrior
+  - key: monster_slime_ooze
+    displayName: Slime Ooze
+    billboardMaterial: {fileID: 2100000, guid: c7816c3def021ff4c995b52730fa48d3, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: c7816c3def021ff4c995b52730fa48d3, type: 2}
+    sprite: {fileID: 2551915780556770821, guid: 3d1aabf699b339142b62ca86f85e1576, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 27
+      y: 0
+      width: 73
+      height: 73
+    archetypeKey: monster_slime_ooze
+  - key: monster_town_guard
+    displayName: Town Guard
+    billboardMaterial: {fileID: 2100000, guid: 7761e0c75227b3e438e7945f979f4d39, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 7761e0c75227b3e438e7945f979f4d39, type: 2}
+    sprite: {fileID: 8076018495705950779, guid: ac13905d932fd494f8bd06330df49e0d, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 38
+      y: 44
+      width: 51
+      height: 51
+    archetypeKey: monster_town_guard
+  - key: monster_widow_spider
+    displayName: Widow Spider
+    billboardMaterial: {fileID: 2100000, guid: 66b5ed9e74db5a54ea3f3acf8664b7d0, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 66b5ed9e74db5a54ea3f3acf8664b7d0, type: 2}
+    sprite: {fileID: -1188695681098979713, guid: 5667d8fca144f4a4ca5c5b6ad212561a, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 18
+      y: 0
+      width: 92
+      height: 92
+    archetypeKey: monster_widow_spider
+  - key: monster_wolf_worg
+    displayName: Wolf Worg
+    billboardMaterial: {fileID: 2100000, guid: a5c9f04890d3c3240854f5e991e71001, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: a5c9f04890d3c3240854f5e991e71001, type: 2}
+    sprite: {fileID: -380380235706222377, guid: f1f7dc5a16d18c44a82de8abae39b503, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 42
+      y: 29
+      width: 42
+      height: 42
+    archetypeKey: monster_wolf_worg
+  - key: monster_wraith_spectre
+    displayName: Wraith Spectre
+    billboardMaterial: {fileID: 2100000, guid: 5e9dab5c42e01254487ab21ac4673d0b, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 5e9dab5c42e01254487ab21ac4673d0b, type: 2}
+    sprite: {fileID: -657055641550580713, guid: 1c6c78c492cf9374aa1384fd78c4f7b6, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 38
+      y: 45
+      width: 52
+      height: 52
+    archetypeKey: monster_wraith_spectre
+  - key: monster_zombie
+    displayName: Zombie
+    billboardMaterial: {fileID: 2100000, guid: 47844a42243c3d340880a7a9f66a9ef3, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 47844a42243c3d340880a7a9f66a9ef3, type: 2}
+    sprite: {fileID: 4028654748672563809, guid: 9983ee5cdb413f545967f6844fa05cd9, type: 3}
+    portraitPixelRect:
+      serializedVersion: 2
+      x: 40
+      y: 42
+      width: 47
+      height: 47
+    archetypeKey: monster_zombie
+  archetypeMappings:
+  - monsterIndex: 0
+    id: giant_frog
+    name: Giant Frog
+    iconId: 392
+    hd: 3
+    size: 2
+    archetype: monster_giant_frog
+    source: w234
+  - monsterIndex: 1
+    id: giant_centipede
+    name: Giant Centipede
+    iconId: 393
+    hd: 2
+    size: 2
+    archetype: monster_giant_centipede
+    source: pack2
+  - monsterIndex: 2
+    id: cave_lizard
+    name: Cave Lizard
+    iconId: 394
+    hd: 5
+    size: 2
+    archetype: monster_cave_lizard
+    source: pack2
+  - monsterIndex: 3
+    id: dogre
+    name: Dogre
+    iconId: 395
+    hd: 6
+    size: 3
+    archetype: monster_ogre_brute
+    source: pack2
+  - monsterIndex: 4
+    id: minor_demon
+    name: Minor Demon
+    iconId: 444
+    hd: 7
+    size: 3
+    archetype: monster_demon_lord
+    source: pack2
+  - monsterIndex: 5
+    id: dragon_lizard
+    name: Dragon Lizard
+    iconId: 420
+    hd: 15
+    size: 3
+    archetype: monster_cave_lizard
+    source: pack2
+  - monsterIndex: 6
+    id: larva
+    name: Larva
+    iconId: 398
+    hd: 7
+    size: 2
+    archetype: monster_carrion_grub
+    source: pack2
+  - monsterIndex: 7
+    id: whip_scorpion
+    name: Whip Scorpion
+    iconId: 399
+    hd: 8
+    size: 2
+    archetype: monster_giant_scorpion
+    source: pack2
+  - monsterIndex: 8
+    id: kisk_dragon
+    name: Kisk Dragon
+    iconId: 400
+    hd: 16
+    size: 3
+    archetype: monster_dragon_wyrm
+    source: pack2
+  - monsterIndex: 9
+    id: giant_wyrm
+    name: Giant Wyrm
+    iconId: 401
+    hd: 10
+    size: 2
+    archetype: monster_giant_snake
+    source: pack2
+  - monsterIndex: 10
+    id: rock_spider
+    name: Rock Spider
+    iconId: 402
+    hd: 8
+    size: 2
+    archetype: monster_giant_spider
+    source: pack2
+  - monsterIndex: 11
+    id: dune_spider
+    name: Dune Spider
+    iconId: 403
+    hd: 10
+    size: 2
+    archetype: monster_giant_spider
+    source: pack2
+  - monsterIndex: 12
+    id: rewop
+    name: Rewop
+    iconId: 454
+    hd: 18
+    size: 3
+    archetype: monster_demon_lord
+    source: pack2
+  - monsterIndex: 13
+    id: hell_dragon
+    name: Hell Dragon
+    iconId: 405
+    hd: 20
+    size: 3
+    archetype: monster_dragon_wyrm
+    source: pack2
+  - monsterIndex: 14
+    id: minotaur
+    name: Minotaur
+    iconId: 407
+    hd: 8
+    size: 3
+    archetype: monster_minotaur
+    source: pack2
+  - monsterIndex: 15
+    id: minotaur
+    name: Minotaur
+    iconId: 406
+    hd: 11
+    size: 3
+    archetype: monster_minotaur
+    source: pack2
+  - monsterIndex: 16
+    id: giant_troll
+    name: Giant Troll
+    iconId: 408
+    hd: 12
+    size: 3
+    archetype: monster_cave_troll
+    source: pack2
+  - monsterIndex: 17
+    id: skeletal_beast
+    name: Skeletal Beast
+    iconId: 409
+    hd: 12
+    size: 3
+    archetype: monster_skeletal_beast
+    source: pack2
+  - monsterIndex: 18
+    id: horvath
+    name: Horvath
+    iconId: 410
+    hd: 11
+    size: 3
+    archetype: monster_minotaur
+    source: pack2
+  - monsterIndex: 19
+    id: skeletal_giant
+    name: Skeletal Giant
+    iconId: 411
+    hd: 13
+    size: 3
+    archetype: monster_skeletal_giant
+    source: pack2
+  - monsterIndex: 20
+    id: proto_shantile
+    name: Proto-Shantile
+    iconId: 412
+    hd: 9
+    size: 3
+    archetype: monster_kobold_skirmisher
+    source: pack2
+  - monsterIndex: 21
+    id: silt_spider
+    name: Silt Spider
+    iconId: 413
+    hd: 5
+    size: 2
+    archetype: monster_giant_spider
+    source: pack2
+  - monsterIndex: 22
+    id: vesp_spider
+    name: Vesp Spider
+    iconId: 414
+    hd: 6
+    size: 2
+    archetype: monster_giant_spider
+    source: pack2
+  - monsterIndex: 23
+    id: proto_vrack
+    name: Proto-Vrack
+    iconId: 415
+    hd: 8
+    size: 3
+    archetype: monster_sabre_feline
+    source: pack2
+  - monsterIndex: 24
+    id: proto_hyena
+    name: Proto-Hyena
+    iconId: 416
+    hd: 9
+    size: 3
+    archetype: monster_wolf_worg
+    source: pack2
+  - monsterIndex: 25
+    id: great_wizard
+    name: Great Wizard
+    iconId: 417
+    hd: 12
+    size: 0
+    archetype: monster_evil_mage
+    source: pack2
+  - monsterIndex: 26
+    id: dinosaur
+    name: Dinosaur
+    iconId: 418
+    hd: 16
+    size: 3
+    archetype: monster_cave_lizard
+    source: pack2
+  - monsterIndex: 27
+    id: cave_bear
+    name: Cave Bear
+    iconId: 419
+    hd: 9
+    size: 3
+    archetype: monster_cave_bear
+    source: pack2
+  - monsterIndex: 28
+    id: terror_beast
+    name: Terror Beast
+    iconId: 420
+    hd: 16
+    size: 3
+    archetype: monster_dragon_wyrm
+    source: pack2
+  - monsterIndex: 29
+    id: mush_man
+    name: Mush Man
+    iconId: 458
+    hd: 7
+    size: 0
+    archetype: monster_mush_creature
+    source: pack2
+  - monsterIndex: 30
+    id: apprentice
+    name: Apprentice
+    iconId: 417
+    hd: 4
+    size: 0
+    archetype: monster_dark_cultist
+    source: pack2
+  - monsterIndex: 31
+    id: widow_of_the_web
+    name: Widow of the Web
+    iconId: 423
+    hd: 16
+    size: 3
+    archetype: monster_widow_spider
+    source: pack2
+  - monsterIndex: 32
+    id: guardian_spider
+    name: Guardian Spider
+    iconId: 424
+    hd: 10
+    size: 3
+    archetype: monster_giant_spider
+    source: pack2
+  - monsterIndex: 33
+    id: giant_snake
+    name: Giant Snake
+    iconId: 425
+    hd: 10
+    size: 3
+    archetype: monster_giant_snake
+    source: pack2
+  - monsterIndex: 34
+    id: dinosaur
+    name: Dinosaur
+    iconId: 426
+    hd: 6
+    size: 2
+    archetype: monster_cave_lizard
+    source: pack2
+  - monsterIndex: 35
+    id: mush_mound
+    name: Mush Mound
+    iconId: 456
+    hd: 15
+    size: 1
+    archetype: monster_mush_creature
+    source: pack2
+  - monsterIndex: 36
+    id: sabre_feline
+    name: Sabre Feline
+    iconId: 428
+    hd: 8
+    size: 2
+    archetype: monster_sabre_feline
+    source: pack2
+  - monsterIndex: 37
+    id: podling
+    name: Podling
+    iconId: 458
+    hd: 3
+    size: 0
+    archetype: monster_mush_creature
+    source: pack2
+  - monsterIndex: 38
+    id: red_dragon
+    name: Red Dragon
+    iconId: 430
+    hd: 14
+    size: 3
+    archetype: monster_dragon_wyrm
+    source: pack2
+  - monsterIndex: 39
+    id: blue_dragon
+    name: Blue Dragon
+    iconId: 431
+    hd: 12
+    size: 3
+    archetype: monster_dragon_wyrm
+    source: pack2
+  - monsterIndex: 40
+    id: green_dragon
+    name: Green Dragon
+    iconId: 432
+    hd: 9
+    size: 3
+    archetype: monster_dragon_wyrm
+    source: pack2
+  - monsterIndex: 41
+    id: mush_mound
+    name: Mush Mound
+    iconId: 456
+    hd: 15
+    size: 1
+    archetype: monster_mush_creature
+    source: pack2
+  - monsterIndex: 42
+    id: podling
+    name: Podling
+    iconId: 458
+    hd: 3
+    size: 0
+    archetype: monster_mush_creature
+    source: pack2
+  - monsterIndex: 43
+    id: mush_mound
+    name: Mush Mound
+    iconId: 456
+    hd: 15
+    size: 1
+    archetype: monster_mush_creature
+    source: pack2
+  - monsterIndex: 44
+    id: podling
+    name: Podling
+    iconId: 458
+    hd: 3
+    size: 0
+    archetype: monster_mush_creature
+    source: pack2
+  - monsterIndex: 45
+    id: fire_fiend
+    name: Fire Fiend
+    iconId: 478
+    hd: 7
+    size: 3
+    archetype: monster_demon_lord
+    source: pack2
+  - monsterIndex: 46
+    id: carrion_slug
+    name: Carrion Slug
+    iconId: 398
+    hd: 3
+    size: 2
+    archetype: monster_carrion_grub
+    source: pack2
+  - monsterIndex: 47
+    id: proto_badger
+    name: Proto-Badger
+    iconId: 439
+    hd: 3
+    size: 2
+    archetype: monster_cave_bear
+    source: pack2
+  - monsterIndex: 48
+    id: hill_giant
+    name: Hill Giant
+    iconId: 440
+    hd: 8
+    size: 1
+    archetype: monster_hill_giant
+    source: pack2
+  - monsterIndex: 49
+    id: cavalry_trooper
+    name: Cavalry Trooper
+    iconId: 441
+    hd: 3
+    size: 1
+    archetype: monster_town_guard
+    source: pack2
+  - monsterIndex: 50
+    id: cavalry_officer
+    name: Cavalry Officer
+    iconId: 442
+    hd: 5
+    size: 1
+    archetype: monster_town_guard
+    source: pack2
+  - monsterIndex: 51
+    id: dinosaur
+    name: Dinosaur
+    iconId: 443
+    hd: 4
+    size: 1
+    archetype: monster_cave_lizard
+    source: pack2
+  - monsterIndex: 52
+    id: secret_cleric
+    name: Secret Cleric
+    iconId: 417
+    hd: 8
+    size: 0
+    archetype: monster_dark_cultist
+    source: pack2
+  - monsterIndex: 53
+    id: ogre
+    name: Ogre
+    iconId: 445
+    hd: 4
+    size: 1
+    archetype: monster_ogre_brute
+    source: pack2
+  - monsterIndex: 54
+    id: dinosaur
+    name: Dinosaur
+    iconId: 446
+    hd: 6
+    size: 2
+    archetype: monster_cave_lizard
+    source: pack2
+  - monsterIndex: 55
+    id: young_hill_giant
+    name: Young Hill Giant
+    iconId: 440
+    hd: 5
+    size: 1
+    archetype: monster_hill_giant
+    source: pack2
+  - monsterIndex: 56
+    id: gnath
+    name: Gnath
+    iconId: 397
+    hd: 4
+    size: 3
+    archetype: monster_kobold_skirmisher
+    source: pack2
+  - monsterIndex: 57
+    id: dinosaur
+    name: Dinosaur
+    iconId: 448
+    hd: 4
+    size: 1
+    archetype: monster_cave_lizard
+    source: pack2
+  - monsterIndex: 58
+    id: cacodeamon_warlord
+    name: Cacodeamon Warlord
+    iconId: 450
+    hd: 7
+    size: 3
+    archetype: monster_demon_lord
+    source: pack2
+  - monsterIndex: 59
+    id: hell_bat
+    name: Hell Bat
+    iconId: 451
+    hd: 6
+    size: 2
+    archetype: monster_giant_bat
+    source: pack2
+  - monsterIndex: 60
+    id: dinosaur
+    name: Dinosaur
+    iconId: 452
+    hd: 14
+    size: 3
+    archetype: monster_cave_lizard
+    source: pack2
+  - monsterIndex: 61
+    id: huge_slime
+    name: Huge Slime
+    iconId: 465
+    hd: 4
+    size: 3
+    archetype: monster_slime_ooze
+    source: pack2
+  - monsterIndex: 62
+    id: small_slime
+    name: Small Slime
+    iconId: 465
+    hd: 1
+    size: 0
+    archetype: monster_slime_ooze
+    source: pack2
+  - monsterIndex: 63
+    id: winged_devil
+    name: Winged Devil
+    iconId: 455
+    hd: 3
+    size: 0
+    archetype: monster_demon_lord
+    source: pack2
+  - monsterIndex: 64
+    id: dogre_champion
+    name: Dogre Champion
+    iconId: 438
+    hd: 9
+    size: 3
+    archetype: monster_ogre_brute
+    source: pack2
+  - monsterIndex: 65
+    id: mummy
+    name: Mummy
+    iconId: 457
+    hd: 8
+    size: 1
+    archetype: monster_mummy
+    source: pack2
+  - monsterIndex: 66
+    id: mad_troll
+    name: Mad Troll
+    iconId: 408
+    hd: 15
+    size: 3
+    archetype: monster_cave_troll
+    source: pack2
+  - monsterIndex: 67
+    id: troll
+    name: Troll
+    iconId: 408
+    hd: 9
+    size: 3
+    archetype: monster_cave_troll
+    source: pack2
+  - monsterIndex: 68
+    id: hag
+    name: Hag
+    iconId: 460
+    hd: 6
+    size: 1
+    archetype: monster_dark_cultist
+    source: pack2
+  - monsterIndex: 69
+    id: cragentooth
+    name: Cragentooth
+    iconId: 438
+    hd: 16
+    size: 3
+    archetype: monster_ogre_brute
+    source: pack2
+  - monsterIndex: 70
+    id: skeletal_warrior
+    name: Skeletal Warrior
+    iconId: 505
+    hd: 1
+    size: 0
+    archetype: monster_skeleton_warrior
+    source: w234
+  - monsterIndex: 71
+    id: vodalian
+    name: Vodalian
+    iconId: 466
+    hd: 6
+    size: 0
+    archetype: monster_evil_mage
+    source: pack2
+  - monsterIndex: 72
+    id: slime
+    name: Slime
+    iconId: 464
+    hd: 1
+    size: 0
+    archetype: monster_slime_ooze
+    source: pack2
+  - monsterIndex: 73
+    id: slime
+    name: Slime
+    iconId: 465
+    hd: 1
+    size: 0
+    archetype: monster_slime_ooze
+    source: pack2
+  - monsterIndex: 74
+    id: human_mage
+    name: Human Mage
+    iconId: 466
+    hd: 4
+    size: 0
+    archetype: monster_evil_mage
+    source: pack2
+  - monsterIndex: 75
+    id: ghoul
+    name: Ghoul
+    iconId: 467
+    hd: 3
+    size: 0
+    archetype: monster_ghoul
+    source: pack2
+  - monsterIndex: 76
+    id: giant_spider
+    name: Giant Spider
+    iconId: 468
+    hd: 1
+    size: 0
+    archetype: monster_giant_spider
+    source: pack2
+  - monsterIndex: 77
+    id: antiid
+    name: Anti'id
+    iconId: 475
+    hd: 15
+    size: 0
+    archetype: monster_demon_lord
+    source: pack2
+  - monsterIndex: 78
+    id: zombie
+    name: Zombie
+    iconId: 470
+    hd: 2
+    size: 0
+    archetype: monster_zombie
+    source: pack2
+  - monsterIndex: 79
+    id: trigwig
+    name: Trigwig
+    iconId: 482
+    hd: 8
+    size: 3
+    archetype: monster_mush_creature
+    source: pack2
+  - monsterIndex: 80
+    id: krise
+    name: Krise
+    iconId: 494
+    hd: 1
+    size: 0
+    archetype: monster_kobold_skirmisher
+    source: pack2
+  - monsterIndex: 81
+    id: giant_boar
+    name: Giant Boar
+    iconId: 473
+    hd: 9
+    size: 2
+    archetype: monster_giant_boar
+    source: pack2
+  - monsterIndex: 82
+    id: human_mage
+    name: Human Mage
+    iconId: 466
+    hd: 7
+    size: 0
+    archetype: monster_evil_mage
+    source: pack2
+  - monsterIndex: 83
+    id: slime_demon
+    name: Slime Demon
+    iconId: 475
+    hd: 1
+    size: 0
+    archetype: monster_slime_ooze
+    source: pack2
+  - monsterIndex: 84
+    id: ghost
+    name: Ghost
+    iconId: 435
+    hd: 9
+    size: 0
+    archetype: monster_wraith_spectre
+    source: pack2
+  - monsterIndex: 85
+    id: spectre
+    name: Spectre
+    iconId: 435
+    hd: 15
+    size: 3
+    archetype: monster_wraith_spectre
+    source: pack2
+  - monsterIndex: 86
+    id: giant_zombie
+    name: Giant Zombie
+    iconId: 436
+    hd: 7
+    size: 3
+    archetype: monster_zombie
+    source: pack2
+  - monsterIndex: 87
+    id: recluse_wizard
+    name: Recluse Wizard
+    iconId: 417
+    hd: 12
+    size: 0
+    archetype: monster_evil_mage
+    source: pack2
+  - monsterIndex: 88
+    id: wizard_headmaster
+    name: Wizard Headmaster
+    iconId: 466
+    hd: 15
+    size: 0
+    archetype: monster_evil_mage
+    source: pack2
+  - monsterIndex: 89
+    id: demon_lord
+    name: Demon Lord
+    iconId: 444
+    hd: 15
+    size: 3
+    archetype: monster_demon_lord
+    source: pack2
+  - monsterIndex: 90
+    id: reppep_rd
+    name: Reppep Rd
+    iconId: 492
+    hd: 8
+    size: 0
+    archetype: monster_town_guard
+    source: pack2
+  - monsterIndex: 91
+    id: orc_warrior
+    name: Orc Warrior
+    iconId: 515
+    hd: 1
+    size: 0
+    archetype: monster_orc_warrior
+    source: w234
+  - monsterIndex: 92
+    id: goblin
+    name: Goblin
+    iconId: 384
+    hd: 1
+    size: 0
+    archetype: monster_goblin_raider
+    source: w234
+  - monsterIndex: 93
+    id: goblin_hero
+    name: Goblin Hero
+    iconId: 387
+    hd: 5
+    size: 0
+    archetype: monster_goblin_raider
+    source: w234
+  - monsterIndex: 94
+    id: vixies_spider
+    name: Vixies Spider
+    iconId: 423
+    hd: 8
+    size: 3
+    archetype: monster_giant_spider
+    source: pack2
+  - monsterIndex: 95
+    id: royal_guard
+    name: Royal Guard
+    iconId: 486
+    hd: 1
+    size: 0
+    archetype: monster_town_guard
+    source: pack2
+  - monsterIndex: 96
+    id: royal_corporal
+    name: Royal Corporal
+    iconId: 487
+    hd: 2
+    size: 0
+    archetype: monster_town_guard
+    source: pack2
+  - monsterIndex: 97
+    id: royal_sergeant
+    name: Royal Sergeant
+    iconId: 488
+    hd: 3
+    size: 0
+    archetype: monster_town_guard
+    source: pack2
+  - monsterIndex: 98
+    id: royal_lieutenant
+    name: Royal Lieutenant
+    iconId: 489
+    hd: 4
+    size: 0
+    archetype: monster_town_guard
+    source: pack2
+  - monsterIndex: 99
+    id: royal_captain
+    name: Royal Captain
+    iconId: 490
+    hd: 7
+    size: 0
+    archetype: monster_town_guard
+    source: pack2
+  - monsterIndex: 100
+    id: flesh_fiend
+    name: Flesh Fiend
+    iconId: 461
+    hd: 6
+    size: 0
+    archetype: monster_ghoul
+    source: pack2
+  - monsterIndex: 101
+    id: cacodaemon_warrior
+    name: Cacodaemon Warrior
+    iconId: 493
+    hd: 2
+    size: 0
+    archetype: monster_demon_lord
+    source: pack2
+  - monsterIndex: 102
+    id: carrion_beast
+    name: Carrion Beast
+    iconId: 479
+    hd: 5
+    size: 3
+    archetype: monster_cave_bear
+    source: pack2
+  - monsterIndex: 103
+    id: mercenary_villain
+    name: Mercenary Villain
+    iconId: 496
+    hd: 5
+    size: 0
+    archetype: monster_bandit_cutthroat
+    source: w234
+  - monsterIndex: 104
+    id: thief
+    name: Thief
+    iconId: 495
+    hd: 1
+    size: 0
+    archetype: monster_bandit_cutthroat
+    source: w234
+  - monsterIndex: 105
+    id: magistrate
+    name: Magistrate
+    iconId: 481
+    hd: 8
+    size: 0
+    archetype: monster_evil_mage
+    source: pack2
+  - monsterIndex: 108
+    id: demon
+    name: Demon
+    iconId: 500
+    hd: 4
+    size: 0
+    archetype: monster_demon_lord
+    source: pack2
+  - monsterIndex: 109
+    id: giant_wasp
+    name: Giant Wasp
+    iconId: 501
+    hd: 2
+    size: 0
+    archetype: monster_giant_wasp
+    source: pack2
+  - monsterIndex: 110
+    id: shantile
+    name: Shantile
+    iconId: 502
+    hd: 3
+    size: 0
+    archetype: monster_kobold_skirmisher
+    source: pack2
+  - monsterIndex: 111
+    id: high_priest
+    name: High Priest
+    iconId: 386
+    hd: 12
+    size: 0
+    archetype: monster_dark_cultist
+    source: pack2
+  - monsterIndex: 112
+    id: young_troll
+    name: Young Troll
+    iconId: 504
+    hd: 3
+    size: 0
+    archetype: monster_cave_troll
+    source: pack2
+  - monsterIndex: 114
+    id: mental_flea
+    name: Mental Flea
+    iconId: 506
+    hd: 5
+    size: 0
+    archetype: monster_giant_wasp
+    source: pack2
+  - monsterIndex: 115
+    id: giant_beetle
+    name: Giant Beetle
+    iconId: 507
+    hd: 2
+    size: 0
+    archetype: monster_giant_beetle
+    source: pack2
+  - monsterIndex: 116
+    id: goblin_shaman
+    name: Goblin Shaman
+    iconId: 508
+    hd: 3
+    size: 0
+    archetype: monster_goblin_shaman
+    source: pack2
+  - monsterIndex: 117
+    id: slime_worm
+    name: Slime Worm
+    iconId: 398
+    hd: 3
+    size: 2
+    archetype: monster_carrion_grub
+    source: pack2
+  - monsterIndex: 118
+    id: giant_scorpion
+    name: Giant Scorpion
+    iconId: 510
+    hd: 4
+    size: 2
+    archetype: monster_giant_scorpion
+    source: pack2
+  - monsterIndex: 119
+    id: troglodyte
+    name: Troglodyte
+    iconId: 502
+    hd: 3
+    size: 0
+    archetype: monster_kobold_skirmisher
+    source: pack2
+  - monsterIndex: 120
+    id: orc_champion
+    name: Orc Champion
+    iconId: 512
+    hd: 5
+    size: 0
+    archetype: monster_orc_warrior
+    source: w234
+  - monsterIndex: 121
+    id: orc_shaman
+    name: Orc Shaman
+    iconId: 385
+    hd: 3
+    size: 0
+    archetype: monster_orc_shaman
+    source: pack2
+  - monsterIndex: 122
+    id: orc_warrior
+    name: Orc Warrior
+    iconId: 512
+    hd: 4
+    size: 0
+    archetype: monster_orc_warrior
+    source: w234
+  - monsterIndex: 123
+    id: beast_man
+    name: Beast Man
+    iconId: 514
+    hd: 3
+    size: 0
+    archetype: monster_minotaur
+    source: pack2
+  - monsterIndex: 124
+    id: gnome_warrior
+    name: Gnome Warrior
+    iconId: 437
+    hd: 3
+    size: 0
+    archetype: monster_kobold_skirmisher
+    source: pack2
+  - monsterIndex: 125
+    id: monstrous_rat
+    name: Monstrous Rat
+    iconId: 511
+    hd: 3
+    size: 2
+    archetype: monster_giant_rat
+    source: w234
+  - monsterIndex: 126
+    id: orc_archer
+    name: Orc Archer
+    iconId: 513
+    hd: 1
+    size: 0
+    archetype: monster_orc_shaman
+    source: pack2
+  - monsterIndex: 127
+    id: giant_bee
+    name: Giant Bee
+    iconId: 391
+    hd: 2
+    size: 0
+    archetype: monster_giant_wasp
+    source: pack2
+  - monsterIndex: 128
+    id: giant_worker_ant
+    name: Giant Worker Ant
+    iconId: 516
+    hd: 2
+    size: 0
+    archetype: monster_giant_beetle
+    source: pack2
+  - monsterIndex: 129
+    id: goblin_champion
+    name: Goblin Champion
+    iconId: 390
+    hd: 3
+    size: 0
+    archetype: monster_goblin_raider
+    source: w234
+  - monsterIndex: 130
+    id: goblin_archer
+    name: Goblin Archer
+    iconId: 388
+    hd: 1
+    size: 0
+    archetype: monster_goblin_archer
+    source: w234
+  - monsterIndex: 131
+    id: goblin_chief
+    name: Goblin Chief
+    iconId: 389
+    hd: 4
+    size: 0
+    archetype: monster_goblin_shaman
+    source: pack2
+  - monsterIndex: 132
+    id: bigbelly
+    name: Bigbelly
+    iconId: 389
+    hd: 5
+    size: 0
+    archetype: monster_ogre_brute
+    source: pack2
+  - monsterIndex: 133
+    id: giant_rat
+    name: Giant Rat
+    iconId: 449
+    hd: 1
+    size: 0
+    archetype: monster_giant_rat
+    source: w234
+  - monsterIndex: 134
+    id: rat_demi_lord
+    name: Rat Demi-Lord
+    iconId: 434
+    hd: 9
+    size: 1
+    archetype: monster_rat_demilord
+    source: pack2
+  - monsterIndex: 135
+    id: undead_rat_demi_lord
+    name: Undead Rat Demi-Lord
+    iconId: 434
+    hd: 15
+    size: 1
+    archetype: monster_rat_demilord
+    source: pack2
+  itemAndSpellIcons:
+  - key: amulet_ruby
+    sprite: {fileID: 21300000, guid: f3c84cd5e83f86c4bb755277705241d1, type: 3}
+  - key: audio
+    sprite: {fileID: 21300000, guid: 1432cef3ffd9c164dac5d0e6efcdda37, type: 3}
+  - key: auto_combat
+    sprite: {fileID: 21300000, guid: bc2667ac9e53d2f459ab723b5148dcc3, type: 3}
+  - key: badge_bless
+    sprite: {fileID: 21300000, guid: faa190888375e2444b63f7f2bcb5accc, type: 3}
+  - key: badge_burn
+    sprite: {fileID: 21300000, guid: ffb89b2fcad822c43bafcbadc4bf7278, type: 3}
+  - key: badge_poison
+    sprite: {fileID: 21300000, guid: d9c636be609427c4e9695baba19ad627, type: 3}
+  - key: badge_stun
+    sprite: {fileID: 21300000, guid: ba30bdeb7814ae24fb31574f832945f3, type: 3}
+  - key: banded_armor
+    sprite: {fileID: 21300000, guid: f3b8d50279d781440817a0729ef7793a, type: 3}
+  - key: battleaxe
+    sprite: {fileID: 21300000, guid: 0cdbb145ecbf0154cb9c0adfa586f25f, type: 3}
+  - key: battle_hammer
+    sprite: {fileID: 21300000, guid: b0a5b044aee40844ea41d5eb596271f5, type: 3}
+  - key: bow
+    sprite: {fileID: 21300000, guid: c808fa3fdbf3a3d41aa61583c36e723d, type: 3}
+  - key: bow_plus1
+    sprite: {fileID: 21300000, guid: 7adf7924fe69d0844ba9359108df7e5c, type: 3}
+  - key: broadsword
+    sprite: {fileID: 21300000, guid: 821cf73eeb27431468a9dca9a566d71a, type: 3}
+  - key: buff
+    sprite: {fileID: 21300000, guid: f57aa728e67f13c4dbe56b421e00dbff, type: 3}
+  - key: chain_armor
+    sprite: {fileID: 21300000, guid: 9734b613342febb4a811fc39cad5173e, type: 3}
+  - key: club
+    sprite: {fileID: 21300000, guid: 5be4d21b33efde847b75c0af8ea32adc, type: 3}
+  - key: crossbow
+    sprite: {fileID: 21300000, guid: 2ac093e09d1a72d418093e60a9b6db45, type: 3}
+  - key: dagger
+    sprite: {fileID: 21300000, guid: daa6e6bbb4df6234ca7c86cf7062329d, type: 3}
+  - key: dagger_shielding
+    sprite: {fileID: 21300000, guid: be470670c329a7b4897dd576bc34f86e, type: 3}
+  - key: dagger_spells
+    sprite: {fileID: 21300000, guid: 2e600fc4de6513f459d9b89612ceeda0, type: 3}
+  - key: darts
+    sprite: {fileID: 21300000, guid: e6d615f16e9a1174da488cfcad621fc3, type: 3}
+  - key: dart_poison
+    sprite: {fileID: 21300000, guid: a87f027ed65db3543ae45354f3e9eca0, type: 3}
+  - key: daze
+    sprite: {fileID: 21300000, guid: 2c630f1e3f2dcdb49bfe7ef6de152f2f, type: 3}
+  - key: end_turn
+    sprite: {fileID: 21300000, guid: e414efa103e5a1b4ba6e601cbc1dd54a, type: 3}
+  - key: fireball
+    sprite: {fileID: 21300000, guid: 0ee8d1fe3ed53fb4f8bcc28e95f3969e, type: 3}
+  - key: flail
+    sprite: {fileID: 21300000, guid: 003332f8f0cb52544b4e46ca2eadf2c7, type: 3}
+  - key: flame_hands
+    sprite: {fileID: 21300000, guid: 4e5418795250e49458b73ed59bec27af, type: 3}
+  - key: flee
+    sprite: {fileID: 21300000, guid: 1857407e9e307aa41b48d80a00bf7f94, type: 3}
+  - key: food_ration
+    sprite: {fileID: 21300000, guid: fbd158e7f1fb86344bbcc6f6fbbb74d1, type: 3}
+  - key: gnarled_staff
+    sprite: {fileID: 21300000, guid: 2909b05e24956d944b4b67ddb327bd53, type: 3}
+  - key: gold_coins
+    sprite: {fileID: 21300000, guid: 891f1462e23970441b78acb31f45dadf, type: 3}
+  - key: greatsword
+    sprite: {fileID: 21300000, guid: b80e9fe30843f174b86d89877232ce62, type: 3}
+  - key: grid
+    sprite: {fileID: 21300000, guid: b1db7da5875a1f24e81fcc7e36fd0f9b, type: 3}
+  - key: guard
+    sprite: {fileID: 21300000, guid: 5ee2c56de0fd0514ca565b9c0916e2b4, type: 3}
+  - key: heal
+    sprite: {fileID: 21300000, guid: 79bed2992143b094494a10026ba411ea, type: 3}
+  - key: helm
+    sprite: {fileID: 21300000, guid: 440b6c58d6a7fe64a837e3a7b774022a, type: 3}
+  - key: leather_armor
+    sprite: {fileID: 21300000, guid: c790be6dd0afd414e808d80c3dcd3faa, type: 3}
+  - key: leather_armor_plus3
+    sprite: {fileID: 21300000, guid: 6590f22ad7faab34ca98d0561d35de0d, type: 3}
+  - key: leather_armor_plus6
+    sprite: {fileID: 21300000, guid: d4b8e2f28f6996340a22fdd3bdebe619, type: 3}
+  - key: leather_boots
+    sprite: {fileID: 21300000, guid: 145d2d4fcf28858479c7106b372ed901, type: 3}
+  - key: leather_cap
+    sprite: {fileID: 21300000, guid: 6087199fc219eee4583cdbac2b502e98, type: 3}
+  - key: leather_gloves
+    sprite: {fileID: 21300000, guid: 89c59487589131e49a276df53a993a17, type: 3}
+  - key: longsword
+    sprite: {fileID: 21300000, guid: e4190e9bd84678344a64efa240534063, type: 3}
+  - key: longsword_plus1
+    sprite: {fileID: 21300000, guid: 887470f5c95ef9943828372a878c8843, type: 3}
+  - key: luck_stone
+    sprite: {fileID: 21300000, guid: d29184328bbfbfb4a97159c1acb6f12a, type: 3}
+  - key: mace
+    sprite: {fileID: 21300000, guid: f81e1e311b8029441ae720c131852c7d, type: 3}
+  - key: magic_darts
+    sprite: {fileID: 21300000, guid: 42fedd05c7a67ae42b62ca371a190dd9, type: 3}
+  - key: morning_star
+    sprite: {fileID: 21300000, guid: 8eeff523dc28cc144b0cb388483278f7, type: 3}
+  - key: nunchuka
+    sprite: {fileID: 21300000, guid: 564cf63bf8885f54591916511f1fba50, type: 3}
+  - key: padded_cloak
+    sprite: {fileID: 21300000, guid: 4b22e55a8d6b5ed4d8562aad95da1032, type: 3}
+  - key: parchment
+    sprite: {fileID: 21300000, guid: 80366da616eb3e44d9e9377b062088dd, type: 3}
+  - key: pepper
+    sprite: {fileID: 21300000, guid: e8896ca15726252498995f9b70169804, type: 3}
+  - key: pike_axe
+    sprite: {fileID: 21300000, guid: 27043fb1b3222b14c80b721d58a8ef7b, type: 3}
+  - key: potion
+    sprite: {fileID: 21300000, guid: 751281a1283f7f448be6b0d885f7c983, type: 3}
+  - key: potion_heal_medium
+    sprite: {fileID: 21300000, guid: 49fdc730ef1f1ab48a51ab479052b97f, type: 3}
+  - key: potion_heal_poison
+    sprite: {fileID: 21300000, guid: 9eacc1462ca3e6f4bafb77698b0e9e71, type: 3}
+  - key: potion_heal_small
+    sprite: {fileID: 21300000, guid: a3e656eb2d02a1e458e82a1f7b00d7a0, type: 3}
+  - key: potion_heat_resist
+    sprite: {fileID: 21300000, guid: ca37d054c89c50846879b0b8be1d6ad4, type: 3}
+  - key: potion_mana
+    sprite: {fileID: 21300000, guid: 1aa3569b0afc9b34e87748b9aa65c4a0, type: 3}
+  - key: potion_refresh
+    sprite: {fileID: 21300000, guid: 7f4df788dcdac94498deb7ccae8557c8, type: 3}
+  - key: quarter_staff
+    sprite: {fileID: 21300000, guid: a1be8f9137e438c48bdfc3ab4b9e3177, type: 3}
+  - key: quarter_staff_plus1
+    sprite: {fileID: 21300000, guid: 4b32d2320f6c4e148abef23499e179b0, type: 3}
+  - key: quarter_staff_sparring
+    sprite: {fileID: 21300000, guid: 075d950e875218046990b95291988640, type: 3}
+  - key: quest_key
+    sprite: {fileID: 21300000, guid: f38a7c3090c621342ba3f9e3397c9a5b, type: 3}
+  - key: quiver_arrows
+    sprite: {fileID: 21300000, guid: 6ac6bc55e2eb398458a6618caf9bcdb4, type: 3}
+  - key: quiver_protection
+    sprite: {fileID: 21300000, guid: c650aa4551ae6564db1e1d7a89ba0a1e, type: 3}
+  - key: ring_gold
+    sprite: {fileID: 21300000, guid: 72174b9ca8075c84b9974f2965c06a75, type: 3}
+  - key: robe
+    sprite: {fileID: 21300000, guid: 75b34c3419948444ca874f7e92e24b55, type: 3}
+  - key: rope
+    sprite: {fileID: 21300000, guid: 3d47d12eaf122f14d9b63fe0bf6c9837, type: 3}
+  - key: salt
+    sprite: {fileID: 21300000, guid: b1de5bb0c23fbec4b8aa9ee554155510, type: 3}
+  - key: scimitar
+    sprite: {fileID: 21300000, guid: 2cc1a7306d8f2d74580bc2862837be7b, type: 3}
+  - key: settings
+    sprite: {fileID: 21300000, guid: d31c44603ba0ae34084e22304f921a17, type: 3}
+  - key: shield
+    sprite: {fileID: 21300000, guid: f6818b2d4da05ee44a97552c1d496437, type: 3}
+  - key: shortsword
+    sprite: {fileID: 21300000, guid: 78cf23970ac0fea4585ca8ae1892bc83, type: 3}
+  - key: shove
+    sprite: {fileID: 21300000, guid: 4cd9d7d4f0d309d44889fee463386adc, type: 3}
+  - key: spear
+    sprite: {fileID: 21300000, guid: 2378f2ca1b27abf4a833a474a2932a56, type: 3}
+  - key: speed
+    sprite: {fileID: 21300000, guid: 05fbbd5f09649934fbf76f90ecbf2fc0, type: 3}
+  - key: spell_bless
+    sprite: {fileID: 21300000, guid: e60d829422122a9498320184b47c08c6, type: 3}
+  - key: spell_brimstones
+    sprite: {fileID: 21300000, guid: 55730c958c5304947978d7a080b68b8e, type: 3}
+  - key: spell_daze
+    sprite: {fileID: 21300000, guid: 7b808ad23496e8e4facd102971257237, type: 3}
+  - key: spell_enchanted_blade
+    sprite: {fileID: 21300000, guid: 507a3ca1f66024247b129f1a925cae28, type: 3}
+  - key: spell_fearful_thoughts
+    sprite: {fileID: 21300000, guid: d3573a154c6d01047a1acd390639e502, type: 3}
+  - key: spell_fireball
+    sprite: {fileID: 21300000, guid: 56e9518507f6cd24c8ac81fa838f11de, type: 3}
+  - key: spell_flame_hands
+    sprite: {fileID: 21300000, guid: 5944a71b761d7c643b2a7bbd691b02fd, type: 3}
+  - key: spell_heal_medium
+    sprite: {fileID: 21300000, guid: 90e59331899372146998c3d091cde994, type: 3}
+  - key: spell_heal_small
+    sprite: {fileID: 21300000, guid: 2f4116c98cf27ec428415a96a3076175, type: 3}
+  - key: spell_magic_darts
+    sprite: {fileID: 21300000, guid: b6c847ca4fee6d34b8e015552964d54c, type: 3}
+  - key: spell_sleep
+    sprite: {fileID: 21300000, guid: b1c00b24e717a904da443fbd102e6cb6, type: 3}
+  - key: spell_sparkling_armor
+    sprite: {fileID: 21300000, guid: ca6325f89d2f2d54484a12e13b0e4aca, type: 3}
+  - key: staff
+    sprite: {fileID: 21300000, guid: 45276d0d3b1d56c47a295a965ff72d04, type: 3}
+  - key: steel_shod_boots
+    sprite: {fileID: 21300000, guid: 01a1e178edb24624ab4db1fd968b4e4d, type: 3}
+  - key: stone_axe
+    sprite: {fileID: 21300000, guid: 38dcd6deeb236e7498316d18a42ab05f, type: 3}
+  - key: stone_hammer
+    sprite: {fileID: 21300000, guid: 260f2ba914f694940abf1d1febbedd56, type: 3}
+  - key: sword
+    sprite: {fileID: 21300000, guid: 71ec1dd8bf9850e42a4dec5e3d69d155, type: 3}
+  - key: throwing_daggers
+    sprite: {fileID: 21300000, guid: d56c44ff548606f4b8938b33230ecdbc, type: 3}
+  - key: throwing_hammer
+    sprite: {fileID: 21300000, guid: 96a4b15f2d83d1f47bcd2ed6a3d926f9, type: 3}
+  - key: throwing_stars
+    sprite: {fileID: 21300000, guid: b70eee9530d79ce4fae4657427e0f1e8, type: 3}
+  - key: torch
+    sprite: {fileID: 21300000, guid: 11eb31b4937add34595b72dd6e439008, type: 3}
+  - key: undo
+    sprite: {fileID: 21300000, guid: 41b26103de11bb04cb863cdc900bbcb0, type: 3}
+  - key: war_axe
+    sprite: {fileID: 21300000, guid: f8ca59cd93a964d4a99118af884f1636, type: 3}
+  - key: war_hammer
+    sprite: {fileID: 21300000, guid: 1c84368c05d1dc848b4b0cb380ed00ea, type: 3}
+  itemIdIconMappings:
+  - id: 1
+    key: dagger
+    name: Dagger
+    category: Weapon
+    iconKey: dagger
+    sprite: {fileID: 21300000, guid: daa6e6bbb4df6234ca7c86cf7062329d, type: 3}
+  - id: 2
+    key: dagger_of_shielding_2
+    name: Dagger of Shielding +2
+    category: Weapon
+    iconKey: dagger_shielding
+    sprite: {fileID: 21300000, guid: be470670c329a7b4897dd576bc34f86e, type: 3}
+  - id: 8
+    key: dagger_of_spells_1
+    name: Dagger of Spells +1
+    category: Weapon
+    iconKey: dagger_spells
+    sprite: {fileID: 21300000, guid: 2e600fc4de6513f459d9b89612ceeda0, type: 3}
+  - id: 10
+    key: longsword
+    name: Longsword
+    category: Weapon
+    iconKey: longsword
+    sprite: {fileID: 21300000, guid: e4190e9bd84678344a64efa240534063, type: 3}
+  - id: 11
+    key: longsword_1
+    name: Longsword +1
+    category: Weapon
+    iconKey: longsword_plus1
+    sprite: {fileID: 21300000, guid: 887470f5c95ef9943828372a878c8843, type: 3}
+  - id: 20
+    key: broadsword
+    name: Broadsword
+    category: Weapon
+    iconKey: broadsword
+    sprite: {fileID: 21300000, guid: 821cf73eeb27431468a9dca9a566d71a, type: 3}
+  - id: 31
+    key: scimitar
+    name: Scimitar
+    category: Weapon
+    iconKey: scimitar
+    sprite: {fileID: 21300000, guid: 2cc1a7306d8f2d74580bc2862837be7b, type: 3}
+  - id: 37
+    key: mace
+    name: Mace
+    category: Weapon
+    iconKey: mace
+    sprite: {fileID: 21300000, guid: f81e1e311b8029441ae720c131852c7d, type: 3}
+  - id: 44
+    key: nunchuka
+    name: Nunchuka
+    category: Weapon
+    iconKey: nunchuka
+    sprite: {fileID: 21300000, guid: 564cf63bf8885f54591916511f1fba50, type: 3}
+  - id: 59
+    key: morning_star
+    name: Morning Star
+    category: Weapon
+    iconKey: morning_star
+    sprite: {fileID: 21300000, guid: 8eeff523dc28cc144b0cb388483278f7, type: 3}
+  - id: 65
+    key: flail
+    name: Flail
+    category: Weapon
+    iconKey: flail
+    sprite: {fileID: 21300000, guid: 003332f8f0cb52544b4e46ca2eadf2c7, type: 3}
+  - id: 75
+    key: short_sword
+    name: Short Sword
+    category: Weapon
+    iconKey: shortsword
+    sprite: {fileID: 21300000, guid: 78cf23970ac0fea4585ca8ae1892bc83, type: 3}
+  - id: 81
+    key: war_axe
+    name: War Axe
+    category: Weapon
+    iconKey: war_axe
+    sprite: {fileID: 21300000, guid: f8ca59cd93a964d4a99118af884f1636, type: 3}
+  - id: 87
+    key: throwing_stars_1
+    name: Throwing Stars +1
+    category: Weapon
+    iconKey: throwing_stars
+    sprite: {fileID: 21300000, guid: b70eee9530d79ce4fae4657427e0f1e8, type: 3}
+  - id: 92
+    key: battleaxe
+    name: Battleaxe
+    category: Weapon
+    iconKey: battleaxe
+    sprite: {fileID: 21300000, guid: 0cdbb145ecbf0154cb9c0adfa586f25f, type: 3}
+  - id: 98
+    key: quarter_staff
+    name: Quarter Staff
+    category: Weapon
+    iconKey: quarter_staff
+    sprite: {fileID: 21300000, guid: a1be8f9137e438c48bdfc3ab4b9e3177, type: 3}
+  - id: 99
+    key: quarter_staff_1
+    name: Quarter Staff +1
+    category: Weapon
+    iconKey: quarter_staff_plus1
+    sprite: {fileID: 21300000, guid: 4b32d2320f6c4e148abef23499e179b0, type: 3}
+  - id: 102
+    key: quarter_staff
+    name: Quarter Staff
+    category: Weapon
+    iconKey: quarter_staff_sparring
+    sprite: {fileID: 21300000, guid: 075d950e875218046990b95291988640, type: 3}
+  - id: 104
+    key: bow
+    name: Bow
+    category: Weapon
+    iconKey: bow
+    sprite: {fileID: 21300000, guid: c808fa3fdbf3a3d41aa61583c36e723d, type: 3}
+  - id: 108
+    key: bow_1
+    name: Bow +1
+    category: Weapon
+    iconKey: bow_plus1
+    sprite: {fileID: 21300000, guid: 7adf7924fe69d0844ba9359108df7e5c, type: 3}
+  - id: 109
+    key: darts
+    name: Darts
+    category: Weapon
+    iconKey: darts
+    sprite: {fileID: 21300000, guid: e6d615f16e9a1174da488cfcad621fc3, type: 3}
+  - id: 113
+    key: dart_of_poison
+    name: Dart of Poison
+    category: Weapon
+    iconKey: dart_poison
+    sprite: {fileID: 21300000, guid: a87f027ed65db3543ae45354f3e9eca0, type: 3}
+  - id: 120
+    key: spear
+    name: Spear
+    category: Weapon
+    iconKey: spear
+    sprite: {fileID: 21300000, guid: 2378f2ca1b27abf4a833a474a2932a56, type: 3}
+  - id: 125
+    key: club
+    name: Club
+    category: Weapon
+    iconKey: club
+    sprite: {fileID: 21300000, guid: 5be4d21b33efde847b75c0af8ea32adc, type: 3}
+  - id: 135
+    key: staff
+    name: Staff
+    category: Weapon
+    iconKey: gnarled_staff
+    sprite: {fileID: 21300000, guid: 2909b05e24956d944b4b67ddb327bd53, type: 3}
+  - id: 136
+    key: stone_hammer
+    name: Stone Hammer
+    category: Weapon
+    iconKey: stone_hammer
+    sprite: {fileID: 21300000, guid: 260f2ba914f694940abf1d1febbedd56, type: 3}
+  - id: 137
+    key: stone_axe
+    name: Stone Axe
+    category: Weapon
+    iconKey: stone_axe
+    sprite: {fileID: 21300000, guid: 38dcd6deeb236e7498316d18a42ab05f, type: 3}
+  - id: 138
+    key: war_hammer
+    name: War Hammer
+    category: Weapon
+    iconKey: war_hammer
+    sprite: {fileID: 21300000, guid: 1c84368c05d1dc848b4b0cb380ed00ea, type: 3}
+  - id: 140
+    key: pike_axe
+    name: Pike Axe
+    category: Weapon
+    iconKey: pike_axe
+    sprite: {fileID: 21300000, guid: 27043fb1b3222b14c80b721d58a8ef7b, type: 3}
+  - id: 144
+    key: throwing_daggers
+    name: Throwing Daggers
+    category: Weapon
+    iconKey: throwing_daggers
+    sprite: {fileID: 21300000, guid: d56c44ff548606f4b8938b33230ecdbc, type: 3}
+  - id: 147
+    key: throwing_hammer
+    name: Throwing Hammer
+    category: Weapon
+    iconKey: throwing_hammer
+    sprite: {fileID: 21300000, guid: 96a4b15f2d83d1f47bcd2ed6a3d926f9, type: 3}
+  - id: 151
+    key: battle_hammer
+    name: Battle Hammer
+    category: Weapon
+    iconKey: battle_hammer
+    sprite: {fileID: 21300000, guid: b0a5b044aee40844ea41d5eb596271f5, type: 3}
+  - id: 200
+    key: robe
+    name: Robe
+    category: Armor
+    iconKey: robe
+    sprite: {fileID: 21300000, guid: 75b34c3419948444ca874f7e92e24b55, type: 3}
+  - id: 209
+    key: leather_armor
+    name: Leather Armor
+    category: Armor
+    iconKey: leather_armor
+    sprite: {fileID: 21300000, guid: c790be6dd0afd414e808d80c3dcd3faa, type: 3}
+  - id: 210
+    key: leather_armor_3
+    name: Leather Armor +3
+    category: Armor
+    iconKey: leather_armor_plus3
+    sprite: {fileID: 21300000, guid: 6590f22ad7faab34ca98d0561d35de0d, type: 3}
+  - id: 211
+    key: leather_armor_6
+    name: Leather Armor +6
+    category: Armor
+    iconKey: leather_armor_plus6
+    sprite: {fileID: 21300000, guid: d4b8e2f28f6996340a22fdd3bdebe619, type: 3}
+  - id: 215
+    key: chain_armor
+    name: Chain Armor
+    category: Armor
+    iconKey: chain_armor
+    sprite: {fileID: 21300000, guid: 9734b613342febb4a811fc39cad5173e, type: 3}
+  - id: 219
+    key: banded_armor
+    name: Banded Armor
+    category: Armor
+    iconKey: banded_armor
+    sprite: {fileID: 21300000, guid: f3b8d50279d781440817a0729ef7793a, type: 3}
+  - id: 250
+    key: padded_cloak
+    name: Padded Cloak
+    category: Armor
+    iconKey: padded_cloak
+    sprite: {fileID: 21300000, guid: 4b22e55a8d6b5ed4d8562aad95da1032, type: 3}
+  - id: 400
+    key: helm
+    name: Helm
+    category: Helm
+    iconKey: helm
+    sprite: {fileID: 21300000, guid: 440b6c58d6a7fe64a837e3a7b774022a, type: 3}
+  - id: 418
+    key: shield
+    name: Shield
+    category: Shield
+    iconKey: shield
+    sprite: {fileID: 21300000, guid: f6818b2d4da05ee44a97552c1d496437, type: 3}
+  - id: 450
+    key: leather_cap
+    name: Leather Cap
+    category: Helm
+    iconKey: leather_cap
+    sprite: {fileID: 21300000, guid: 6087199fc219eee4583cdbac2b502e98, type: 3}
+  - id: 452
+    key: leather_gloves
+    name: Leather Gloves
+    category: Helm
+    iconKey: leather_gloves
+    sprite: {fileID: 21300000, guid: 89c59487589131e49a276df53a993a17, type: 3}
+  - id: 454
+    key: leather_boots
+    name: Leather Boots
+    category: Helm
+    iconKey: leather_boots
+    sprite: {fileID: 21300000, guid: 145d2d4fcf28858479c7106b372ed901, type: 3}
+  - id: 455
+    key: steel_shod_boots
+    name: Steel Shod Boots
+    category: Helm
+    iconKey: steel_shod_boots
+    sprite: {fileID: 21300000, guid: 01a1e178edb24624ab4db1fd968b4e4d, type: 3}
+  - id: 602
+    key: heal_poison
+    name: Heal Poison
+    category: Potion
+    iconKey: potion_heal_poison
+    sprite: {fileID: 21300000, guid: 9eacc1462ca3e6f4bafb77698b0e9e71, type: 3}
+  - id: 603
+    key: heat_resistance
+    name: Heat Resistance
+    category: Magic
+    iconKey: potion_heat_resist
+    sprite: {fileID: 21300000, guid: ca37d054c89c50846879b0b8be1d6ad4, type: 3}
+  - id: 611
+    key: heal_small_wounds
+    name: Heal Small Wounds
+    category: Potion
+    iconKey: potion_heal_small
+    sprite: {fileID: 21300000, guid: a3e656eb2d02a1e458e82a1f7b00d7a0, type: 3}
+  - id: 612
+    key: heal_medium_wounds
+    name: Heal Medium Wounds
+    category: Potion
+    iconKey: potion_heal_medium
+    sprite: {fileID: 21300000, guid: 49fdc730ef1f1ab48a51ab479052b97f, type: 3}
+  - id: 622
+    key: speckled_luck_stone_2
+    name: Speckled Luck Stone +2
+    category: Magic
+    iconKey: luck_stone
+    sprite: {fileID: 21300000, guid: d29184328bbfbfb4a97159c1acb6f12a, type: 3}
+  - id: 675
+    key: quiver_of_protection_2
+    name: Quiver of Protection +2
+    category: Magic
+    iconKey: quiver_protection
+    sprite: {fileID: 21300000, guid: c650aa4551ae6564db1e1d7a89ba0a1e, type: 3}
+  - id: 723
+    key: refresh_potion
+    name: Refresh Potion
+    category: Potion
+    iconKey: potion_refresh
+    sprite: {fileID: 21300000, guid: 7f4df788dcdac94498deb7ccae8557c8, type: 3}
+  - id: 747
+    key: salt
+    name: Salt
+    category: Magic
+    iconKey: salt
+    sprite: {fileID: 21300000, guid: b1de5bb0c23fbec4b8aa9ee554155510, type: 3}
+  - id: 748
+    key: pepper
+    name: Pepper
+    category: Magic
+    iconKey: pepper
+    sprite: {fileID: 21300000, guid: e8896ca15726252498995f9b70169804, type: 3}
+  - id: 803
+    key: quiver_of_arrows
+    name: Quiver of Arrows
+    category: Supply
+    iconKey: quiver_arrows
+    sprite: {fileID: 21300000, guid: 6ac6bc55e2eb398458a6618caf9bcdb4, type: 3}
+  - id: 805
+    key: torch
+    name: Torch
+    category: Supply
+    iconKey: torch
+    sprite: {fileID: 21300000, guid: 11eb31b4937add34595b72dd6e439008, type: 3}
+  - id: 806
+    key: parchment
+    name: Parchment
+    category: Supply
+    iconKey: parchment
+    sprite: {fileID: 21300000, guid: 80366da616eb3e44d9e9377b062088dd, type: 3}
+  - id: 878
+    key: rope
+    name: Rope
+    category: Supply
+    iconKey: rope
+    sprite: {fileID: 21300000, guid: 3d47d12eaf122f14d9b63fe0bf6c9837, type: 3}
+  spellIdIconMappings:
+  - id: 1108
+    key: magic_missile
+    name: Magic Darts
+    category: Spell
+    iconKey: spell_magic_darts
+    sprite: {fileID: 21300000, guid: b6c847ca4fee6d34b8e015552964d54c, type: 3}
+  - id: 1104
+    key: burning_hands
+    name: Flame Hands
+    category: Spell
+    iconKey: spell_flame_hands
+    sprite: {fileID: 21300000, guid: 5944a71b761d7c643b2a7bbd691b02fd, type: 3}
+  - id: 1306
+    key: fireball
+    name: Fireball
+    category: Spell
+    iconKey: spell_fireball
+    sprite: {fileID: 21300000, guid: 56e9518507f6cd24c8ac81fa838f11de, type: 3}
+  - id: 2101
+    key: brimstones
+    name: Brimstones
+    category: Spell
+    iconKey: spell_brimstones
+    sprite: {fileID: 21300000, guid: 55730c958c5304947978d7a080b68b8e, type: 3}
+  - id: 2105
+    key: heal_light_wounds
+    name: Heal Small Wounds
+    category: Spell
+    iconKey: spell_heal_small
+    sprite: {fileID: 21300000, guid: 2f4116c98cf27ec428415a96a3076175, type: 3}
+  - id: 2207
+    key: heal_medium_wounds
+    name: Heal Medium Wounds
+    category: Spell
+    iconKey: spell_heal_medium
+    sprite: {fileID: 21300000, guid: 90e59331899372146998c3d091cde994, type: 3}
+  - id: 2106
+    key: bless
+    name: Magic Aura
+    category: Spell
+    iconKey: spell_bless
+    sprite: {fileID: 21300000, guid: e60d829422122a9498320184b47c08c6, type: 3}
+  - id: 3202
+    key: hold
+    name: Daze
+    category: Spell
+    iconKey: spell_daze
+    sprite: {fileID: 21300000, guid: 7b808ad23496e8e4facd102971257237, type: 3}
+  - id: 2310
+    key: sleep
+    name: Sandman
+    category: Spell
+    iconKey: spell_sleep
+    sprite: {fileID: 21300000, guid: b1c00b24e717a904da443fbd102e6cb6, type: 3}
+  - id: 1102
+    key: enchanted_blade
+    name: Enchanted Blade
+    category: Spell
+    iconKey: spell_enchanted_blade
+    sprite: {fileID: 21300000, guid: 507a3ca1f66024247b129f1a925cae28, type: 3}
+  - id: 1111
+    key: sparkling_armor
+    name: Sparkling Armor
+    category: Spell
+    iconKey: spell_sparkling_armor
+    sprite: {fileID: 21300000, guid: ca6325f89d2f2d54484a12e13b0e4aca, type: 3}
+  - id: 2103
+    key: fearful_thoughts
+    name: Fearful Thoughts
+    category: Spell
+    iconKey: spell_fearful_thoughts
+    sprite: {fileID: 21300000, guid: d3573a154c6d01047a1acd390639e502, type: 3}
+  combatSurfaces:
+  - key: surface_electrified_water
+    albedo: {fileID: 2800000, guid: a447c2a697d61a142a1a325f1a538e50, type: 3}
+    normal: {fileID: 2800000, guid: 206e56f00a7070440856e14144dd07cf, type: 3}
+    material: {fileID: 2100000, guid: 6a5b98a811afb9242be4f446ec579f33, type: 2}
+    frames:
+    - {fileID: -5166153831301359943, guid: a447c2a697d61a142a1a325f1a538e50, type: 3}
+    - {fileID: 4431261625935799270, guid: a447c2a697d61a142a1a325f1a538e50, type: 3}
+    - {fileID: -7276557016125248393, guid: a447c2a697d61a142a1a325f1a538e50, type: 3}
+    - {fileID: 8214185993880679484, guid: a447c2a697d61a142a1a325f1a538e50, type: 3}
+  - key: surface_fire
+    albedo: {fileID: 2800000, guid: 00a81f94d57a2f24d8e24e613eaf929f, type: 3}
+    normal: {fileID: 2800000, guid: c3d858f7c742c2d408e3103a64ba3050, type: 3}
+    material: {fileID: 2100000, guid: a3b7987dfa1804540b27ac423f7bb745, type: 2}
+    frames:
+    - {fileID: -8635902046876020079, guid: 00a81f94d57a2f24d8e24e613eaf929f, type: 3}
+    - {fileID: 1303775034435408288, guid: 00a81f94d57a2f24d8e24e613eaf929f, type: 3}
+    - {fileID: 95566565448763229, guid: 00a81f94d57a2f24d8e24e613eaf929f, type: 3}
+    - {fileID: -5857607303882937777, guid: 00a81f94d57a2f24d8e24e613eaf929f, type: 3}
+  - key: surface_ice
+    albedo: {fileID: 2800000, guid: b2ed4109098ecdf45befa632c1940def, type: 3}
+    normal: {fileID: 2800000, guid: 2bb1edf6cbbdf3f4aaf7a684118cda03, type: 3}
+    material: {fileID: 2100000, guid: 314be68694fa1db459d055aa9d67d427, type: 2}
+    frames:
+    - {fileID: -5171406021114808015, guid: b2ed4109098ecdf45befa632c1940def, type: 3}
+    - {fileID: -8736204442297404782, guid: b2ed4109098ecdf45befa632c1940def, type: 3}
+    - {fileID: -3972659061557561645, guid: b2ed4109098ecdf45befa632c1940def, type: 3}
+    - {fileID: -8721800594831329349, guid: b2ed4109098ecdf45befa632c1940def, type: 3}
+  - key: surface_oil
+    albedo: {fileID: 2800000, guid: d546de9117e7e544ea6154a4aa2a5a9d, type: 3}
+    normal: {fileID: 2800000, guid: dec3826e1dcd4914d800c2c9135cf1e1, type: 3}
+    material: {fileID: 2100000, guid: ac568734e854c1b4597cb474d37c4c98, type: 2}
+    frames:
+    - {fileID: -9164747029871396806, guid: d546de9117e7e544ea6154a4aa2a5a9d, type: 3}
+    - {fileID: 5155761288407611719, guid: d546de9117e7e544ea6154a4aa2a5a9d, type: 3}
+    - {fileID: 5526490568175467626, guid: d546de9117e7e544ea6154a4aa2a5a9d, type: 3}
+    - {fileID: 7858128263524381363, guid: d546de9117e7e544ea6154a4aa2a5a9d, type: 3}
+  - key: surface_poison
+    albedo: {fileID: 2800000, guid: a1ca6c6a9b498c34cb2ea5e20316bf08, type: 3}
+    normal: {fileID: 2800000, guid: 261746e49e86abc458b19a451b7d433c, type: 3}
+    material: {fileID: 2100000, guid: d872a04df3585664ca4a68b8fc0b5a54, type: 2}
+    frames:
+    - {fileID: -8369076360580613186, guid: a1ca6c6a9b498c34cb2ea5e20316bf08, type: 3}
+    - {fileID: -1203751019347219429, guid: a1ca6c6a9b498c34cb2ea5e20316bf08, type: 3}
+    - {fileID: -3791311092664689471, guid: a1ca6c6a9b498c34cb2ea5e20316bf08, type: 3}
+    - {fileID: -455338555054131297, guid: a1ca6c6a9b498c34cb2ea5e20316bf08, type: 3}
+  - key: surface_steam_cloud
+    albedo: {fileID: 2800000, guid: 94abe29b8cede2744a98894a17cfca4b, type: 3}
+    normal: {fileID: 2800000, guid: eb47f0bfc53b7d648921ba3efdedac2a, type: 3}
+    material: {fileID: 2100000, guid: 4406fd657f893624ba2d3a7159acb0c3, type: 2}
+    frames:
+    - {fileID: 6183857571930248392, guid: 94abe29b8cede2744a98894a17cfca4b, type: 3}
+    - {fileID: 6667940194949584289, guid: 94abe29b8cede2744a98894a17cfca4b, type: 3}
+    - {fileID: -7389082364189719771, guid: 94abe29b8cede2744a98894a17cfca4b, type: 3}
+    - {fileID: 5270430767491004448, guid: 94abe29b8cede2744a98894a17cfca4b, type: 3}
+  - key: surface_water
+    albedo: {fileID: 2800000, guid: 299eb1f009d5c274c83c36aa4b32f244, type: 3}
+    normal: {fileID: 2800000, guid: db79abf6441a144459bde8d1c7fe3955, type: 3}
+    material: {fileID: 2100000, guid: 3d59e605f21d5864499e45b04d67e5a3, type: 2}
+    frames:
+    - {fileID: -712819780207394010, guid: 299eb1f009d5c274c83c36aa4b32f244, type: 3}
+    - {fileID: -3758224245457064202, guid: 299eb1f009d5c274c83c36aa4b32f244, type: 3}
+    - {fileID: -7607926435122640353, guid: 299eb1f009d5c274c83c36aa4b32f244, type: 3}
+    - {fileID: -6526857638510424254, guid: 299eb1f009d5c274c83c36aa4b32f244, type: 3}
+  combatVfx:
+  - key: vfx_arrow_bolt
+    albedo: {fileID: 2800000, guid: 35819b987c28a1846ae8254208c6abd2, type: 3}
+    normal: {fileID: 2800000, guid: 58e68ab28616eda4cb7802788cce3bf4, type: 3}
+    material: {fileID: 2100000, guid: 5a77f289e5644f6409cae3a983bfb666, type: 2}
+    frames:
+    - {fileID: -3225365696693253453, guid: 35819b987c28a1846ae8254208c6abd2, type: 3}
+    - {fileID: -6662734377290355700, guid: 35819b987c28a1846ae8254208c6abd2, type: 3}
+    - {fileID: 8160041039159176871, guid: 35819b987c28a1846ae8254208c6abd2, type: 3}
+    - {fileID: -2891946790153259045, guid: 35819b987c28a1846ae8254208c6abd2, type: 3}
+  - key: vfx_fireball_impact
+    albedo: {fileID: 2800000, guid: a32ff0d6c1b1d4f4b868f404dc87682a, type: 3}
+    normal: {fileID: 2800000, guid: 109b9cf26401a2f46ba48acb1cb736c4, type: 3}
+    material: {fileID: 2100000, guid: 13ba319cb3fbed44d964be3c3fda738f, type: 2}
+    frames:
+    - {fileID: 8194709008903660331, guid: a32ff0d6c1b1d4f4b868f404dc87682a, type: 3}
+    - {fileID: -202043948814324764, guid: a32ff0d6c1b1d4f4b868f404dc87682a, type: 3}
+    - {fileID: 5366299656088510125, guid: a32ff0d6c1b1d4f4b868f404dc87682a, type: 3}
+    - {fileID: -8174331752387698734, guid: a32ff0d6c1b1d4f4b868f404dc87682a, type: 3}
+  - key: vfx_heal_sparkle
+    albedo: {fileID: 2800000, guid: 0ce2cec1006b4a94da2ac2ea127216a7, type: 3}
+    normal: {fileID: 2800000, guid: cfcca3b11a2329c4a8a88ab9162bded3, type: 3}
+    material: {fileID: 2100000, guid: a80dd049fe91d504382ac54f98991510, type: 2}
+    frames:
+    - {fileID: -8289937355836254029, guid: 0ce2cec1006b4a94da2ac2ea127216a7, type: 3}
+    - {fileID: 3095245422622255270, guid: 0ce2cec1006b4a94da2ac2ea127216a7, type: 3}
+    - {fileID: 8433715372453501977, guid: 0ce2cec1006b4a94da2ac2ea127216a7, type: 3}
+    - {fileID: -5121510817286434820, guid: 0ce2cec1006b4a94da2ac2ea127216a7, type: 3}
+  - key: vfx_slash_arc
+    albedo: {fileID: 2800000, guid: 26eb5625f906d7341b76600595c77a87, type: 3}
+    normal: {fileID: 2800000, guid: 9da0d895289055f4d83f51bc2cb6d645, type: 3}
+    material: {fileID: 2100000, guid: d4c3c988a27d91641b20031ccf1fc863, type: 2}
+    frames:
+    - {fileID: 2563264964012886676, guid: 26eb5625f906d7341b76600595c77a87, type: 3}
+    - {fileID: -7067838320665210391, guid: 26eb5625f906d7341b76600595c77a87, type: 3}
+    - {fileID: -5750626778819678886, guid: 26eb5625f906d7341b76600595c77a87, type: 3}
+    - {fileID: -938261823350319301, guid: 26eb5625f906d7341b76600595c77a87, type: 3}

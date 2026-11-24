@@ -23,10 +23,14 @@ namespace Realmz.World
     {
         private const int IntentArcSegments = 12;
         private const int SurfaceTextureSize = 64;
+        private const int MaxCombatVfxPool = 8;
+        private const float DefaultVfxDuration = 0.35f;
 
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int ColorId = Shader.PropertyToID("_Color");
         private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap");
+        private static readonly int BaseMapStId = Shader.PropertyToID("_BaseMap_ST");
+        private static readonly int MainTexStId = Shader.PropertyToID("_MainTex_ST");
 
         private static readonly Color ReachableNormalColor = new Color(0.176f, 0.831f, 0.749f, 0.88f); // #2DD4BF
         private static readonly Color ReachableAooColor = new Color(0.976f, 0.451f, 0.086f, 0.92f);    // #F97316
@@ -96,6 +100,7 @@ namespace Realmz.World
         private readonly Dictionary<SurfaceType, Material> _surfaceMaterials = new Dictionary<SurfaceType, Material>(8);
         private readonly Dictionary<SurfaceType, Texture2D> _surfaceTextures = new Dictionary<SurfaceType, Texture2D>(8);
         private readonly Dictionary<SurfaceType, Color> _surfaceBaseColors = new Dictionary<SurfaceType, Color>(8);
+        private readonly Dictionary<SurfaceType, bool> _surfaceIsStrip = new Dictionary<SurfaceType, bool>(8);
         private readonly SurfaceType[] _animatedSurfaceTypes =
         {
             SurfaceType.Water,
@@ -106,6 +111,27 @@ namespace Realmz.World
             SurfaceType.ElectrifiedWater,
             SurfaceType.SteamCloud
         };
+
+        private sealed class CombatVfxInstance
+        {
+            public GameObject Root;
+            public MeshRenderer Renderer;
+            public bool Active;
+            public string VfxKey;
+            public Vector3 StartPos;
+            public Vector3 TargetPos;
+            public bool IsProjectile;
+            public float Elapsed;
+            public float Duration;
+            public float BaseScale;
+        }
+
+        private Transform _vfxContainer;
+        private readonly List<CombatVfxInstance> _vfxPool = new List<CombatVfxInstance>(MaxCombatVfxPool);
+        private readonly Dictionary<string, Material> _vfxMaterials = new Dictionary<string, Material>(StringComparer.OrdinalIgnoreCase);
+        private MaterialPropertyBlock _vfxPropBlock;
+        private Texture2D _vfxFallbackTexture;
+        private int _vfxRoundRobinCursor;
 
         private Material _shoveChevronMaterial;
         private Texture2D _shoveChevronTexture;
@@ -132,6 +158,11 @@ namespace Realmz.World
 
         public void Initialize(BywaterAssetCatalog catalog)
         {
+            if (_catalog != catalog)
+            {
+                DisposeSurfaceCache();
+                DisposeVfxMaterialCache();
+            }
             _catalog = catalog;
             EnsureLayers();
         }
@@ -156,6 +187,8 @@ namespace Realmz.World
                 StepSurfaceAnimations(t);
             }
 
+            StepCombatVfx(dt);
+
             if (_activeIntentArcCount > 0 && Application.isPlaying)
             {
                 _intentScrollOffset = Mathf.Repeat(_intentScrollOffset - dt * 1.65f, 1f);
@@ -172,17 +205,11 @@ namespace Realmz.World
 
         private void OnDestroy()
         {
-            foreach (KeyValuePair<SurfaceType, Material> kv in _surfaceMaterials)
-            {
-                DestroySafe(kv.Value);
-            }
-            _surfaceMaterials.Clear();
+            DisposeSurfaceCache();
+            DisposeVfxMaterialCache();
 
-            foreach (KeyValuePair<SurfaceType, Texture2D> kv in _surfaceTextures)
-            {
-                DestroySafe(kv.Value);
-            }
-            _surfaceTextures.Clear();
+            DestroySafe(_vfxFallbackTexture);
+            _vfxFallbackTexture = null;
 
             DestroySafe(_shoveChevronMaterial);
             _shoveChevronMaterial = null;
@@ -208,6 +235,32 @@ namespace Realmz.World
 
             DestroySafe(_fallbackOverlayMaterial);
             _fallbackOverlayMaterial = null;
+        }
+
+        private void DisposeSurfaceCache()
+        {
+            foreach (KeyValuePair<SurfaceType, Material> kv in _surfaceMaterials)
+            {
+                DestroySafe(kv.Value);
+            }
+            _surfaceMaterials.Clear();
+            _surfaceBaseColors.Clear();
+            _surfaceIsStrip.Clear();
+
+            foreach (KeyValuePair<SurfaceType, Texture2D> kv in _surfaceTextures)
+            {
+                DestroySafe(kv.Value);
+            }
+            _surfaceTextures.Clear();
+        }
+
+        private void DisposeVfxMaterialCache()
+        {
+            foreach (KeyValuePair<string, Material> kv in _vfxMaterials)
+            {
+                DestroySafe(kv.Value);
+            }
+            _vfxMaterials.Clear();
         }
 
         public void ClearAll()
@@ -236,6 +289,7 @@ namespace Realmz.World
 
             if (cells != null)
             {
+                float t = Application.isPlaying ? Time.unscaledTime : 0f;
                 for (int i = 0; i < cells.Count; i++)
                 {
                     CombatGridCell cell = cells[i];
@@ -245,10 +299,17 @@ namespace Realmz.World
                     }
 
                     Material mat = GetOrCreateSurfaceMaterial(cell.Surface);
-                    Color baseCol = GetSurfaceBaseColor(cell.Surface);
-                    float y = GetTileElevation(cell.X, cell.Y) + 0.018f;
+                    Color baseCol = _surfaceBaseColors.TryGetValue(cell.Surface, out Color cachedCol)
+                        ? cachedCol
+                        : GetSurfaceBaseColor(cell.Surface);
+                    float y = GetTileElevation(cell.X, cell.Y) + 0.085f;
                     Vector3 pos = new Vector3(cell.X + 0.5f, y, -(cell.Y + 0.5f));
                     PlaceCustomQuad(_surfaceLayer, pos, 0.96f, 0.96f, 0f, mat, baseCol);
+                }
+
+                if (_surfaceLayer.ActiveCount > 0)
+                {
+                    StepSurfaceAnimations(t);
                 }
             }
 
@@ -259,6 +320,47 @@ namespace Realmz.World
         {
             EnsureLayers();
             HideLayer(_surfaceLayer);
+        }
+
+        public void PlayCombatVfx(string vfxKey, Vector3 startWorldPos, Vector3 targetWorldPos, bool isProjectile = false)
+        {
+            if (string.IsNullOrWhiteSpace(vfxKey))
+            {
+                return;
+            }
+
+            EnsureLayers();
+            CombatVfxInstance inst = AcquireVfxInstance();
+            inst.Active = true;
+            inst.VfxKey = vfxKey;
+            inst.StartPos = startWorldPos;
+            inst.TargetPos = targetWorldPos;
+            inst.IsProjectile = isProjectile || string.Equals(vfxKey, "arrow_bolt", StringComparison.OrdinalIgnoreCase);
+            inst.Elapsed = 0f;
+            inst.Duration = DefaultVfxDuration;
+            inst.BaseScale = ResolveVfxBaseScale(vfxKey);
+            inst.Renderer.sharedMaterial = GetOrCreateVfxMaterial(vfxKey);
+
+            UpdateCombatVfxInstanceVisual(inst);
+            inst.Root.SetActive(true);
+        }
+
+        public void ClearCombatVfx()
+        {
+            for (int i = 0; i < _vfxPool.Count; i++)
+            {
+                CombatVfxInstance inst = _vfxPool[i];
+                if (inst == null)
+                {
+                    continue;
+                }
+
+                inst.Active = false;
+                if (inst.Root != null)
+                {
+                    inst.Root.SetActive(false);
+                }
+            }
         }
 
         public void ShowShovePreview(GridCoord actor, GridCoord target, TacticalShovePreview preview)
@@ -925,46 +1027,95 @@ namespace Realmz.World
                 }
 
                 Color baseCol = _surfaceBaseColors[st];
+                bool isStrip = _surfaceIsStrip.TryGetValue(st, out bool stripFlag) && stripFlag;
+                if (isStrip)
+                {
+                    float fps;
+                    float pulse;
+                    switch (st)
+                    {
+                        case SurfaceType.Fire:
+                            fps = 7.0f;
+                            pulse = 0.94f + 0.06f * Mathf.Sin(timeSec * 7.2f);
+                            break;
+                        case SurfaceType.ElectrifiedWater:
+                            fps = 8.0f;
+                            pulse = 0.92f + 0.08f * Mathf.Abs(Mathf.Sin(timeSec * 11.0f));
+                            break;
+                        case SurfaceType.Poison:
+                            fps = 4.5f;
+                            pulse = 0.92f + 0.08f * Mathf.Sin(timeSec * 3.4f);
+                            break;
+                        case SurfaceType.SteamCloud:
+                            fps = 4.0f;
+                            pulse = 0.90f + 0.10f * Mathf.Sin(timeSec * 2.1f);
+                            break;
+                        case SurfaceType.Oil:
+                            fps = 3.0f;
+                            pulse = 0.96f + 0.04f * Mathf.Sin(timeSec * 1.8f);
+                            break;
+                        case SurfaceType.Ice:
+                            fps = 2.0f;
+                            pulse = 0.95f + 0.05f * Mathf.Sin(timeSec * 2.6f);
+                            break;
+                        default: // Water
+                            fps = 5.0f;
+                            pulse = 0.94f + 0.06f * Mathf.Sin(timeSec * 2.8f);
+                            break;
+                    }
+
+                    int frame = Mathf.FloorToInt(timeSec * fps) & 3;
+                    SetMaterialTextureScale(mat, new Vector2(0.25f, 1f));
+                    SetMaterialTextureOffset(mat, new Vector2(frame * 0.25f, 0f));
+                    Color pulsedStrip = new Color(
+                        Mathf.Clamp01(baseCol.r * pulse),
+                        Mathf.Clamp01(baseCol.g * pulse),
+                        Mathf.Clamp01(baseCol.b * pulse),
+                        baseCol.a);
+                    SetMaterialColor(mat, pulsedStrip);
+                    continue;
+                }
+
                 Vector2 offset;
-                float pulse;
+                float procPulse;
 
                 switch (st)
                 {
                     case SurfaceType.Fire:
                         offset = new Vector2(Mathf.Sin(timeSec * 1.4f) * 0.08f, -timeSec * 0.36f);
-                        pulse = 0.90f + 0.12f * Mathf.Sin(timeSec * 7.2f);
+                        procPulse = 0.90f + 0.12f * Mathf.Sin(timeSec * 7.2f);
                         break;
                     case SurfaceType.ElectrifiedWater:
                         offset = new Vector2(timeSec * 0.28f, Mathf.Sin(timeSec * 3.2f) * 0.10f);
-                        pulse = 0.86f + 0.16f * Mathf.Abs(Mathf.Sin(timeSec * 11.0f));
+                        procPulse = 0.86f + 0.16f * Mathf.Abs(Mathf.Sin(timeSec * 11.0f));
                         break;
                     case SurfaceType.Poison:
                         offset = new Vector2(timeSec * 0.08f, -timeSec * 0.14f);
-                        pulse = 0.88f + 0.12f * Mathf.Sin(timeSec * 3.4f);
+                        procPulse = 0.88f + 0.12f * Mathf.Sin(timeSec * 3.4f);
                         break;
                     case SurfaceType.SteamCloud:
                         offset = new Vector2(timeSec * 0.16f, timeSec * 0.10f);
-                        pulse = 0.84f + 0.14f * Mathf.Sin(timeSec * 2.1f);
+                        procPulse = 0.84f + 0.14f * Mathf.Sin(timeSec * 2.1f);
                         break;
                     case SurfaceType.Oil:
                         offset = new Vector2(timeSec * 0.04f, timeSec * 0.03f);
-                        pulse = 0.94f + 0.06f * Mathf.Sin(timeSec * 1.8f);
+                        procPulse = 0.94f + 0.06f * Mathf.Sin(timeSec * 1.8f);
                         break;
                     case SurfaceType.Ice:
                         offset = Vector2.zero;
-                        pulse = 0.92f + 0.08f * Mathf.Sin(timeSec * 2.6f);
+                        procPulse = 0.92f + 0.08f * Mathf.Sin(timeSec * 2.6f);
                         break;
                     default: // Water
                         offset = new Vector2(timeSec * 0.14f, timeSec * 0.07f);
-                        pulse = 0.90f + 0.08f * Mathf.Sin(timeSec * 2.8f);
+                        procPulse = 0.90f + 0.08f * Mathf.Sin(timeSec * 2.8f);
                         break;
                 }
 
                 SetMaterialTextureOffset(mat, new Vector2(Mathf.Repeat(offset.x, 1f), Mathf.Repeat(offset.y, 1f)));
                 Color pulsed = new Color(
-                    Mathf.Clamp01(baseCol.r * pulse),
-                    Mathf.Clamp01(baseCol.g * pulse),
-                    Mathf.Clamp01(baseCol.b * pulse),
+                    Mathf.Clamp01(baseCol.r * procPulse),
+                    Mathf.Clamp01(baseCol.g * procPulse),
+                    Mathf.Clamp01(baseCol.b * procPulse),
                     baseCol.a);
                 SetMaterialColor(mat, pulsed);
             }
@@ -977,15 +1128,65 @@ namespace Realmz.World
                 return existing;
             }
 
+            if (_catalog != null)
+            {
+                string key = GetSurfaceCatalogKey(surface);
+                var stripEntry = !string.IsNullOrEmpty(key) ? _catalog.GetCombatSurfaceEntry(key) : null;
+                if (stripEntry == null)
+                {
+                    stripEntry = _catalog.GetCombatSurfaceEntry(surface.ToString());
+                }
+                if (stripEntry != null && stripEntry.albedo != null)
+                {
+                    Color stripBase = new Color(1f, 1f, 1f, GetSurfaceStripAlpha(surface));
+                    _surfaceBaseColors[surface] = stripBase;
+                    _surfaceIsStrip[surface] = true;
+
+                    Material stripMat = CreateTransparentOverlayMaterial("SurfaceStrip_" + surface, stripEntry.albedo, stripBase);
+                    SetMaterialTextureScale(stripMat, new Vector2(0.25f, 1f));
+                    SetMaterialTextureOffset(stripMat, Vector2.zero);
+                    _surfaceMaterials[surface] = stripMat;
+                    return stripMat;
+                }
+            }
+
             Texture2D tex = BuildSurfacePixelTexture(surface);
             _surfaceTextures[surface] = tex;
 
             Color baseCol = GetSurfaceBaseColor(surface);
             _surfaceBaseColors[surface] = baseCol;
+            _surfaceIsStrip[surface] = false;
 
             Material mat = CreateTransparentOverlayMaterial("Surface_" + surface, tex, baseCol);
             _surfaceMaterials[surface] = mat;
             return mat;
+        }
+
+        private static string GetSurfaceCatalogKey(SurfaceType surface)
+        {
+            switch (surface)
+            {
+                case SurfaceType.Water: return "water";
+                case SurfaceType.Oil: return "oil";
+                case SurfaceType.Fire: return "fire";
+                case SurfaceType.Ice: return "ice";
+                case SurfaceType.Poison: return "poison";
+                case SurfaceType.ElectrifiedWater: return "electrified_water";
+                case SurfaceType.SteamCloud: return "steam_cloud";
+                default: return string.Empty;
+            }
+        }
+
+        private static float GetSurfaceStripAlpha(SurfaceType surface)
+        {
+            switch (surface)
+            {
+                case SurfaceType.Water: return 0.80f;
+                case SurfaceType.SteamCloud: return 0.78f;
+                case SurfaceType.Fire: return 0.92f;
+                case SurfaceType.ElectrifiedWater: return 0.90f;
+                default: return 0.86f;
+            }
         }
 
         private Material GetOrCreateShoveChevronMaterial()
@@ -1394,6 +1595,222 @@ namespace Realmz.World
             }
         }
 
+        private static void SetMaterialTextureScale(Material mat, Vector2 scale)
+        {
+            mat.mainTextureScale = scale;
+            if (mat.HasProperty(BaseMapId))
+            {
+                mat.SetTextureScale(BaseMapId, scale);
+            }
+        }
+
+        private CombatVfxInstance AcquireVfxInstance()
+        {
+            for (int i = 0; i < _vfxPool.Count; i++)
+            {
+                if (!_vfxPool[i].Active)
+                {
+                    return _vfxPool[i];
+                }
+            }
+
+            if (_vfxPool.Count < MaxCombatVfxPool)
+            {
+                GameObject go = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                go.name = "CombatVfxQuad_" + _vfxPool.Count;
+                go.transform.SetParent(_vfxContainer, false);
+
+                Collider col = go.GetComponent<Collider>();
+                if (col != null)
+                {
+                    DestroySafe(col);
+                }
+
+                MeshRenderer mr = go.GetComponent<MeshRenderer>();
+                mr.shadowCastingMode = ShadowCastingMode.Off;
+                mr.receiveShadows = false;
+                go.SetActive(false);
+
+                CombatVfxInstance created = new CombatVfxInstance
+                {
+                    Root = go,
+                    Renderer = mr
+                };
+                _vfxPool.Add(created);
+                return created;
+            }
+
+            CombatVfxInstance recycled = _vfxPool[_vfxRoundRobinCursor % _vfxPool.Count];
+            _vfxRoundRobinCursor = (_vfxRoundRobinCursor + 1) % _vfxPool.Count;
+            return recycled;
+        }
+
+        private void StepCombatVfx(float dt)
+        {
+            if (_vfxPool.Count == 0 || !Application.isPlaying)
+            {
+                return;
+            }
+
+            for (int i = 0; i < _vfxPool.Count; i++)
+            {
+                CombatVfxInstance inst = _vfxPool[i];
+                if (inst == null || !inst.Active)
+                {
+                    continue;
+                }
+
+                inst.Elapsed += dt;
+                if (inst.Elapsed >= inst.Duration)
+                {
+                    inst.Active = false;
+                    if (inst.Root != null)
+                    {
+                        inst.Root.SetActive(false);
+                    }
+                    continue;
+                }
+
+                UpdateCombatVfxInstanceVisual(inst);
+            }
+        }
+
+        private void UpdateCombatVfxInstanceVisual(CombatVfxInstance inst)
+        {
+            float t = Mathf.Clamp01(inst.Elapsed / Mathf.Max(0.01f, inst.Duration));
+            int frame = Mathf.Clamp(Mathf.FloorToInt(t * 4f), 0, 3);
+
+            Vector3 pos;
+            if (inst.IsProjectile)
+            {
+                pos = Vector3.Lerp(inst.StartPos, inst.TargetPos, t);
+                pos.y += 0.72f + Mathf.Sin(t * Mathf.PI) * 0.24f;
+            }
+            else
+            {
+                pos = inst.TargetPos + new Vector3(0f, 0.78f, 0f);
+            }
+
+            inst.Root.transform.position = pos;
+
+            Camera cam = Camera.main;
+            Quaternion camRot = cam != null ? cam.transform.rotation : Quaternion.Euler(45f, 0f, 0f);
+            if (inst.IsProjectile)
+            {
+                Vector3 dir = inst.TargetPos - inst.StartPos;
+                dir.y = 0f;
+                if (dir.sqrMagnitude > 0.0001f && cam != null)
+                {
+                    Vector3 right = cam.transform.right;
+                    Vector3 up = cam.transform.up;
+                    float dx = Vector3.Dot(dir, right);
+                    float dy = Vector3.Dot(dir, up);
+                    float rollDeg = Mathf.Atan2(dy, dx) * Mathf.Rad2Deg;
+                    inst.Root.transform.rotation = camRot * Quaternion.Euler(0f, 0f, rollDeg);
+                }
+                else
+                {
+                    inst.Root.transform.rotation = camRot;
+                }
+            }
+            else
+            {
+                inst.Root.transform.rotation = camRot;
+            }
+
+            float pop = inst.IsProjectile ? 1.0f : (0.92f + 0.24f * Mathf.Sin(t * Mathf.PI));
+            float scale = inst.BaseScale * pop;
+            inst.Root.transform.localScale = new Vector3(scale, scale, 1f);
+
+            float alpha = t > 0.72f ? Mathf.Lerp(1f, 0f, (t - 0.72f) / 0.28f) : 1f;
+            Color tint = new Color(1f, 1f, 1f, alpha);
+            Vector4 st = new Vector4(0.25f, 1f, frame * 0.25f, 0f);
+
+            _vfxPropBlock ??= new MaterialPropertyBlock();
+            _vfxPropBlock.Clear();
+            _vfxPropBlock.SetVector(BaseMapStId, st);
+            _vfxPropBlock.SetVector(MainTexStId, st);
+            _vfxPropBlock.SetColor(BaseColorId, tint);
+            _vfxPropBlock.SetColor(ColorId, tint);
+            inst.Renderer.SetPropertyBlock(_vfxPropBlock);
+        }
+
+        private Material GetOrCreateVfxMaterial(string vfxKey)
+        {
+            if (_vfxMaterials.TryGetValue(vfxKey, out Material existing) && existing != null)
+            {
+                return existing;
+            }
+
+            Texture2D tex = null;
+            if (_catalog != null)
+            {
+                var entry = _catalog.GetCombatVfxEntry(vfxKey);
+                if (entry != null && entry.albedo != null)
+                {
+                    tex = entry.albedo;
+                }
+            }
+
+            if (tex == null)
+            {
+                if (_vfxFallbackTexture == null)
+                {
+                    _vfxFallbackTexture = BuildVfxFallbackTexture();
+                }
+                tex = _vfxFallbackTexture;
+            }
+
+            Material mat = CreateTransparentOverlayMaterial("CombatVfx_" + vfxKey, tex, Color.white);
+            SetMaterialTextureScale(mat, new Vector2(0.25f, 1f));
+            SetMaterialTextureOffset(mat, Vector2.zero);
+            _vfxMaterials[vfxKey] = mat;
+            return mat;
+        }
+
+        private static float ResolveVfxBaseScale(string vfxKey)
+        {
+            if (string.Equals(vfxKey, "fireball_impact", StringComparison.OrdinalIgnoreCase)) return 1.45f;
+            if (string.Equals(vfxKey, "heal_sparkle", StringComparison.OrdinalIgnoreCase)) return 1.25f;
+            if (string.Equals(vfxKey, "slash_arc", StringComparison.OrdinalIgnoreCase)) return 1.25f;
+            if (string.Equals(vfxKey, "arrow_bolt", StringComparison.OrdinalIgnoreCase)) return 0.95f;
+            return 1.15f;
+        }
+
+        private static Texture2D BuildVfxFallbackTexture()
+        {
+            const int w = 64;
+            const int h = 16;
+            Texture2D tex = new Texture2D(w, h, TextureFormat.RGBA32, false)
+            {
+                name = "CombatVfxFallbackTex",
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave
+            };
+
+            Color32[] pixels = new Color32[w * h];
+            for (int f = 0; f < 4; f++)
+            {
+                float radius = 0.25f + f * 0.16f;
+                for (int y = 0; y < h; y++)
+                {
+                    float ny = ((y + 0.5f) / h - 0.5f) * 2f;
+                    for (int lx = 0; lx < 16; lx++)
+                    {
+                        float nx = ((lx + 0.5f) / 16f - 0.5f) * 2f;
+                        float d = Mathf.Sqrt(nx * nx + ny * ny);
+                        float a = Mathf.Clamp01(1f - d / Mathf.Max(0.15f, radius));
+                        pixels[y * w + f * 16 + lx] = new Color(1f, 0.92f, 0.65f, a);
+                    }
+                }
+            }
+
+            tex.SetPixels32(pixels);
+            tex.Apply(false, false);
+            return tex;
+        }
+
         private static void SetMaterialColor(Material mat, Color color)
         {
             if (mat.HasProperty(BaseColorId))
@@ -1456,6 +1873,13 @@ namespace Realmz.World
                 GameObject go = new GameObject("EnemyIntentArcs");
                 go.transform.SetParent(transform, false);
                 _intentArcContainer = go.transform;
+            }
+
+            if (_vfxContainer == null)
+            {
+                GameObject go = new GameObject("CombatVfxPool");
+                go.transform.SetParent(transform, false);
+                _vfxContainer = go.transform;
             }
         }
 

@@ -19,6 +19,7 @@ Shader "Realmz/CartographyTerrain"
         _RoadValueBoost ("Road & Cobble Value Scale", Range(0.6, 1.2)) = 0.88
         _HorizonHazeColor ("North Horizon Haze Color", Color) = (0.91, 0.83, 0.70, 1)
         _HorizonHazeStrength ("North Horizon Haze Strength", Range(0, 0.35)) = 0.09
+        _LayerCount ("Terrain Array Layer Count (0=Auto)", Float) = 0.0
     }
 
     SubShader
@@ -60,6 +61,7 @@ Shader "Realmz/CartographyTerrain"
             half _RoadValueBoost;
             half4 _HorizonHazeColor;
             half _HorizonHazeStrength;
+            float _LayerCount;
         CBUFFER_END
         ENDHLSL
 
@@ -100,6 +102,7 @@ Shader "Realmz/CartographyTerrain"
                 float4 color : COLOR;
                 float2 uv0 : TEXCOORD0;
                 float2 uv1 : TEXCOORD1;
+                float2 uv2 : TEXCOORD2;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -111,7 +114,7 @@ Shader "Realmz/CartographyTerrain"
                 float3 tangentWS : TEXCOORD2;
                 float3 bitangentWS : TEXCOORD3;
                 float4 splatWeights : TEXCOORD4;
-                float2 cliffAndAO : TEXCOORD5;
+                float4 cliffAOAndBiome : TEXCOORD5;
                 half fogFactor : TEXCOORD6;
                 float4 shadowCoord : TEXCOORD7;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
@@ -205,6 +208,52 @@ Shader "Realmz/CartographyTerrain"
                 }
             }
 
+            void SampleBiomeBlendSlice(
+                float baseSlice,
+                float extSlice,
+                half extBlend,
+                uint arrayDepth,
+                half weight,
+                float2 snappedUV,
+                half microJitter,
+                out half3 albedo,
+                out half3 normalTS,
+                out half score)
+            {
+                if (weight <= 0.002h)
+                {
+                    albedo = half3(0.0h, 0.0h, 0.0h);
+                    normalTS = half3(0.0h, 0.0h, 1.0h);
+                    score = -10.0h;
+                    return;
+                }
+
+                half4 baseAlb = SAMPLE_TEXTURE2D_ARRAY_LOD(_TerrainArray, sampler_TerrainArray, snappedUV, baseSlice, 0);
+                half4 baseNrm = SAMPLE_TEXTURE2D_ARRAY_LOD(_NormalArray, sampler_NormalArray, snappedUV, baseSlice, 0);
+                half3 baseN = DecodeTangentNormal(baseNrm, _BumpScale);
+
+                if (extBlend > 0.01h && extSlice >= 0.0 && max(0.0, extSlice) < (float)arrayDepth)
+                {
+                    half4 extAlb = SAMPLE_TEXTURE2D_ARRAY_LOD(_TerrainArray, sampler_TerrainArray, snappedUV, extSlice, 0);
+                    half4 extNrm = SAMPLE_TEXTURE2D_ARRAY_LOD(_NormalArray, sampler_NormalArray, snappedUV, extSlice, 0);
+                    half3 extN = DecodeTangentNormal(extNrm, _BumpScale);
+
+                    half noiseEdge = saturate((extBlend - 0.5h) * 2.2h + (extAlb.a - baseAlb.a) * _NoiseMaskStrength + 0.5h);
+                    albedo = lerp(baseAlb.rgb, extAlb.rgb, noiseEdge);
+                    normalTS = SafeNormalize(lerp(baseN, extN, noiseEdge));
+                    half combinedMask = lerp(baseAlb.a, extAlb.a, noiseEdge);
+                    half maskVal = saturate(combinedMask + microJitter);
+                    score = weight + (maskVal - 0.5h) * _NoiseMaskStrength;
+                }
+                else
+                {
+                    albedo = baseAlb.rgb;
+                    normalTS = baseN;
+                    half maskVal = saturate(baseAlb.a + microJitter);
+                    score = weight + (maskVal - 0.5h) * _NoiseMaskStrength;
+                }
+            }
+
             Varyings CartoTerrainVert(Attributes input)
             {
                 Varyings output;
@@ -220,7 +269,7 @@ Shader "Realmz/CartographyTerrain"
                 output.tangentWS = normInputs.tangentWS;
                 output.bitangentWS = normInputs.bitangentWS;
                 output.splatWeights = input.color;
-                output.cliffAndAO = input.uv1;
+                output.cliffAOAndBiome = float4(input.uv1.x, input.uv1.y, input.uv2.x, input.uv2.y);
                 output.fogFactor = ComputeFogFactor(posInputs.positionCS.z);
                 output.shadowCoord = GetShadowCoord(posInputs);
 
@@ -238,7 +287,7 @@ Shader "Realmz/CartographyTerrain"
 
                 // Resolve 6 terrain layer weights:
                 // 0=meadow_grass, 1=moss_patch, 2=dirt_road, 3=cobble_plaza, 4=river_mud, 5=cliff_rock
-                half w5 = saturate((half)input.cliffAndAO.x);
+                half w5 = saturate((half)input.cliffAOAndBiome.x);
                 half groundBudget = 1.0h - w5;
 
                 half w1 = saturate((half)input.splatWeights.r);
@@ -261,16 +310,148 @@ Shader "Realmz/CartographyTerrain"
                 w3 *= groundBudget;
                 w4 *= groundBudget;
 
+                uint texW = 0, texH = 0, texD = 6;
+                #if defined(SHADER_API_D3D11) || defined(SHADER_API_D3D12) || defined(SHADER_API_VULKAN) || defined(SHADER_API_METAL) || defined(SHADER_API_GLCORE)
+                    _TerrainArray.GetDimensions(texW, texH, texD);
+                #endif
+                uint arrayDepth = (_LayerCount > 0.5) ? (uint)floor(_LayerCount + 0.5) : max(texD, 6u);
+
                 half3 a0, a1, a2, a3, a4, a5;
                 half3 n0, n1, n2, n3, n4, n5;
                 half s0, s1, s2, s3, s4, s5;
 
-                SampleLayerSlice(0.0, w0, snappedUV, microJitter, a0, n0, s0);
-                SampleLayerSlice(1.0, w1, snappedUV, microJitter, a1, n1, s1);
-                SampleLayerSlice(2.0, w2, snappedUV, microJitter, a2, n2, s2);
-                SampleLayerSlice(3.0, w3, snappedUV, microJitter, a3, n3, s3);
-                SampleLayerSlice(4.0, w4, snappedUV, microJitter, a4, n4, s4);
-                SampleLayerSlice(5.0, w5, snappedUV, microJitter, a5, n5, s5);
+                if (arrayDepth <= 6u)
+                {
+                    SampleLayerSlice(0.0, w0, snappedUV, microJitter, a0, n0, s0);
+                    SampleLayerSlice(1.0, w1, snappedUV, microJitter, a1, n1, s1);
+                    SampleLayerSlice(2.0, w2, snappedUV, microJitter, a2, n2, s2);
+                    SampleLayerSlice(3.0, w3, snappedUV, microJitter, a3, n3, s3);
+                    SampleLayerSlice(4.0, w4, snappedUV, microJitter, a4, n4, s4);
+                    SampleLayerSlice(5.0, w5, snappedUV, microJitter, a5, n5, s5);
+                }
+                else
+                {
+                    half biomeHint = saturate((half)input.cliffAOAndBiome.z);
+                    half elevHint = (half)input.cliffAOAndBiome.w;
+                    half creaseVal = saturate((half)input.cliffAOAndBiome.y);
+                    half macroA = CartoMacroFbm(input.positionWS.xz * 0.055);
+                    half macroB = CartoMacroFbm(input.positionWS.xz * 0.11 + float2(19.3, 7.1));
+
+                    // Slot 0: meadow_grass -> alpine_frost_grass (13), marsh_bog_turf (10), or dark_forest_moss (7)
+                    float ext0 = -1.0;
+                    half blend0 = 0.0h;
+                    if (elevHint >= 0.45h && arrayDepth > 13u)
+                    {
+                        ext0 = 13.0;
+                        blend0 = smoothstep(-0.35h, 0.35h, macroA + 0.25h);
+                    }
+                    else if (biomeHint >= 0.40h && biomeHint < 0.65h && arrayDepth > 10u)
+                    {
+                        ext0 = 10.0;
+                        blend0 = smoothstep(-0.45h, 0.25h, macroB + 0.35h);
+                    }
+                    else if (biomeHint >= 0.65h && biomeHint < 0.90h && arrayDepth > 7u)
+                    {
+                        ext0 = 7.0;
+                        blend0 = smoothstep(-0.40h, 0.25h, macroA + 0.30h);
+                    }
+                    else if (macroA > 0.35h && arrayDepth > 10u)
+                    {
+                        ext0 = 10.0;
+                        blend0 = smoothstep(0.35h, 0.85h, macroA) * 0.65h;
+                    }
+
+                    // Slot 1: moss_patch -> dark_forest_moss (7), fallen_leaves_loam (8), or marsh_bog_turf (10)
+                    float ext1 = -1.0;
+                    half blend1 = 0.0h;
+                    if (biomeHint >= 0.65h && biomeHint < 0.90h)
+                    {
+                        if (macroB > 0.12h && arrayDepth > 8u)
+                        {
+                            ext1 = 8.0;
+                            blend1 = smoothstep(0.12h, 0.55h, macroB);
+                        }
+                        else if (arrayDepth > 7u)
+                        {
+                            ext1 = 7.0;
+                            blend1 = smoothstep(-0.55h, 0.20h, macroA + 0.35h);
+                        }
+                    }
+                    else if (biomeHint >= 0.40h && biomeHint < 0.65h && arrayDepth > 10u)
+                    {
+                        ext1 = 10.0;
+                        blend1 = smoothstep(-0.30h, 0.40h, macroB + 0.25h);
+                    }
+                    else if (macroA > 0.20h && arrayDepth > 7u)
+                    {
+                        ext1 = 7.0;
+                        blend1 = smoothstep(0.20h, 0.70h, macroA);
+                    }
+
+                    // Slot 2: dirt_road -> highland_scree (9), forest_root_dirt (6), or fallen_leaves_loam (8)
+                    float ext2 = -1.0;
+                    half blend2 = 0.0h;
+                    if (elevHint >= 0.45h && arrayDepth > 9u)
+                    {
+                        ext2 = 9.0;
+                        blend2 = smoothstep(-0.40h, 0.20h, macroB + 0.35h);
+                    }
+                    else if (biomeHint >= 0.65h && biomeHint < 0.90h)
+                    {
+                        if (macroB > 0.20h && arrayDepth > 8u)
+                        {
+                            ext2 = 8.0;
+                            blend2 = 0.75h;
+                        }
+                        else if (arrayDepth > 6u)
+                        {
+                            ext2 = 6.0;
+                            blend2 = 0.85h;
+                        }
+                    }
+
+                    // Slot 3: cobble_plaza -> inn_wood_planks (16) / hearth_ash_stone (15) / temple_marble_tile (17)
+                    float ext3 = -1.0;
+                    half blend3 = 0.0h;
+                    if (biomeHint >= 0.90h && elevHint <= 0.02h && creaseVal < 0.72h)
+                    {
+                        if (arrayDepth > 16u && macroB >= 0.0h)
+                        {
+                            ext3 = 16.0;
+                            blend3 = 0.80h;
+                        }
+                        else if (arrayDepth > 15u)
+                        {
+                            ext3 = 15.0;
+                            blend3 = 0.70h;
+                        }
+                    }
+
+                    // Slot 4: river_mud -> swamp_mire_mud (11)
+                    float ext4 = -1.0;
+                    half blend4 = 0.0h;
+                    if (arrayDepth > 11u && macroB > -0.25h)
+                    {
+                        ext4 = 11.0;
+                        blend4 = smoothstep(-0.25h, 0.35h, macroB);
+                    }
+
+                    // Slot 5: cliff_rock -> highland_scree (9) on elevated highland walls
+                    float ext5 = -1.0;
+                    half blend5 = 0.0h;
+                    if (elevHint >= 0.45h && arrayDepth > 9u && macroA > -0.10h)
+                    {
+                        ext5 = 9.0;
+                        blend5 = smoothstep(-0.10h, 0.45h, macroA) * 0.80h;
+                    }
+
+                    SampleBiomeBlendSlice(0.0, ext0, blend0, arrayDepth, w0, snappedUV, microJitter, a0, n0, s0);
+                    SampleBiomeBlendSlice(1.0, ext1, blend1, arrayDepth, w1, snappedUV, microJitter, a1, n1, s1);
+                    SampleBiomeBlendSlice(2.0, ext2, blend2, arrayDepth, w2, snappedUV, microJitter, a2, n2, s2);
+                    SampleBiomeBlendSlice(3.0, ext3, blend3, arrayDepth, w3, snappedUV, microJitter, a3, n3, s3);
+                    SampleBiomeBlendSlice(4.0, ext4, blend4, arrayDepth, w4, snappedUV, microJitter, a4, n4, s4);
+                    SampleBiomeBlendSlice(5.0, ext5, blend5, arrayDepth, w5, snappedUV, microJitter, a5, n5, s5);
+                }
 
                 half maxScore = max(max(s0, s1), max(s2, max(s3, max(s4, s5))));
                 half sharpness = max(1.0h, _NoiseBlendSharpness);
@@ -306,7 +487,7 @@ Shader "Realmz/CartographyTerrain"
                 albedo *= (1.0h + macroN * _MacroStrength);
 
                 // Elevation crease and structure footprint AO from TEXCOORD1.y
-                half creaseAO = lerp(1.0h, saturate((half)input.cliffAndAO.y), _CreaseAOStrength);
+                half creaseAO = lerp(1.0h, saturate((half)input.cliffAOAndBiome.y), _CreaseAOStrength);
                 albedo *= lerp(0.55h, 1.0h, creaseAO);
 
                 // SoC chiaroscuro ground-vs-road value split

@@ -1383,6 +1383,317 @@ namespace Realmz.EditorTests
             }
         }
 
+        [Test]
+        public void Pack2UnifiedPortraits_All12HeroPortraitsAre128x128PointAndResolveViaCatalog()
+        {
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            Assert.That(catalog, Is.Not.Null, "BywaterAssetCatalog missing.");
+            Assert.That(catalog.heroes.Count, Is.EqualTo(6), "Preserve 6 core heroes.");
+            Assert.That(catalog.unifiedPortraits.Count, Is.EqualTo(12), "Expected 12 unified bronze portraits.");
+            Assert.That(catalog.extraHeroes.Count, Is.GreaterThanOrEqualTo(6), "Expected >= 6 extraHeroes entries.");
+
+            for (int i = 0; i < catalog.heroes.Count; i++)
+            {
+                Assert.That(catalog.heroes[i].portrait, Is.Not.Null, "Hero portrait missing on heroes[" + i + "].");
+            }
+
+            for (int i = 0; i < catalog.extraHeroes.Count; i++)
+            {
+                Assert.That(catalog.extraHeroes[i].portrait, Is.Not.Null, "Extra hero portrait missing on extraHeroes[" + i + "].");
+            }
+
+            string[] all12Archetypes =
+            {
+                "knight", "cleric", "ranger", "mage", "paladin", "rogue",
+                "archer", "assassin", "barbarian", "druid", "enchanter", "monk"
+            };
+
+            for (int i = 0; i < all12Archetypes.Length; i++)
+            {
+                string key = all12Archetypes[i];
+                string path = $"Assets/Art/Cartography/Portraits/portrait_{key}.png";
+                TextureImporter importer = AssetImporter.GetAtPath(path) as TextureImporter;
+                Assert.That(importer, Is.Not.Null, "Missing portrait importer: " + path);
+                Assert.That(importer.filterMode, Is.EqualTo(FilterMode.Point), "Expected Point filter on " + path);
+                Assert.That(importer.textureCompression, Is.EqualTo(TextureImporterCompression.Uncompressed), "Expected Uncompressed on " + path);
+                Assert.That(importer.mipmapEnabled, Is.False, "Expected mipmaps off on " + path);
+
+                Sprite sprite = catalog.GetUnifiedPortrait(key);
+                Assert.That(sprite, Is.Not.Null, "GetUnifiedPortrait returned null for " + key);
+                Assert.That(sprite.texture, Is.Not.Null);
+                Assert.That(sprite.texture.width, Is.EqualTo(128), "Portrait width != 128 for " + key);
+                Assert.That(sprite.texture.height, Is.EqualTo(128), "Portrait height != 128 for " + key);
+                Assert.That(sprite.texture.filterMode, Is.EqualTo(FilterMode.Point));
+            }
+        }
+
+        [Test]
+        public void Pack2MonsterArchetypes_All133MappingsResolveUnitSheetsAndZoomedPortraitCrops()
+        {
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            Assert.That(catalog, Is.Not.Null, "BywaterAssetCatalog missing.");
+            Assert.That(catalog.monsters.Count, Is.EqualTo(7), "Preserve 7 core monsters.");
+            Assert.That(catalog.expandedMonsters.Count, Is.GreaterThanOrEqualTo(36), "Expected >= 36 expanded monster entries.");
+            Assert.That(catalog.archetypeMappings.Count, Is.EqualTo(133), "Expected all 133 archetype mappings.");
+
+            string mappingPath = Path.Combine(Application.streamingAssetsPath, "bywater_m1", "archetype_mapping.json");
+            Assert.That(File.Exists(mappingPath), Is.True, "archetype_mapping.json missing.");
+            string json = File.ReadAllText(mappingPath);
+            MatchCollection matches = Regex.Matches(
+                json,
+                "\"name\"\\s*:\\s*\"([^\"]+)\"\\s*,\\s*\"icon_id\"\\s*:\\s*(-?\\d+)",
+                RegexOptions.Singleline);
+            Assert.That(matches.Count, Is.EqualTo(133), "Expected 133 monster records in archetype_mapping.json.");
+
+            for (int i = 0; i < matches.Count; i++)
+            {
+                string monsterName = matches[i].Groups[1].Value;
+                int iconId = int.Parse(matches[i].Groups[2].Value);
+
+                bool resolved = catalog.TryResolveMonsterArchetype(monsterName, iconId, out string archetypeKey);
+                Assert.That(resolved, Is.True, $"TryResolveMonsterArchetype failed for '{monsterName}' (iconId={iconId}).");
+                Assert.That(archetypeKey, Is.Not.Null.And.Not.Empty);
+
+                Material unitMat = catalog.ResolveCartographyUnitMaterial(archetypeKey, null);
+                Assert.That(unitMat, Is.Not.Null, $"ResolveCartographyUnitMaterial null for '{archetypeKey}' ({monsterName}).");
+
+                Sprite crop = catalog.GetMonsterPortrait(monsterName, iconId);
+                Assert.That(crop, Is.Not.Null, $"GetMonsterPortrait null for '{monsterName}' (iconId={iconId}).");
+                Assert.That(crop.rect.width, Is.GreaterThan(0f));
+                Assert.That(crop.rect.height, Is.GreaterThan(0f));
+                Assert.That(crop.rect.width, Is.LessThanOrEqualTo(128f));
+                Assert.That(crop.rect.height, Is.LessThanOrEqualTo(128f));
+                Assert.That(crop.rect.width < 128f || crop.rect.height < 128f, Is.True,
+                    $"Expected zoomed portraitPixelRect crop smaller than 128x128 for '{monsterName}', got {crop.rect.size}.");
+            }
+
+            string[] spotlightNames =
+            {
+                "Kobold", "Bear", "Spider", "Wraith", "Ogre",
+                "Troll", "Town Guard", "Minotaur", "Demon Lord", "Dragon Wyrm"
+            };
+            for (int i = 0; i < spotlightNames.Length; i++)
+            {
+                string name = spotlightNames[i];
+                Assert.That(catalog.TryResolveMonsterArchetype(name, 0, out string arch), Is.True, "Spotlight resolve failed: " + name);
+                Assert.That(catalog.ResolveCartographyUnitMaterial(arch, null), Is.Not.Null, "Spotlight material null: " + name);
+                Assert.That(catalog.GetMonsterPortrait(name, 0), Is.Not.Null, "Spotlight portrait crop null: " + name);
+            }
+        }
+
+        [Test]
+        public void Pack5IconsAndHud_All58Items12SpellsAnd4ConditionBadgesResolveAt32x32Point()
+        {
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            Assert.That(catalog, Is.Not.Null, "BywaterAssetCatalog missing.");
+            Assert.That(catalog.itemIdIconMappings.Count, Is.EqualTo(58), "Expected 58 itemIdIconMappings.");
+            Assert.That(catalog.spellIdIconMappings.Count, Is.EqualTo(12), "Expected 12 spellIdIconMappings.");
+
+            string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
+            Assert.That(bundle.Items.Count, Is.EqualTo(58));
+            Assert.That(bundle.Spells.Count, Is.EqualTo(12));
+
+            foreach (ItemDefinition item in bundle.Items.Values)
+            {
+                Sprite icon = catalog.GetItemIcon(item.Id, item.Name);
+                Assert.That(icon, Is.Not.Null, $"GetItemIcon null for item {item.Id} ({item.Name}).");
+                Assert.That(icon.texture.width, Is.EqualTo(32), $"Item icon width != 32 for {item.Name}.");
+                Assert.That(icon.texture.height, Is.EqualTo(32), $"Item icon height != 32 for {item.Name}.");
+                Assert.That(icon.texture.filterMode, Is.EqualTo(FilterMode.Point));
+            }
+
+            foreach (SpellDefinition spell in bundle.Spells.Values)
+            {
+                Sprite icon = catalog.GetSpellIcon(spell.Id, spell.Key);
+                Assert.That(icon, Is.Not.Null, $"GetSpellIcon null for spell {spell.Id} ({spell.Key}).");
+                Assert.That(icon.texture.width, Is.EqualTo(32), $"Spell icon width != 32 for {spell.Key}.");
+                Assert.That(icon.texture.height, Is.EqualTo(32), $"Spell icon height != 32 for {spell.Key}.");
+                Assert.That(icon.texture.filterMode, Is.EqualTo(FilterMode.Point));
+            }
+
+            string[] badgeKeys = { "poison", "burn", "stun", "bless" };
+            for (int i = 0; i < badgeKeys.Length; i++)
+            {
+                Sprite badge = catalog.GetConditionBadgeIcon(badgeKeys[i]);
+                Assert.That(badge, Is.Not.Null, "GetConditionBadgeIcon null for " + badgeKeys[i]);
+                Assert.That(badge.texture.width, Is.EqualTo(32));
+                Assert.That(badge.texture.height, Is.EqualTo(32));
+                Assert.That(badge.texture.filterMode, Is.EqualTo(FilterMode.Point));
+            }
+
+            // Verify HUD binds shop, stash, equipment, and condition badge icons with zero churn and >= 15pt font floor.
+            PartyState party = PartyState.FromBundle(bundle);
+            party.Members[0].Conditions.Apply(CharConditionId.Poisoned, 1, 3, 25, true, 10);
+            foreach (ItemDefinition item in bundle.Items.Values)
+            {
+                party.AddItemToStash(item.Id, 1, true, item.Charges);
+                if (party.Stash.Count >= 4) break;
+            }
+
+            ExplorationSession explore = new ExplorationSession(bundle.Maps, "land_0", party, new DeterministicDiceRoller(91UL));
+            CombatGrid grid = new CombatGrid(8, 8);
+            CombatantState hero = CombatantState.FromHero(party.Members[0], new GridCoord(2, 4), bundle.Items);
+            hero.Conditions.Apply(CharConditionId.Poisoned, 1, 3, 25, true, 10);
+            CombatantState monster = CombatantState.FromMonster(bundle.Monsters[0], "mon_0_badge", new GridCoord(6, 4), new DeterministicDiceRoller(91UL));
+            TacticalCombatSession combat = new TacticalCombatSession(
+                grid,
+                new[] { hero, monster },
+                bundle.Spells,
+                bundle.Items,
+                new DeterministicDiceRoller(91UL),
+                RulesetMode.ModernBalanced,
+                party);
+
+            bool hadEventSystem = Object.FindFirstObjectByType<EventSystem>() != null;
+            GameObject tempGo = new GameObject("TempPack5HudIconsTest");
+            try
+            {
+                BywaterHudController hud = tempGo.AddComponent<BywaterHudController>();
+                hud.BuildUi(catalog);
+                Canvas canvas = tempGo.GetComponentInChildren<Canvas>(true);
+                Assert.That(canvas, Is.Not.Null);
+
+                hud.RefreshExploreHud(explore, bundle, null, null, 0, null, isReachable: true);
+                hud.RefreshPartyDrawer(party, bundle, 0);
+                hud.RefreshShopModal(party, bundle);
+
+                Transform heroBadge0 = FindDescendantByPathSuffix(canvas.transform, "HeroCard_0/PortraitFrame/ConditionBadges/ConditionBadge_0");
+                Assert.That(heroBadge0, Is.Not.Null, "Explore HeroCard_0 ConditionBadge_0 missing.");
+                Assert.That(heroBadge0.gameObject.activeSelf, Is.True, "Poisoned hero should display ConditionBadge_0.");
+                Assert.That(heroBadge0.GetComponent<UnityEngine.UI.Image>().sprite, Is.Not.Null);
+
+                Transform buyIcon0 = FindDescendantByPathSuffix(canvas.transform, "BuyRow_0/Icon");
+                Transform sellIcon0 = FindDescendantByPathSuffix(canvas.transform, "SellRow_0/Icon");
+                Transform stashIcon0 = FindDescendantByPathSuffix(canvas.transform, "StashRow_0/Icon");
+                Assert.That(buyIcon0, Is.Not.Null, "Shop BuyRow_0 Icon missing.");
+                Assert.That(buyIcon0.GetComponent<UnityEngine.UI.Image>().sprite, Is.Not.Null);
+                Assert.That(sellIcon0, Is.Not.Null, "Shop SellRow_0 Icon missing.");
+                Assert.That(sellIcon0.GetComponent<UnityEngine.UI.Image>().sprite, Is.Not.Null);
+                Assert.That(stashIcon0, Is.Not.Null, "Party StashRow_0 Icon missing.");
+                Assert.That(stashIcon0.GetComponent<UnityEngine.UI.Image>().sprite, Is.Not.Null);
+
+                hud.RefreshCombatHud(combat, bundle, CombatActionMode.Smart, -1, "1x");
+                Transform combatBadge0 = FindDescendantByPathSuffix(canvas.transform, "CombatPartyCard_0/PortraitFrame/ConditionBadges/ConditionBadge_0");
+                Assert.That(combatBadge0, Is.Not.Null, "CombatPartyCard_0 ConditionBadge_0 missing.");
+                Assert.That(combatBadge0.gameObject.activeSelf, Is.True, "Poisoned combat hero should display ConditionBadge_0.");
+
+                Transform buyContent = FindDescendantByPathSuffix(canvas.transform, "ShopBuyScroll/Viewport/Content");
+                int buyChildrenBefore = buyContent.childCount;
+                hud.RefreshShopModal(party, bundle);
+                Assert.That(buyContent.childCount, Is.EqualTo(buyChildrenBefore), "2nd RefreshShopModal must not churn GameObjects.");
+
+                TextMeshProUGUI[] labels = canvas.GetComponentsInChildren<TextMeshProUGUI>(true);
+                for (int i = 0; i < labels.Length; i++)
+                {
+                    Assert.That(labels[i].fontSize, Is.GreaterThanOrEqualTo(15f), $"Label '{labels[i].gameObject.name}' below 15pt.");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(tempGo);
+                if (!hadEventSystem)
+                {
+                    EventSystem createdEs = Object.FindFirstObjectByType<EventSystem>();
+                    if (createdEs != null)
+                    {
+                        Object.DestroyImmediate(createdEs.gameObject);
+                    }
+                }
+            }
+        }
+
+        [Test]
+        public void Pack5SurfacesAndCombatVfx_All7SurfacesAnd4VfxResolve512x128StripsAndPlayCleanly()
+        {
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            Assert.That(catalog, Is.Not.Null, "BywaterAssetCatalog missing.");
+            Assert.That(catalog.combatSurfaces.Count, Is.EqualTo(7), "Expected 7 Pack 5 combat surfaces.");
+            Assert.That(catalog.combatVfx.Count, Is.EqualTo(4), "Expected 4 Pack 5 combat VFX.");
+
+            SurfaceType[] expectedSurfaces =
+            {
+                SurfaceType.Water,
+                SurfaceType.Oil,
+                SurfaceType.Fire,
+                SurfaceType.Ice,
+                SurfaceType.Poison,
+                SurfaceType.ElectrifiedWater,
+                SurfaceType.SteamCloud
+            };
+            for (int i = 0; i < expectedSurfaces.Length; i++)
+            {
+                var entry = catalog.GetCombatSurfaceEntry(expectedSurfaces[i].ToString());
+                Assert.That(entry, Is.Not.Null, "GetCombatSurfaceEntry null for " + expectedSurfaces[i]);
+            }
+
+            string[] expectedVfx =
+            {
+                "fireball_impact",
+                "heal_sparkle",
+                "slash_arc",
+                "arrow_bolt"
+            };
+            for (int i = 0; i < expectedVfx.Length; i++)
+            {
+                var entry = catalog.GetCombatVfxEntry(expectedVfx[i]);
+                Assert.That(entry, Is.Not.Null, "GetCombatVfxEntry null for " + expectedVfx[i]);
+            }
+
+            string[] stripPngPaths =
+            {
+                "Assets/Art/Cartography/Surfaces/surface_water.png",
+                "Assets/Art/Cartography/Surfaces/surface_oil.png",
+                "Assets/Art/Cartography/Surfaces/surface_fire.png",
+                "Assets/Art/Cartography/Surfaces/surface_ice.png",
+                "Assets/Art/Cartography/Surfaces/surface_poison.png",
+                "Assets/Art/Cartography/Surfaces/surface_electrified_water.png",
+                "Assets/Art/Cartography/Surfaces/surface_steam_cloud.png",
+                "Assets/Art/Cartography/Vfx/vfx_fireball_impact.png",
+                "Assets/Art/Cartography/Vfx/vfx_heal_sparkle.png",
+                "Assets/Art/Cartography/Vfx/vfx_slash_arc.png",
+                "Assets/Art/Cartography/Vfx/vfx_arrow_bolt.png"
+            };
+
+            for (int i = 0; i < stripPngPaths.Length; i++)
+            {
+                string path = stripPngPaths[i];
+                TextureImporter imp = AssetImporter.GetAtPath(path) as TextureImporter;
+                Assert.That(imp, Is.Not.Null, "Missing importer for " + path);
+                Assert.That(imp.filterMode, Is.EqualTo(FilterMode.Point), "Expected Point filter on " + path);
+                Assert.That(imp.textureCompression, Is.EqualTo(TextureImporterCompression.Uncompressed), "Expected Uncompressed on " + path);
+                Assert.That(imp.mipmapEnabled, Is.False, "Expected mipmaps off on " + path);
+
+                Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                Assert.That(tex, Is.Not.Null, "Missing Texture2D for " + path);
+                Assert.That(tex.width, Is.EqualTo(512), "Expected 512px width (4x128 frames) on " + path);
+                Assert.That(tex.height, Is.EqualTo(128), "Expected 128px height on " + path);
+            }
+
+            GameObject overlaysGo = new GameObject("TempPack5VfxOverlaysTest");
+            GameObject unitGo = new GameObject("TempPack5BadgeUnitTest");
+            try
+            {
+                BywaterGridOverlays overlays = overlaysGo.AddComponent<BywaterGridOverlays>();
+                overlays.Initialize(catalog);
+                overlays.PlayCombatVfx("fireball_impact", Vector3.zero, new Vector3(2f, 0f, -2f), isProjectile: false);
+                overlays.PlayCombatVfx("heal_sparkle", Vector3.zero, Vector3.zero, isProjectile: false);
+                overlays.PlayCombatVfx("slash_arc", Vector3.zero, new Vector3(1f, 0f, -1f), isProjectile: false);
+                overlays.PlayCombatVfx("arrow_bolt", Vector3.zero, new Vector3(4f, 0f, -3f), isProjectile: true);
+                overlays.ClearCombatVfx();
+
+                BywaterUnitView unitView = unitGo.AddComponent<BywaterUnitView>();
+                unitView.Configure("hero_knight", "Aldric", null, Color.cyan, catalog.uiFont, isAllyOverride: true);
+                unitView.UpdateConditionBadgeIcon(catalog.GetConditionBadgeIcon("poison"));
+                unitView.UpdateConditionBadgeIcon(null);
+            }
+            finally
+            {
+                Object.DestroyImmediate(overlaysGo);
+                Object.DestroyImmediate(unitGo);
+            }
+        }
+
         private static void AssertUnifiedUnitSheet(string unitId, bool isHero)
         {
             string sheetPath = $"Assets/Art/Cartography/units/{unitId}_sheet.png";

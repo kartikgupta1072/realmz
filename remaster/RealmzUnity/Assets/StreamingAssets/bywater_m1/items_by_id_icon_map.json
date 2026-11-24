@@ -1,0 +1,1106 @@
+{
+  "scenario": "City of Bywater",
+  "item_count": 58,
+  "spell_count": 12,
+  "total_icons_authored": 82,
+  "by_item_id": {
+    "1": {
+      "id": 1,
+      "name": "Dagger",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_dagger.png"
+    },
+    "2": {
+      "id": 2,
+      "name": "Dagger of Shielding +2",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_dagger_shielding.png"
+    },
+    "8": {
+      "id": 8,
+      "name": "Dagger of Spells +1",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_dagger_spells.png"
+    },
+    "10": {
+      "id": 10,
+      "name": "Longsword",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_longsword.png"
+    },
+    "11": {
+      "id": 11,
+      "name": "Longsword +1",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_longsword_plus1.png"
+    },
+    "20": {
+      "id": 20,
+      "name": "Broadsword",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_broadsword.png"
+    },
+    "31": {
+      "id": 31,
+      "name": "Scimitar",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_scimitar.png"
+    },
+    "37": {
+      "id": 37,
+      "name": "Mace",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_mace.png"
+    },
+    "44": {
+      "id": 44,
+      "name": "Nunchuka",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_nunchuka.png"
+    },
+    "59": {
+      "id": 59,
+      "name": "Morning Star",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_morning_star.png"
+    },
+    "65": {
+      "id": 65,
+      "name": "Flail",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_flail.png"
+    },
+    "75": {
+      "id": 75,
+      "name": "Short Sword",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_shortsword.png"
+    },
+    "81": {
+      "id": 81,
+      "name": "War Axe",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_war_axe.png"
+    },
+    "87": {
+      "id": 87,
+      "name": "Throwing Stars +1",
+      "category": "Weapon",
+      "slot": "MissileWeapon",
+      "icon_path": "icons/icon_throwing_stars.png"
+    },
+    "92": {
+      "id": 92,
+      "name": "Battleaxe",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_battleaxe.png"
+    },
+    "98": {
+      "id": 98,
+      "name": "Quarter Staff",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_quarter_staff.png"
+    },
+    "99": {
+      "id": 99,
+      "name": "Quarter Staff +1",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_quarter_staff_plus1.png"
+    },
+    "102": {
+      "id": 102,
+      "name": "Quarter Staff",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_quarter_staff_sparring.png"
+    },
+    "104": {
+      "id": 104,
+      "name": "Bow",
+      "category": "Weapon",
+      "slot": "MissileWeapon",
+      "icon_path": "icons/icon_bow.png"
+    },
+    "108": {
+      "id": 108,
+      "name": "Bow +1",
+      "category": "Weapon",
+      "slot": "MissileWeapon",
+      "icon_path": "icons/icon_bow_plus1.png"
+    },
+    "109": {
+      "id": 109,
+      "name": "Darts",
+      "category": "Weapon",
+      "slot": "MissileWeapon",
+      "icon_path": "icons/icon_darts.png"
+    },
+    "113": {
+      "id": 113,
+      "name": "Dart of Poison",
+      "category": "Weapon",
+      "slot": "MissileWeapon",
+      "icon_path": "icons/icon_dart_poison.png"
+    },
+    "120": {
+      "id": 120,
+      "name": "Spear",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_spear.png"
+    },
+    "125": {
+      "id": 125,
+      "name": "Club",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_club.png"
+    },
+    "135": {
+      "id": 135,
+      "name": "Staff",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_gnarled_staff.png"
+    },
+    "136": {
+      "id": 136,
+      "name": "Stone Hammer",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_stone_hammer.png"
+    },
+    "137": {
+      "id": 137,
+      "name": "Stone Axe",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_stone_axe.png"
+    },
+    "138": {
+      "id": 138,
+      "name": "War Hammer",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_war_hammer.png"
+    },
+    "140": {
+      "id": 140,
+      "name": "Pike Axe",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_pike_axe.png"
+    },
+    "144": {
+      "id": 144,
+      "name": "Throwing Daggers",
+      "category": "Weapon",
+      "slot": "MissileWeapon",
+      "icon_path": "icons/icon_throwing_daggers.png"
+    },
+    "147": {
+      "id": 147,
+      "name": "Throwing Hammer",
+      "category": "Weapon",
+      "slot": "MissileWeapon",
+      "icon_path": "icons/icon_throwing_hammer.png"
+    },
+    "151": {
+      "id": 151,
+      "name": "Battle Hammer",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_battle_hammer.png"
+    },
+    "200": {
+      "id": 200,
+      "name": "Robe",
+      "category": "Armor",
+      "slot": "Armor",
+      "icon_path": "icons/icon_robe.png"
+    },
+    "209": {
+      "id": 209,
+      "name": "Leather Armor",
+      "category": "Armor",
+      "slot": "Armor",
+      "icon_path": "icons/icon_leather_armor.png"
+    },
+    "210": {
+      "id": 210,
+      "name": "Leather Armor +3",
+      "category": "Armor",
+      "slot": "Armor",
+      "icon_path": "icons/icon_leather_armor_plus3.png"
+    },
+    "211": {
+      "id": 211,
+      "name": "Leather Armor +6",
+      "category": "Armor",
+      "slot": "Armor",
+      "icon_path": "icons/icon_leather_armor_plus6.png"
+    },
+    "215": {
+      "id": 215,
+      "name": "Chain Armor",
+      "category": "Armor",
+      "slot": "Armor",
+      "icon_path": "icons/icon_chain_armor.png"
+    },
+    "219": {
+      "id": 219,
+      "name": "Banded Armor",
+      "category": "Armor",
+      "slot": "Armor",
+      "icon_path": "icons/icon_banded_armor.png"
+    },
+    "250": {
+      "id": 250,
+      "name": "Padded Cloak",
+      "category": "Armor",
+      "slot": "Armor",
+      "icon_path": "icons/icon_padded_cloak.png"
+    },
+    "400": {
+      "id": 400,
+      "name": "Helm",
+      "category": "Helm",
+      "slot": "Helm",
+      "icon_path": "icons/icon_helm.png"
+    },
+    "418": {
+      "id": 418,
+      "name": "Shield",
+      "category": "Shield",
+      "slot": "Shield",
+      "icon_path": "icons/icon_shield.png"
+    },
+    "450": {
+      "id": 450,
+      "name": "Leather Cap",
+      "category": "Helm",
+      "slot": "Helm",
+      "icon_path": "icons/icon_leather_cap.png"
+    },
+    "452": {
+      "id": 452,
+      "name": "Leather Gloves",
+      "category": "Helm",
+      "slot": "Helm",
+      "icon_path": "icons/icon_leather_gloves.png"
+    },
+    "454": {
+      "id": 454,
+      "name": "Leather Boots",
+      "category": "Helm",
+      "slot": "Helm",
+      "icon_path": "icons/icon_leather_boots.png"
+    },
+    "455": {
+      "id": 455,
+      "name": "Steel Shod Boots",
+      "category": "Helm",
+      "slot": "Helm",
+      "icon_path": "icons/icon_steel_shod_boots.png"
+    },
+    "602": {
+      "id": 602,
+      "name": "Heal Poison",
+      "category": "Potion",
+      "slot": "Consumable",
+      "icon_path": "icons/icon_potion_heal_poison.png"
+    },
+    "603": {
+      "id": 603,
+      "name": "Heat Resistance",
+      "category": "Magic",
+      "slot": "Consumable",
+      "icon_path": "icons/icon_potion_heat_resist.png"
+    },
+    "611": {
+      "id": 611,
+      "name": "Heal Small Wounds",
+      "category": "Potion",
+      "slot": "Consumable",
+      "icon_path": "icons/icon_potion_heal_small.png"
+    },
+    "612": {
+      "id": 612,
+      "name": "Heal Medium Wounds",
+      "category": "Potion",
+      "slot": "Consumable",
+      "icon_path": "icons/icon_potion_heal_medium.png"
+    },
+    "622": {
+      "id": 622,
+      "name": "Speckled Luck Stone +2",
+      "category": "Magic",
+      "slot": "Consumable",
+      "icon_path": "icons/icon_luck_stone.png"
+    },
+    "675": {
+      "id": 675,
+      "name": "Quiver of Protection +2",
+      "category": "Magic",
+      "slot": "Consumable",
+      "icon_path": "icons/icon_quiver_protection.png"
+    },
+    "723": {
+      "id": 723,
+      "name": "Refresh Potion",
+      "category": "Potion",
+      "slot": "Consumable",
+      "icon_path": "icons/icon_potion_refresh.png"
+    },
+    "747": {
+      "id": 747,
+      "name": "Salt",
+      "category": "Magic",
+      "slot": "Consumable",
+      "icon_path": "icons/icon_salt.png"
+    },
+    "748": {
+      "id": 748,
+      "name": "Pepper",
+      "category": "Magic",
+      "slot": "Consumable",
+      "icon_path": "icons/icon_pepper.png"
+    },
+    "803": {
+      "id": 803,
+      "name": "Quiver of Arrows",
+      "category": "Supply",
+      "slot": "Utility",
+      "icon_path": "icons/icon_quiver_arrows.png"
+    },
+    "805": {
+      "id": 805,
+      "name": "Torch",
+      "category": "Supply",
+      "slot": "Utility",
+      "icon_path": "icons/icon_torch.png"
+    },
+    "806": {
+      "id": 806,
+      "name": "Parchment",
+      "category": "Supply",
+      "slot": "Utility",
+      "icon_path": "icons/icon_parchment.png"
+    },
+    "878": {
+      "id": 878,
+      "name": "Rope",
+      "category": "Supply",
+      "slot": "Utility",
+      "icon_path": "icons/icon_rope.png"
+    }
+  },
+  "items": [
+    {
+      "id": 1,
+      "name": "Dagger",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_dagger.png"
+    },
+    {
+      "id": 2,
+      "name": "Dagger of Shielding +2",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_dagger_shielding.png"
+    },
+    {
+      "id": 8,
+      "name": "Dagger of Spells +1",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_dagger_spells.png"
+    },
+    {
+      "id": 10,
+      "name": "Longsword",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_longsword.png"
+    },
+    {
+      "id": 11,
+      "name": "Longsword +1",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_longsword_plus1.png"
+    },
+    {
+      "id": 20,
+      "name": "Broadsword",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_broadsword.png"
+    },
+    {
+      "id": 31,
+      "name": "Scimitar",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_scimitar.png"
+    },
+    {
+      "id": 37,
+      "name": "Mace",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_mace.png"
+    },
+    {
+      "id": 44,
+      "name": "Nunchuka",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_nunchuka.png"
+    },
+    {
+      "id": 59,
+      "name": "Morning Star",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_morning_star.png"
+    },
+    {
+      "id": 65,
+      "name": "Flail",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_flail.png"
+    },
+    {
+      "id": 75,
+      "name": "Short Sword",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_shortsword.png"
+    },
+    {
+      "id": 81,
+      "name": "War Axe",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_war_axe.png"
+    },
+    {
+      "id": 87,
+      "name": "Throwing Stars +1",
+      "category": "Weapon",
+      "slot": "MissileWeapon",
+      "icon_path": "icons/icon_throwing_stars.png"
+    },
+    {
+      "id": 92,
+      "name": "Battleaxe",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_battleaxe.png"
+    },
+    {
+      "id": 98,
+      "name": "Quarter Staff",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_quarter_staff.png"
+    },
+    {
+      "id": 99,
+      "name": "Quarter Staff +1",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_quarter_staff_plus1.png"
+    },
+    {
+      "id": 102,
+      "name": "Quarter Staff",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_quarter_staff_sparring.png"
+    },
+    {
+      "id": 104,
+      "name": "Bow",
+      "category": "Weapon",
+      "slot": "MissileWeapon",
+      "icon_path": "icons/icon_bow.png"
+    },
+    {
+      "id": 108,
+      "name": "Bow +1",
+      "category": "Weapon",
+      "slot": "MissileWeapon",
+      "icon_path": "icons/icon_bow_plus1.png"
+    },
+    {
+      "id": 109,
+      "name": "Darts",
+      "category": "Weapon",
+      "slot": "MissileWeapon",
+      "icon_path": "icons/icon_darts.png"
+    },
+    {
+      "id": 113,
+      "name": "Dart of Poison",
+      "category": "Weapon",
+      "slot": "MissileWeapon",
+      "icon_path": "icons/icon_dart_poison.png"
+    },
+    {
+      "id": 120,
+      "name": "Spear",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_spear.png"
+    },
+    {
+      "id": 125,
+      "name": "Club",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_club.png"
+    },
+    {
+      "id": 135,
+      "name": "Staff",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_gnarled_staff.png"
+    },
+    {
+      "id": 136,
+      "name": "Stone Hammer",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_stone_hammer.png"
+    },
+    {
+      "id": 137,
+      "name": "Stone Axe",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_stone_axe.png"
+    },
+    {
+      "id": 138,
+      "name": "War Hammer",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_war_hammer.png"
+    },
+    {
+      "id": 140,
+      "name": "Pike Axe",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_pike_axe.png"
+    },
+    {
+      "id": 144,
+      "name": "Throwing Daggers",
+      "category": "Weapon",
+      "slot": "MissileWeapon",
+      "icon_path": "icons/icon_throwing_daggers.png"
+    },
+    {
+      "id": 147,
+      "name": "Throwing Hammer",
+      "category": "Weapon",
+      "slot": "MissileWeapon",
+      "icon_path": "icons/icon_throwing_hammer.png"
+    },
+    {
+      "id": 151,
+      "name": "Battle Hammer",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_battle_hammer.png"
+    },
+    {
+      "id": 200,
+      "name": "Robe",
+      "category": "Armor",
+      "slot": "Armor",
+      "icon_path": "icons/icon_robe.png"
+    },
+    {
+      "id": 209,
+      "name": "Leather Armor",
+      "category": "Armor",
+      "slot": "Armor",
+      "icon_path": "icons/icon_leather_armor.png"
+    },
+    {
+      "id": 210,
+      "name": "Leather Armor +3",
+      "category": "Armor",
+      "slot": "Armor",
+      "icon_path": "icons/icon_leather_armor_plus3.png"
+    },
+    {
+      "id": 211,
+      "name": "Leather Armor +6",
+      "category": "Armor",
+      "slot": "Armor",
+      "icon_path": "icons/icon_leather_armor_plus6.png"
+    },
+    {
+      "id": 215,
+      "name": "Chain Armor",
+      "category": "Armor",
+      "slot": "Armor",
+      "icon_path": "icons/icon_chain_armor.png"
+    },
+    {
+      "id": 219,
+      "name": "Banded Armor",
+      "category": "Armor",
+      "slot": "Armor",
+      "icon_path": "icons/icon_banded_armor.png"
+    },
+    {
+      "id": 250,
+      "name": "Padded Cloak",
+      "category": "Armor",
+      "slot": "Armor",
+      "icon_path": "icons/icon_padded_cloak.png"
+    },
+    {
+      "id": 400,
+      "name": "Helm",
+      "category": "Helm",
+      "slot": "Helm",
+      "icon_path": "icons/icon_helm.png"
+    },
+    {
+      "id": 418,
+      "name": "Shield",
+      "category": "Shield",
+      "slot": "Shield",
+      "icon_path": "icons/icon_shield.png"
+    },
+    {
+      "id": 450,
+      "name": "Leather Cap",
+      "category": "Helm",
+      "slot": "Helm",
+      "icon_path": "icons/icon_leather_cap.png"
+    },
+    {
+      "id": 452,
+      "name": "Leather Gloves",
+      "category": "Helm",
+      "slot": "Helm",
+      "icon_path": "icons/icon_leather_gloves.png"
+    },
+    {
+      "id": 454,
+      "name": "Leather Boots",
+      "category": "Helm",
+      "slot": "Helm",
+      "icon_path": "icons/icon_leather_boots.png"
+    },
+    {
+      "id": 455,
+      "name": "Steel Shod Boots",
+      "category": "Helm",
+      "slot": "Helm",
+      "icon_path": "icons/icon_steel_shod_boots.png"
+    },
+    {
+      "id": 602,
+      "name": "Heal Poison",
+      "category": "Potion",
+      "slot": "Consumable",
+      "icon_path": "icons/icon_potion_heal_poison.png"
+    },
+    {
+      "id": 603,
+      "name": "Heat Resistance",
+      "category": "Magic",
+      "slot": "Consumable",
+      "icon_path": "icons/icon_potion_heat_resist.png"
+    },
+    {
+      "id": 611,
+      "name": "Heal Small Wounds",
+      "category": "Potion",
+      "slot": "Consumable",
+      "icon_path": "icons/icon_potion_heal_small.png"
+    },
+    {
+      "id": 612,
+      "name": "Heal Medium Wounds",
+      "category": "Potion",
+      "slot": "Consumable",
+      "icon_path": "icons/icon_potion_heal_medium.png"
+    },
+    {
+      "id": 622,
+      "name": "Speckled Luck Stone +2",
+      "category": "Magic",
+      "slot": "Consumable",
+      "icon_path": "icons/icon_luck_stone.png"
+    },
+    {
+      "id": 675,
+      "name": "Quiver of Protection +2",
+      "category": "Magic",
+      "slot": "Consumable",
+      "icon_path": "icons/icon_quiver_protection.png"
+    },
+    {
+      "id": 723,
+      "name": "Refresh Potion",
+      "category": "Potion",
+      "slot": "Consumable",
+      "icon_path": "icons/icon_potion_refresh.png"
+    },
+    {
+      "id": 747,
+      "name": "Salt",
+      "category": "Magic",
+      "slot": "Consumable",
+      "icon_path": "icons/icon_salt.png"
+    },
+    {
+      "id": 748,
+      "name": "Pepper",
+      "category": "Magic",
+      "slot": "Consumable",
+      "icon_path": "icons/icon_pepper.png"
+    },
+    {
+      "id": 803,
+      "name": "Quiver of Arrows",
+      "category": "Supply",
+      "slot": "Utility",
+      "icon_path": "icons/icon_quiver_arrows.png"
+    },
+    {
+      "id": 805,
+      "name": "Torch",
+      "category": "Supply",
+      "slot": "Utility",
+      "icon_path": "icons/icon_torch.png"
+    },
+    {
+      "id": 806,
+      "name": "Parchment",
+      "category": "Supply",
+      "slot": "Utility",
+      "icon_path": "icons/icon_parchment.png"
+    },
+    {
+      "id": 878,
+      "name": "Rope",
+      "category": "Supply",
+      "slot": "Utility",
+      "icon_path": "icons/icon_rope.png"
+    }
+  ],
+  "by_spell_id": {
+    "1108": {
+      "id": 1108,
+      "key": "magic_missile",
+      "name": "Magic Darts",
+      "icon_path": "icons/icon_spell_magic_darts.png"
+    },
+    "1104": {
+      "id": 1104,
+      "key": "burning_hands",
+      "name": "Flame Hands",
+      "icon_path": "icons/icon_spell_flame_hands.png"
+    },
+    "1306": {
+      "id": 1306,
+      "key": "fireball",
+      "name": "Fireball",
+      "icon_path": "icons/icon_spell_fireball.png"
+    },
+    "2101": {
+      "id": 2101,
+      "key": "brimstones",
+      "name": "Brimstones",
+      "icon_path": "icons/icon_spell_brimstones.png"
+    },
+    "2105": {
+      "id": 2105,
+      "key": "heal_light_wounds",
+      "name": "Heal Small Wounds",
+      "icon_path": "icons/icon_spell_heal_small.png"
+    },
+    "2207": {
+      "id": 2207,
+      "key": "heal_medium_wounds",
+      "name": "Heal Medium Wounds",
+      "icon_path": "icons/icon_spell_heal_medium.png"
+    },
+    "2106": {
+      "id": 2106,
+      "key": "bless",
+      "name": "Magic Aura",
+      "icon_path": "icons/icon_spell_bless.png"
+    },
+    "3202": {
+      "id": 3202,
+      "key": "hold",
+      "name": "Daze",
+      "icon_path": "icons/icon_spell_daze.png"
+    },
+    "2310": {
+      "id": 2310,
+      "key": "sleep",
+      "name": "Sandman",
+      "icon_path": "icons/icon_spell_sleep.png"
+    },
+    "1102": {
+      "id": 1102,
+      "key": "enchanted_blade",
+      "name": "Enchanted Blade",
+      "icon_path": "icons/icon_spell_enchanted_blade.png"
+    },
+    "1111": {
+      "id": 1111,
+      "key": "sparkling_armor",
+      "name": "Sparkling Armor",
+      "icon_path": "icons/icon_spell_sparkling_armor.png"
+    },
+    "2103": {
+      "id": 2103,
+      "key": "fearful_thoughts",
+      "name": "Fearful Thoughts",
+      "icon_path": "icons/icon_spell_fearful_thoughts.png"
+    }
+  },
+  "by_spell_key": {
+    "magic_missile": {
+      "id": 1108,
+      "key": "magic_missile",
+      "name": "Magic Darts",
+      "icon_path": "icons/icon_spell_magic_darts.png"
+    },
+    "burning_hands": {
+      "id": 1104,
+      "key": "burning_hands",
+      "name": "Flame Hands",
+      "icon_path": "icons/icon_spell_flame_hands.png"
+    },
+    "fireball": {
+      "id": 1306,
+      "key": "fireball",
+      "name": "Fireball",
+      "icon_path": "icons/icon_spell_fireball.png"
+    },
+    "brimstones": {
+      "id": 2101,
+      "key": "brimstones",
+      "name": "Brimstones",
+      "icon_path": "icons/icon_spell_brimstones.png"
+    },
+    "heal_light_wounds": {
+      "id": 2105,
+      "key": "heal_light_wounds",
+      "name": "Heal Small Wounds",
+      "icon_path": "icons/icon_spell_heal_small.png"
+    },
+    "heal_medium_wounds": {
+      "id": 2207,
+      "key": "heal_medium_wounds",
+      "name": "Heal Medium Wounds",
+      "icon_path": "icons/icon_spell_heal_medium.png"
+    },
+    "bless": {
+      "id": 2106,
+      "key": "bless",
+      "name": "Magic Aura",
+      "icon_path": "icons/icon_spell_bless.png"
+    },
+    "hold": {
+      "id": 3202,
+      "key": "hold",
+      "name": "Daze",
+      "icon_path": "icons/icon_spell_daze.png"
+    },
+    "sleep": {
+      "id": 2310,
+      "key": "sleep",
+      "name": "Sandman",
+      "icon_path": "icons/icon_spell_sleep.png"
+    },
+    "enchanted_blade": {
+      "id": 1102,
+      "key": "enchanted_blade",
+      "name": "Enchanted Blade",
+      "icon_path": "icons/icon_spell_enchanted_blade.png"
+    },
+    "sparkling_armor": {
+      "id": 1111,
+      "key": "sparkling_armor",
+      "name": "Sparkling Armor",
+      "icon_path": "icons/icon_spell_sparkling_armor.png"
+    },
+    "fearful_thoughts": {
+      "id": 2103,
+      "key": "fearful_thoughts",
+      "name": "Fearful Thoughts",
+      "icon_path": "icons/icon_spell_fearful_thoughts.png"
+    }
+  },
+  "spells": [
+    {
+      "id": 1108,
+      "key": "magic_missile",
+      "name": "Magic Darts",
+      "icon_path": "icons/icon_spell_magic_darts.png"
+    },
+    {
+      "id": 1104,
+      "key": "burning_hands",
+      "name": "Flame Hands",
+      "icon_path": "icons/icon_spell_flame_hands.png"
+    },
+    {
+      "id": 1306,
+      "key": "fireball",
+      "name": "Fireball",
+      "icon_path": "icons/icon_spell_fireball.png"
+    },
+    {
+      "id": 2101,
+      "key": "brimstones",
+      "name": "Brimstones",
+      "icon_path": "icons/icon_spell_brimstones.png"
+    },
+    {
+      "id": 2105,
+      "key": "heal_light_wounds",
+      "name": "Heal Small Wounds",
+      "icon_path": "icons/icon_spell_heal_small.png"
+    },
+    {
+      "id": 2207,
+      "key": "heal_medium_wounds",
+      "name": "Heal Medium Wounds",
+      "icon_path": "icons/icon_spell_heal_medium.png"
+    },
+    {
+      "id": 2106,
+      "key": "bless",
+      "name": "Magic Aura",
+      "icon_path": "icons/icon_spell_bless.png"
+    },
+    {
+      "id": 3202,
+      "key": "hold",
+      "name": "Daze",
+      "icon_path": "icons/icon_spell_daze.png"
+    },
+    {
+      "id": 2310,
+      "key": "sleep",
+      "name": "Sandman",
+      "icon_path": "icons/icon_spell_sleep.png"
+    },
+    {
+      "id": 1102,
+      "key": "enchanted_blade",
+      "name": "Enchanted Blade",
+      "icon_path": "icons/icon_spell_enchanted_blade.png"
+    },
+    {
+      "id": 1111,
+      "key": "sparkling_armor",
+      "name": "Sparkling Armor",
+      "icon_path": "icons/icon_spell_sparkling_armor.png"
+    },
+    {
+      "id": 2103,
+      "key": "fearful_thoughts",
+      "name": "Fearful Thoughts",
+      "icon_path": "icons/icon_spell_fearful_thoughts.png"
+    }
+  ],
+  "extra_icons": [
+    {
+      "file": "icon_greatsword.png",
+      "label": "Greatsword",
+      "icon_path": "icons/icon_greatsword.png"
+    },
+    {
+      "file": "icon_crossbow.png",
+      "label": "Crossbow",
+      "icon_path": "icons/icon_crossbow.png"
+    },
+    {
+      "file": "icon_gold_coins.png",
+      "label": "Gold Coins",
+      "icon_path": "icons/icon_gold_coins.png"
+    },
+    {
+      "file": "icon_quest_key.png",
+      "label": "Quest Key",
+      "icon_path": "icons/icon_quest_key.png"
+    },
+    {
+      "file": "icon_food_ration.png",
+      "label": "Food Ration",
+      "icon_path": "icons/icon_food_ration.png"
+    },
+    {
+      "file": "icon_potion_mana.png",
+      "label": "Mana Potion",
+      "icon_path": "icons/icon_potion_mana.png"
+    },
+    {
+      "file": "icon_ring_gold.png",
+      "label": "Gold Ring",
+      "icon_path": "icons/icon_ring_gold.png"
+    },
+    {
+      "file": "icon_amulet_ruby.png",
+      "label": "Ruby Amulet",
+      "icon_path": "icons/icon_amulet_ruby.png"
+    },
+    {
+      "file": "icon_badge_poison.png",
+      "label": "Badge: Poison",
+      "icon_path": "icons/icon_badge_poison.png"
+    },
+    {
+      "file": "icon_badge_burn.png",
+      "label": "Badge: Burn",
+      "icon_path": "icons/icon_badge_burn.png"
+    },
+    {
+      "file": "icon_badge_stun.png",
+      "label": "Badge: Stun",
+      "icon_path": "icons/icon_badge_stun.png"
+    },
+    {
+      "file": "icon_badge_bless.png",
+      "label": "Badge: Bless",
+      "icon_path": "icons/icon_badge_bless.png"
+    }
+  ]
+}

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
+using System.Text;
 using Realmz.Data;
 using Realmz.World;
 using TMPro;
@@ -53,6 +55,16 @@ namespace Realmz.EditorTools
             new HeroSpec { Key = "mage", Id = "hero_mage", Archetype = "Mage", IconId = 9084, PortraitId = 341 },
             new HeroSpec { Key = "paladin", Id = "hero_paladin", Archetype = "Paladin", IconId = 9054, PortraitId = 311 },
             new HeroSpec { Key = "rogue", Id = "hero_rogue", Archetype = "Rogue", IconId = 9106, PortraitId = 363 }
+        };
+
+        private static readonly HeroSpec[] ExtraHeroSpecs =
+        {
+            new HeroSpec { Key = "archer", Id = "hero_archer", Archetype = "Archer", IconId = 0, PortraitId = 0 },
+            new HeroSpec { Key = "assassin", Id = "hero_assassin", Archetype = "Assassin", IconId = 0, PortraitId = 0 },
+            new HeroSpec { Key = "barbarian", Id = "hero_barbarian", Archetype = "Barbarian", IconId = 0, PortraitId = 0 },
+            new HeroSpec { Key = "druid", Id = "hero_druid", Archetype = "Druid", IconId = 0, PortraitId = 0 },
+            new HeroSpec { Key = "enchanter", Id = "hero_enchanter", Archetype = "Enchanter", IconId = 0, PortraitId = 0 },
+            new HeroSpec { Key = "monk", Id = "hero_monk", Archetype = "Monk", IconId = 0, PortraitId = 0 }
         };
 
         private static readonly MonsterSpec[] MonsterSpecs =
@@ -138,7 +150,8 @@ namespace Realmz.EditorTools
             {
                 HeroSpec spec = HeroSpecs[i];
                 string sheetAlbedoPath = $"{Realmz.EditorTools.Cartography.CartographyAssetImporter.UnitsDir}/{spec.Id}_sheet.png";
-                string portraitPath = PortraitsDir + "/" + spec.Key + "_portrait.png";
+                string unifiedPortraitPath = $"{Realmz.EditorTools.Cartography.CartographyAssetImporter.PortraitsDir}/portrait_{spec.Key}.png";
+                string legacyPortraitPath = PortraitsDir + "/" + spec.Key + "_portrait.png";
                 string legacyAlbedoPath = HeroesDir + "/" + spec.Key + ".png";
                 string legacyNormalPath = HeroesDir + "/" + spec.Key + "_n.png";
                 string legacyMatPath = MaterialsDir + "/M1_Hero_" + spec.Key + ".mat";
@@ -150,7 +163,8 @@ namespace Realmz.EditorTools
                 Material unitSheetMat = Realmz.EditorTools.Cartography.CartographyAssetImporter.CreateOrUpdateUnitMaterial(spec.Id);
                 Sprite frameZeroSprite = Realmz.EditorTools.Cartography.CartographyAssetImporter.LoadFirstSpriteFrame(sheetAlbedoPath)
                     ?? AssetDatabase.LoadAssetAtPath<Sprite>(legacyAlbedoPath);
-                Sprite portrait = AssetDatabase.LoadAssetAtPath<Sprite>(portraitPath);
+                Sprite portrait = AssetDatabase.LoadAssetAtPath<Sprite>(unifiedPortraitPath)
+                    ?? AssetDatabase.LoadAssetAtPath<Sprite>(legacyPortraitPath);
 
                 catalog.heroes.Add(new BywaterAssetCatalog.HeroArtEntry
                 {
@@ -170,7 +184,33 @@ namespace Realmz.EditorTools
                 });
             }
 
-            // 2. Monsters (all 7 unified 64 px/m 512x128 sheets + normals)
+            // 1b. Pack 1 extra heroes (6 additional hero classes) & all 12 bronze portraits
+            catalog.extraHeroes = new List<BywaterAssetCatalog.HeroArtEntry>(ExtraHeroSpecs.Length);
+            for (int i = 0; i < ExtraHeroSpecs.Length; i++)
+            {
+                HeroSpec spec = ExtraHeroSpecs[i];
+                string sheetAlbedoPath = $"{Realmz.EditorTools.Cartography.CartographyAssetImporter.UnitsDir}/{spec.Id}_sheet.png";
+                string unifiedPortraitPath = $"{Realmz.EditorTools.Cartography.CartographyAssetImporter.PortraitsDir}/portrait_{spec.Key}.png";
+                Material unitSheetMat = Realmz.EditorTools.Cartography.CartographyAssetImporter.CreateOrUpdateUnitMaterial(spec.Id);
+                Sprite frameZeroSprite = Realmz.EditorTools.Cartography.CartographyAssetImporter.LoadFirstSpriteFrame(sheetAlbedoPath);
+                Sprite portrait = AssetDatabase.LoadAssetAtPath<Sprite>(unifiedPortraitPath);
+
+                catalog.extraHeroes.Add(new BywaterAssetCatalog.HeroArtEntry
+                {
+                    id = spec.Id,
+                    archetype = spec.Archetype,
+                    iconId = spec.IconId,
+                    portraitId = spec.PortraitId,
+                    billboardMaterial = unitSheetMat,
+                    unitSheetMaterial = unitSheetMat,
+                    sprite = frameZeroSprite,
+                    portrait = portrait
+                });
+            }
+
+            catalog.unifiedPortraits = CollectUnifiedPortraits();
+
+            // 2. Monsters (keep exact 7 baseline entries in catalog.monsters + 43 expandedMonsters + 133 archetypeMappings)
             catalog.monsters = new List<BywaterAssetCatalog.MonsterArtEntry>(MonsterSpecs.Length);
             for (int i = 0; i < MonsterSpecs.Length; i++)
             {
@@ -189,7 +229,9 @@ namespace Realmz.EditorTools
                     displayName = spec.DisplayName,
                     billboardMaterial = unitSheetMat,
                     unitSheetMaterial = unitSheetMat,
-                    sprite = frameZeroSprite
+                    sprite = frameZeroSprite,
+                    portraitPixelRect = ComputeFrameZeroPortraitRect(sheetAlbedoPath),
+                    archetypeKey = spec.Key
                 });
                 catalog.cartographyUnitSheets.Add(new BywaterAssetCatalog.CartographyUnitSheetEntry
                 {
@@ -197,6 +239,9 @@ namespace Realmz.EditorTools
                     unitSheetMaterial = unitSheetMat
                 });
             }
+
+            catalog.expandedMonsters = CollectExpandedMonsters();
+            catalog.archetypeMappings = LoadArchetypeMappings();
 
             for (int i = 0; i < LegacyM1MonsterTextureKeys.Length; i++)
             {
@@ -206,7 +251,7 @@ namespace Realmz.EditorTools
                 CreateOrUpdateBillboardMaterial(MaterialsDir + "/M1_Monster_" + legacyKey + ".mat", legacyAlb, legacyNorm, 0.18f, subtleTorchEmission: false);
             }
 
-            // 2b. All 21 32x32 combat hotbar & utility icons
+            // 2b. All 21 32x32 combat hotbar & utility icons + full item/spell/badge icon library
             string[] iconKeys = Realmz.EditorTools.Cartography.CartographyAssetImporter.HotbarIconKeys;
             catalog.hotbarIcons = new List<BywaterAssetCatalog.HotbarIconEntry>(iconKeys.Length);
             for (int i = 0; i < iconKeys.Length; i++)
@@ -220,6 +265,17 @@ namespace Realmz.EditorTools
                     sprite = iconSprite
                 });
             }
+
+            catalog.itemAndSpellIcons = CollectAllCartographyIcons();
+            LoadItemAndSpellIconMappings(out catalog.itemIdIconMappings, out catalog.spellIdIconMappings);
+
+            // 2c. 4-frame Combat Surfaces & Combat VFX strips
+            catalog.combatSurfaces = CollectStripAssets(
+                Realmz.EditorTools.Cartography.CartographyAssetImporter.SurfacesDir,
+                isVfx: false);
+            catalog.combatVfx = CollectStripAssets(
+                Realmz.EditorTools.Cartography.CartographyAssetImporter.VfxDir,
+                isVfx: true);
 
             // 3. Props (torch/brazier billboard + ember + portal beacon)
             string torchAlbedoPath = FirstExistingPropPath("torch_brazier", "torch");
@@ -411,6 +467,14 @@ namespace Realmz.EditorTools
                 Realmz.EditorTools.Cartography.CartographyAssetImporter.WaterMaterialPath);
             catalog.cartographyFoliageMaterial = AssetDatabase.LoadAssetAtPath<Material>(
                 Realmz.EditorTools.Cartography.CartographyAssetImporter.FoliageMaterialPath);
+            catalog.cartographyDungeonTerrainMaterial = AssetDatabase.LoadAssetAtPath<Material>(
+                Realmz.EditorTools.Cartography.CartographyAssetImporter.DungeonTerrainMaterialPath);
+            catalog.cartographyDungeonWaterMaterial = AssetDatabase.LoadAssetAtPath<Material>(
+                Realmz.EditorTools.Cartography.CartographyAssetImporter.DungeonWaterMaterialPath);
+            catalog.cartographyDungeonFoliageMaterial = AssetDatabase.LoadAssetAtPath<Material>(
+                Realmz.EditorTools.Cartography.CartographyAssetImporter.DungeonFoliageMaterialPath);
+            catalog.cartographyMarshFoliageMaterial = AssetDatabase.LoadAssetAtPath<Material>(
+                Realmz.EditorTools.Cartography.CartographyAssetImporter.MarshFoliageMaterialPath);
             catalog.shallowWaterMaterial = catalog.cartographyWaterMaterial;
 
             catalog.cartographyPropMaterials = new List<BywaterAssetCatalog.CartographyPropMaterialEntry>();
@@ -421,11 +485,13 @@ namespace Realmz.EditorTools
                     continue;
                 }
 
-                Material propMat = Realmz.EditorTools.Cartography.CartographyAssetImporter.LoadOrCreatePropMaterial(kind, out _);
+                Material propMat = Realmz.EditorTools.Cartography.CartographyAssetImporter.LoadOrCreatePropMaterial(kind, out Texture2D propTex);
+                Vector2 propSizeMeters = Realmz.EditorTools.Cartography.CartographyAssetImporter.GetPropSizeMeters(kind, propTex);
                 catalog.cartographyPropMaterials.Add(new BywaterAssetCatalog.CartographyPropMaterialEntry
                 {
                     kind = kind,
-                    material = propMat
+                    material = propMat,
+                    sizeMeters = propSizeMeters
                 });
             }
 
@@ -1073,6 +1139,465 @@ namespace Realmz.EditorTools
             EditorUtility.SetDirty(fontAsset);
             AssetDatabase.SaveAssets();
             return fontAsset;
+        }
+
+        [Serializable]
+        private sealed class ArchetypeMappingFileDto
+        {
+            public ArchetypeMappingRecordDto[] records;
+        }
+
+        [Serializable]
+        private sealed class ArchetypeMappingRecordDto
+        {
+            public int monster_index;
+            public string name;
+            public int icon_id;
+            public int hd;
+            public int size;
+            public string archetype;
+            public string source;
+        }
+
+        [Serializable]
+        private sealed class IdIconMapFileDto
+        {
+            public ItemIconRecordDto[] items;
+            public SpellIconRecordDto[] spells;
+        }
+
+        [Serializable]
+        private sealed class ItemIconRecordDto
+        {
+            public int id;
+            public string name;
+            public string category;
+            public string slot;
+            public string icon_path;
+        }
+
+        [Serializable]
+        private sealed class SpellIconRecordDto
+        {
+            public int id;
+            public string key;
+            public string name;
+            public string icon_path;
+        }
+
+        private static List<BywaterAssetCatalog.HotbarIconEntry> CollectUnifiedPortraits()
+        {
+            List<BywaterAssetCatalog.HotbarIconEntry> list = new List<BywaterAssetCatalog.HotbarIconEntry>(12);
+            string dir = Path.GetFullPath(Realmz.EditorTools.Cartography.CartographyAssetImporter.PortraitsDir);
+            if (!Directory.Exists(dir))
+            {
+                return list;
+            }
+
+            string[] files = Directory.GetFiles(dir, "portrait_*.png", SearchOption.TopDirectoryOnly);
+            Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < files.Length; i++)
+            {
+                string fileName = Path.GetFileName(files[i]);
+                if (fileName.EndsWith("_n.png", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string assetPath = $"{Realmz.EditorTools.Cartography.CartographyAssetImporter.PortraitsDir}/{fileName}";
+                Sprite sprite = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
+                string key = Path.GetFileNameWithoutExtension(fileName);
+                if (key.StartsWith("portrait_", StringComparison.OrdinalIgnoreCase))
+                {
+                    key = key.Substring("portrait_".Length);
+                }
+
+                list.Add(new BywaterAssetCatalog.HotbarIconEntry
+                {
+                    key = key.ToLowerInvariant(),
+                    sprite = sprite
+                });
+            }
+
+            return list;
+        }
+
+        private static List<BywaterAssetCatalog.MonsterArtEntry> CollectExpandedMonsters()
+        {
+            List<BywaterAssetCatalog.MonsterArtEntry> list = new List<BywaterAssetCatalog.MonsterArtEntry>(48);
+            string dir = Path.GetFullPath(Realmz.EditorTools.Cartography.CartographyAssetImporter.UnitsDir);
+            if (!Directory.Exists(dir))
+            {
+                return list;
+            }
+
+            string[] files = Directory.GetFiles(dir, "monster_*_sheet.png", SearchOption.TopDirectoryOnly);
+            Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < files.Length; i++)
+            {
+                string fileName = Path.GetFileName(files[i]);
+                if (fileName.EndsWith("_n.png", StringComparison.OrdinalIgnoreCase) ||
+                    !fileName.EndsWith("_sheet.png", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string unitKey = fileName.Substring(0, fileName.Length - "_sheet.png".Length).ToLowerInvariant();
+                string sheetAssetPath = $"{Realmz.EditorTools.Cartography.CartographyAssetImporter.UnitsDir}/{fileName}";
+                Material unitSheetMat = Realmz.EditorTools.Cartography.CartographyAssetImporter.CreateOrUpdateUnitMaterial(unitKey);
+                Sprite frameZeroSprite = Realmz.EditorTools.Cartography.CartographyAssetImporter.LoadFirstSpriteFrame(sheetAssetPath);
+
+                string shortName = unitKey.StartsWith("monster_", StringComparison.Ordinal)
+                    ? unitKey.Substring("monster_".Length)
+                    : unitKey;
+
+                list.Add(new BywaterAssetCatalog.MonsterArtEntry
+                {
+                    key = unitKey,
+                    displayName = ToDisplayName(shortName),
+                    billboardMaterial = unitSheetMat,
+                    unitSheetMaterial = unitSheetMat,
+                    sprite = frameZeroSprite,
+                    portraitPixelRect = ComputeFrameZeroPortraitRect(sheetAssetPath),
+                    archetypeKey = unitKey
+                });
+            }
+
+            return list;
+        }
+
+        private static Rect ComputeFrameZeroPortraitRect(string sheetAssetPath)
+        {
+            Rect fallback = new Rect(28f, 44f, 72f, 72f);
+            string fullPath = Path.GetFullPath(sheetAssetPath);
+            if (!File.Exists(fullPath))
+            {
+                return fallback;
+            }
+
+            Texture2D scratch = new Texture2D(2, 2, TextureFormat.RGBA32, mipChain: false, linear: false);
+            try
+            {
+                byte[] bytes = File.ReadAllBytes(fullPath);
+                if (!ImageConversion.LoadImage(scratch, bytes, markNonReadable: false))
+                {
+                    return fallback;
+                }
+
+                int texW = scratch.width;
+                int texH = scratch.height;
+                int frameW = Mathf.Min(128, texW);
+                int frameH = Mathf.Min(128, texH);
+                if (frameW < 16 || frameH < 16)
+                {
+                    return fallback;
+                }
+
+                Color32[] pixels = scratch.GetPixels32();
+                int minX = frameW;
+                int maxX = -1;
+                int minY = frameH;
+                int maxY = -1;
+
+                for (int y = 0; y < frameH; y++)
+                {
+                    int rowOffset = y * texW;
+                    for (int x = 0; x < frameW; x++)
+                    {
+                        if (pixels[rowOffset + x].a > 16)
+                        {
+                            if (x < minX) minX = x;
+                            if (x > maxX) maxX = x;
+                            if (y < minY) minY = y;
+                            if (y > maxY) maxY = y;
+                        }
+                    }
+                }
+
+                if (maxX < minX || maxY < minY)
+                {
+                    return fallback;
+                }
+
+                int silW = maxX - minX + 1;
+                int silH = maxY - minY + 1;
+                int cropSide = Mathf.Clamp(Mathf.RoundToInt(Mathf.Max(silW * 0.78f, silH * 0.56f)), 32, 96);
+                cropSide = Mathf.Min(cropSide, Mathf.Min(frameW, frameH));
+
+                float centerX = (minX + maxX) * 0.5f;
+                int topPad = Mathf.Min(frameH, maxY + 4);
+                int cropX = Mathf.Clamp(Mathf.RoundToInt(centerX - cropSide * 0.5f), 0, frameW - cropSide);
+                int cropY = Mathf.Clamp(topPad - cropSide, 0, frameH - cropSide);
+                return new Rect(cropX, cropY, cropSide, cropSide);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(scratch);
+            }
+        }
+
+        private static List<BywaterAssetCatalog.MonsterArchetypeMappingEntry> LoadArchetypeMappings()
+        {
+            List<BywaterAssetCatalog.MonsterArchetypeMappingEntry> list = new List<BywaterAssetCatalog.MonsterArchetypeMappingEntry>(140);
+            string jsonPath = Path.Combine(Application.streamingAssetsPath, "bywater_m1", "archetype_mapping.json");
+            if (!File.Exists(jsonPath))
+            {
+                return list;
+            }
+
+            string json = File.ReadAllText(jsonPath);
+            ArchetypeMappingFileDto dto = JsonUtility.FromJson<ArchetypeMappingFileDto>(json);
+            if (dto == null || dto.records == null)
+            {
+                return list;
+            }
+
+            for (int i = 0; i < dto.records.Length; i++)
+            {
+                ArchetypeMappingRecordDto rec = dto.records[i];
+                if (rec == null) continue;
+
+                string arch = (rec.archetype ?? string.Empty).Trim();
+                if (arch.StartsWith("w234:", StringComparison.OrdinalIgnoreCase))
+                {
+                    arch = arch.Substring(5).Trim();
+                }
+
+                list.Add(new BywaterAssetCatalog.MonsterArchetypeMappingEntry
+                {
+                    monsterIndex = rec.monster_index,
+                    id = SlugifyKey(rec.name),
+                    name = rec.name ?? string.Empty,
+                    iconId = rec.icon_id,
+                    hd = rec.hd,
+                    size = rec.size,
+                    archetype = arch,
+                    source = rec.source ?? string.Empty
+                });
+            }
+
+            return list;
+        }
+
+        private static List<BywaterAssetCatalog.HotbarIconEntry> CollectAllCartographyIcons()
+        {
+            List<BywaterAssetCatalog.HotbarIconEntry> list = new List<BywaterAssetCatalog.HotbarIconEntry>(110);
+            string dir = Path.GetFullPath(Realmz.EditorTools.Cartography.CartographyAssetImporter.IconsDir);
+            if (!Directory.Exists(dir))
+            {
+                return list;
+            }
+
+            string[] files = Directory.GetFiles(dir, "*.png", SearchOption.TopDirectoryOnly);
+            Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < files.Length; i++)
+            {
+                string fileName = Path.GetFileName(files[i]);
+                if (fileName.EndsWith("_n.png", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string assetPath = $"{Realmz.EditorTools.Cartography.CartographyAssetImporter.IconsDir}/{fileName}";
+                Sprite sprite = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
+                string key = Path.GetFileNameWithoutExtension(fileName);
+                if (key.StartsWith("icon_", StringComparison.OrdinalIgnoreCase))
+                {
+                    key = key.Substring("icon_".Length);
+                }
+
+                list.Add(new BywaterAssetCatalog.HotbarIconEntry
+                {
+                    key = key.ToLowerInvariant(),
+                    sprite = sprite
+                });
+            }
+
+            return list;
+        }
+
+        private static void LoadItemAndSpellIconMappings(
+            out List<BywaterAssetCatalog.IdIconMappingEntry> itemMappings,
+            out List<BywaterAssetCatalog.IdIconMappingEntry> spellMappings)
+        {
+            itemMappings = new List<BywaterAssetCatalog.IdIconMappingEntry>(64);
+            spellMappings = new List<BywaterAssetCatalog.IdIconMappingEntry>(16);
+
+            string jsonPath = Path.Combine(Application.streamingAssetsPath, "bywater_m1", "items_by_id_icon_map.json");
+            if (!File.Exists(jsonPath))
+            {
+                return;
+            }
+
+            string json = File.ReadAllText(jsonPath);
+            IdIconMapFileDto dto = JsonUtility.FromJson<IdIconMapFileDto>(json);
+            if (dto == null)
+            {
+                return;
+            }
+
+            if (dto.items != null)
+            {
+                for (int i = 0; i < dto.items.Length; i++)
+                {
+                    ItemIconRecordDto rec = dto.items[i];
+                    if (rec == null) continue;
+                    ResolveIconPath(rec.icon_path, out string iconKey, out Sprite sprite);
+                    itemMappings.Add(new BywaterAssetCatalog.IdIconMappingEntry
+                    {
+                        id = rec.id,
+                        key = SlugifyKey(rec.name),
+                        name = rec.name ?? string.Empty,
+                        category = rec.category ?? string.Empty,
+                        iconKey = iconKey,
+                        sprite = sprite
+                    });
+                }
+            }
+
+            if (dto.spells != null)
+            {
+                for (int i = 0; i < dto.spells.Length; i++)
+                {
+                    SpellIconRecordDto rec = dto.spells[i];
+                    if (rec == null) continue;
+                    ResolveIconPath(rec.icon_path, out string iconKey, out Sprite sprite);
+                    spellMappings.Add(new BywaterAssetCatalog.IdIconMappingEntry
+                    {
+                        id = rec.id,
+                        key = rec.key ?? SlugifyKey(rec.name),
+                        name = rec.name ?? string.Empty,
+                        category = "Spell",
+                        iconKey = iconKey,
+                        sprite = sprite
+                    });
+                }
+            }
+        }
+
+        private static void ResolveIconPath(string relativeIconPath, out string iconKey, out Sprite sprite)
+        {
+            iconKey = string.Empty;
+            sprite = null;
+            if (string.IsNullOrWhiteSpace(relativeIconPath))
+            {
+                return;
+            }
+
+            string fileName = Path.GetFileName(relativeIconPath.Trim());
+            if (string.IsNullOrEmpty(fileName))
+            {
+                return;
+            }
+
+            string assetPath = $"{Realmz.EditorTools.Cartography.CartographyAssetImporter.IconsDir}/{fileName}";
+            sprite = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
+            iconKey = Path.GetFileNameWithoutExtension(fileName);
+            if (iconKey.StartsWith("icon_", StringComparison.OrdinalIgnoreCase))
+            {
+                iconKey = iconKey.Substring("icon_".Length);
+            }
+            iconKey = iconKey.ToLowerInvariant();
+        }
+
+        private static List<BywaterAssetCatalog.StripAssetEntry> CollectStripAssets(string assetDir, bool isVfx)
+        {
+            List<BywaterAssetCatalog.StripAssetEntry> list = new List<BywaterAssetCatalog.StripAssetEntry>(8);
+            string fullDir = Path.GetFullPath(assetDir);
+            if (!Directory.Exists(fullDir))
+            {
+                return list;
+            }
+
+            string[] files = Directory.GetFiles(fullDir, "*.png", SearchOption.TopDirectoryOnly);
+            Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < files.Length; i++)
+            {
+                string fileName = Path.GetFileName(files[i]);
+                if (fileName.EndsWith("_n.png", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string key = Path.GetFileNameWithoutExtension(fileName).ToLowerInvariant();
+                string albedoPath = $"{assetDir}/{fileName}";
+                string normalPath = $"{assetDir}/{Path.GetFileNameWithoutExtension(fileName)}_n.png";
+
+                Texture2D albedo = AssetDatabase.LoadAssetAtPath<Texture2D>(albedoPath);
+                Texture2D normal = AssetDatabase.LoadAssetAtPath<Texture2D>(normalPath);
+                Material mat = Realmz.EditorTools.Cartography.CartographyAssetImporter.CreateOrUpdateStripMaterial(key, albedo, normal, isVfx);
+                Sprite[] frames = Realmz.EditorTools.Cartography.CartographyAssetImporter.LoadAllSpriteFrames(albedoPath);
+
+                list.Add(new BywaterAssetCatalog.StripAssetEntry
+                {
+                    key = key,
+                    albedo = albedo,
+                    normal = normal,
+                    material = mat,
+                    frames = frames
+                });
+            }
+
+            return list;
+        }
+
+        private static string SlugifyKey(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return string.Empty;
+            }
+
+            StringBuilder sb = new StringBuilder(raw.Length);
+            bool lastUnderscore = false;
+            string lower = raw.Trim().ToLowerInvariant();
+            for (int i = 0; i < lower.Length; i++)
+            {
+                char c = lower[i];
+                if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))
+                {
+                    sb.Append(c);
+                    lastUnderscore = false;
+                }
+                else if (c == '\'' || c == '+')
+                {
+                    continue;
+                }
+                else if (!lastUnderscore && sb.Length > 0)
+                {
+                    sb.Append('_');
+                    lastUnderscore = true;
+                }
+            }
+
+            if (sb.Length > 0 && sb[sb.Length - 1] == '_')
+            {
+                sb.Length--;
+            }
+            return sb.ToString();
+        }
+
+        private static string ToDisplayName(string snakeKey)
+        {
+            if (string.IsNullOrWhiteSpace(snakeKey))
+            {
+                return string.Empty;
+            }
+
+            string[] parts = snakeKey.Split('_');
+            StringBuilder sb = new StringBuilder(snakeKey.Length + 4);
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string p = parts[i];
+                if (string.IsNullOrEmpty(p)) continue;
+                if (sb.Length > 0) sb.Append(' ');
+                sb.Append(char.ToUpperInvariant(p[0]));
+                if (p.Length > 1)
+                {
+                    sb.Append(p.Substring(1));
+                }
+            }
+            return sb.ToString();
         }
 
         private static Color ParseHexColor(string hex, Color fallback)

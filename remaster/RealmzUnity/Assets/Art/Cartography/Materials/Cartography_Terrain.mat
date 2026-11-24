@@ -38,6 +38,7 @@ Material:
     - _GroundValueScale: 0.76
     - _HorizonHazeStrength: 0.09
     - _LanternPoolIntensity: 1.35
+    - _LayerCount: 0
     - _MacroScale: 0.085
     - _MacroStrength: 0.1
     - _NoiseBlendSharpness: 18

@@ -117,9 +117,18 @@ namespace Realmz.Game
 
         public bool IsInCombat => _isInCombat;
         public bool ShowAllEnemyIntentArcs => _showAllEnemyIntentArcs;
+        public GridCoord ArenaOrigin => new GridCoord(_arenaOriginX, _arenaOriginY);
         public ExplorationSession ExploreSession { get; private set; }
         public TacticalCombatSession CombatSession { get; private set; }
         public BywaterM1Bundle Bundle { get; private set; }
+
+        public void InitializeForTests(BywaterM1Bundle bundle, ExplorationSession exploreSession, ulong seed = 12345UL)
+        {
+            ResolveSceneReferences();
+            Bundle = bundle;
+            ExploreSession = exploreSession;
+            _roller = new DeterministicDiceRoller(seed == 0UL ? 1UL : seed);
+        }
 
         private string SaveFilePath => Path.Combine(Application.persistentDataPath, "bywater_save.json");
 
@@ -328,10 +337,18 @@ namespace Realmz.Game
                 ExitCombatToExploration(syncPartyFromCombat: false);
             }
 
+            // Stage combat showcase in Bywater's clean southern meadow clearing (arena origin ~(13, 49), zero trees/roof overlap).
             if (ExploreSession.CurrentMap.IsDungeon)
             {
                 WarpToOverworldTownShowcase();
             }
+
+            ExploreSession = new ExplorationSession(
+                Bundle.Maps,
+                "land_0",
+                ExploreSession.Party,
+                _roller,
+                new GridCoord(18, 54));
 
             TriggerDemoSkirmish();
 
@@ -341,6 +358,26 @@ namespace Realmz.Game
             }
 
             StopAiCoroutine();
+
+            // Ensure showcased combat always demonstrates active surface tiles away from spawn edges.
+            if (CombatSession.GetActiveSurfaceCells().Count == 0 && CombatSession.Grid != null)
+            {
+                int placed = 0;
+                for (int sy = 4; sy < _arenaHeight - 2 && placed < 2; sy++)
+                {
+                    for (int sx = 4; sx < _arenaWidth - 3 && placed < 2; sx++)
+                    {
+                        GridCoord sc = new GridCoord(sx, sy);
+                        if (CombatSession.Grid.IsWalkable(sx, sy) &&
+                            GetLivingUnitAt(sc) == null &&
+                            CombatSession.Grid.GetSurface(sx, sy) == SurfaceType.None)
+                        {
+                            CombatSession.Grid.SetSurface(sx, sy, placed == 0 ? SurfaceType.Water : SurfaceType.Fire, -1);
+                            placed++;
+                        }
+                    }
+                }
+            }
 
             int guard = 0;
             while (CombatSession.Outcome == CombatOutcome.InProgress && guard < 16)
@@ -425,9 +462,14 @@ namespace Realmz.Game
             worldRenderer?.UpdateTreeOcclusionFade(_treeFadePositionsScratch, fadeCenterBuildingsInCombat: true);
 
             GridCoord bestHoverTile = FindBestShowcaseHoverTile(current);
-            if (CombatSession.Grid.InBounds(bestHoverTile))
+            if (CombatSession.Grid.InBounds(bestHoverTile) &&
+                CombatSession.Grid.GetSurface(bestHoverTile.X, bestHoverTile.Y) == SurfaceType.None)
             {
                 UpdateCombatHoverVisuals(bestHoverTile);
+            }
+            else
+            {
+                gridOverlays?.SetCombatHoverPath(null, false);
             }
 
             gridOverlays?.ClearEnemyIntentArcs();
@@ -2013,6 +2055,7 @@ namespace Realmz.Game
             StopAiCoroutine();
             UnsubscribeCombatEvents();
             ClearCombatUnitViews();
+            gridOverlays?.ClearCombatVfx();
 
             TileMapData map = ExploreSession.CurrentMap;
             GridCoord partyPos = ExploreSession.Position;
@@ -2061,12 +2104,12 @@ namespace Realmz.Game
 
             GridCoord[] preferredHeroSlots =
             {
-                new GridCoord(3, 2),
                 new GridCoord(2, 4),
-                new GridCoord(3, 6),
-                new GridCoord(1, 3),
+                new GridCoord(1, 5),
+                new GridCoord(3, 5),
+                new GridCoord(2, 6),
                 new GridCoord(3, 4),
-                new GridCoord(2, 7)
+                new GridCoord(1, 3)
             };
 
             for (int i = 0; i < ExploreSession.Party.Members.Count; i++)
@@ -2078,19 +2121,19 @@ namespace Realmz.Game
                 }
 
                 GridCoord targetSlot = preferredHeroSlots[i % preferredHeroSlots.Length];
-                GridCoord spot = PickNearestFreeWalkable(connectedWalkable, occupied, targetSlot);
+                GridCoord spot = PickNearestFreeWalkable(connectedWalkable, occupied, targetSlot, map, _arenaOriginX, _arenaOriginY);
                 occupied.Add(spot);
                 combatants.Add(CombatantState.FromHero(member, spot, Bundle.Items));
             }
 
             GridCoord[] preferredMonsterSlots =
             {
-                new GridCoord(7, 2),
-                new GridCoord(8, 4),
+                new GridCoord(7, 4),
+                new GridCoord(8, 5),
                 new GridCoord(7, 6),
-                new GridCoord(9, 3),
+                new GridCoord(9, 4),
                 new GridCoord(8, 6),
-                new GridCoord(9, 5)
+                new GridCoord(9, 6)
             };
 
             bool spawnedGiantFrog = false;
@@ -2103,7 +2146,7 @@ namespace Realmz.Game
                 }
 
                 GridCoord targetSlot = preferredMonsterSlots[i % preferredMonsterSlots.Length];
-                GridCoord spot = PickNearestFreeWalkable(connectedWalkable, occupied, targetSlot);
+                GridCoord spot = PickNearestFreeWalkable(connectedWalkable, occupied, targetSlot, map, _arenaOriginX, _arenaOriginY);
                 occupied.Add(spot);
 
                 string instanceId = $"mon_{i}_{def.Id}";
@@ -2252,7 +2295,14 @@ namespace Realmz.Game
             {
                 if (view != null)
                 {
-                    Destroy(view.gameObject);
+                    if (Application.isPlaying)
+                    {
+                        Destroy(view.gameObject);
+                    }
+                    else
+                    {
+                        DestroyImmediate(view.gameObject);
+                    }
                 }
             }
 
@@ -2280,7 +2330,72 @@ namespace Realmz.Game
                     ? "PRONE"
                     : (conds.Count > 0 ? conds[0].DisplayName : (c.IsGuarding ? "GUARD" : string.Empty));
                 view.UpdateStats(c.Hp, c.MaxHp, c.Sp, c.MaxSp, badge, c.Id == currentId && c.IsAlive, c.IsAlive);
+                view.UpdateConditionBadgeIcon(ResolveUnitConditionBadgeSprite(c));
             }
+        }
+
+        private Sprite ResolveUnitConditionBadgeSprite(CombatantState unit)
+        {
+            if (unit == null || assetCatalog == null || !unit.IsAlive)
+            {
+                return null;
+            }
+
+            if (unit.Conditions.Has(CharConditionId.Poisoned) || unit.Conditions.Has(CharConditionId.Diseased))
+            {
+                return assetCatalog.GetConditionBadgeIcon("poison");
+            }
+
+            if (CombatSession?.Grid != null &&
+                CombatSession.Grid.InBounds(unit.Position) &&
+                CombatSession.Grid.GetSurface(unit.Position) == SurfaceType.Fire)
+            {
+                return assetCatalog.GetConditionBadgeIcon("burn");
+            }
+
+            IReadOnlyList<ConditionDisplayEffect> effects = unit.Conditions.GetDisplayEffects();
+            for (int i = 0; i < effects.Count; i++)
+            {
+                ConditionDisplayEffect eff = effects[i];
+                if (eff == null) continue;
+                string codeOrName = string.Concat(eff.Code ?? string.Empty, " ", eff.DisplayName ?? string.Empty);
+                if (codeOrName.IndexOf("burn", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    codeOrName.IndexOf("fire", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    codeOrName.IndexOf("flame", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return assetCatalog.GetConditionBadgeIcon("burn");
+                }
+            }
+
+            if (unit.IsProne ||
+                unit.Conditions.Has(CharConditionId.Helpless) ||
+                unit.Conditions.Has(CharConditionId.Tangled) ||
+                unit.Conditions.Has(CharConditionId.Slow) ||
+                unit.Conditions.Has(CharConditionId.Stupid) ||
+                unit.Conditions.Has(CharConditionId.Confused) ||
+                unit.Conditions.Has(CharConditionId.Blind) ||
+                unit.Conditions.Has(CharConditionId.TurnedToStone) ||
+                unit.Conditions.Has(CharConditionId.Silenced) ||
+                unit.Conditions.Has(CharConditionId.RunsAway))
+            {
+                return assetCatalog.GetConditionBadgeIcon("stun");
+            }
+
+            if (unit.IsGuarding ||
+                unit.Conditions.Has(CharConditionId.Strong) ||
+                unit.Conditions.Has(CharConditionId.AttackBonus) ||
+                unit.Conditions.Has(CharConditionId.ShieldFromHits) ||
+                unit.Conditions.Has(CharConditionId.ShieldFromProjectiles) ||
+                unit.Conditions.Has(CharConditionId.Regenerating) ||
+                unit.Conditions.Has(CharConditionId.MagicAura) ||
+                unit.Conditions.Has(CharConditionId.DefenseBonus) ||
+                unit.Conditions.Has(CharConditionId.Speedy) ||
+                unit.Conditions.Has(CharConditionId.ProtectionFromEvil))
+            {
+                return assetCatalog.GetConditionBadgeIcon("bless");
+            }
+
+            return null;
         }
 
         private void BeginCurrentCombatTurn()
@@ -2326,7 +2441,10 @@ namespace Realmz.Game
                 hudController?.ClearCombatHoverPreview();
                 RefreshCombatHudState();
                 StopAiCoroutine();
-                _aiCoroutine = StartCoroutine(RunMonsterTurnsRoutine());
+                if (Application.isPlaying && gameObject.activeInHierarchy)
+                {
+                    _aiCoroutine = StartCoroutine(RunMonsterTurnsRoutine());
+                }
                 return;
             }
 
@@ -2353,7 +2471,10 @@ namespace Realmz.Game
                 hudController?.ClearCombatHoverPreview();
                 RefreshCombatHudState();
                 StopAiCoroutine();
-                _aiCoroutine = StartCoroutine(RunAutoCombatHeroTurnRoutine());
+                if (Application.isPlaying && gameObject.activeInHierarchy)
+                {
+                    _aiCoroutine = StartCoroutine(RunAutoCombatHeroTurnRoutine());
+                }
                 return;
             }
 
@@ -2553,17 +2674,47 @@ namespace Realmz.Game
             }
 
             CombatantState hitHero = null;
+            CombatantState healedAlly = null;
             for (int i = 0; i < CombatSession.Combatants.Count; i++)
             {
                 CombatantState c = CombatSession.Combatants[i];
-                if (c.Side == CombatSide.Hero && oldHps.TryGetValue(c.Id, out int before) && c.Hp < before)
+                if (!oldHps.TryGetValue(c.Id, out int before))
                 {
-                    hitHero = c;
+                    continue;
+                }
+
+                if (c.Side == CombatSide.Hero && c.Hp < before)
+                {
+                    if (hitHero == null)
+                    {
+                        hitHero = c;
+                    }
                     if (_combatUnitViews.TryGetValue(c.Id, out BywaterUnitView hView) && hView != null)
                     {
                         hView.PlayHitFlash(0.055f);
                     }
                 }
+                else if (c.Side == CombatSide.Monster && c.Hp > before)
+                {
+                    healedAlly = c;
+                }
+            }
+
+            CombatantState targetUnit = hitHero ?? healedAlly ?? ResolveLastLogTargetCombatant(monster.Id);
+            Vector3 startWorld = GridToWorldAtElevation(LocalToWorld(monster.Position));
+            Vector3 targetWorld = targetUnit != null
+                ? GridToWorldAtElevation(LocalToWorld(targetUnit.Position))
+                : startWorld;
+
+            bool isSpell = res.Message.IndexOf("casts ", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (isSpell && gridOverlays != null)
+            {
+                string spellVfx = ResolveSpellVfxKeyFromMessage(res.Message, res.HealingDone > 0, out bool isProjectile);
+                gridOverlays.PlayCombatVfx(spellVfx, startWorld, targetWorld, isProjectile);
+            }
+            else if (res.HealingDone > 0 && gridOverlays != null)
+            {
+                gridOverlays.PlayCombatVfx("heal_sparkle", startWorld, targetWorld, isProjectile: false);
             }
 
             if (hitHero != null)
@@ -2583,10 +2734,30 @@ namespace Realmz.Game
                     }
                 }
 
-                bool isRanged = monster.PrefersRanged && monster.Position.ChebyshevDistance(hitHero.Position) > 1;
+                bool isRanged = res.Message.IndexOf("fires at", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                (monster.PrefersRanged && monster.Position.ChebyshevDistance(hitHero.Position) > 1);
+                if (!isSpell && gridOverlays != null)
+                {
+                    gridOverlays.PlayCombatVfx(
+                        isRanged ? "arrow_bolt" : "slash_arc",
+                        startWorld,
+                        targetWorld,
+                        isProjectile: isRanged);
+                }
+
                 audioDirector?.PlayAttack(isRanged, isCrit);
                 cameraRig?.PlayImpactImpulse(isCrit ? 0.18f : 0.12f, 0.14f);
                 TriggerHitStop(isCrit ? 0.060f : 0.045f);
+            }
+            else if (!isSpell && res.AttackOutcomes.Count > 0 && targetUnit != null && gridOverlays != null)
+            {
+                bool isRanged = res.Message.IndexOf("fires at", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                (monster.PrefersRanged && monster.Position.ChebyshevDistance(targetUnit.Position) > 1);
+                gridOverlays.PlayCombatVfx(
+                    isRanged ? "arrow_bolt" : "slash_arc",
+                    startWorld,
+                    targetWorld,
+                    isProjectile: isRanged);
             }
         }
 
@@ -3266,6 +3437,13 @@ namespace Realmz.Game
                     {
                         SpellDefinition spell = Bundle.Spells.TryGetValue(_selectedSpellId, out SpellDefinition s) ? s : null;
                         audioDirector?.PlaySpell(spell?.EffectKind);
+                        if (gridOverlays != null)
+                        {
+                            string vfxKey = ResolveSpellVfxKey(spell, out bool isProjectile);
+                            Vector3 startWorld = GridToWorldAtElevation(LocalToWorld(actor.Position));
+                            Vector3 targetWorld = GridToWorldAtElevation(LocalToWorld(localCoord));
+                            gridOverlays.PlayCombatVfx(vfxKey, startWorld, targetWorld, isProjectile);
+                        }
                         if (_combatUnitViews.TryGetValue(actor.Id, out BywaterUnitView casterView) && casterView != null)
                         {
                             casterView.PlayAttackLunge(GridToWorldAtElevation(LocalToWorld(localCoord)), 0.28f, 0.07f);
@@ -3320,6 +3498,13 @@ namespace Realmz.Game
                     if (res.Success)
                     {
                         audioDirector?.PlaySpell("heal");
+                        if (gridOverlays != null)
+                        {
+                            CombatantState targetUnit = CombatSession.GetCombatant(targetId) ?? actor;
+                            Vector3 startWorld = GridToWorldAtElevation(LocalToWorld(actor.Position));
+                            Vector3 targetWorld = GridToWorldAtElevation(LocalToWorld(targetUnit.Position));
+                            gridOverlays.PlayCombatVfx("heal_sparkle", startWorld, targetWorld, isProjectile: false);
+                        }
                     }
                     FinishPlayerCombatAction(res, oldHps);
                     break;
@@ -3413,6 +3598,17 @@ namespace Realmz.Game
             if (_combatUnitViews.TryGetValue(attacker.Id, out BywaterUnitView attView) && attView != null)
             {
                 attView.PlayAttackLunge(GridToWorldAtElevation(LocalToWorld(defender.Position)), 0.28f, 0.07f);
+            }
+
+            if (gridOverlays != null)
+            {
+                Vector3 startWorld = GridToWorldAtElevation(LocalToWorld(attacker.Position));
+                Vector3 targetWorld = GridToWorldAtElevation(LocalToWorld(defender.Position));
+                gridOverlays.PlayCombatVfx(
+                    isRanged ? "arrow_bolt" : "slash_arc",
+                    startWorld,
+                    targetWorld,
+                    isProjectile: isRanged);
             }
 
             audioDirector?.PlayAttack(isRanged, isCrit);
@@ -3704,6 +3900,7 @@ namespace Realmz.Game
 
             UnsubscribeCombatEvents();
             ClearCombatUnitViews();
+            gridOverlays?.ClearCombatVfx();
             CombatSession = null;
             _activeEncounterZoneKey = string.Empty;
             _hoveredCombatUnitId = null;
@@ -4457,7 +4654,10 @@ namespace Realmz.Game
                     }
                     hudController?.ClearCombatHoverPreview();
                     RefreshCombatHudState();
-                    _aiCoroutine = StartCoroutine(RunAutoCombatHeroTurnRoutine());
+                    if (Application.isPlaying && gameObject.activeInHierarchy)
+                    {
+                        _aiCoroutine = StartCoroutine(RunAutoCombatHeroTurnRoutine());
+                    }
                 }
                 hudController?.ShowToast("Auto-Combat ON ([A] or [Esc] to stop).", 1.8f);
             }
@@ -4697,7 +4897,26 @@ namespace Realmz.Game
             }
         }
 
-        private GridCoord FindCleanArenaOrigin(TileMapData map, GridCoord partyPos, int width, int height)
+        private static bool IsArenaOverhangObstacle(BywaterTileKind kind)
+        {
+            return kind == BywaterTileKind.TownBuildingSolid ||
+                   kind == BywaterTileKind.TownBuildingDoor ||
+                   kind == BywaterTileKind.WallBlock ||
+                   kind == BywaterTileKind.DungeonWall;
+        }
+
+        public static bool IsSpawnTileNorthClear(TileMapData map, int worldX, int worldY)
+        {
+            if (map == null || !map.InBounds(worldX, worldY - 1))
+            {
+                return false;
+            }
+
+            BywaterTileKind northKind = BywaterTileClassifier.Classify(map, worldX, worldY - 1);
+            return !IsArenaOverhangObstacle(northKind);
+        }
+
+        public GridCoord FindCleanArenaOrigin(TileMapData map, GridCoord partyPos, int width, int height)
         {
             int maxOx = Math.Max(0, map.Width - width);
             int maxOy = Math.Max(0, map.Height - height);
@@ -4708,9 +4927,9 @@ namespace Realmz.Game
             int bestScore = int.MaxValue;
             GridCoord bestOrigin = new GridCoord(baseOx, baseOy);
 
-            for (int dy = -3; dy <= 3; dy++)
+            for (int dy = -4; dy <= 4; dy++)
             {
-                for (int dx = -3; dx <= 3; dx++)
+                for (int dx = -4; dx <= 4; dx++)
                 {
                     int ox = Mathf.Clamp(baseOx + dx, 0, maxOx);
                     int oy = Mathf.Clamp(baseOy + dy, 0, maxOy);
@@ -4735,30 +4954,72 @@ namespace Realmz.Game
                     }
 
                     int score = partyInsideSafeMargin ? 0 : 250;
-                    for (int ly = 2; ly <= height - 3; ly++)
+
+                    int northOutsideY = oy - 1;
+                    for (int lx = 0; lx < width; lx++)
                     {
-                        for (int lx = 2; lx <= width - 3; lx++)
+                        int wx = ox + lx;
+                        if (!map.InBounds(wx, northOutsideY))
+                        {
+                            score += 220;
+                        }
+                        else
+                        {
+                            BywaterTileKind northKind = BywaterTileClassifier.Classify(map, wx, northOutsideY);
+                            if (IsArenaOverhangObstacle(northKind))
+                            {
+                                score += 450;
+                            }
+                            else if (northKind == BywaterTileKind.TownBuildingDoor || northKind == BywaterTileKind.DungeonDoor)
+                            {
+                                score += 160;
+                            }
+                        }
+                    }
+
+                    for (int ly = 0; ly < height; ly++)
+                    {
+                        int wy = oy + ly;
+                        bool isNorthRow = ly <= 1;
+                        bool isSpawnBand = ly >= 2 && ly <= height - 3;
+
+                        for (int lx = 0; lx < width; lx++)
                         {
                             int wx = ox + lx;
-                            int wy = oy + ly;
                             if (!map.InBounds(wx, wy))
                             {
-                                score += 120;
+                                score += isNorthRow ? 300 : 120;
                                 continue;
                             }
 
                             BywaterTileKind kind = BywaterTileClassifier.Classify(map, wx, wy);
-                            if (kind == BywaterTileKind.TownBuildingSolid ||
-                                kind == BywaterTileKind.WallBlock ||
-                                kind == BywaterTileKind.DungeonWall)
+                            bool isSolidWall = IsArenaOverhangObstacle(kind);
+
+                            if (isNorthRow)
                             {
-                                score += 100;
+                                if (isSolidWall)
+                                {
+                                    score += 500;
+                                }
+                                else if (kind == BywaterTileKind.TownBuildingDoor ||
+                                         kind == BywaterTileKind.DungeonDoor ||
+                                         !map.IsPassable(wx, wy, hasBoat))
+                                {
+                                    score += 180;
+                                }
                             }
-                            else if (kind == BywaterTileKind.TownBuildingDoor ||
-                                     kind == BywaterTileKind.DungeonDoor ||
-                                     !map.IsPassable(wx, wy, hasBoat))
+                            else if (isSpawnBand && lx >= 2 && lx <= width - 3)
                             {
-                                score += 45;
+                                if (isSolidWall)
+                                {
+                                    score += 100;
+                                }
+                                else if (kind == BywaterTileKind.TownBuildingDoor ||
+                                         kind == BywaterTileKind.DungeonDoor ||
+                                         !map.IsPassable(wx, wy, hasBoat))
+                                {
+                                    score += 45;
+                                }
                             }
                         }
                     }
@@ -4931,6 +5192,12 @@ namespace Realmz.Game
                 if (res.Success)
                 {
                     audioDirector?.PlaySpell("heal");
+                    if (gridOverlays != null)
+                    {
+                        Vector3 startWorld = GridToWorldAtElevation(LocalToWorld(actor.Position));
+                        Vector3 targetWorld = GridToWorldAtElevation(LocalToWorld(ally.Position));
+                        gridOverlays.PlayCombatVfx("heal_sparkle", startWorld, targetWorld, isProjectile: false);
+                    }
                 }
                 FinishPlayerCombatAction(res, oldHps);
                 return;
@@ -4969,6 +5236,7 @@ namespace Realmz.Game
             }
 
             CombatantState hitEnemy = null;
+            CombatantState healedHero = null;
             bool anyHealed = false;
             for (int i = 0; i < CombatSession.Combatants.Count; i++)
             {
@@ -4992,7 +5260,28 @@ namespace Realmz.Game
                 else if (c.Side == CombatSide.Hero && c.Hp > before)
                 {
                     anyHealed = true;
+                    if (healedHero == null)
+                    {
+                        healedHero = c;
+                    }
                 }
+            }
+
+            CombatantState targetUnit = hitEnemy ?? healedHero ?? ResolveLastLogTargetCombatant(hero.Id);
+            Vector3 startWorld = GridToWorldAtElevation(LocalToWorld(hero.Position));
+            Vector3 targetWorld = targetUnit != null
+                ? GridToWorldAtElevation(LocalToWorld(targetUnit.Position))
+                : startWorld;
+
+            bool isSpell = res.Message.IndexOf("casts ", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (isSpell && gridOverlays != null)
+            {
+                string spellVfx = ResolveSpellVfxKeyFromMessage(res.Message, anyHealed || res.HealingDone > 0, out bool isProjectile);
+                gridOverlays.PlayCombatVfx(spellVfx, startWorld, targetWorld, isProjectile);
+            }
+            else if ((anyHealed || res.HealingDone > 0) && gridOverlays != null)
+            {
+                gridOverlays.PlayCombatVfx("heal_sparkle", startWorld, targetWorld, isProjectile: false);
             }
 
             if (hitEnemy != null)
@@ -5012,15 +5301,121 @@ namespace Realmz.Game
                     }
                 }
 
-                bool isRanged = hero.PrefersRanged && hero.Position.ChebyshevDistance(hitEnemy.Position) > 1;
+                bool isRanged = res.Message.IndexOf("fires at", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                (hero.PrefersRanged && hero.Position.ChebyshevDistance(hitEnemy.Position) > 1);
+                if (!isSpell && gridOverlays != null)
+                {
+                    gridOverlays.PlayCombatVfx(
+                        isRanged ? "arrow_bolt" : "slash_arc",
+                        startWorld,
+                        targetWorld,
+                        isProjectile: isRanged);
+                }
+
                 audioDirector?.PlayAttack(isRanged, isCrit);
                 cameraRig?.PlayImpactImpulse(isCrit ? 0.18f : 0.12f, 0.14f);
                 TriggerHitStop(isCrit ? 0.060f : 0.045f);
+            }
+            else if (!isSpell && res.AttackOutcomes.Count > 0 && targetUnit != null && gridOverlays != null)
+            {
+                bool isRanged = res.Message.IndexOf("fires at", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                (hero.PrefersRanged && hero.Position.ChebyshevDistance(targetUnit.Position) > 1);
+                gridOverlays.PlayCombatVfx(
+                    isRanged ? "arrow_bolt" : "slash_arc",
+                    startWorld,
+                    targetWorld,
+                    isProjectile: isRanged);
             }
             else if (anyHealed)
             {
                 audioDirector?.PlaySpell("heal");
             }
+        }
+
+        private CombatantState ResolveLastLogTargetCombatant(string actorId)
+        {
+            if (CombatSession == null || CombatSession.Log == null || CombatSession.Log.Count == 0)
+            {
+                return null;
+            }
+
+            for (int i = CombatSession.Log.Count - 1; i >= 0; i--)
+            {
+                CombatLogEntry entry = CombatSession.Log[i];
+                if (entry == null || !string.Equals(entry.ActorId, actorId, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (entry.TargetIds != null && entry.TargetIds.Count > 0)
+                {
+                    return CombatSession.GetCombatant(entry.TargetIds[0]);
+                }
+
+                break;
+            }
+
+            return null;
+        }
+
+        private static string ResolveSpellVfxKey(SpellDefinition spell, out bool isProjectile)
+        {
+            isProjectile = false;
+            if (spell == null)
+            {
+                return "fireball_impact";
+            }
+
+            string combined = string.Concat(
+                spell.Key ?? string.Empty, " ",
+                spell.Name ?? string.Empty, " ",
+                spell.DamageType ?? string.Empty, " ",
+                spell.EffectKind ?? string.Empty);
+
+            if (combined.IndexOf("heal", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                combined.IndexOf("cure", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                string.Equals(spell.EffectKind, "Buff", StringComparison.OrdinalIgnoreCase))
+            {
+                return "heal_sparkle";
+            }
+
+            if (combined.IndexOf("dart", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                combined.IndexOf("bolt", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                combined.IndexOf("missile", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                combined.IndexOf("arrow", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                isProjectile = true;
+                return "arrow_bolt";
+            }
+
+            return "fireball_impact";
+        }
+
+        private static string ResolveSpellVfxKeyFromMessage(string message, bool healed, out bool isProjectile)
+        {
+            isProjectile = false;
+            if (healed ||
+                (!string.IsNullOrEmpty(message) &&
+                 (message.IndexOf("heal", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                  message.IndexOf("cure", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                  message.IndexOf("bless", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                  message.IndexOf("armor", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                  message.IndexOf("blade", StringComparison.OrdinalIgnoreCase) >= 0)))
+            {
+                return "heal_sparkle";
+            }
+
+            if (!string.IsNullOrEmpty(message) &&
+                (message.IndexOf("dart", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 message.IndexOf("bolt", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 message.IndexOf("missile", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 message.IndexOf("arrow", StringComparison.OrdinalIgnoreCase) >= 0))
+            {
+                isProjectile = true;
+                return "arrow_bolt";
+            }
+
+            return "fireball_impact";
         }
 
         private bool CanOfferQuickResolveForEncounter(List<MonsterDefinition> monsters, out QuickResolveSummary summary)
@@ -5125,27 +5520,27 @@ namespace Realmz.Game
             List<CombatantState> combatants = new List<CombatantState>();
             GridCoord[] heroSlots =
             {
-                new GridCoord(3, 2), new GridCoord(2, 4), new GridCoord(3, 6),
-                new GridCoord(1, 3), new GridCoord(3, 4), new GridCoord(2, 7)
+                new GridCoord(2, 4), new GridCoord(1, 5), new GridCoord(3, 5),
+                new GridCoord(2, 6), new GridCoord(3, 4), new GridCoord(1, 3)
             };
             for (int i = 0; i < ExploreSession.Party.Members.Count; i++)
             {
                 PartyMemberState m = ExploreSession.Party.Members[i];
                 if (m.Hp <= 0) m.Hp = 1;
-                GridCoord spot = PickNearestFreeWalkable(connectedWalkable, occupied, heroSlots[i % heroSlots.Length]);
+                GridCoord spot = PickNearestFreeWalkable(connectedWalkable, occupied, heroSlots[i % heroSlots.Length], map, origin.X, origin.Y);
                 occupied.Add(spot);
                 combatants.Add(CombatantState.FromHero(m, spot, Bundle.Items));
             }
 
             GridCoord[] monsterSlots =
             {
-                new GridCoord(7, 2), new GridCoord(8, 4), new GridCoord(7, 6),
-                new GridCoord(9, 3), new GridCoord(8, 6), new GridCoord(9, 5)
+                new GridCoord(7, 4), new GridCoord(8, 5), new GridCoord(7, 6),
+                new GridCoord(9, 4), new GridCoord(8, 6), new GridCoord(9, 6)
             };
             for (int i = 0; i < monsters.Count; i++)
             {
                 MonsterDefinition def = monsters[i];
-                GridCoord spot = PickNearestFreeWalkable(connectedWalkable, occupied, monsterSlots[i % monsterSlots.Length]);
+                GridCoord spot = PickNearestFreeWalkable(connectedWalkable, occupied, monsterSlots[i % monsterSlots.Length], map, origin.X, origin.Y);
                 occupied.Add(spot);
                 combatants.Add(CombatantState.FromMonster(def, $"mon_{i}_{def.Id}", spot, _roller));
             }
@@ -5329,9 +5724,13 @@ namespace Realmz.Game
         private static GridCoord PickNearestFreeWalkable(
             List<GridCoord> candidates,
             HashSet<GridCoord> occupied,
-            GridCoord preferred)
+            GridCoord preferred,
+            TileMapData map = null,
+            int originX = 0,
+            int originY = 0)
         {
             GridCoord best = preferred;
+            int bestTier = int.MaxValue;
             int bestDist = int.MaxValue;
             for (int i = 0; i < candidates.Count; i++)
             {
@@ -5341,9 +5740,16 @@ namespace Realmz.Game
                     continue;
                 }
 
+                bool southOfNorthRows = c.Y >= 3;
+                bool northClear = map == null || IsSpawnTileNorthClear(map, originX + c.X, originY + c.Y);
+                int tier = (southOfNorthRows && northClear)
+                    ? 0
+                    : (northClear ? 1 : (southOfNorthRows ? 2 : 3));
+
                 int d = c.ManhattanDistance(preferred);
-                if (d < bestDist)
+                if (tier < bestTier || (tier == bestTier && d < bestDist))
                 {
+                    bestTier = tier;
                     bestDist = d;
                     best = c;
                 }

@@ -31,7 +31,35 @@ namespace Realmz.Cartography
         TreePineB = 10,
         TreeWillowA = 11,
         TorchBrazier = 12,
-        MarketCrates = 13
+        MarketCrates = 13,
+        Blacksmith = 14,
+        Apothecary = 15,
+        Temple = 16,
+        Guildhall = 17,
+        CottageB = 18,
+        CottageC = 19,
+        Watchtower = 20,
+        MarketStallA = 21,
+        MarketStallB = 22,
+        StoneWell = 23,
+        Signpost = 24,
+        WoodenWagon = 25,
+        BarrelsCrates = 26,
+        CampTent = 27,
+        StoneRuins = 28,
+        ShrineStatue = 29,
+        Campfire4f = 30,
+        DungeonChestClosed = 31,
+        DungeonChestOpen = 32,
+        DungeonDoorClosed = 33,
+        DungeonDoorOpen = 34,
+        DungeonPillar = 35,
+        DungeonStairsDown = 36,
+        DungeonStairsUp = 37,
+        DungeonWallSconce4f = 38,
+        DungeonSarcophagus = 39,
+        DungeonSpikeTrap = 40,
+        DungeonIronGrate = 41
     }
 
     public enum CartographyBiomeZone
@@ -208,6 +236,11 @@ namespace Realmz.Cartography
         public float GetElevation(int x, int y)
         {
             return GetTile(x, y).Elevation;
+        }
+
+        public CartographyBiomeZone GetBiomeZone(int x, int y)
+        {
+            return GetTile(x, y).BiomeZone;
         }
 
         public float GetInterpolatedElevation(float worldX, float worldZ)
@@ -523,103 +556,478 @@ namespace Realmz.Cartography
             return data;
         }
 
+        public static Vector2 GetDefaultPropSizeMeters(CartographyPropKind kind)
+        {
+            switch (kind)
+            {
+                case CartographyPropKind.BywaterInn: return new Vector2(5.0f, 4.0f);
+                case CartographyPropKind.StoneBridge: return new Vector2(4.0f, 3.0f);
+                case CartographyPropKind.StoneFenceH:
+                case CartographyPropKind.StoneFenceV: return new Vector2(1.15f, 1.25f);
+                case CartographyPropKind.Knight:
+                case CartographyPropKind.GiantFrog: return new Vector2(2.0f, 2.0f);
+                case CartographyPropKind.TreeOakA:
+                case CartographyPropKind.TreeOakB: return new Vector2(3.5f, 3.5f);
+                case CartographyPropKind.TreePineA:
+                case CartographyPropKind.TreePineB: return new Vector2(3.0f, 4.0f);
+                case CartographyPropKind.TreeWillowA: return new Vector2(4.0f, 4.0f);
+                case CartographyPropKind.TorchBrazier: return new Vector2(0.85f, 1.15f);
+                case CartographyPropKind.MarketCrates: return new Vector2(0.9f, 0.9f);
+                case CartographyPropKind.Blacksmith: return new Vector2(5.0f, 4.0f);
+                case CartographyPropKind.Apothecary: return new Vector2(4.5f, 4.0f);
+                case CartographyPropKind.Temple: return new Vector2(5.0f, 5.0f);
+                case CartographyPropKind.Guildhall: return new Vector2(6.0f, 5.0f);
+                case CartographyPropKind.CottageB:
+                case CartographyPropKind.CottageC: return new Vector2(4.0f, 4.0f);
+                case CartographyPropKind.Watchtower: return new Vector2(4.0f, 5.0f);
+                case CartographyPropKind.MarketStallA:
+                case CartographyPropKind.MarketStallB: return new Vector2(2.5f, 2.25f);
+                case CartographyPropKind.StoneWell: return new Vector2(2.0f, 2.25f);
+                case CartographyPropKind.Signpost: return new Vector2(1.5f, 2.0f);
+                case CartographyPropKind.WoodenWagon: return new Vector2(3.0f, 2.25f);
+                case CartographyPropKind.BarrelsCrates: return new Vector2(2.0f, 1.75f);
+                case CartographyPropKind.CampTent: return new Vector2(2.5f, 2.0f);
+                case CartographyPropKind.StoneRuins: return new Vector2(2.5f, 2.25f);
+                case CartographyPropKind.ShrineStatue: return new Vector2(2.0f, 2.75f);
+                case CartographyPropKind.Campfire4f: return new Vector2(2.0f, 2.0f);
+                case CartographyPropKind.DungeonChestClosed:
+                case CartographyPropKind.DungeonChestOpen: return new Vector2(1.15f, 1.15f);
+                case CartographyPropKind.DungeonDoorClosed:
+                case CartographyPropKind.DungeonDoorOpen: return new Vector2(1.45f, 1.80f);
+                case CartographyPropKind.DungeonPillar: return new Vector2(1.10f, 2.20f);
+                case CartographyPropKind.DungeonStairsDown:
+                case CartographyPropKind.DungeonStairsUp: return new Vector2(1.55f, 1.55f);
+                case CartographyPropKind.DungeonWallSconce4f: return new Vector2(2.0f, 2.0f);
+                case CartographyPropKind.DungeonSarcophagus: return new Vector2(1.75f, 1.55f);
+                case CartographyPropKind.DungeonSpikeTrap:
+                case CartographyPropKind.DungeonIronGrate: return new Vector2(1.15f, 1.15f);
+                default: return Vector2.one;
+            }
+        }
+
         private void PopulatePropsAndLanternsFromTileMap(TileMapData map, BywaterTileKind[,] kinds)
         {
             _props.Clear();
             _lanterns.Clear();
 
+            if (map.IsDungeon)
+            {
+                PopulateDungeonPropsAndLanterns(map, kinds);
+            }
+            else
+            {
+                PopulateOutdoorPropsAndLanterns(map, kinds);
+            }
+        }
+
+        private void PopulateDungeonPropsAndLanterns(TileMapData map, BywaterTileKind[,] kinds)
+        {
             int w = map.Width;
             int h = map.Height;
 
-            if (map.IsDungeon)
+            HashSet<long> occupied = new HashSet<long>();
+            long TileKey(int tx, int ty) => ((long)ty << 16) | (uint)tx;
+
+            // Reserve spawn and portals so primary combat/entry lanes always stay clear.
+            occupied.Add(TileKey(map.StartSpawn.X, map.StartSpawn.Y));
+            for (int i = 0; i < map.Portals.Count; i++)
             {
-                List<Vector2Int> placedSconces = new List<Vector2Int>(64);
-                for (int y = 0; y < h; y++)
-                {
-                    for (int x = 0; x < w; x++)
-                    {
-                        if (kinds[x, y] != BywaterTileKind.DungeonWall && kinds[x, y] != BywaterTileKind.WallBlock)
-                        {
-                            continue;
-                        }
-
-                        // Only mount sconces on North walls facing South open floor so props never occlude heroes from camera.
-                        bool southIsOpenFloor = (y + 1 < h) &&
-                            kinds[x, y + 1] != BywaterTileKind.DungeonWall &&
-                            kinds[x, y + 1] != BywaterTileKind.WallBlock &&
-                            !_tiles[x, y + 1].IsWater;
-                        if (!southIsOpenFloor)
-                        {
-                            continue;
-                        }
-
-                        bool nearPortalOrSpawnNorth = false;
-                        if (map.StartSpawn.X == x && map.StartSpawn.Y == y + 1)
-                        {
-                            nearPortalOrSpawnNorth = true;
-                        }
-                        else
-                        {
-                            for (int pi = 0; pi < map.Portals.Count; pi++)
-                            {
-                                MapPortal p = map.Portals[pi];
-                                if ((p.X == x || p.X == x - 2 || p.X == x + 2) && p.Y == y + 1)
-                                {
-                                    nearPortalOrSpawnNorth = true;
-                                    break;
-                                }
-                            }
-                        }
-
-                        int hash = DeterministicHash(x, y, 617);
-                        if (!nearPortalOrSpawnNorth && (hash % 13) != 0)
-                        {
-                            continue;
-                        }
-
-                        bool tooClose = false;
-                        for (int s = 0; s < placedSconces.Count; s++)
-                        {
-                            int dx = placedSconces[s].x - x;
-                            int dy = placedSconces[s].y - y;
-                            if (dx * dx + dy * dy < 20)
-                            {
-                                tooClose = true;
-                                break;
-                            }
-                        }
-                        if (tooClose)
-                        {
-                            continue;
-                        }
-
-                        placedSconces.Add(new Vector2Int(x, y));
-                        Vector3 pos = GridToWorld(x, y + 1, GetElevation(x, y + 1));
-                        AddProp(CartographyPropKind.TorchBrazier, pos.x, pos.y + 0.02f, pos.z + 0.34f, 0.54f, 0.78f);
-                        _lanterns.Add(new CartographyLanternSource
-                        {
-                            WorldXZ = new Vector2(pos.x, pos.z + 0.15f),
-                            Radius = 3.8f,
-                            Intensity = 0.72f
-                        });
-                    }
-                }
-
-                // Ensure start spawn & portals always have warm illumination
-                AddUniqueLantern(GridToWorld(map.StartSpawn, 0f), 3.6f, 0.72f);
-                for (int i = 0; i < map.Portals.Count; i++)
-                {
-                    MapPortal p = map.Portals[i];
-                    AddUniqueLantern(GridToWorld(p.X, p.Y, 0f), 3.6f, 0.75f);
-                }
-                return;
+                MapPortal p = map.Portals[i];
+                occupied.Add(TileKey(p.X, p.Y));
+                Vector3 pPos = GridToWorld(p.X, p.Y, GetElevation(p.X, p.Y));
+                Vector2 stairsUpSize = GetDefaultPropSizeMeters(CartographyPropKind.DungeonStairsUp);
+                AddProp(CartographyPropKind.DungeonStairsUp, pPos.x - 0.15f, pPos.y + 0.01f, pPos.z + 0.25f, stairsUpSize.x, stairsUpSize.y);
+                AddUniqueLantern(pPos, 6.2f, 0.95f);
             }
 
-            // Outdoor props & lanterns (uncapped)
+            // Stairs down & dungeon doors from tile classification
+            bool placedStairsDown = false;
             for (int y = 0; y < h; y++)
             {
                 for (int x = 0; x < w; x++)
                 {
+                    BywaterTileKind k = kinds[x, y];
+                    if (k == BywaterTileKind.DungeonStairs)
+                    {
+                        if (map.GetPortalAt(x, y) == null)
+                        {
+                            occupied.Add(TileKey(x, y));
+                            Vector3 pos = GridToWorld(x, y, GetElevation(x, y));
+                            Vector2 sz = GetDefaultPropSizeMeters(CartographyPropKind.DungeonStairsDown);
+                            AddProp(CartographyPropKind.DungeonStairsDown, pos.x, pos.y + 0.01f, pos.z, sz.x, sz.y);
+                            AddUniqueLantern(pos, 5.5f, 0.85f);
+                            placedStairsDown = true;
+                        }
+                    }
+                    else if (k == BywaterTileKind.DungeonDoor)
+                    {
+                        occupied.Add(TileKey(x, y));
+                        Vector3 pos = GridToWorld(x, y, GetElevation(x, y));
+                        bool nearStart = Mathf.Abs(x - map.StartSpawn.X) <= 6 && Mathf.Abs(y - map.StartSpawn.Y) <= 6;
+                        bool isOpen = nearStart || (DeterministicHash(x, y, 313) % 3) == 0;
+                        CartographyPropKind doorKind = isOpen
+                            ? CartographyPropKind.DungeonDoorOpen
+                            : CartographyPropKind.DungeonDoorClosed;
+                        Vector2 sz = GetDefaultPropSizeMeters(doorKind);
+                        AddProp(doorKind, pos.x, pos.y + 0.01f, pos.z, sz.x, sz.y);
+                    }
+                }
+            }
+
+            // Wall sconces on North walls facing South open floor
+            List<Vector2Int> placedSconces = new List<Vector2Int>(64);
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    if (kinds[x, y] != BywaterTileKind.DungeonWall && kinds[x, y] != BywaterTileKind.WallBlock)
+                    {
+                        continue;
+                    }
+
+                    bool southIsOpenFloor = (y + 1 < h) &&
+                        kinds[x, y + 1] != BywaterTileKind.DungeonWall &&
+                        kinds[x, y + 1] != BywaterTileKind.WallBlock &&
+                        !_tiles[x, y + 1].IsWater;
+                    if (!southIsOpenFloor)
+                    {
+                        continue;
+                    }
+
+                    bool nearPortalOrSpawnNorth = (Mathf.Abs(map.StartSpawn.X - x) <= 4 && map.StartSpawn.Y == y + 1);
+                    if (!nearPortalOrSpawnNorth)
+                    {
+                        for (int pi = 0; pi < map.Portals.Count; pi++)
+                        {
+                            MapPortal p = map.Portals[pi];
+                            if ((p.X == x || p.X == x - 2 || p.X == x + 2) && p.Y == y + 1)
+                            {
+                                nearPortalOrSpawnNorth = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    int hash = DeterministicHash(x, y, 617);
+                    if (!nearPortalOrSpawnNorth && (hash % 7) != 0)
+                    {
+                        continue;
+                    }
+
+                    if (IsTooCloseToList(placedSconces, x, y, 9))
+                    {
+                        continue;
+                    }
+
+                    placedSconces.Add(new Vector2Int(x, y));
+                    Vector3 pos = GridToWorld(x, y + 1, GetElevation(x, y + 1));
+                    Vector2 sconceSize = GetDefaultPropSizeMeters(CartographyPropKind.DungeonWallSconce4f);
+                    AddProp(CartographyPropKind.DungeonWallSconce4f, pos.x, pos.y + 0.02f, pos.z + 0.34f, sconceSize.x, sconceSize.y);
+                    _lanterns.Add(new CartographyLanternSource
+                    {
+                        WorldXZ = new Vector2(pos.x, pos.z + 0.15f),
+                        Radius = 6.2f,
+                        Intensity = 0.92f
+                    });
+                }
+            }
+
+            // Pillars in wide open halls, chests & sarcophagi in room corners, traps & grates on corridors
+            List<Vector2Int> placedPillars = new List<Vector2Int>(24);
+            List<Vector2Int> placedChests = new List<Vector2Int>(24);
+            List<Vector2Int> placedFloorHazards = new List<Vector2Int>(24);
+            Vector2Int deepestRoomTile = new Vector2Int(-1, -1);
+            int deepestDistSq = -1;
+
+            for (int y = 1; y < h - 1; y++)
+            {
+                for (int x = 1; x < w - 1; x++)
+                {
+                    if (kinds[x, y] != BywaterTileKind.DungeonFloor || _tiles[x, y].IsWater)
+                    {
+                        continue;
+                    }
+
+                    int distFromSpawnSq = (x - map.StartSpawn.X) * (x - map.StartSpawn.X) +
+                                          (y - map.StartSpawn.Y) * (y - map.StartSpawn.Y);
+                    if (distFromSpawnSq > deepestDistSq)
+                    {
+                        deepestDistSq = distFromSpawnSq;
+                        deepestRoomTile = new Vector2Int(x, y);
+                    }
+
+                    if (occupied.Contains(TileKey(x, y)) || IsNearSpawnOrPortal(map, x, y, 2))
+                    {
+                        continue;
+                    }
+
+                    int openCardinal = CountOpenDungeonCardinal(kinds, x, y, w, h);
+                    int openAll8 = CountOpenDungeonNeighbors8(kinds, x, y, w, h);
+                    int hash = DeterministicHash(x, y, 823);
+
+                    // Pillars only in wide halls where all 8 surrounding tiles are open floor (never bottlenecks)
+                    if (openAll8 == 8 && (hash % 17) == 0 && !IsTooCloseToList(placedPillars, x, y, 16))
+                    {
+                        placedPillars.Add(new Vector2Int(x, y));
+                        occupied.Add(TileKey(x, y));
+                        Vector3 pos = GridToWorld(x, y, GetElevation(x, y));
+                        Vector2 sz = GetDefaultPropSizeMeters(CartographyPropKind.DungeonPillar);
+                        AddProp(CartographyPropKind.DungeonPillar, pos.x, pos.y + 0.01f, pos.z, sz.x, sz.y);
+                        continue;
+                    }
+
+                    // Chests & sarcophagi only in multi-tile room corners/alcoves so corridors stay traversable
+                    bool isCornerSafe = openAll8 >= 4 && openCardinal >= 2 && !IsCorridorBottleneck(kinds, x, y, w, h);
+                    bool wallAdjacent = openAll8 < 8;
+                    if (isCornerSafe && wallAdjacent && (hash % 19) == 0 && !IsTooCloseToList(placedChests, x, y, 25))
+                    {
+                        placedChests.Add(new Vector2Int(x, y));
+                        occupied.Add(TileKey(x, y));
+                        Vector3 pos = GridToWorld(x, y, GetElevation(x, y));
+                        bool isCryptSarcophagus = (y < 30 && (hash & 1) == 1);
+                        CartographyPropKind propKind = isCryptSarcophagus
+                            ? CartographyPropKind.DungeonSarcophagus
+                            : CartographyPropKind.DungeonChestClosed;
+                        Vector2 sz = GetDefaultPropSizeMeters(propKind);
+                        AddProp(propKind, pos.x, pos.y + 0.01f, pos.z, sz.x, sz.y);
+                        continue;
+                    }
+
+                    // Floor grates & spike traps on open room/corridor tiles
+                    if (openCardinal >= 2 && (hash % 23) == 0 && !IsTooCloseToList(placedFloorHazards, x, y, 20))
+                    {
+                        placedFloorHazards.Add(new Vector2Int(x, y));
+                        Vector3 pos = GridToWorld(x, y, GetElevation(x, y));
+                        CartographyPropKind hazardKind = (hash & 1) == 0
+                            ? CartographyPropKind.DungeonIronGrate
+                            : CartographyPropKind.DungeonSpikeTrap;
+                        Vector2 sz = GetDefaultPropSizeMeters(hazardKind);
+                        AddProp(hazardKind, pos.x, pos.y + 0.01f, pos.z, sz.x, sz.y);
+                    }
+                }
+            }
+
+            if (!placedStairsDown && deepestRoomTile.x >= 0 && !occupied.Contains(TileKey(deepestRoomTile.x, deepestRoomTile.y)))
+            {
+                Vector3 pos = GridToWorld(deepestRoomTile.x, deepestRoomTile.y, GetElevation(deepestRoomTile.x, deepestRoomTile.y));
+                Vector2 sz = GetDefaultPropSizeMeters(CartographyPropKind.DungeonStairsDown);
+                AddProp(CartographyPropKind.DungeonStairsDown, pos.x, pos.y + 0.01f, pos.z, sz.x, sz.y);
+                AddUniqueLantern(pos, 3.2f, 0.68f);
+            }
+
+            AddUniqueLantern(GridToWorld(map.StartSpawn, 0f), 3.6f, 0.72f);
+        }
+
+        private void PopulateOutdoorPropsAndLanterns(TileMapData map, BywaterTileKind[,] kinds)
+        {
+            int w = map.Width;
+            int h = map.Height;
+
+            // 1. Cluster connected town building tiles via BFS flood fill so each building footprint emits ONE Pack 3 building.
+            bool[,] isBuildingTile = new bool[w, h];
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    if ((x == 10 && y >= 9 && y <= 13) ||
+                        (x == 7 && y == 11) || (x == 9 && y == 13) || (x == 9 && y == 17) ||
+                        (map.StartSpawn.X == x && map.StartSpawn.Y == y) ||
+                        map.GetPortalAt(x, y) != null)
+                    {
+                        continue;
+                    }
+
+                    BywaterTileKind k = kinds[x, y];
+                    if (k == BywaterTileKind.TownBuildingSolid || k == BywaterTileKind.TownBuildingDoor)
+                    {
+                        isBuildingTile[x, y] = true;
+                        continue;
+                    }
+
+                    if (x >= 2 && x <= 32 && y >= 2 && y <= 32 && k == BywaterTileKind.WallBlock)
+                    {
+                        if (BywaterTileClassifier.ClassifyOutdoorProp(map, x, y, out _) == BywaterOutdoorPropKind.CottageFacade)
+                        {
+                            isBuildingTile[x, y] = true;
+                        }
+                    }
+                }
+            }
+
+            bool[,] visited = new bool[w, h];
+            List<List<Vector2Int>> buildingClusters = new List<List<Vector2Int>>(32);
+            Queue<Vector2Int> bfs = new Queue<Vector2Int>(32);
+
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    if (!isBuildingTile[x, y] || visited[x, y])
+                    {
+                        continue;
+                    }
+
+                    List<Vector2Int> cluster = new List<Vector2Int>(8);
+                    visited[x, y] = true;
+                    bfs.Enqueue(new Vector2Int(x, y));
+
+                    while (bfs.Count > 0)
+                    {
+                        Vector2Int cur = bfs.Dequeue();
+                        cluster.Add(cur);
+
+                        for (int dir = 0; dir < 4; dir++)
+                        {
+                            int nx = cur.x + (dir == 0 ? -1 : (dir == 1 ? 1 : 0));
+                            int ny = cur.y + (dir == 2 ? -1 : (dir == 3 ? 1 : 0));
+                            if (nx >= 0 && nx < w && ny >= 0 && ny < h && !visited[nx, ny] && isBuildingTile[nx, ny])
+                            {
+                                visited[nx, ny] = true;
+                                bfs.Enqueue(new Vector2Int(nx, ny));
+                            }
+                        }
+                    }
+
+                    buildingClusters.Add(cluster);
+                }
+            }
+
+            // Determine largest footprint for Guildhall (excluding Tavern/Armory/Temple direct footprints if possible)
+            int residentialCounter = 0;
+            bool placedGuildhall = false;
+            bool placedApothecary = false;
+            bool placedInn = false;
+            bool placedBlacksmith = false;
+            bool placedTemple = false;
+
+            // Sort clusters descending by size so Guildhall claims the largest main hall first
+            buildingClusters.Sort((a, b) => b.Count.CompareTo(a.Count));
+
+            List<Vector2Int> placedOutdoorProps = new List<Vector2Int>(64);
+
+            for (int cIdx = 0; cIdx < buildingClusters.Count; cIdx++)
+            {
+                List<Vector2Int> cluster = buildingClusters[cIdx];
+                bool containsSolidBuilding = false;
+                float sumX = 0f;
+                float sumY = 0f;
+                for (int i = 0; i < cluster.Count; i++)
+                {
+                    Vector2Int pt = cluster[i];
+                    sumX += pt.x;
+                    sumY += pt.y;
+                    if (kinds[pt.x, pt.y] == BywaterTileKind.TownBuildingSolid)
+                    {
+                        containsSolidBuilding = true;
+                    }
+                }
+
+                // Skip isolated 1-tile wall fragments that aren't true building footprints
+                if (cluster.Count < 2 && !containsSolidBuilding)
+                {
+                    continue;
+                }
+
+                float cx = sumX / cluster.Count;
+                float cy = sumY / cluster.Count;
+                int tx = Mathf.Clamp(Mathf.RoundToInt(cx), 0, w - 1);
+                int ty = Mathf.Clamp(Mathf.RoundToInt(cy), 0, h - 1);
+
+                // If centroid landed on a protected road/doorway tile, pick the first non-protected cluster tile
+                if (IsProtectedRoadOrDoorway(map, kinds, tx, ty))
+                {
+                    for (int i = 0; i < cluster.Count; i++)
+                    {
+                        if (!IsProtectedRoadOrDoorway(map, kinds, cluster[i].x, cluster[i].y))
+                        {
+                            tx = cluster[i].x;
+                            ty = cluster[i].y;
+                            cx = tx;
+                            cy = ty;
+                            break;
+                        }
+                    }
+                }
+
+                // Single outer marker tiles (like (72,13) or (24,89)) become shrine/watchtower markers rather than full inns
+                CartographyPropKind buildingKind;
+                if (cluster.Count == 1 && (tx > 32 || ty > 32))
+                {
+                    buildingKind = CartographyPropKind.ShrineStatue;
+                }
+                else
+                {
+                    buildingKind = ClassifyBuildingClusterKind(
+                        map,
+                        cluster,
+                        cx,
+                        cy,
+                        ref placedInn,
+                        ref placedBlacksmith,
+                        ref placedApothecary,
+                        ref placedTemple,
+                        ref placedGuildhall,
+                        ref residentialCounter);
+                }
+
+                float elev = GetElevation(tx, ty);
+                Vector3 pos = new Vector3(cx + 0.5f, elev, -(cy + 0.5f));
+                Vector2 sz = GetDefaultPropSizeMeters(buildingKind);
+                _props.Add(new CartographyPropPlacement
+                {
+                    Kind = buildingKind,
+                    WorldPosition = pos,
+                    SizeMeters = sz,
+                    CastsCanopyShadow = true,
+                    CanopyRadius = Mathf.Max(1.35f, sz.x * 0.45f),
+                    CanopyStrength = 0.42f
+                });
+                placedOutdoorProps.Add(new Vector2Int(tx, ty));
+                _lanterns.Add(new CartographyLanternSource
+                {
+                    WorldXZ = new Vector2(pos.x, pos.z),
+                    Radius = 2.6f,
+                    Intensity = 0.40f
+                });
+            }
+
+            // Ensure Apothecary POI has an Apothecary building if its map location had no solid tile cluster
+            for (int i = 0; i < map.PointsOfInterest.Count && !placedApothecary; i++)
+            {
+                MapPointOfInterest poi = map.PointsOfInterest[i];
+                if (!IsApothecaryPoi(poi))
+                {
+                    continue;
+                }
+
+                if (TryFindCleanOutdoorSpotNear(map, kinds, poi.X, poi.Y, 3, placedOutdoorProps, out int ax, out int ay))
+                {
+                    Vector3 pos = GridToWorld(ax, ay, GetElevation(ax, ay));
+                    Vector2 sz = GetDefaultPropSizeMeters(CartographyPropKind.Apothecary);
+                    _props.Add(new CartographyPropPlacement
+                    {
+                        Kind = CartographyPropKind.Apothecary,
+                        WorldPosition = pos,
+                        SizeMeters = sz,
+                        CastsCanopyShadow = true,
+                        CanopyRadius = 2.0f,
+                        CanopyStrength = 0.42f
+                    });
+                    placedOutdoorProps.Add(new Vector2Int(ax, ay));
+                    placedApothecary = true;
+                }
+            }
+
+            // 2. Natural flora, fences, ruins, and road/portal lanterns
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    if (isBuildingTile[x, y] || IsProtectedRoadOrDoorway(map, kinds, x, y))
+                    {
+                        continue;
+                    }
+
                     BywaterTileKind kind = kinds[x, y];
                     float elev = _tiles[x, y].Elevation;
                     Vector3 pos = GridToWorld(x, y, elev);
@@ -628,23 +1036,15 @@ namespace Realmz.Cartography
                     switch (prop)
                     {
                         case BywaterOutdoorPropKind.CottageFacade:
-                            _props.Add(new CartographyPropPlacement
+                            // Wilderness 181..185 outside the town cluster become stone ruins or canopy trees
+                            if (x > 32 || y > 32)
                             {
-                                Kind = CartographyPropKind.BywaterInn,
-                                WorldPosition = pos,
-                                SizeMeters = new Vector2(1.45f, 1.45f),
-                                CastsCanopyShadow = true,
-                                CanopyRadius = 1.35f,
-                                CanopyStrength = 0.42f
-                            });
-                            if ((vHash % 4) == 0)
-                            {
-                                _lanterns.Add(new CartographyLanternSource
+                                if ((vHash % 5) == 0 && !IsTooCloseToList(placedOutdoorProps, x, y, 25))
                                 {
-                                    WorldXZ = new Vector2(pos.x, pos.z),
-                                    Radius = 2.4f,
-                                    Intensity = 0.36f
-                                });
+                                    Vector2 ruinSz = GetDefaultPropSizeMeters(CartographyPropKind.StoneRuins);
+                                    AddProp(CartographyPropKind.StoneRuins, pos.x, pos.y, pos.z, ruinSz.x, ruinSz.y);
+                                    placedOutdoorProps.Add(new Vector2Int(x, y));
+                                }
                             }
                             break;
 
@@ -670,7 +1070,12 @@ namespace Realmz.Cartography
                             break;
 
                         case BywaterOutdoorPropKind.MarketCrates:
-                            AddProp(CartographyPropKind.MarketCrates, pos.x, pos.y, pos.z, 0.9f, 0.9f);
+                            if (!IsNearPortalOrDoorway(map, kinds, x, y, 1) && !IsTooCloseToList(placedOutdoorProps, x, y, 9))
+                            {
+                                Vector2 bcSz = GetDefaultPropSizeMeters(CartographyPropKind.BarrelsCrates);
+                                AddProp(CartographyPropKind.BarrelsCrates, pos.x, pos.y, pos.z, bcSz.x, bcSz.y);
+                                placedOutdoorProps.Add(new Vector2Int(x, y));
+                            }
                             break;
                     }
 
@@ -685,7 +1090,8 @@ namespace Realmz.Cartography
                     }
                     else if ((kind == BywaterTileKind.Cobblestone || kind == BywaterTileKind.DirtPath) &&
                              CountRoadNeighbors(kinds, x, y, w, h) >= 3 &&
-                             (DeterministicHash(x, y, 503) % 7) == 0)
+                             (DeterministicHash(x, y, 503) % 7) == 0 &&
+                             !IsNearPortalOrDoorway(map, kinds, x, y, 1))
                     {
                         AddProp(CartographyPropKind.TorchBrazier, pos.x + 0.35f, pos.y, pos.z + 0.35f, 0.85f, 1.15f);
                         _lanterns.Add(new CartographyLanternSource
@@ -693,6 +1099,115 @@ namespace Realmz.Cartography
                             WorldXZ = new Vector2(pos.x + 0.35f, pos.z + 0.35f),
                             Radius = 2.5f,
                             Intensity = 0.42f
+                        });
+                    }
+                }
+            }
+
+            // 3. Town plaza & outskirts dressing (deterministic, strictly non-portal and >1 tile from portals/doorways)
+            (int px, int py, CartographyPropKind pKind)[] fixedPlazaAnchors =
+            {
+                (13, 10, CartographyPropKind.StoneWell),
+                (12, 8, CartographyPropKind.MarketStallA),
+                (15, 10, CartographyPropKind.MarketStallB),
+                (12, 12, CartographyPropKind.Signpost),
+                (15, 7, CartographyPropKind.WoodenWagon),
+                (14, 12, CartographyPropKind.BarrelsCrates)
+            };
+            for (int i = 0; i < fixedPlazaAnchors.Length; i++)
+            {
+                int fx = fixedPlazaAnchors[i].px;
+                int fy = fixedPlazaAnchors[i].py;
+                if (IsCleanPlazaOrEdgeTile(map, kinds, fx, fy) && !IsTooCloseToList(placedOutdoorProps, fx, fy, 4))
+                {
+                    Vector3 fPos = GridToWorld(fx, fy, GetElevation(fx, fy));
+                    Vector2 fSz = GetDefaultPropSizeMeters(fixedPlazaAnchors[i].pKind);
+                    AddProp(fixedPlazaAnchors[i].pKind, fPos.x, fPos.y, fPos.z, fSz.x, fSz.y);
+                    placedOutdoorProps.Add(new Vector2Int(fx, fy));
+                }
+            }
+
+            CartographyPropKind[] townPlazaProps =
+            {
+                CartographyPropKind.StoneWell,
+                CartographyPropKind.MarketStallA,
+                CartographyPropKind.MarketStallB,
+                CartographyPropKind.Signpost,
+                CartographyPropKind.BarrelsCrates,
+                CartographyPropKind.WoodenWagon,
+                CartographyPropKind.ShrineStatue
+            };
+
+            int townPlazaIdx = 0;
+            for (int y = 3; y <= 22 && y < h; y++)
+            {
+                for (int x = 3; x <= 26 && x < w; x++)
+                {
+                    if (!IsCleanPlazaOrEdgeTile(map, kinds, x, y) || IsTooCloseToList(placedOutdoorProps, x, y, 12))
+                    {
+                        continue;
+                    }
+
+                    int hash = DeterministicHash(x, y, 947);
+                    bool nearTownRoad = CountRoadNeighbors(kinds, x, y, w, h) >= 1;
+                    if (!nearTownRoad || (hash % 13) != 0)
+                    {
+                        continue;
+                    }
+
+                    CartographyPropKind dressKind = townPlazaProps[townPlazaIdx % townPlazaProps.Length];
+                    townPlazaIdx++;
+                    Vector3 pos = GridToWorld(x, y, GetElevation(x, y));
+                    Vector2 sz = GetDefaultPropSizeMeters(dressKind);
+                    AddProp(dressKind, pos.x, pos.y, pos.z, sz.x, sz.y);
+                    placedOutdoorProps.Add(new Vector2Int(x, y));
+                }
+            }
+
+            // Outskirts camps, wagons, signposts along roads
+            for (int y = 4; y < h - 4; y += 3)
+            {
+                for (int x = 4; x < w - 4; x += 3)
+                {
+                    if (x <= 28 && y <= 24)
+                    {
+                        continue;
+                    }
+
+                    if (!IsCleanPlazaOrEdgeTile(map, kinds, x, y) || IsTooCloseToList(placedOutdoorProps, x, y, 64))
+                    {
+                        continue;
+                    }
+
+                    int hash = DeterministicHash(x, y, 1291);
+                    if ((hash % 19) != 0)
+                    {
+                        continue;
+                    }
+
+                    bool roadEdge = CountRoadNeighbors(kinds, x, y, w, h) >= 1;
+                    CartographyPropKind outskirtKind;
+                    if (roadEdge)
+                    {
+                        outskirtKind = (hash & 1) == 0 ? CartographyPropKind.Signpost : CartographyPropKind.WoodenWagon;
+                    }
+                    else
+                    {
+                        outskirtKind = (hash % 3) == 0 ? CartographyPropKind.CampTent : CartographyPropKind.Campfire4f;
+                    }
+
+                    Vector3 pos = GridToWorld(x, y, GetElevation(x, y));
+                    Vector2 sz = GetDefaultPropSizeMeters(outskirtKind);
+                    AddProp(outskirtKind, pos.x, pos.y, pos.z, sz.x, sz.y);
+                    placedOutdoorProps.Add(new Vector2Int(x, y));
+
+                    if (outskirtKind == CartographyPropKind.Campfire4f)
+                    {
+                        _lanterns.Add(new CartographyLanternSource
+                        {
+                            WorldXZ = new Vector2(pos.x, pos.z),
+                            Radius = 3.0f,
+                            Intensity = 0.52f
                         });
                     }
                 }
@@ -714,6 +1229,271 @@ namespace Realmz.Cartography
                 AddProp(CartographyPropKind.TorchBrazier, pos.x - 0.4f, pos.y, pos.z, 0.85f, 1.15f);
                 AddUniqueLantern(pos, 3.0f, 0.55f);
             }
+        }
+
+        private static CartographyPropKind ClassifyBuildingClusterKind(
+            TileMapData map,
+            List<Vector2Int> cluster,
+            float cx,
+            float cy,
+            ref bool placedInn,
+            ref bool placedBlacksmith,
+            ref bool placedApothecary,
+            ref bool placedTemple,
+            ref bool placedGuildhall,
+            ref int residentialCounter)
+        {
+            float bestDistSq = float.MaxValue;
+            MapPointOfInterest nearestPoi = null;
+            for (int i = 0; i < map.PointsOfInterest.Count; i++)
+            {
+                MapPointOfInterest poi = map.PointsOfInterest[i];
+                for (int c = 0; c < cluster.Count; c++)
+                {
+                    float dx = cluster[c].x - poi.X;
+                    float dy = cluster[c].y - poi.Y;
+                    float dSq = dx * dx + dy * dy;
+                    if (dSq < bestDistSq)
+                    {
+                        bestDistSq = dSq;
+                        nearestPoi = poi;
+                    }
+                }
+            }
+
+            if (nearestPoi != null && bestDistSq <= 36.0f)
+            {
+                string kindLower = (nearestPoi.Kind ?? string.Empty).ToLowerInvariant();
+                string labelLower = (nearestPoi.Label ?? string.Empty).ToLowerInvariant();
+
+                if (!placedInn && (kindLower == "tavern" || labelLower.Contains("tavern") || labelLower.Contains("inn")))
+                {
+                    placedInn = true;
+                    return CartographyPropKind.BywaterInn;
+                }
+                if (!placedBlacksmith && (labelLower.Contains("armory") || labelLower.Contains("weapon") || labelLower.Contains("blacksmith")))
+                {
+                    placedBlacksmith = true;
+                    return CartographyPropKind.Blacksmith;
+                }
+                if (!placedApothecary && IsApothecaryPoi(nearestPoi))
+                {
+                    placedApothecary = true;
+                    return CartographyPropKind.Apothecary;
+                }
+                if (!placedTemple && (kindLower == "temple" || labelLower.Contains("temple") || labelLower.Contains("shrine") || labelLower.Contains("magistrate")))
+                {
+                    placedTemple = true;
+                    return CartographyPropKind.Temple;
+                }
+                if (kindLower == "gate" || labelLower.Contains("gate"))
+                {
+                    return CartographyPropKind.Watchtower;
+                }
+            }
+
+            if (!placedBlacksmith && cx <= 8.5f && cy <= 7.5f)
+            {
+                placedBlacksmith = true;
+                return CartographyPropKind.Blacksmith;
+            }
+            if (!placedApothecary && cx >= 8.5f && cx <= 12.5f && cy <= 7.5f)
+            {
+                placedApothecary = true;
+                return CartographyPropKind.Apothecary;
+            }
+            if (!placedGuildhall && cluster.Count >= 4)
+            {
+                placedGuildhall = true;
+                return CartographyPropKind.Guildhall;
+            }
+
+            // Northern fortification / outer fortification check
+            if (cy <= 3.5f && cx <= 20f)
+            {
+                return CartographyPropKind.Watchtower;
+            }
+
+            residentialCounter++;
+            return (residentialCounter & 1) == 1
+                ? CartographyPropKind.CottageB
+                : CartographyPropKind.CottageC;
+        }
+
+        private static bool IsApothecaryPoi(MapPointOfInterest poi)
+        {
+            if (poi == null) return false;
+            string labelLower = (poi.Label ?? string.Empty).ToLowerInvariant();
+            return labelLower.Contains("apothecary") || labelLower.Contains("alchem") || labelLower.Contains("magic");
+        }
+
+        private static bool IsProtectedRoadOrDoorway(TileMapData map, BywaterTileKind[,] kinds, int x, int y)
+        {
+            if (x == 10 && y >= 9 && y <= 13) return true;
+            if ((x == 7 && y == 11) || (x == 9 && y == 13) || (x == 9 && y == 17)) return true;
+            if (kinds[x, y] == BywaterTileKind.TownBuildingDoor) return true;
+            if (map.StartSpawn.X == x && map.StartSpawn.Y == y) return true;
+            if (map.GetPortalAt(x, y) != null) return true;
+            return false;
+        }
+
+        private static bool IsNearPortalOrDoorway(TileMapData map, BywaterTileKind[,] kinds, int x, int y, int radius)
+        {
+            if (Mathf.Max(Mathf.Abs(map.StartSpawn.X - x), Mathf.Abs(map.StartSpawn.Y - y)) <= radius)
+            {
+                return true;
+            }
+            if (IsNearPortal(map, x, y, radius))
+            {
+                return true;
+            }
+            for (int dy = -radius; dy <= radius; dy++)
+            {
+                for (int dx = -radius; dx <= radius; dx++)
+                {
+                    int nx = x + dx;
+                    int ny = y + dy;
+                    if (!map.InBounds(nx, ny)) continue;
+                    if (kinds[nx, ny] == BywaterTileKind.TownBuildingDoor) return true;
+                    if (nx == 10 && ny >= 9 && ny <= 13) return true;
+                    if ((nx == 7 && ny == 11) || (nx == 9 && ny == 13) || (nx == 9 && ny == 17)) return true;
+                }
+            }
+            return false;
+        }
+
+        private bool IsCleanPlazaOrEdgeTile(TileMapData map, BywaterTileKind[,] kinds, int x, int y)
+        {
+            if (!map.InBounds(x, y)) return false;
+            if (_tiles[x, y].IsWater) return false;
+            if (!map.GetTileRule(map.GetTile(x, y)).Passable) return false;
+            BywaterTileKind k = kinds[x, y];
+            if (k != BywaterTileKind.Grass && k != BywaterTileKind.Cobblestone && k != BywaterTileKind.DirtPath)
+            {
+                return false;
+            }
+            if (IsNearPortalOrDoorway(map, kinds, x, y, 1))
+            {
+                return false;
+            }
+            for (int i = 0; i < map.PointsOfInterest.Count; i++)
+            {
+                MapPointOfInterest poi = map.PointsOfInterest[i];
+                if (Mathf.Max(Mathf.Abs(poi.X - x), Mathf.Abs(poi.Y - y)) <= 1)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private bool TryFindCleanOutdoorSpotNear(
+            TileMapData map,
+            BywaterTileKind[,] kinds,
+            int originX,
+            int originY,
+            int maxRadius,
+            List<Vector2Int> existing,
+            out int outX,
+            out int outY)
+        {
+            for (int r = 1; r <= maxRadius; r++)
+            {
+                for (int dy = -r; dy <= r; dy++)
+                {
+                    for (int dx = -r; dx <= r; dx++)
+                    {
+                        int nx = originX + dx;
+                        int ny = originY + dy;
+                        if (!map.InBounds(nx, ny) || _tiles[nx, ny].IsWater) continue;
+                        if (!map.GetTileRule(map.GetTile(nx, ny)).Passable) continue;
+                        if (IsProtectedRoadOrDoorway(map, kinds, nx, ny)) continue;
+                        if (IsNearPortal(map, nx, ny, 1)) continue;
+                        if (IsTooCloseToList(existing, nx, ny, 4)) continue;
+                        outX = nx;
+                        outY = ny;
+                        return true;
+                    }
+                }
+            }
+            outX = 0;
+            outY = 0;
+            return false;
+        }
+
+        private static bool IsTooCloseToList(List<Vector2Int> points, int x, int y, int minDistSq)
+        {
+            for (int i = 0; i < points.Count; i++)
+            {
+                int dx = points[i].x - x;
+                int dy = points[i].y - y;
+                if (dx * dx + dy * dy < minDistSq)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool IsNearSpawnOrPortal(TileMapData map, int x, int y, int radius)
+        {
+            if (Mathf.Max(Mathf.Abs(map.StartSpawn.X - x), Mathf.Abs(map.StartSpawn.Y - y)) <= radius)
+            {
+                return true;
+            }
+            return IsNearPortal(map, x, y, radius);
+        }
+
+        private int CountOpenDungeonCardinal(BywaterTileKind[,] kinds, int x, int y, int w, int h)
+        {
+            int count = 0;
+            int[] dx = { -1, 1, 0, 0 };
+            int[] dy = { 0, 0, -1, 1 };
+            for (int i = 0; i < 4; i++)
+            {
+                int nx = x + dx[i];
+                int ny = y + dy[i];
+                if (nx >= 0 && nx < w && ny >= 0 && ny < h &&
+                    kinds[nx, ny] == BywaterTileKind.DungeonFloor &&
+                    !_tiles[nx, ny].IsWater)
+                {
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        private int CountOpenDungeonNeighbors8(BywaterTileKind[,] kinds, int x, int y, int w, int h)
+        {
+            int count = 0;
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    if (dx == 0 && dy == 0) continue;
+                    int nx = x + dx;
+                    int ny = y + dy;
+                    if (nx >= 0 && nx < w && ny >= 0 && ny < h &&
+                        kinds[nx, ny] == BywaterTileKind.DungeonFloor &&
+                        !_tiles[nx, ny].IsWater)
+                    {
+                        count++;
+                    }
+                }
+            }
+            return count;
+        }
+
+        private bool IsCorridorBottleneck(BywaterTileKind[,] kinds, int x, int y, int w, int h)
+        {
+            bool openN = y > 0 && kinds[x, y - 1] == BywaterTileKind.DungeonFloor && !_tiles[x, y - 1].IsWater;
+            bool openS = y + 1 < h && kinds[x, y + 1] == BywaterTileKind.DungeonFloor && !_tiles[x, y + 1].IsWater;
+            bool openW = x > 0 && kinds[x - 1, y] == BywaterTileKind.DungeonFloor && !_tiles[x - 1, y].IsWater;
+            bool openE = x + 1 < w && kinds[x + 1, y] == BywaterTileKind.DungeonFloor && !_tiles[x + 1, y].IsWater;
+
+            if (openN && openS && !openW && !openE) return true;
+            if (openW && openE && !openN && !openS) return true;
+            return false;
         }
 
         private void AddUniqueLantern(Vector3 worldPos, float radius, float intensity)

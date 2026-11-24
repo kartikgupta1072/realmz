@@ -27,6 +27,7 @@ namespace Realmz.Cartography
 
         [Header("Material & Camera")]
         public Material foliageMaterial;
+        public Material marshFoliageMaterial;
         public Camera targetCamera;
 
         [Header("Scatter Stats")]
@@ -50,6 +51,7 @@ namespace Realmz.Cartography
         {
             public Bounds Bounds;
             public readonly List<FoliageBatch> Batches = new List<FoliageBatch>(4);
+            public readonly List<FoliageBatch> MarshBatches = new List<FoliageBatch>(4);
         }
 
         private readonly List<FoliageChunk> _chunks = new List<FoliageChunk>(36);
@@ -114,13 +116,18 @@ namespace Realmz.Cartography
                 GeometryUtility.CalculateFrustumPlanes(cullCamera, _frustumPlanes);
             }
 
-            bool canDraw = foliageMaterial != null && SystemInfo.supportsInstancing;
-            if (canDraw)
+            bool canDrawPrimary = foliageMaterial != null && SystemInfo.supportsInstancing;
+            bool canDrawMarsh = marshFoliageMaterial != null && SystemInfo.supportsInstancing;
+            if (canDrawPrimary || canDrawMarsh)
             {
                 EnsureCardMesh();
-                if (!foliageMaterial.enableInstancing)
+                if (canDrawPrimary && !foliageMaterial.enableInstancing)
                 {
                     foliageMaterial.enableInstancing = true;
+                }
+                if (canDrawMarsh && !marshFoliageMaterial.enableInstancing)
+                {
+                    marshFoliageMaterial.enableInstancing = true;
                 }
             }
 
@@ -128,7 +135,7 @@ namespace Realmz.Cartography
             for (int c = 0; c < _chunks.Count; c++)
             {
                 FoliageChunk chunk = _chunks[c];
-                if (chunk.Batches.Count == 0)
+                if (chunk.Batches.Count == 0 && chunk.MarshBatches.Count == 0)
                 {
                     continue;
                 }
@@ -139,34 +146,41 @@ namespace Realmz.Cartography
                 }
 
                 visibleChunks++;
-                if (!canDraw)
+                if (canDrawPrimary)
                 {
-                    continue;
+                    DrawBatchList(chunk.Batches, foliageMaterial, drawCamera);
                 }
-
-                for (int b = 0; b < chunk.Batches.Count; b++)
+                if (canDrawMarsh)
                 {
-                    FoliageBatch batch = chunk.Batches[b];
-                    if (batch.Count <= 0)
-                    {
-                        continue;
-                    }
-
-                    Graphics.DrawMeshInstanced(
-                        _cardMesh,
-                        0,
-                        foliageMaterial,
-                        batch.Matrices,
-                        batch.Count,
-                        batch.PropertyBlock,
-                        ShadowCastingMode.Off,
-                        true,
-                        gameObject.layer,
-                        drawCamera);
+                    DrawBatchList(chunk.MarshBatches, marshFoliageMaterial, drawCamera);
                 }
             }
 
             LastVisibleChunkCount = visibleChunks;
+        }
+
+        private void DrawBatchList(List<FoliageBatch> batches, Material mat, Camera drawCamera)
+        {
+            for (int b = 0; b < batches.Count; b++)
+            {
+                FoliageBatch batch = batches[b];
+                if (batch.Count <= 0)
+                {
+                    continue;
+                }
+
+                Graphics.DrawMeshInstanced(
+                    _cardMesh,
+                    0,
+                    mat,
+                    batch.Matrices,
+                    batch.Count,
+                    batch.PropertyBlock,
+                    ShadowCastingMode.Off,
+                    true,
+                    gameObject.layer,
+                    drawCamera);
+            }
         }
 
         public void Rebuild(CartographyWorldData data)
@@ -219,11 +233,20 @@ namespace Realmz.Cartography
             List<Vector4> tints = new List<Vector4>(4096);
             List<float> frameCounts = new List<float>(4096);
             List<float> animFps = new List<float>(4096);
+
+            List<Matrix4x4> marshMatrices = new List<Matrix4x4>(1024);
+            List<float> marshVariants = new List<float>(1024);
+            List<float> marshWindPhases = new List<float>(1024);
+            List<Vector4> marshTints = new List<Vector4>(1024);
+            List<float> marshFrameCounts = new List<float>(1024);
+            List<float> marshAnimFps = new List<float>(1024);
+
             System.Span<int> strataPass0 = stackalloc int[25];
             System.Span<int> strataPass1 = stackalloc int[25];
 
             int total = 0;
             int openTiles = 0;
+            bool splitMarsh = marshFoliageMaterial != null;
 
             for (int cy = 0; cy < chunksY; cy++)
             {
@@ -241,6 +264,13 @@ namespace Realmz.Cartography
                     tints.Clear();
                     frameCounts.Clear();
                     animFps.Clear();
+
+                    marshMatrices.Clear();
+                    marshVariants.Clear();
+                    marshWindPhases.Clear();
+                    marshTints.Clear();
+                    marshFrameCounts.Clear();
+                    marshAnimFps.Clear();
 
                     float minElev = float.MaxValue;
                     float maxElev = float.MinValue;
@@ -281,6 +311,14 @@ namespace Realmz.Cartography
                             bool openNorth = data.InBounds(x, y - 1) && !data.GetTile(x, y - 1).BlocksFoliage && !data.GetTile(x, y - 1).IsWater;
                             bool openSouth = data.InBounds(x, y + 1) && !data.GetTile(x, y + 1).BlocksFoliage && !data.GetTile(x, y + 1).IsWater;
 
+                            bool useMarsh = splitMarsh && (tile.BiomeZone == CartographyBiomeZone.RiverbankReed || tile.MudWeight >= 0.35f);
+                            List<Matrix4x4> dstMatrices = useMarsh ? marshMatrices : matrices;
+                            List<float> dstVariants = useMarsh ? marshVariants : variants;
+                            List<float> dstWind = useMarsh ? marshWindPhases : windPhases;
+                            List<Vector4> dstTints = useMarsh ? marshTints : tints;
+                            List<float> dstFrames = useMarsh ? marshFrameCounts : frameCounts;
+                            List<float> dstFps = useMarsh ? marshAnimFps : animFps;
+
                             for (int i = 0; i < cardCount; i++)
                             {
                                 int h = CartographyWorldData.DeterministicHash(x * 37 + i, y * 53 + i * 7, 911);
@@ -306,6 +344,162 @@ namespace Realmz.Cartography
                                 float fps = 5.5f + (((h >> 26) & 0x0F) / 15f) * 3.0f;
                                 Vector4 tint = ComputeCardTint(tile.BiomeZone, wx, wz, h);
 
+                                dstMatrices.Add(Matrix4x4.TRS(
+                                    new Vector3(wx, tile.Elevation, wz),
+                                    Quaternion.identity,
+                                    new Vector3(scaleW, scaleH, 1.0f)));
+                                dstVariants.Add(variant);
+                                dstWind.Add(windPhase);
+                                dstTints.Add(tint);
+                                dstFrames.Add(8f);
+                                dstFps.Add(fps);
+                            }
+                        }
+                    }
+
+                    FoliageChunk chunk = new FoliageChunk();
+                    int chunkTotal = matrices.Count + marshMatrices.Count;
+                    if (chunkTotal > 0)
+                    {
+                        Vector3 boundsMin = new Vector3(xStart - 0.35f, minElev - 0.1f, -yEnd - 0.35f);
+                        Vector3 boundsMax = new Vector3(xEnd + 0.35f, maxElev + CardHeightMeters * 1.35f, -yStart + 0.35f);
+                        chunk.Bounds = new Bounds((boundsMin + boundsMax) * 0.5f, boundsMax - boundsMin);
+
+                        total += chunkTotal;
+                        BuildBatchesFromLists(chunk.Batches, matrices, variants, windPhases, tints, frameCounts, animFps);
+                        BuildBatchesFromLists(chunk.MarshBatches, marshMatrices, marshVariants, marshWindPhases, marshTints, marshFrameCounts, marshAnimFps);
+                    }
+                    else
+                    {
+                        Vector3 center = new Vector3((xStart + xEnd) * 0.5f, 0f, -(yStart + yEnd) * 0.5f);
+                        Vector3 size = new Vector3(xEnd - xStart, 1f, yEnd - yStart);
+                        chunk.Bounds = new Bounds(center, size);
+                    }
+
+                    _chunks.Add(chunk);
+                }
+            }
+
+            totalCardCount = total;
+            populatedTileCount = openTiles;
+            _hasBuilt = true;
+        }
+
+        /// <summary>
+        /// Scatters sparse glowing cave mushrooms, cave ferns, bone piles, and stone chips for dungeon
+        /// maps using foliage_atlas_dungeon_cave without altering the primary Rebuild(dungeon) test path.
+        /// </summary>
+        public void RebuildDungeonScatter(CartographyWorldData data, Material dungeonFoliageMaterial)
+        {
+            if (data == null || !data.IsDungeon)
+            {
+                RebuildScatter(data);
+                return;
+            }
+
+            if (dungeonFoliageMaterial != null)
+            {
+                foliageMaterial = dungeonFoliageMaterial;
+            }
+            marshFoliageMaterial = null;
+
+            EnsureCardMesh();
+            _chunks.Clear();
+            _tileCounts.Clear();
+            LastVisibleChunkCount = 0;
+
+            int width = data.Width;
+            int height = data.Height;
+            int chunksX = Mathf.CeilToInt(width / (float)ChunkSizeTiles);
+            int chunksY = Mathf.CeilToInt(height / (float)ChunkSizeTiles);
+
+            List<Matrix4x4> matrices = new List<Matrix4x4>(512);
+            List<float> variants = new List<float>(512);
+            List<float> windPhases = new List<float>(512);
+            List<Vector4> tints = new List<Vector4>(512);
+            List<float> frameCounts = new List<float>(512);
+            List<float> animFps = new List<float>(512);
+            System.Span<int> strata = stackalloc int[25];
+
+            int total = 0;
+            int populatedTiles = 0;
+
+            for (int cy = 0; cy < chunksY; cy++)
+            {
+                int yStart = cy * ChunkSizeTiles;
+                int yEnd = Mathf.Min(height, yStart + ChunkSizeTiles);
+
+                for (int cx = 0; cx < chunksX; cx++)
+                {
+                    int xStart = cx * ChunkSizeTiles;
+                    int xEnd = Mathf.Min(width, xStart + ChunkSizeTiles);
+
+                    matrices.Clear();
+                    variants.Clear();
+                    windPhases.Clear();
+                    tints.Clear();
+                    frameCounts.Clear();
+                    animFps.Clear();
+
+                    float minElev = float.MaxValue;
+                    float maxElev = float.MinValue;
+
+                    for (int y = yStart; y < yEnd; y++)
+                    {
+                        for (int x = xStart; x < xEnd; x++)
+                        {
+                            CartographyTile tile = data.GetTile(x, y);
+                            if (tile.IsWater || tile.Elevation >= CartographyWorldData.DungeonWallElevation - 0.05f)
+                            {
+                                continue;
+                            }
+
+                            int tileHash = CartographyWorldData.DeterministicHash(x, y, 401);
+                            bool nearWallOrCrease = tile.CreaseAO < 0.85f;
+                            int cardCount;
+                            if (nearWallOrCrease)
+                            {
+                                if ((tileHash % 3) >= 2)
+                                {
+                                    continue;
+                                }
+                                cardCount = 2 + (tileHash % 3); // 2..4 wall-edge cave mushrooms/ferns
+                            }
+                            else
+                            {
+                                if ((tileHash % 13) >= 2)
+                                {
+                                    continue;
+                                }
+                                cardCount = 1 + (tileHash % 2); // 1..2 floor bone piles/stone chips
+                            }
+
+                            populatedTiles++;
+                            _tileCounts[PackKey(x, y)] = cardCount;
+                            if (tile.Elevation < minElev) minElev = tile.Elevation;
+                            if (tile.Elevation > maxElev) maxElev = tile.Elevation;
+
+                            FillShuffledStrata25(strata, tileHash);
+                            for (int i = 0; i < cardCount; i++)
+                            {
+                                int h = CartographyWorldData.DeterministicHash(x * 41 + i, y * 59 + i * 11, 773);
+                                Vector2 localXY = ComputeCellOffsetFromStrata(strata[i], h);
+                                float wx = x + Mathf.Lerp(0.08f, 0.92f, localXY.x);
+                                float wz = -(y + Mathf.Lerp(0.08f, 0.92f, localXY.y));
+
+                                float scaleW = 0.78f + (((h >> 16) & 0x1F) / 31f) * 0.30f;
+                                float scaleH = 0.78f + (((h >> 21) & 0x1F) / 31f) * 0.34f;
+
+                                int variant = nearWallOrCrease
+                                    ? (h % 10)
+                                    : (10 + (h % 6));
+                                float windPhase = ((h >> 12) & 0xFF) / 255f;
+                                float fps = 2.6f + (((h >> 26) & 0x0F) / 15f) * 1.8f;
+                                float lum = 0.88f + (((h >> 4) & 0x1F) / 31f) * 0.22f;
+                                Vector4 tint = nearWallOrCrease
+                                    ? new Vector4(0.76f * lum, 0.90f * lum, 0.98f * lum, 1f)
+                                    : new Vector4(0.84f * lum, 0.86f * lum, 0.90f * lum, 1f);
+
                                 matrices.Add(Matrix4x4.TRS(
                                     new Vector3(wx, tile.Elevation, wz),
                                     Quaternion.identity,
@@ -326,43 +520,8 @@ namespace Realmz.Cartography
                         Vector3 boundsMax = new Vector3(xEnd + 0.35f, maxElev + CardHeightMeters * 1.35f, -yStart + 0.35f);
                         chunk.Bounds = new Bounds((boundsMin + boundsMax) * 0.5f, boundsMax - boundsMin);
 
-                        int chunkCount = matrices.Count;
-                        total += chunkCount;
-                        for (int offset = 0; offset < chunkCount; offset += MaxBatchSize)
-                        {
-                            int count = Mathf.Min(MaxBatchSize, chunkCount - offset);
-                            Matrix4x4[] batchMatrices = new Matrix4x4[count];
-                            float[] batchVariants = new float[count];
-                            float[] batchWindPhases = new float[count];
-                            Vector4[] batchTints = new Vector4[count];
-                            float[] batchFrameCounts = new float[count];
-                            float[] batchAnimFps = new float[count];
-
-                            for (int i = 0; i < count; i++)
-                            {
-                                int src = offset + i;
-                                batchMatrices[i] = matrices[src];
-                                batchVariants[i] = variants[src];
-                                batchWindPhases[i] = windPhases[src];
-                                batchTints[i] = tints[src];
-                                batchFrameCounts[i] = frameCounts[src];
-                                batchAnimFps[i] = animFps[src];
-                            }
-
-                            MaterialPropertyBlock mpb = new MaterialPropertyBlock();
-                            mpb.SetFloatArray(VariantIndexId, batchVariants);
-                            mpb.SetFloatArray(WindPhaseId, batchWindPhases);
-                            mpb.SetVectorArray(TintColorId, batchTints);
-                            mpb.SetFloatArray(FrameCountId, batchFrameCounts);
-                            mpb.SetFloatArray(AnimFpsId, batchAnimFps);
-
-                            chunk.Batches.Add(new FoliageBatch
-                            {
-                                Matrices = batchMatrices,
-                                PropertyBlock = mpb,
-                                Count = count
-                            });
-                        }
+                        total += matrices.Count;
+                        BuildBatchesFromLists(chunk.Batches, matrices, variants, windPhases, tints, frameCounts, animFps);
                     }
                     else
                     {
@@ -376,8 +535,60 @@ namespace Realmz.Cartography
             }
 
             totalCardCount = total;
-            populatedTileCount = openTiles;
+            populatedTileCount = populatedTiles;
             _hasBuilt = true;
+        }
+
+        private static void BuildBatchesFromLists(
+            List<FoliageBatch> targetBatches,
+            List<Matrix4x4> matrices,
+            List<float> variants,
+            List<float> windPhases,
+            List<Vector4> tints,
+            List<float> frameCounts,
+            List<float> animFps)
+        {
+            int totalCount = matrices.Count;
+            if (totalCount == 0)
+            {
+                return;
+            }
+
+            for (int offset = 0; offset < totalCount; offset += MaxBatchSize)
+            {
+                int count = Mathf.Min(MaxBatchSize, totalCount - offset);
+                Matrix4x4[] batchMatrices = new Matrix4x4[count];
+                float[] batchVariants = new float[count];
+                float[] batchWindPhases = new float[count];
+                Vector4[] batchTints = new Vector4[count];
+                float[] batchFrameCounts = new float[count];
+                float[] batchAnimFps = new float[count];
+
+                for (int i = 0; i < count; i++)
+                {
+                    int src = offset + i;
+                    batchMatrices[i] = matrices[src];
+                    batchVariants[i] = variants[src];
+                    batchWindPhases[i] = windPhases[src];
+                    batchTints[i] = tints[src];
+                    batchFrameCounts[i] = frameCounts[src];
+                    batchAnimFps[i] = animFps[src];
+                }
+
+                MaterialPropertyBlock mpb = new MaterialPropertyBlock();
+                mpb.SetFloatArray(VariantIndexId, batchVariants);
+                mpb.SetFloatArray(WindPhaseId, batchWindPhases);
+                mpb.SetVectorArray(TintColorId, batchTints);
+                mpb.SetFloatArray(FrameCountId, batchFrameCounts);
+                mpb.SetFloatArray(AnimFpsId, batchAnimFps);
+
+                targetBatches.Add(new FoliageBatch
+                {
+                    Matrices = batchMatrices,
+                    PropertyBlock = mpb,
+                    Count = count
+                });
+            }
         }
 
         public int GetTileCardCount(int x, int y)

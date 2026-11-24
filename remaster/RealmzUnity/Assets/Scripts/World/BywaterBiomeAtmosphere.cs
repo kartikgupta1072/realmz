@@ -135,22 +135,22 @@ namespace Realmz.World
         {
             if (directionalSun != null)
             {
-                directionalSun.color = new Color(0.42f, 0.52f, 0.82f, 1f);
-                directionalSun.intensity = 0.28f;
+                directionalSun.color = new Color(0.62f, 0.72f, 0.98f, 1f);
+                directionalSun.intensity = 0.45f;
                 directionalSun.shadows = LightShadows.Soft;
-                directionalSun.shadowStrength = 0.45f;
+                directionalSun.shadowStrength = 0.35f;
             }
 
             RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.20f, 0.25f, 0.42f, 1f);
-            RenderSettings.ambientEquatorColor = new Color(0.14f, 0.19f, 0.32f, 1f);
-            RenderSettings.ambientGroundColor = new Color(0.09f, 0.12f, 0.22f, 1f);
-            RenderSettings.ambientIntensity = 0.68f;
+            RenderSettings.ambientSkyColor = new Color(0.22f, 0.34f, 0.56f, 1f);
+            RenderSettings.ambientEquatorColor = new Color(0.18f, 0.28f, 0.48f, 1f);
+            RenderSettings.ambientGroundColor = new Color(0.14f, 0.20f, 0.36f, 1f);
+            RenderSettings.ambientIntensity = 1.35f;
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
-            RenderSettings.fogColor = new Color(0.045f, 0.055f, 0.098f, 1f);
-            RenderSettings.fogStartDistance = 16f;
-            RenderSettings.fogEndDistance = 42f;
+            RenderSettings.fogColor = new Color(0.065f, 0.082f, 0.140f, 1f);
+            RenderSettings.fogStartDistance = 24f;
+            RenderSettings.fogEndDistance = 60f;
 
             if (targetCamera != null)
             {

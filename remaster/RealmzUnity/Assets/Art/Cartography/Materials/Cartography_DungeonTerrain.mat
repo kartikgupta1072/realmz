@@ -1,0 +1,54 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: Cartography_DungeonTerrain
+  m_Shader: {fileID: 4800000, guid: 46eec551f4a19954b9a7baf4c11ee87e, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _NormalArray:
+        m_Texture: {fileID: 18700000, guid: 07baa710c5ec79f468bd23c09e1f94e8, type: 2}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _TerrainArray:
+        m_Texture: {fileID: 18700000, guid: 47691872acae4ca40aa6f19eea4bfb4e, type: 2}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _BumpScale: 1
+    - _CreaseAOStrength: 1
+    - _GroundValueScale: 0.42
+    - _HorizonHazeStrength: 0.22
+    - _LanternPoolIntensity: 1.35
+    - _LayerCount: 0
+    - _MacroScale: 0.085
+    - _MacroStrength: 0.1
+    - _NoiseBlendSharpness: 18
+    - _NoiseMaskStrength: 0.55
+    - _RoadValueBoost: 0.46
+    - _Smoothness: 0.06
+    - _TexelResolution: 128
+    - _WorldTexelScale: 0.5
+    m_Colors:
+    - _HorizonHazeColor: {r: 0.05, g: 0.07, b: 0.12, a: 1}
+    - _LanternPoolColor: {r: 1, g: 0.62, b: 0.23999995, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

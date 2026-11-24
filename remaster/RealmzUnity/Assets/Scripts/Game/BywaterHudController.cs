@@ -54,6 +54,7 @@ namespace Realmz.Game
             public RectTransform Root;
             public Image Background;
             public Image Portrait;
+            public Image[] ConditionBadges;
             public TextMeshProUGUI NameText;
             public TextMeshProUGUI ClassText;
             public Image HpFill;
@@ -85,6 +86,7 @@ namespace Realmz.Game
             public CanvasGroup CanvasGroup;
             public Image Background;
             public Image Portrait;
+            public Image[] ConditionBadges;
             public TextMeshProUGUI NameText;
             public Image HpFill;
             public Image SpFill;
@@ -111,6 +113,7 @@ namespace Realmz.Game
         private sealed class EquipSlotRefs
         {
             public EquipmentSlot Slot;
+            public Image ItemIcon;
             public TextMeshProUGUI ItemLabel;
             public Button UnequipBtn;
         }
@@ -118,6 +121,7 @@ namespace Realmz.Game
         private sealed class StashRowRefs
         {
             public GameObject Root;
+            public Image ItemIcon;
             public TextMeshProUGUI InfoText;
             public Button EquipBtn;
             public Button UseBtn;
@@ -127,6 +131,7 @@ namespace Realmz.Game
         private sealed class ShopBuyRowRefs
         {
             public GameObject Root;
+            public Image ItemIcon;
             public TextMeshProUGUI NameText;
             public TextMeshProUGUI PriceText;
             public Button BuyBtn;
@@ -137,6 +142,7 @@ namespace Realmz.Game
         private sealed class ShopSellRowRefs
         {
             public GameObject Root;
+            public Image ItemIcon;
             public TextMeshProUGUI ItemText;
             public TextMeshProUGUI ValueText;
             public Button SellBtn;
@@ -250,6 +256,7 @@ namespace Realmz.Game
         private TextMeshProUGUI _combatSwiftPip;
         private readonly List<HotbarSlotRefs> _hotbarSlots = new List<HotbarSlotRefs>(MaxHotbarSlots);
         private readonly List<string> _visibleHotbarActionIds = new List<string>(16);
+        private readonly List<string> _badgeKeysScratch = new List<string>(4);
         private Button _combatUndoBtn;
         private Image _combatUndoBtnIcon;
         private Button _combatPotionBtn;
@@ -865,13 +872,11 @@ namespace Realmz.Game
 
                 card.Root.gameObject.SetActive(true);
                 PartyMemberState m = members[i];
-                BywaterAssetCatalog.HeroArtEntry art = _catalog != null
-                    ? _catalog.GetHeroArt(m.Id, m.PortraitId, m.Archetype)
-                    : null;
 
-                card.Portrait.sprite = art != null ? (art.portrait != null ? art.portrait : art.sprite) : null;
+                card.Portrait.sprite = ResolveHeroPortrait(m.Id, m.PortraitId, m.Archetype);
                 card.Portrait.preserveAspect = true;
                 card.Portrait.color = card.Portrait.sprite != null ? Color.white : new Color(0.2f, 0.25f, 0.35f, 1f);
+                RefreshConditionBadges(card.ConditionBadges, m.Conditions, isGuarding: false, onFireSurface: false);
                 card.NameText.text = m.Name;
                 card.ClassText.text = $"{m.Archetype} Lv{m.Level}";
 
@@ -962,10 +967,7 @@ namespace Realmz.Game
             }
 
             PartyMemberState hero = party.Members[_selectedHeroIndex];
-            BywaterAssetCatalog.HeroArtEntry art = _catalog != null
-                ? _catalog.GetHeroArt(hero.Id, hero.PortraitId, hero.Archetype)
-                : null;
-            _drawerHeroPortrait.sprite = art != null ? (art.portrait != null ? art.portrait : art.sprite) : null;
+            _drawerHeroPortrait.sprite = ResolveHeroPortrait(hero.Id, hero.PortraitId, hero.Archetype);
             _drawerHeroPortrait.preserveAspect = true;
             _drawerHeroPortrait.color = _drawerHeroPortrait.sprite != null ? Color.white : new Color(0.2f, 0.25f, 0.35f, 1f);
             _drawerHeroTitle.text = $"{hero.Name} - Lv{hero.Level} {hero.RaceName} {hero.Archetype} ({hero.CasteName})";
@@ -1025,12 +1027,24 @@ namespace Realmz.Game
                     slotRef.ItemLabel.text = string.IsNullOrEmpty(bonus) ? itemDef.Name : $"{itemDef.Name} ({bonus})";
                     slotRef.ItemLabel.color = BywaterUiHelpers.ParchmentText;
                     slotRef.UnequipBtn.interactable = true;
+                    Sprite eqSprite = _catalog != null ? _catalog.GetItemIcon(itemDef.Id, itemDef.Name) : null;
+                    if (slotRef.ItemIcon != null)
+                    {
+                        slotRef.ItemIcon.sprite = eqSprite;
+                        slotRef.ItemIcon.preserveAspect = true;
+                        slotRef.ItemIcon.gameObject.SetActive(eqSprite != null);
+                    }
                 }
                 else
                 {
                     slotRef.ItemLabel.text = "- Empty -";
                     slotRef.ItemLabel.color = BywaterUiHelpers.MutedSlate;
                     slotRef.UnequipBtn.interactable = false;
+                    if (slotRef.ItemIcon != null)
+                    {
+                        slotRef.ItemIcon.sprite = null;
+                        slotRef.ItemIcon.gameObject.SetActive(false);
+                    }
                 }
             }
 
@@ -1059,6 +1073,15 @@ namespace Realmz.Game
 
                 StashRowRefs rowRef = GetOrCreateStashRow(i);
                 rowRef.BoundStashIndex = i;
+                Sprite stashSprite = _catalog != null
+                    ? _catalog.GetItemIcon(def != null ? def.Id : entry.ItemId, def != null ? def.Name : itemName)
+                    : null;
+                if (rowRef.ItemIcon != null)
+                {
+                    rowRef.ItemIcon.sprite = stashSprite;
+                    rowRef.ItemIcon.preserveAspect = true;
+                    rowRef.ItemIcon.gameObject.SetActive(stashSprite != null);
+                }
                 rowRef.InfoText.text = $"{itemName} x{entry.Quantity}  [{sellPrice}g]{(string.IsNullOrEmpty(stats) ? "" : " - " + stats)}";
                 rowRef.EquipBtn.gameObject.SetActive(canEquip);
                 rowRef.UseBtn.gameObject.SetActive(canUse);
@@ -1094,6 +1117,15 @@ namespace Realmz.Game
             hlg.childForceExpandWidth = false;
             hlg.childForceExpandHeight = true;
 
+            Image iconImg = BywaterUiHelpers.CreateImage(row, "Icon", null, Color.white, preserveAspect: true);
+            iconImg.raycastTarget = false;
+            LayoutElement iconLe = iconImg.gameObject.AddComponent<LayoutElement>();
+            iconLe.preferredWidth = 28f;
+            iconLe.preferredHeight = 28f;
+            iconLe.minWidth = 28f;
+            iconLe.minHeight = 28f;
+            iconImg.gameObject.SetActive(false);
+
             TextMeshProUGUI info = BywaterUiHelpers.CreateLabel(
                 row,
                 "Info",
@@ -1110,6 +1142,7 @@ namespace Realmz.Game
             StashRowRefs rowRef = new StashRowRefs
             {
                 Root = row.gameObject,
+                ItemIcon = iconImg,
                 InfoText = info,
                 BoundStashIndex = index
             };
@@ -1197,6 +1230,14 @@ namespace Realmz.Game
                 ShopBuyRowRefs rowRef = GetOrCreateShopBuyRow(i);
                 rowRef.BoundShopId = shop.ShopId;
                 rowRef.BoundItemId = entry.Item.Id;
+                Sprite buySprite = _catalog != null ? _catalog.GetItemIcon(entry.Item.Id, entry.Item.Name) : null;
+                if (rowRef.ItemIcon != null)
+                {
+                    rowRef.ItemIcon.sprite = buySprite;
+                    rowRef.ItemIcon.preserveAspect = true;
+                    rowRef.ItemIcon.color = entry.CanAfford ? Color.white : new Color(0.65f, 0.65f, 0.70f, 0.85f);
+                    rowRef.ItemIcon.gameObject.SetActive(buySprite != null);
+                }
                 rowRef.NameText.text = $"{entry.Item.Name}{(string.IsNullOrEmpty(stats) ? "" : " (" + stats + ")")}";
                 rowRef.NameText.color = entry.CanAfford ? BywaterUiHelpers.ParchmentText : BywaterUiHelpers.MutedSlate;
                 rowRef.PriceText.text = $"{entry.EffectivePrice}g";
@@ -1226,6 +1267,16 @@ namespace Realmz.Game
 
                 ShopSellRowRefs rowRef = GetOrCreateShopSellRow(i);
                 rowRef.BoundStashIndex = i;
+                Sprite sellSprite = _catalog != null
+                    ? _catalog.GetItemIcon(def != null ? def.Id : entry.ItemId, def != null ? def.Name : itemName)
+                    : null;
+                if (rowRef.ItemIcon != null)
+                {
+                    rowRef.ItemIcon.sprite = sellSprite;
+                    rowRef.ItemIcon.preserveAspect = true;
+                    rowRef.ItemIcon.color = Color.white;
+                    rowRef.ItemIcon.gameObject.SetActive(sellSprite != null);
+                }
                 rowRef.ItemText.text = $"{itemName} x{entry.Quantity}";
                 rowRef.ValueText.text = $"+{sellPrice}g";
                 rowRef.Root.SetActive(true);
@@ -1260,6 +1311,15 @@ namespace Realmz.Game
             hlg.childForceExpandWidth = false;
             hlg.childForceExpandHeight = true;
 
+            Image iconImg = BywaterUiHelpers.CreateImage(row, "Icon", null, Color.white, preserveAspect: true);
+            iconImg.raycastTarget = false;
+            LayoutElement iconLe = iconImg.gameObject.AddComponent<LayoutElement>();
+            iconLe.preferredWidth = 28f;
+            iconLe.preferredHeight = 28f;
+            iconLe.minWidth = 28f;
+            iconLe.minHeight = 28f;
+            iconImg.gameObject.SetActive(false);
+
             TextMeshProUGUI label = BywaterUiHelpers.CreateLabel(
                 row,
                 "Name",
@@ -1289,6 +1349,7 @@ namespace Realmz.Game
             ShopBuyRowRefs rowRef = new ShopBuyRowRefs
             {
                 Root = row.gameObject,
+                ItemIcon = iconImg,
                 NameText = label,
                 PriceText = priceLbl
             };
@@ -1331,6 +1392,15 @@ namespace Realmz.Game
             hlg.childForceExpandWidth = false;
             hlg.childForceExpandHeight = true;
 
+            Image iconImg = BywaterUiHelpers.CreateImage(row, "Icon", null, Color.white, preserveAspect: true);
+            iconImg.raycastTarget = false;
+            LayoutElement iconLe = iconImg.gameObject.AddComponent<LayoutElement>();
+            iconLe.preferredWidth = 28f;
+            iconLe.preferredHeight = 28f;
+            iconLe.minWidth = 28f;
+            iconLe.minHeight = 28f;
+            iconImg.gameObject.SetActive(false);
+
             TextMeshProUGUI lbl = BywaterUiHelpers.CreateLabel(
                 row,
                 "Item",
@@ -1360,6 +1430,7 @@ namespace Realmz.Game
             ShopSellRowRefs rowRef = new ShopSellRowRefs
             {
                 Root = row.gameObject,
+                ItemIcon = iconImg,
                 ItemText = lbl,
                 ValueText = valLbl,
                 BoundStashIndex = index
@@ -1510,6 +1581,195 @@ namespace Realmz.Game
             }
         }
 
+        private static Image[] CreateConditionBadgeStrip(RectTransform portraitFrameRt, float iconSize)
+        {
+            const int maxBadges = 4;
+            Image[] badges = new Image[maxBadges];
+            if (portraitFrameRt == null)
+            {
+                return badges;
+            }
+
+            GameObject stripGo = new GameObject("ConditionBadges", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
+            stripGo.transform.SetParent(portraitFrameRt, false);
+
+            LayoutElement stripLe = stripGo.GetComponent<LayoutElement>();
+            stripLe.ignoreLayout = true;
+
+            RectTransform stripRt = stripGo.GetComponent<RectTransform>();
+            stripRt.anchorMin = new Vector2(1f, 0f);
+            stripRt.anchorMax = new Vector2(1f, 0f);
+            stripRt.pivot = new Vector2(1f, 0f);
+            stripRt.anchoredPosition = new Vector2(-2f, 2f);
+            stripRt.sizeDelta = new Vector2((iconSize + 2f) * maxBadges, iconSize);
+
+            HorizontalLayoutGroup hlg = stripGo.GetComponent<HorizontalLayoutGroup>();
+            hlg.spacing = 2f;
+            hlg.childControlWidth = true;
+            hlg.childControlHeight = true;
+            hlg.childForceExpandWidth = false;
+            hlg.childForceExpandHeight = false;
+            hlg.childAlignment = TextAnchor.LowerRight;
+
+            for (int i = 0; i < maxBadges; i++)
+            {
+                Image badgeImg = BywaterUiHelpers.CreateImage(stripGo.transform, $"ConditionBadge_{i}", null, Color.white, preserveAspect: true);
+                badgeImg.raycastTarget = false;
+                LayoutElement le = badgeImg.gameObject.AddComponent<LayoutElement>();
+                le.preferredWidth = iconSize;
+                le.preferredHeight = iconSize;
+                le.minWidth = iconSize;
+                le.minHeight = iconSize;
+                badgeImg.gameObject.SetActive(false);
+                badges[i] = badgeImg;
+            }
+
+            return badges;
+        }
+
+        private void RefreshConditionBadges(Image[] badges, ConditionTracker conditions, bool isGuarding, bool onFireSurface)
+        {
+            if (badges == null || badges.Length == 0)
+            {
+                return;
+            }
+
+            _badgeKeysScratch.Clear();
+            CollectConditionBadgeKeys(conditions, isGuarding, onFireSurface, _badgeKeysScratch);
+
+            int slotIdx = 0;
+            for (int i = 0; i < _badgeKeysScratch.Count && slotIdx < badges.Length; i++)
+            {
+                Sprite sprite = _catalog != null ? _catalog.GetConditionBadgeIcon(_badgeKeysScratch[i]) : null;
+                if (sprite == null)
+                {
+                    continue;
+                }
+
+                Image img = badges[slotIdx++];
+                if (img != null)
+                {
+                    img.sprite = sprite;
+                    img.preserveAspect = true;
+                    img.color = Color.white;
+                    img.gameObject.SetActive(true);
+                }
+            }
+
+            for (int i = slotIdx; i < badges.Length; i++)
+            {
+                if (badges[i] != null)
+                {
+                    badges[i].sprite = null;
+                    badges[i].gameObject.SetActive(false);
+                }
+            }
+        }
+
+        private static void CollectConditionBadgeKeys(ConditionTracker conditions, bool isGuarding, bool onFireSurface, List<string> results)
+        {
+            if (results == null)
+            {
+                return;
+            }
+
+            bool hasPoison = false;
+            bool hasBurn = onFireSurface;
+            bool hasStun = false;
+            bool hasBless = isGuarding;
+
+            if (conditions != null)
+            {
+                if (conditions.Has(CharConditionId.Poisoned) || conditions.Has(CharConditionId.Diseased))
+                {
+                    hasPoison = true;
+                }
+
+                if (conditions.Has(CharConditionId.Helpless) ||
+                    conditions.Has(CharConditionId.Tangled) ||
+                    conditions.Has(CharConditionId.Slow) ||
+                    conditions.Has(CharConditionId.Stupid) ||
+                    conditions.Has(CharConditionId.Confused) ||
+                    conditions.Has(CharConditionId.Blind) ||
+                    conditions.Has(CharConditionId.TurnedToStone) ||
+                    conditions.Has(CharConditionId.Silenced) ||
+                    conditions.Has(CharConditionId.RunsAway))
+                {
+                    hasStun = true;
+                }
+
+                if (conditions.Has(CharConditionId.Strong) ||
+                    conditions.Has(CharConditionId.AttackBonus) ||
+                    conditions.Has(CharConditionId.ShieldFromHits) ||
+                    conditions.Has(CharConditionId.ShieldFromProjectiles) ||
+                    conditions.Has(CharConditionId.Regenerating) ||
+                    conditions.Has(CharConditionId.MagicAura) ||
+                    conditions.Has(CharConditionId.DefenseBonus) ||
+                    conditions.Has(CharConditionId.Speedy) ||
+                    conditions.Has(CharConditionId.ProtectionFromEvil))
+                {
+                    hasBless = true;
+                }
+
+                IReadOnlyList<ConditionDisplayEffect> effects = conditions.GetDisplayEffects();
+                for (int i = 0; i < effects.Count; i++)
+                {
+                    ConditionDisplayEffect eff = effects[i];
+                    if (eff == null)
+                    {
+                        continue;
+                    }
+
+                    string codeOrName = string.Concat(eff.Code ?? string.Empty, " ", eff.DisplayName ?? string.Empty);
+                    if (codeOrName.IndexOf("burn", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        codeOrName.IndexOf("fire", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        codeOrName.IndexOf("flame", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        hasBurn = true;
+                    }
+                    else if (codeOrName.IndexOf("poison", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        hasPoison = true;
+                    }
+                    else if (codeOrName.IndexOf("stun", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        hasStun = true;
+                    }
+                    else if (codeOrName.IndexOf("bless", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        hasBless = true;
+                    }
+                }
+            }
+
+            if (hasPoison) results.Add("poison");
+            if (hasBurn) results.Add("burn");
+            if (hasStun) results.Add("stun");
+            if (hasBless) results.Add("bless");
+        }
+
+        private Sprite ResolveHeroPortrait(string heroId, int portraitId, string archetype)
+        {
+            if (_catalog == null)
+            {
+                return null;
+            }
+
+            Sprite unified = _catalog.GetUnifiedPortrait(heroId);
+            if (unified == null && !string.IsNullOrWhiteSpace(archetype))
+            {
+                unified = _catalog.GetUnifiedPortrait(archetype);
+            }
+
+            if (unified != null)
+            {
+                return unified;
+            }
+
+            BywaterAssetCatalog.HeroArtEntry heroArt = _catalog.GetHeroArt(heroId, portraitId, archetype);
+            return heroArt != null ? (heroArt.portrait != null ? heroArt.portrait : heroArt.sprite) : null;
+        }
+
         private Sprite ResolveCombatantPortrait(CombatantState unit)
         {
             if (unit == null || _catalog == null)
@@ -1519,8 +1779,36 @@ namespace Realmz.Game
 
             if (unit.Side == CombatSide.Hero)
             {
-                BywaterAssetCatalog.HeroArtEntry heroArt = _catalog.GetHeroArt(unit.Id, unit.PortraitId, string.Empty);
-                return heroArt != null ? (heroArt.portrait != null ? heroArt.portrait : heroArt.sprite) : null;
+                string archetype = string.Empty;
+                if (_cachedParty != null)
+                {
+                    for (int i = 0; i < _cachedParty.Members.Count; i++)
+                    {
+                        PartyMemberState m = _cachedParty.Members[i];
+                        if (m != null && string.Equals(m.Id, unit.Id, StringComparison.OrdinalIgnoreCase))
+                        {
+                            archetype = m.Archetype;
+                            break;
+                        }
+                    }
+                }
+
+                Sprite heroPortrait = ResolveHeroPortrait(unit.Id, unit.PortraitId, archetype);
+                if (heroPortrait == null && !string.IsNullOrWhiteSpace(unit.Name))
+                {
+                    heroPortrait = _catalog.GetUnifiedPortrait(unit.Name);
+                }
+                return heroPortrait;
+            }
+
+            Sprite monsterPortrait = _catalog.GetMonsterPortrait(unit.Id, unit.IconId);
+            if (monsterPortrait == null && !string.IsNullOrWhiteSpace(unit.Name))
+            {
+                monsterPortrait = _catalog.GetMonsterPortrait(unit.Name, unit.IconId);
+            }
+            if (monsterPortrait != null)
+            {
+                return monsterPortrait;
             }
 
             BywaterAssetCatalog.MonsterArtEntry monArt = _catalog.GetMonsterArt(unit.Id, unit.IconId);
@@ -1545,7 +1833,12 @@ namespace Realmz.Game
 
                 Sprite sprite = ResolveCombatantPortrait(unit);
                 card.Portrait.sprite = sprite;
+                card.Portrait.preserveAspect = true;
                 card.Portrait.color = sprite != null ? Color.white : new Color(0.22f, 0.26f, 0.36f, 1f);
+                bool onFireSurface = combat.Grid != null &&
+                                     combat.Grid.InBounds(unit.Position) &&
+                                     combat.Grid.GetSurface(unit.Position) == SurfaceType.Fire;
+                RefreshConditionBadges(card.ConditionBadges, unit.Conditions, unit.IsGuarding, onFireSurface);
                 card.NameText.text = unit.Name;
 
                 float hpRatio = Mathf.Clamp01(unit.Hp / (float)Mathf.Max(1, unit.MaxHp));
@@ -1633,7 +1926,10 @@ namespace Realmz.Game
             if (actor != null && actor.IsAlive)
             {
                 // Slot 1: Melee (always for living hero)
-                string meleeLabel = ResolveEquippedWeaponLabel(combat, bundle, actor, EquipmentSlot.Weapon, "Strike", out string meleeIconKey);
+                string meleeLabel = ResolveEquippedWeaponLabel(combat, bundle, actor, EquipmentSlot.Weapon, "Strike", out string meleeIconKey, out int meleeItemId, out string meleeItemName);
+                Sprite meleeSprite = _catalog != null && (meleeItemId > 0 || !string.IsNullOrEmpty(meleeItemName))
+                    ? _catalog.GetItemIcon(meleeItemId, meleeItemName)
+                    : null;
                 ConfigureHotbarSlot(
                     slotCursor++,
                     actionId: "melee",
@@ -1646,12 +1942,16 @@ namespace Realmz.Game
                     interactable: hasStd,
                     selected: isHeroTurn && activeMode == CombatActionMode.Melee,
                     tipTitle: $"{meleeLabel} [Melee]",
-                    tipBody: $"Weapon: {actor.WeaponDice} (+{actor.EffectiveToHit} Hit). Standard action.");
+                    tipBody: $"Weapon: {actor.WeaponDice} (+{actor.EffectiveToHit} Hit). Standard action.",
+                    directIconSprite: meleeSprite);
 
                 // Slot 2: Ranged (ONLY if actor has ranged weapon/range)
                 if (actor.RangedRange > 0 && !string.IsNullOrWhiteSpace(actor.RangedDice))
                 {
-                    string rangedLabel = ResolveEquippedWeaponLabel(combat, bundle, actor, EquipmentSlot.MissileWeapon, "Ranged", out _);
+                    string rangedLabel = ResolveEquippedWeaponLabel(combat, bundle, actor, EquipmentSlot.MissileWeapon, "Ranged", out _, out int rangedItemId, out string rangedItemName);
+                    Sprite rangedSprite = _catalog != null && (rangedItemId > 0 || !string.IsNullOrEmpty(rangedItemName))
+                        ? _catalog.GetItemIcon(rangedItemId, rangedItemName)
+                        : null;
                     ConfigureHotbarSlot(
                         slotCursor++,
                         actionId: "ranged",
@@ -1664,7 +1964,8 @@ namespace Realmz.Game
                         interactable: hasStd,
                         selected: isHeroTurn && activeMode == CombatActionMode.Ranged,
                         tipTitle: $"{rangedLabel} [Ranged]",
-                        tipBody: $"Damage: {actor.RangedDice}, Range {actor.RangedRange}. Standard action.");
+                        tipBody: $"Damage: {actor.RangedDice}, Range {actor.RangedRange}. Standard action.",
+                        directIconSprite: rangedSprite);
                 }
 
                 // Direct Spell Slots (NO Spell submenu button, 0 slots for non-casters)
@@ -1681,6 +1982,9 @@ namespace Realmz.Game
                         bool enoughSp = actor.Sp >= spell.SpCost;
                         bool isSelectedSpell = isHeroTurn && activeMode == CombatActionMode.Spell && spell.Id == selectedSpellId;
                         string spellIcon = ResolveSpellIconKey(spell);
+                        Sprite spellSprite = _catalog != null
+                            ? (_catalog.GetSpellIcon(spell.Id, spell.Key) ?? _catalog.GetSpellIcon(spell.Id, spell.Name))
+                            : null;
                         string scope = (spell.AoeOffsets.Count > 1 ||
                             string.Equals(spell.TargetMode, "AreaOfEffect", StringComparison.OrdinalIgnoreCase) ||
                             string.Equals(spell.TargetMode, "AllEnemies", StringComparison.OrdinalIgnoreCase) ||
@@ -1700,7 +2004,8 @@ namespace Realmz.Game
                             interactable: hasStd && enoughSp,
                             selected: isSelectedSpell,
                             tipTitle: $"{spell.Name} ({spell.SpCost} SP)",
-                            tipBody: $"{scope} | Range {spell.Range} | {(string.IsNullOrWhiteSpace(spell.EffectDice) ? spell.EffectKind : spell.EffectDice)}. {(string.IsNullOrWhiteSpace(spell.Description) ? string.Empty : spell.Description)}");
+                            tipBody: $"{scope} | Range {spell.Range} | {(string.IsNullOrWhiteSpace(spell.EffectDice) ? spell.EffectKind : spell.EffectDice)}. {(string.IsNullOrWhiteSpace(spell.Description) ? string.Empty : spell.Description)}",
+                            directIconSprite: spellSprite);
                     }
                 }
             }
@@ -1784,7 +2089,8 @@ namespace Realmz.Game
             bool interactable,
             bool selected,
             string tipTitle,
-            string tipBody)
+            string tipBody,
+            Sprite directIconSprite = null)
         {
             if (slotIndex < 0 || slotIndex >= _hotbarSlots.Count)
             {
@@ -1799,7 +2105,8 @@ namespace Realmz.Game
             slot.TooltipBody = tipBody;
             slot.HotkeyText.text = hotkeyIndex <= 6 ? hotkeyIndex.ToString() : string.Empty;
             slot.LabelText.text = label;
-            slot.Icon.sprite = LoadHotbarIcon(iconKey);
+            slot.Icon.sprite = directIconSprite != null ? directIconSprite : LoadHotbarIcon(iconKey);
+            slot.Icon.preserveAspect = true;
             slot.Icon.color = interactable ? Color.white : new Color(0.55f, 0.55f, 0.60f, 0.85f);
 
             if (spCost > 0)
@@ -1824,9 +2131,13 @@ namespace Realmz.Game
             CombatantState actor,
             EquipmentSlot eqSlot,
             string fallback,
-            out string iconKey)
+            out string iconKey,
+            out int itemId,
+            out string itemName)
         {
             iconKey = eqSlot == EquipmentSlot.MissileWeapon ? "bow" : "sword";
+            itemId = 0;
+            itemName = null;
             if (combat?.Party != null && bundle?.Items != null && actor != null)
             {
                 for (int i = 0; i < combat.Party.Members.Count; i++)
@@ -1837,6 +2148,8 @@ namespace Realmz.Game
                         InventoryItem eq = member.GetEquipped(eqSlot);
                         if (eq != null && bundle.Items.TryGetValue(eq.ItemId, out ItemDefinition def) && !string.IsNullOrWhiteSpace(def.Name))
                         {
+                            itemId = def.Id;
+                            itemName = def.Name;
                             string lower = def.Name.ToLowerInvariant();
                             if (lower.Contains("dagger") || lower.Contains("dirk") || lower.Contains("knife")) iconKey = "dagger";
                             else if (lower.Contains("staff") || lower.Contains("wand") || lower.Contains("rod")) iconKey = "staff";
@@ -2697,7 +3010,8 @@ namespace Realmz.Game
                 cardHlg.childForceExpandHeight = false;
                 cardHlg.childAlignment = TextAnchor.MiddleLeft;
 
-                BywaterUiHelpers.CreatePortraitFrame(cardRt, "PortraitFrame", 74f, out Image portrait);
+                RectTransform portraitFrameRt = BywaterUiHelpers.CreatePortraitFrame(cardRt, "PortraitFrame", 74f, out Image portrait);
+                Image[] conditionBadges = CreateConditionBadgeStrip(portraitFrameRt, 18f);
 
                 GameObject infoCol = new GameObject("Info", typeof(RectTransform), typeof(VerticalLayoutGroup));
                 infoCol.transform.SetParent(cardRt, false);
@@ -2741,6 +3055,7 @@ namespace Realmz.Game
                     Root = cardRt,
                     Background = cardRt.GetComponent<Image>(),
                     Portrait = portrait,
+                    ConditionBadges = conditionBadges,
                     NameText = nameTxt,
                     ClassText = classTxt,
                     HpFill = hpFill,
@@ -2880,6 +3195,15 @@ namespace Realmz.Game
                 TextMeshProUGUI slotTag = BywaterUiHelpers.CreateLabel(slotRow, "SlotName", slot.ToString(), _font, 15f, BywaterUiHelpers.BrassAccent, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
                 slotTag.gameObject.AddComponent<LayoutElement>().preferredWidth = 128f;
 
+                Image slotIcon = BywaterUiHelpers.CreateImage(slotRow, "Icon", null, Color.white, preserveAspect: true);
+                slotIcon.raycastTarget = false;
+                LayoutElement slotIconLe = slotIcon.gameObject.AddComponent<LayoutElement>();
+                slotIconLe.preferredWidth = 26f;
+                slotIconLe.preferredHeight = 26f;
+                slotIconLe.minWidth = 26f;
+                slotIconLe.minHeight = 26f;
+                slotIcon.gameObject.SetActive(false);
+
                 TextMeshProUGUI itemLbl = BywaterUiHelpers.CreateLabel(slotRow, "ItemName", "- Empty -", _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, wrap: false);
                 itemLbl.overflowMode = TextOverflowModes.Truncate;
                 itemLbl.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
@@ -2890,6 +3214,7 @@ namespace Realmz.Game
                 _equipSlots.Add(new EquipSlotRefs
                 {
                     Slot = slot,
+                    ItemIcon = slotIcon,
                     ItemLabel = itemLbl,
                     UnequipBtn = unequipBtn
                 });
@@ -3288,7 +3613,8 @@ namespace Realmz.Game
                 pcHlg.childForceExpandHeight = false;
                 pcHlg.childAlignment = TextAnchor.MiddleLeft;
 
-                BywaterUiHelpers.CreatePortraitFrame(pCardRt, "PortraitFrame", 42f, out Image miniPortrait);
+                RectTransform miniPortraitFrame = BywaterUiHelpers.CreatePortraitFrame(pCardRt, "PortraitFrame", 42f, out Image miniPortrait);
+                Image[] miniConditionBadges = CreateConditionBadgeStrip(miniPortraitFrame, 16f);
 
                 GameObject infoCol = new GameObject("InfoCol", typeof(RectTransform), typeof(VerticalLayoutGroup));
                 infoCol.transform.SetParent(pCardRt, false);
@@ -3315,6 +3641,7 @@ namespace Realmz.Game
                     CanvasGroup = cg,
                     Background = pCardRt.GetComponent<Image>(),
                     Portrait = miniPortrait,
+                    ConditionBadges = miniConditionBadges,
                     NameText = pName,
                     HpFill = hpFill,
                     SpFill = spFill

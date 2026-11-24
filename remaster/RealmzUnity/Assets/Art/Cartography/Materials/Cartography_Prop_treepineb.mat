@@ -38,7 +38,7 @@ Material:
     - _BumpScale: 0.65
     - _CameraPitchTiltDeg: 14
     - _Cols: 1
-    - _Cutoff: 0.45
+    - _Cutoff: 0.5
     - _EmissionMinV: 0
     - _EmissionWarmMask: 1
     - _FrameCount: 1

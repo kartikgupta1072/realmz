@@ -21,6 +21,10 @@ namespace Realmz.World
         private static readonly int ColorId = Shader.PropertyToID("_Color");
         private static readonly int TintColorId = Shader.PropertyToID("_TintColor");
         private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap");
+        private static readonly int MainTexStId = Shader.PropertyToID("_MainTex_ST");
+        private static readonly int BaseMapStId = Shader.PropertyToID("_BaseMap_ST");
+        private static readonly int LayerCountId = Shader.PropertyToID("_LayerCount");
+        private static readonly int TerrainArrayId = Shader.PropertyToID("_TerrainArray");
         private static readonly int GroundValueScaleId = Shader.PropertyToID("_GroundValueScale");
         private static readonly int RoadValueBoostId = Shader.PropertyToID("_RoadValueBoost");
         private static readonly int HorizonHazeColorId = Shader.PropertyToID("_HorizonHazeColor");
@@ -43,6 +47,8 @@ namespace Realmz.World
             public Vector3 WorldPosition;
             public Vector2 SizeMeters;
             public float CurrentAlpha = 1f;
+            public bool IsAnimated4Frame;
+            public bool IsFloorDecal;
         }
 
         private sealed class StoneBridgeEntry
@@ -80,6 +86,10 @@ namespace Realmz.World
             public PixelBillboard Billboard;
             public Light PointLight;
             public BywaterTorchFlicker Flicker;
+            public bool IsAnimated4Frame;
+            public GameObject TentRoot;
+            public MeshRenderer TentRenderer;
+            public PixelBillboard TentBillboard;
         }
 
         private BywaterAssetCatalog _catalog;
@@ -90,6 +100,7 @@ namespace Realmz.World
 
         private BywaterElevationBuilder _elevationBuilder;
         private BywaterFoliageScatter _foliageScatter;
+        private BywaterFoliageScatter _dungeonFoliageScatter;
         private BywaterTopDownLightmap _topDownLightmap;
         private BywaterDioramaController _dioramaController;
         private Transform _heroAnchor;
@@ -127,9 +138,11 @@ namespace Realmz.World
         private Material _portalBeaconMaterial;
         private Texture2D _portalBeaconTexture;
         private MaterialPropertyBlock _propFadeBlock;
+        private MaterialPropertyBlock _animatedPropBlock;
         private MaterialPropertyBlock _portalBeaconBlock;
         private int _activePropCount;
         private int _activePortalCount;
+        private int _lastAnimatedPropFrame = -1;
         private float _terrainGridHintStrength;
 
         public CartographyWorldData CartographyData => _cartographyData;
@@ -264,21 +277,108 @@ namespace Realmz.World
             if (!active)
             {
                 _campfireEntry.Root.SetActive(false);
+                if (_campfireEntry.TentRoot != null)
+                {
+                    _campfireEntry.TentRoot.SetActive(false);
+                }
                 return;
             }
 
+            Camera cam = ResolveActiveCamera();
             _campfireEntry.Root.transform.position = worldPos;
-            Material brazierMat = ResolvePropMaterial(CartographyPropKind.TorchBrazier);
-            if (_campfireEntry.BillboardRenderer != null && brazierMat != null)
+            Material campfireMat = _catalog != null ? _catalog.GetCartographyPropMaterial(CartographyPropKind.Campfire4f) : null;
+            bool is4f = campfireMat != null;
+            if (!is4f)
             {
-                _campfireEntry.BillboardRenderer.sharedMaterial = brazierMat;
+                campfireMat = ResolvePropMaterial(CartographyPropKind.TorchBrazier);
+            }
+            _campfireEntry.IsAnimated4Frame = is4f;
+
+            if (_campfireEntry.BillboardRenderer != null && campfireMat != null)
+            {
+                _campfireEntry.BillboardRenderer.sharedMaterial = campfireMat;
+                if (is4f)
+                {
+                    int frame = Application.isPlaying ? ((int)(Time.time * 6f) % 4) : 0;
+                    ApplyAnimated4FramePropertyBlock(_campfireEntry.BillboardRenderer, 1f, frame);
+                }
+                else
+                {
+                    _campfireEntry.BillboardRenderer.SetPropertyBlock(null);
+                }
             }
             if (_campfireEntry.Billboard != null)
             {
-                _campfireEntry.Billboard.targetCamera = ResolveActiveCamera();
+                _campfireEntry.Billboard.targetCamera = cam;
             }
 
             _campfireEntry.Root.SetActive(true);
+
+            if (_campfireEntry.TentRoot != null)
+            {
+                Material tentMat = _catalog != null ? _catalog.GetCartographyPropMaterial(CartographyPropKind.CampTent) : null;
+                if (tentMat != null)
+                {
+                    _campfireEntry.TentRoot.transform.position = ResolveCampTentPosition(worldPos);
+                    if (_campfireEntry.TentRenderer != null)
+                    {
+                        _campfireEntry.TentRenderer.sharedMaterial = tentMat;
+                    }
+                    if (_campfireEntry.TentBillboard != null)
+                    {
+                        _campfireEntry.TentBillboard.targetCamera = cam;
+                    }
+                    _campfireEntry.TentRoot.SetActive(true);
+                }
+                else
+                {
+                    _campfireEntry.TentRoot.SetActive(false);
+                }
+            }
+        }
+
+        private Vector3 ResolveCampTentPosition(Vector3 campfireWorldPos)
+        {
+            if (_currentMap == null || _cartographyData == null)
+            {
+                return new Vector3(campfireWorldPos.x - 1.65f, campfireWorldPos.y, campfireWorldPos.z - 0.35f);
+            }
+
+            CartographyWorldData.WorldToGrid(campfireWorldPos, out int cx, out int cy);
+            float campElev = _cartographyData.GetElevation(cx, cy);
+
+            // Heroes sit in a northern semicircle (-dy in grid, +Z in world), so check clear tiles beside/south first.
+            int[] dxs = { -2, 2, -1, 1, 0, -2, 2, 0 };
+            int[] dys = { 0, 0, 1, 1, 1, 1, 1, 2 };
+
+            for (int i = 0; i < dxs.Length; i++)
+            {
+                int tx = cx + dxs[i];
+                int ty = cy + dys[i];
+                if (!_currentMap.InBounds(tx, ty))
+                {
+                    continue;
+                }
+
+                TileRule rule = _currentMap.GetTileRule(_currentMap.GetTile(tx, ty));
+                if (!rule.Passable || rule.NeedsBoat)
+                {
+                    continue;
+                }
+
+                CartographyTile tile = _cartographyData.GetTile(tx, ty);
+                if (tile.IsWater || Mathf.Abs(tile.Elevation - campElev) > 0.45f)
+                {
+                    continue;
+                }
+
+                return CartographyWorldData.GridToWorld(tx, ty, tile.Elevation);
+            }
+
+            return new Vector3(
+                Mathf.Clamp(campfireWorldPos.x - 1.5f, 0.75f, _currentMap.Width - 0.75f),
+                campfireWorldPos.y,
+                Mathf.Clamp(campfireWorldPos.z - 0.5f, -_currentMap.Height + 0.75f, -0.75f));
         }
 
         public void SetTerrainGridHint(float strength)
@@ -335,16 +435,70 @@ namespace Realmz.World
                 }
 
                 Color tint = new Color(1f, 1f, 1f, entry.CurrentAlpha);
-                _propFadeBlock.Clear();
-                _propFadeBlock.SetColor(TintColorId, tint);
-                _propFadeBlock.SetColor(ColorId, tint);
-                entry.Renderer.SetPropertyBlock(_propFadeBlock);
+                if (entry.IsAnimated4Frame)
+                {
+                    int frame = Application.isPlaying ? ((int)(Time.time * 6f) % 4) : 0;
+                    ApplyAnimated4FramePropertyBlock(entry.Renderer, entry.CurrentAlpha, frame);
+                }
+                else
+                {
+                    _propFadeBlock.Clear();
+                    _propFadeBlock.SetColor(TintColorId, tint);
+                    _propFadeBlock.SetColor(ColorId, tint);
+                    entry.Renderer.SetPropertyBlock(_propFadeBlock);
+                }
             }
+        }
+
+        private void ApplyAnimated4FramePropertyBlock(MeshRenderer renderer, float alpha, int frame)
+        {
+            if (renderer == null)
+            {
+                return;
+            }
+
+            _animatedPropBlock ??= new MaterialPropertyBlock();
+            _animatedPropBlock.Clear();
+            Color tint = new Color(1f, 1f, 1f, alpha);
+            Vector4 st = new Vector4(0.25f, 1f, (frame & 3) * 0.25f, 0f);
+            _animatedPropBlock.SetColor(TintColorId, tint);
+            _animatedPropBlock.SetColor(ColorId, tint);
+            _animatedPropBlock.SetColor(BaseColorId, tint);
+            _animatedPropBlock.SetVector(MainTexStId, st);
+            _animatedPropBlock.SetVector(BaseMapStId, st);
+            renderer.SetPropertyBlock(_animatedPropBlock);
         }
 
         private void Update()
         {
-            if (!Application.isPlaying || _activePortalCount <= 0)
+            if (!Application.isPlaying)
+            {
+                return;
+            }
+
+            int frame = (int)(Time.time * 6f) % 4;
+            if (frame != _lastAnimatedPropFrame)
+            {
+                _lastAnimatedPropFrame = frame;
+                int propLimit = Mathf.Min(_activePropCount, _propPool.Count);
+                for (int i = 0; i < propLimit; i++)
+                {
+                    PropBillboardEntry entry = _propPool[i];
+                    if (entry != null && entry.IsAnimated4Frame && entry.Renderer != null && entry.Root != null && entry.Root.activeSelf)
+                    {
+                        ApplyAnimated4FramePropertyBlock(entry.Renderer, entry.CurrentAlpha, frame);
+                    }
+                }
+
+                if (_campfireEntry != null && _campfireEntry.IsAnimated4Frame &&
+                    _campfireEntry.Root != null && _campfireEntry.Root.activeSelf &&
+                    _campfireEntry.BillboardRenderer != null)
+                {
+                    ApplyAnimated4FramePropertyBlock(_campfireEntry.BillboardRenderer, 1f, frame);
+                }
+            }
+
+            if (_activePortalCount <= 0)
             {
                 return;
             }
@@ -462,12 +616,12 @@ namespace Realmz.World
             _elevationBuilder.waterMaterial = waterMat;
             _elevationBuilder.Rebuild(_cartographyData);
 
-            // 2. Top-Down Lightmap (disable bright daytime clouds in underground dungeons)
+            // 2. Top-Down Lightmap (disable dark daytime cloud blotches in underground dungeons)
             if (isDungeon)
             {
-                _topDownLightmap.cloudStrength = 0.04f;
-                _topDownLightmap.cloudShadowColor = new Color(0.24f, 0.28f, 0.42f, 1f);
-                _topDownLightmap.canopyShadowColor = new Color(0.18f, 0.22f, 0.34f, 1f);
+                _topDownLightmap.cloudStrength = 0.0f;
+                _topDownLightmap.cloudShadowColor = Color.white;
+                _topDownLightmap.canopyShadowColor = new Color(0.72f, 0.76f, 0.88f, 1f);
             }
             else
             {
@@ -479,11 +633,27 @@ namespace Realmz.World
             _topDownLightmap.ConfigureFromWorldData(_cartographyData);
             _topDownLightmap.UpdateLightmap(Application.isPlaying ? Time.time : 0f);
 
-            // 3. Instanced Foliage Scatter (skip outdoor grass foliage in dungeons)
+            // 3. Instanced Foliage Scatter (outdoor grass/marsh + sparse dungeon cave scatter on separate child)
             _foliageScatter.foliageMaterial = _catalog != null ? _catalog.cartographyFoliageMaterial : null;
+            _foliageScatter.marshFoliageMaterial = _catalog != null ? _catalog.cartographyMarshFoliageMaterial : null;
             _foliageScatter.targetCamera = cam;
             _foliageScatter.RebuildScatter(_cartographyData);
             _foliageScatter.gameObject.SetActive(!isDungeon);
+
+            if (_dungeonFoliageScatter != null)
+            {
+                if (isDungeon)
+                {
+                    Material dungeonFoliageMat = _catalog != null ? _catalog.cartographyDungeonFoliageMaterial : null;
+                    _dungeonFoliageScatter.targetCamera = cam;
+                    _dungeonFoliageScatter.RebuildDungeonScatter(_cartographyData, dungeonFoliageMat);
+                    _dungeonFoliageScatter.gameObject.SetActive(dungeonFoliageMat != null);
+                }
+                else
+                {
+                    _dungeonFoliageScatter.gameObject.SetActive(false);
+                }
+            }
 
             // 4. Diorama Runtime Global Coordinator
             _dioramaController.targetCamera = cam;
@@ -532,20 +702,52 @@ namespace Realmz.World
                     PropBillboardEntry entry = GetPropEntry(propIdx++);
                     float sizeX = Mathf.Max(0.25f, prop.SizeMeters.x);
                     float sizeY = Mathf.Max(0.25f, prop.SizeMeters.y);
-                    entry.Root.transform.position = prop.WorldPosition;
-                    entry.Root.transform.rotation = initialYaw;
-                    entry.Root.transform.localScale = new Vector3(sizeX, sizeY, 1f);
-                    entry.Renderer.sharedMaterial = ResolvePropMaterial(prop.Kind);
-                    entry.Billboard.targetCamera = cam;
+                    bool isFloorDecal = IsFloorDecalPropKind(prop.Kind);
+                    bool isAnimated4f = IsAnimated4FramePropKind(prop.Kind);
+
                     entry.Kind = prop.Kind;
-                    entry.WorldPosition = prop.WorldPosition;
+                    entry.IsFloorDecal = isFloorDecal;
+                    entry.IsAnimated4Frame = isAnimated4f;
                     entry.SizeMeters = new Vector2(sizeX, sizeY);
                     entry.CurrentAlpha = 1f;
-                    _propFadeBlock ??= new MaterialPropertyBlock();
-                    _propFadeBlock.Clear();
-                    _propFadeBlock.SetColor(TintColorId, Color.white);
-                    _propFadeBlock.SetColor(ColorId, Color.white);
-                    entry.Renderer.SetPropertyBlock(_propFadeBlock);
+                    entry.Renderer.sharedMaterial = ResolvePropMaterial(prop.Kind);
+                    entry.Billboard.targetCamera = cam;
+
+                    if (isFloorDecal)
+                    {
+                        Vector3 decalPos = new Vector3(prop.WorldPosition.x, prop.WorldPosition.y + 0.04f, prop.WorldPosition.z);
+                        entry.WorldPosition = decalPos;
+                        entry.Filter.sharedMesh = _groundQuadMesh;
+                        entry.Billboard.enabled = false;
+                        entry.Renderer.shadowCastingMode = ShadowCastingMode.Off;
+                        entry.Root.transform.position = decalPos;
+                        entry.Root.transform.rotation = Quaternion.identity;
+                        entry.Root.transform.localScale = new Vector3(sizeX, 1f, sizeY);
+                    }
+                    else
+                    {
+                        entry.WorldPosition = prop.WorldPosition;
+                        entry.Filter.sharedMesh = _propBillboardQuadMesh;
+                        entry.Billboard.enabled = true;
+                        entry.Renderer.shadowCastingMode = ShadowCastingMode.On;
+                        entry.Root.transform.position = prop.WorldPosition;
+                        entry.Root.transform.rotation = initialYaw;
+                        entry.Root.transform.localScale = new Vector3(sizeX, sizeY, 1f);
+                    }
+
+                    if (isAnimated4f)
+                    {
+                        int frame = Application.isPlaying ? ((int)(Time.time * 6f) % 4) : 0;
+                        ApplyAnimated4FramePropertyBlock(entry.Renderer, 1f, frame);
+                    }
+                    else
+                    {
+                        _propFadeBlock ??= new MaterialPropertyBlock();
+                        _propFadeBlock.Clear();
+                        _propFadeBlock.SetColor(TintColorId, Color.white);
+                        _propFadeBlock.SetColor(ColorId, Color.white);
+                        entry.Renderer.SetPropertyBlock(_propFadeBlock);
+                    }
                     entry.Root.SetActive(true);
                 }
             }
@@ -621,7 +823,10 @@ namespace Realmz.World
             IReadOnlyList<CartographyPropPlacement> props = _cartographyData.Props;
             for (int i = 0; i < props.Count; i++)
             {
-                if (props[i].Kind == CartographyPropKind.TorchBrazier)
+                CartographyPropKind k = props[i].Kind;
+                if (k == CartographyPropKind.TorchBrazier ||
+                    k == CartographyPropKind.Campfire4f ||
+                    k == CartographyPropKind.DungeonWallSconce4f)
                 {
                     _allLightPositions.Add(props[i].WorldPosition);
                 }
@@ -721,7 +926,10 @@ namespace Realmz.World
 
         private Material ResolveRuntimeTerrainMaterial(bool isDungeon)
         {
-            Material source = _catalog != null ? _catalog.cartographyTerrainMaterial : null;
+            bool hasDedicatedDungeonMat = isDungeon && _catalog != null && _catalog.cartographyDungeonTerrainMaterial != null;
+            Material source = _catalog != null
+                ? (hasDedicatedDungeonMat ? _catalog.cartographyDungeonTerrainMaterial : _catalog.cartographyTerrainMaterial)
+                : null;
             if (source == null)
             {
                 return null;
@@ -738,10 +946,19 @@ namespace Realmz.World
                 };
             }
 
+            if (_runtimeTerrainMat.HasProperty(LayerCountId) &&
+                _runtimeTerrainMat.HasProperty(TerrainArrayId) &&
+                _runtimeTerrainMat.GetTexture(TerrainArrayId) is Texture2DArray terrainArr)
+            {
+                _runtimeTerrainMat.SetFloat(LayerCountId, terrainArr.depth);
+            }
+
             if (isDungeon)
             {
-                if (_runtimeTerrainMat.HasProperty(GroundValueScaleId)) _runtimeTerrainMat.SetFloat(GroundValueScaleId, 0.42f);
-                if (_runtimeTerrainMat.HasProperty(RoadValueBoostId)) _runtimeTerrainMat.SetFloat(RoadValueBoostId, 0.46f);
+                float groundVal = hasDedicatedDungeonMat ? 0.78f : 0.42f;
+                float roadVal = hasDedicatedDungeonMat ? 0.86f : 0.46f;
+                if (_runtimeTerrainMat.HasProperty(GroundValueScaleId)) _runtimeTerrainMat.SetFloat(GroundValueScaleId, groundVal);
+                if (_runtimeTerrainMat.HasProperty(RoadValueBoostId)) _runtimeTerrainMat.SetFloat(RoadValueBoostId, roadVal);
                 if (_runtimeTerrainMat.HasProperty(HorizonHazeColorId)) _runtimeTerrainMat.SetColor(HorizonHazeColorId, new Color(0.05f, 0.07f, 0.12f, 1f));
                 if (_runtimeTerrainMat.HasProperty(HorizonHazeStrengthId)) _runtimeTerrainMat.SetFloat(HorizonHazeStrengthId, 0.22f);
                 if (_runtimeTerrainMat.HasProperty(LanternPoolIntensityId)) _runtimeTerrainMat.SetFloat(LanternPoolIntensityId, 1.15f);
@@ -760,8 +977,11 @@ namespace Realmz.World
 
         private Material ResolveRuntimeWaterMaterial(bool isDungeon)
         {
+            bool hasDedicatedDungeonWater = isDungeon && _catalog != null && _catalog.cartographyDungeonWaterMaterial != null;
             Material source = _catalog != null
-                ? (_catalog.cartographyWaterMaterial != null ? _catalog.cartographyWaterMaterial : _catalog.shallowWaterMaterial)
+                ? (hasDedicatedDungeonWater
+                    ? _catalog.cartographyDungeonWaterMaterial
+                    : (_catalog.cartographyWaterMaterial != null ? _catalog.cartographyWaterMaterial : _catalog.shallowWaterMaterial))
                 : null;
             if (source == null)
             {
@@ -781,9 +1001,12 @@ namespace Realmz.World
 
             if (isDungeon)
             {
-                if (_runtimeWaterMat.HasProperty(BaseColorId)) _runtimeWaterMat.SetColor(BaseColorId, new Color(0.08f, 0.16f, 0.24f, 1f));
-                if (_runtimeWaterMat.HasProperty(ShallowColorId)) _runtimeWaterMat.SetColor(ShallowColorId, new Color(0.08f, 0.18f, 0.28f, 0.90f));
-                if (_runtimeWaterMat.HasProperty(DeepColorId)) _runtimeWaterMat.SetColor(DeepColorId, new Color(0.03f, 0.08f, 0.14f, 0.98f));
+                if (!hasDedicatedDungeonWater)
+                {
+                    if (_runtimeWaterMat.HasProperty(BaseColorId)) _runtimeWaterMat.SetColor(BaseColorId, new Color(0.08f, 0.16f, 0.24f, 1f));
+                    if (_runtimeWaterMat.HasProperty(ShallowColorId)) _runtimeWaterMat.SetColor(ShallowColorId, new Color(0.08f, 0.18f, 0.28f, 0.90f));
+                    if (_runtimeWaterMat.HasProperty(DeepColorId)) _runtimeWaterMat.SetColor(DeepColorId, new Color(0.03f, 0.08f, 0.14f, 0.98f));
+                }
             }
             else
             {
@@ -1028,13 +1251,29 @@ namespace Realmz.World
             flicker.flickerSpeed = 6.8f;
 
             root.SetActive(false);
+
+            GameObject tentRoot = new GameObject("CampTentProp");
+            tentRoot.transform.SetParent(_propsContainer, false);
+            GameObject tentQuadGo = new GameObject("CampTentBillboard");
+            tentQuadGo.transform.SetParent(tentRoot.transform, false);
+            tentQuadGo.transform.localScale = new Vector3(1.85f, 1.85f, 1f);
+            tentQuadGo.AddComponent<MeshFilter>().sharedMesh = _propBillboardQuadMesh;
+            MeshRenderer tentMr = tentQuadGo.AddComponent<MeshRenderer>();
+            tentMr.shadowCastingMode = ShadowCastingMode.On;
+            tentMr.receiveShadows = true;
+            PixelBillboard tentBb = tentQuadGo.AddComponent<PixelBillboard>();
+            tentRoot.SetActive(false);
+
             _campfireEntry = new CampfireEntry
             {
                 Root = root,
                 BillboardRenderer = mr,
                 Billboard = bb,
                 PointLight = light,
-                Flicker = flicker
+                Flicker = flicker,
+                TentRoot = tentRoot,
+                TentRenderer = tentMr,
+                TentBillboard = tentBb
             };
         }
 
@@ -1102,6 +1341,12 @@ namespace Realmz.World
             {
                 Transform t = CreateChildContainer("CartographyFoliage");
                 _foliageScatter = t.GetComponent<BywaterFoliageScatter>() ?? t.gameObject.AddComponent<BywaterFoliageScatter>();
+            }
+
+            if (_dungeonFoliageScatter == null)
+            {
+                Transform t = CreateChildContainer("CartographyDungeonFoliage");
+                _dungeonFoliageScatter = t.GetComponent<BywaterFoliageScatter>() ?? t.gameObject.AddComponent<BywaterFoliageScatter>();
             }
 
             if (_topDownLightmap == null)
@@ -1478,6 +1723,18 @@ namespace Realmz.World
             _portalBeaconTexture = null;
         }
 
+        private static bool IsFloorDecalPropKind(CartographyPropKind kind)
+        {
+            return kind == CartographyPropKind.DungeonIronGrate ||
+                   kind == CartographyPropKind.DungeonSpikeTrap;
+        }
+
+        private static bool IsAnimated4FramePropKind(CartographyPropKind kind)
+        {
+            return kind == CartographyPropKind.Campfire4f ||
+                   kind == CartographyPropKind.DungeonWallSconce4f;
+        }
+
         private static bool IsOccludingPropKind(CartographyPropKind kind, bool fadeCenterBuildingsInCombat)
         {
             switch (kind)
@@ -1487,9 +1744,15 @@ namespace Realmz.World
                 case CartographyPropKind.TreePineA:
                 case CartographyPropKind.TreePineB:
                 case CartographyPropKind.TreeWillowA:
-                    return true;
                 case CartographyPropKind.BywaterInn:
-                    return fadeCenterBuildingsInCombat;
+                case CartographyPropKind.Guildhall:
+                case CartographyPropKind.Blacksmith:
+                case CartographyPropKind.Apothecary:
+                case CartographyPropKind.Temple:
+                case CartographyPropKind.CottageB:
+                case CartographyPropKind.CottageC:
+                case CartographyPropKind.Watchtower:
+                    return true;
                 default:
                     return false;
             }

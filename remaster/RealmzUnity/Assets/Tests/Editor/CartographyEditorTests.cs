@@ -4,7 +4,12 @@ using NUnit.Framework;
 using Realmz.Cartography;
 using Realmz.Data;
 using Realmz.EditorTools.Cartography;
+using Realmz.Game;
+using Realmz.World;
+using RealmzCore.Combat;
 using RealmzCore.Data;
+using RealmzCore.Exploration;
+using RealmzCore.Rules;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -570,6 +575,218 @@ namespace Realmz.EditorTests
             finally
             {
                 Object.DestroyImmediate(host);
+            }
+        }
+
+        [Test]
+        public void Pack3BuildingsTownAndDungeonProps_ResolveMaterialsAt64PpuAndWireDungeonTerrainAndFoliage()
+        {
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            Assert.That(catalog, Is.Not.Null, "BywaterAssetCatalog missing.");
+
+            CartographyPropKind[] requiredPack3Kinds =
+            {
+                CartographyPropKind.Guildhall,
+                CartographyPropKind.Blacksmith,
+                CartographyPropKind.Apothecary,
+                CartographyPropKind.Temple,
+                CartographyPropKind.CottageB,
+                CartographyPropKind.CottageC,
+                CartographyPropKind.Watchtower,
+                CartographyPropKind.MarketStallA,
+                CartographyPropKind.MarketStallB,
+                CartographyPropKind.StoneWell,
+                CartographyPropKind.Signpost,
+                CartographyPropKind.WoodenWagon,
+                CartographyPropKind.BarrelsCrates,
+                CartographyPropKind.CampTent,
+                CartographyPropKind.StoneRuins,
+                CartographyPropKind.ShrineStatue,
+                CartographyPropKind.Campfire4f,
+                CartographyPropKind.DungeonChestClosed,
+                CartographyPropKind.DungeonChestOpen,
+                CartographyPropKind.DungeonDoorClosed,
+                CartographyPropKind.DungeonDoorOpen,
+                CartographyPropKind.DungeonPillar,
+                CartographyPropKind.DungeonStairsDown,
+                CartographyPropKind.DungeonStairsUp,
+                CartographyPropKind.DungeonWallSconce4f,
+                CartographyPropKind.DungeonSarcophagus,
+                CartographyPropKind.DungeonSpikeTrap,
+                CartographyPropKind.DungeonIronGrate
+            };
+
+            for (int i = 0; i < requiredPack3Kinds.Length; i++)
+            {
+                CartographyPropKind kind = requiredPack3Kinds[i];
+                Material mat = catalog.GetCartographyPropMaterial(kind);
+                Assert.That(mat, Is.Not.Null, $"Missing cartographyPropMaterials entry for {kind}.");
+
+                Texture tex = mat.HasProperty("_BaseMap") ? mat.GetTexture("_BaseMap") : mat.mainTexture;
+                Assert.That(tex, Is.Not.Null, $"Material for {kind} is missing base texture.");
+            }
+
+            string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
+            CartographyWorldData land = CartographyWorldData.BuildFromTileMap(bundle.Land0);
+            CartographyWorldData dungeon = CartographyWorldData.BuildFromTileMap(bundle.Dungeon0);
+
+            Assert.That(land.Props.Count, Is.GreaterThan(0));
+            Assert.That(dungeon.Props.Count, Is.GreaterThan(0));
+
+            bool sawDungeonProp = false;
+            for (int i = 0; i < dungeon.Props.Count; i++)
+            {
+                CartographyPropPlacement p = dungeon.Props[i];
+                if (p.Kind == CartographyPropKind.DungeonWallSconce4f)
+                {
+                    sawDungeonProp = true;
+                    Assert.That(p.SizeMeters.x, Is.EqualTo(2.0f).Within(0.05f), "DungeonWallSconce4f width must be 2.0m (64 px/m).");
+                    Assert.That(p.SizeMeters.y, Is.EqualTo(2.0f).Within(0.05f), "DungeonWallSconce4f height must be 2.0m (64 px/m).");
+                }
+                else if (p.Kind == CartographyPropKind.DungeonStairsUp ||
+                         p.Kind == CartographyPropKind.DungeonStairsDown ||
+                         p.Kind == CartographyPropKind.DungeonChestClosed ||
+                         p.Kind == CartographyPropKind.DungeonPillar ||
+                         p.Kind == CartographyPropKind.DungeonDoorClosed)
+                {
+                    sawDungeonProp = true;
+                }
+            }
+            Assert.That(sawDungeonProp, Is.True, "Expected Pack 3 dungeon props in dungeon_0 CartographyWorldData.");
+
+            for (int i = 0; i < land.Props.Count; i++)
+            {
+                CartographyPropPlacement p = land.Props[i];
+                if (p.Kind == CartographyPropKind.Campfire4f)
+                {
+                    Assert.That(p.SizeMeters.x, Is.EqualTo(2.0f).Within(0.05f), "Campfire4f width must be 2.0m (64 px/m).");
+                    Assert.That(p.SizeMeters.y, Is.EqualTo(2.0f).Within(0.05f), "Campfire4f height must be 2.0m (64 px/m).");
+                }
+            }
+
+            string dungeonAtlasPath = "Assets/Art/Cartography/Atlases/foliage_atlas_dungeon_cave.png";
+            TextureImporter atlasImp = AssetImporter.GetAtPath(dungeonAtlasPath) as TextureImporter;
+            Assert.That(atlasImp, Is.Not.Null, "Missing foliage_atlas_dungeon_cave.png importer.");
+            Assert.That(atlasImp.filterMode, Is.EqualTo(FilterMode.Point));
+            Assert.That(atlasImp.textureCompression, Is.EqualTo(TextureImporterCompression.Uncompressed));
+            Assert.That(atlasImp.spritePixelsPerUnit, Is.EqualTo(64f));
+
+            string materialsDir = Path.GetFullPath(Path.Combine(Application.dataPath, "Art", "Cartography", "Materials"));
+            bool foundDungeonFoliageMat = false;
+            if (Directory.Exists(materialsDir))
+            {
+                string[] matFiles = Directory.GetFiles(materialsDir, "*.mat", SearchOption.AllDirectories);
+                for (int i = 0; i < matFiles.Length; i++)
+                {
+                    string rel = "Assets" + matFiles[i].Substring(Application.dataPath.Length).Replace('\\', '/');
+                    Material m = AssetDatabase.LoadAssetAtPath<Material>(rel);
+                    if (m == null) continue;
+                    Texture t = m.HasProperty("_BaseMap")
+                        ? m.GetTexture("_BaseMap")
+                        : (m.HasProperty("_MainTex") ? m.mainTexture : null);
+                    if (t != null && string.Equals(t.name, "foliage_atlas_dungeon_cave", System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        foundDungeonFoliageMat = true;
+                        break;
+                    }
+                }
+            }
+            Assert.That(foundDungeonFoliageMat, Is.True, "Expected a Cartography material wired to foliage_atlas_dungeon_cave.");
+
+            GameObject worldGo = new GameObject("TempDungeonRenderTest");
+            try
+            {
+                BywaterWorldRenderer renderer = worldGo.AddComponent<BywaterWorldRenderer>();
+                renderer.Initialize(catalog);
+                renderer.RenderMap(bundle.Dungeon0, new GridCoord(33, 72), forceRebuild: true);
+
+                BywaterElevationBuilder elev = renderer.GetComponentInChildren<BywaterElevationBuilder>(true);
+                Assert.That(elev, Is.Not.Null);
+                Assert.That(elev.terrainMeshRenderer, Is.Not.Null);
+                Assert.That(elev.terrainMeshRenderer.sharedMaterial, Is.Not.Null, "dungeon_0 terrain material not wired.");
+                Assert.That(elev.terrainMeshRenderer.sharedMaterial.shader.name, Is.EqualTo("Realmz/CartographyTerrain"));
+
+                BywaterFoliageScatter scatter = renderer.GetComponentInChildren<BywaterFoliageScatter>(true);
+                Assert.That(scatter, Is.Not.Null);
+                Assert.That(scatter.TotalInstanceCount, Is.EqualTo(0), "BywaterFoliageScatter must return 0 on dungeon_0.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(worldGo);
+            }
+        }
+
+        [Test]
+        public void CombatSpawnClearance_Land0NearTownAvoidsNorthBuildingRoofOverhang()
+        {
+            string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
+            PartyState party = PartyState.FromBundle(bundle);
+            ExplorationSession explore = new ExplorationSession(
+                bundle.Maps,
+                "land_0",
+                party,
+                new DeterministicDiceRoller(4242UL),
+                new GridCoord(10, 9));
+
+            Assert.That(BywaterGameController.IsSpawnTileNorthClear(bundle.Land0, 6, 7), Is.False,
+                "Tile (6,7) immediately south of town building (6,6) must fail north clearance.");
+            Assert.That(BywaterGameController.IsSpawnTileNorthClear(bundle.Land0, 14, 14), Is.True,
+                "Open town plaza tile (14,14) should be north clear.");
+
+            GameObject ctrlGo = new GameObject("TempSpawnClearanceController");
+            try
+            {
+                BywaterGameController ctrl = ctrlGo.AddComponent<BywaterGameController>();
+                ctrl.InitializeForTests(bundle, explore, 4242UL);
+
+                GridCoord origin = ctrl.FindCleanArenaOrigin(bundle.Land0, new GridCoord(10, 9), 12, 10);
+                for (int lx = 0; lx < 12; lx++)
+                {
+                    int wx = origin.X + lx;
+                    int northBorderY = origin.Y - 1;
+                    if (bundle.Land0.InBounds(wx, northBorderY))
+                    {
+                        Assert.That(BywaterTileClassifier.Classify(bundle.Land0, wx, northBorderY),
+                            Is.Not.EqualTo(BywaterTileKind.TownBuildingSolid),
+                            $"Chosen arena north border ({wx},{northBorderY}) should avoid TownBuildingSolid.");
+                    }
+                    for (int ly = 0; ly <= 1; ly++)
+                    {
+                        int wy = origin.Y + ly;
+                        if (bundle.Land0.InBounds(wx, wy))
+                        {
+                            Assert.That(BywaterTileClassifier.Classify(bundle.Land0, wx, wy),
+                                Is.Not.EqualTo(BywaterTileKind.TownBuildingSolid),
+                                $"Chosen arena north row ({wx},{wy}) should avoid TownBuildingSolid.");
+                        }
+                    }
+                }
+
+                ctrl.TriggerDemoSkirmish();
+                Assert.That(ctrl.IsInCombat, Is.True);
+                Assert.That(ctrl.CombatSession, Is.Not.Null);
+
+                GridCoord activeOrigin = ctrl.ArenaOrigin;
+                IReadOnlyList<CombatantState> units = ctrl.CombatSession.Combatants;
+                Assert.That(units.Count, Is.GreaterThanOrEqualTo(7));
+
+                for (int i = 0; i < units.Count; i++)
+                {
+                    CombatantState unit = units[i];
+                    int worldX = activeOrigin.X + unit.Position.X;
+                    int worldY = activeOrigin.Y + unit.Position.Y;
+
+                    Assert.That(unit.Position.Y, Is.GreaterThanOrEqualTo(3),
+                        $"Combatant {unit.Name} spawned too far north at local {unit.Position}.");
+                    Assert.That(BywaterGameController.IsSpawnTileNorthClear(bundle.Land0, worldX, worldY), Is.True,
+                        $"Combatant {unit.Name} spawned at world ({worldX},{worldY}) with north building/wall overhang.");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(ctrlGo);
             }
         }
 

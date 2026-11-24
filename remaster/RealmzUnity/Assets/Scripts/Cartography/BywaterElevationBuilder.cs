@@ -203,6 +203,7 @@ namespace Realmz.Cartography
             List<Color> colors = new List<Color>(estimatedQuads + w * h * 4);
             List<Vector2> uv0 = new List<Vector2>(estimatedQuads + w * h * 4);
             List<Vector2> uv1 = new List<Vector2>(estimatedQuads + w * h * 4);
+            List<Vector2> uv2 = new List<Vector2>(estimatedQuads + w * h * 4);
             List<int> tris = new List<int>(estimatedQuads * 6 + w * h * 12);
 
             // Cache welded plateau vertices by (subgridX, subgridZ, quantizedElevation)
@@ -227,13 +228,13 @@ namespace Realmz.Cartography
                             int gzSouth = gzNorth + 1;
 
                             int i00 = GetOrAddPlateauVertex(data, w, h, gx0, gzSouth, step, yElev, elevKey, chamferDrop,
-                                plateauVertCache, verts, norms, tangs, colors, uv0, uv1);
+                                plateauVertCache, verts, norms, tangs, colors, uv0, uv1, uv2);
                             int i10 = GetOrAddPlateauVertex(data, w, h, gx1, gzSouth, step, yElev, elevKey, chamferDrop,
-                                plateauVertCache, verts, norms, tangs, colors, uv0, uv1);
+                                plateauVertCache, verts, norms, tangs, colors, uv0, uv1, uv2);
                             int i11 = GetOrAddPlateauVertex(data, w, h, gx1, gzNorth, step, yElev, elevKey, chamferDrop,
-                                plateauVertCache, verts, norms, tangs, colors, uv0, uv1);
+                                plateauVertCache, verts, norms, tangs, colors, uv0, uv1, uv2);
                             int i01 = GetOrAddPlateauVertex(data, w, h, gx0, gzNorth, step, yElev, elevKey, chamferDrop,
-                                plateauVertCache, verts, norms, tangs, colors, uv0, uv1);
+                                plateauVertCache, verts, norms, tangs, colors, uv0, uv1, uv2);
 
                             // Winding for +Y up normal in Unity LH coords: (0, 2, 1) and (0, 3, 2)
                             tris.Add(i00);
@@ -258,28 +259,30 @@ namespace Realmz.Cartography
 
                 for (int tx = 0; tx < w; tx++)
                 {
-                    float eHere = data.GetTile(tx, ty).Elevation;
+                    CartographyTile hereTile = data.GetTile(tx, ty);
+                    float eHere = hereTile.Elevation;
+                    float biomeHint = EncodeBiomeHint(hereTile.BiomeZone);
                     float topY = eHere - topRimOffset;
 
                     // South face (neighbor at ty + 1, Z = -(ty + 1), outward Vector3.back)
-                    CheckAndEmitCliff(data, tx, ty + 1, eHere, topY, topRimOffset,
+                    CheckAndEmitCliff(data, tx, ty + 1, eHere, biomeHint, topY, topRimOffset,
                         new Vector3(tx + 1, topY, zSouth), new Vector3(tx, topY, zSouth),
-                        Vector3.back, verts, norms, tangs, colors, uv0, uv1, tris);
+                        Vector3.back, verts, norms, tangs, colors, uv0, uv1, uv2, tris);
 
                     // North face (neighbor at ty - 1, Z = -ty, outward Vector3.forward)
-                    CheckAndEmitCliff(data, tx, ty - 1, eHere, topY, topRimOffset,
+                    CheckAndEmitCliff(data, tx, ty - 1, eHere, biomeHint, topY, topRimOffset,
                         new Vector3(tx, topY, zNorth), new Vector3(tx + 1, topY, zNorth),
-                        Vector3.forward, verts, norms, tangs, colors, uv0, uv1, tris);
+                        Vector3.forward, verts, norms, tangs, colors, uv0, uv1, uv2, tris);
 
                     // West face (neighbor at tx - 1, X = tx, outward Vector3.left)
-                    CheckAndEmitCliff(data, tx - 1, ty, eHere, topY, topRimOffset,
+                    CheckAndEmitCliff(data, tx - 1, ty, eHere, biomeHint, topY, topRimOffset,
                         new Vector3(tx, topY, zSouth), new Vector3(tx, topY, zNorth),
-                        Vector3.left, verts, norms, tangs, colors, uv0, uv1, tris);
+                        Vector3.left, verts, norms, tangs, colors, uv0, uv1, uv2, tris);
 
                     // East face (neighbor at tx + 1, X = tx + 1, outward Vector3.right)
-                    CheckAndEmitCliff(data, tx + 1, ty, eHere, topY, topRimOffset,
+                    CheckAndEmitCliff(data, tx + 1, ty, eHere, biomeHint, topY, topRimOffset,
                         new Vector3(tx + 1, topY, zNorth), new Vector3(tx + 1, topY, zSouth),
-                        Vector3.right, verts, norms, tangs, colors, uv0, uv1, tris);
+                        Vector3.right, verts, norms, tangs, colors, uv0, uv1, uv2, tris);
                 }
             }
 
@@ -296,6 +299,7 @@ namespace Realmz.Cartography
             mesh.SetColors(colors);
             mesh.SetUVs(0, uv0);
             mesh.SetUVs(1, uv1);
+            mesh.SetUVs(2, uv2);
             mesh.SetTriangles(tris, 0);
             mesh.RecalculateBounds();
             return mesh;
@@ -317,7 +321,8 @@ namespace Realmz.Cartography
             List<Vector4> tangs,
             List<Color> colors,
             List<Vector2> uv0,
-            List<Vector2> uv1)
+            List<Vector2> uv1,
+            List<Vector2> uv2)
         {
             long key = ((long)(uint)(elevKey + 32768) << 32) | ((long)(uint)gz << 16) | (uint)gx;
             if (cache.TryGetValue(key, out int existingIdx))
@@ -329,7 +334,7 @@ namespace Realmz.Cartography
             float worldY = gz * step;
             float wz = -worldY;
 
-            SampleCornerWeights(data, wx, worldY, yElev, out Color splat, out float ao);
+            SampleCornerWeights(data, wx, worldY, yElev, out Color splat, out float ao, out float biomeHint);
             float rimDrop = ComputeCornerRimDrop(data, wx, worldY, yElev, chamferDrop);
 
             int idx = verts.Count;
@@ -339,6 +344,7 @@ namespace Realmz.Cartography
             colors.Add(splat);
             uv0.Add(new Vector2(wx / w, 1f - worldY / h));
             uv1.Add(new Vector2(0f, ao));
+            uv2.Add(new Vector2(biomeHint, yElev));
 
             cache[key] = idx;
             return idx;
@@ -349,6 +355,7 @@ namespace Realmz.Cartography
             int nx,
             int ny,
             float eHere,
+            float biomeHint,
             float topY,
             float topRimOffset,
             Vector3 topLeft,
@@ -360,6 +367,7 @@ namespace Realmz.Cartography
             List<Color> colors,
             List<Vector2> uv0,
             List<Vector2> uv1,
+            List<Vector2> uv2,
             List<int> tris)
         {
             float eNeighbor;
@@ -399,6 +407,7 @@ namespace Realmz.Cartography
                 norms.Add(cliffNormal);
                 tangs.Add(tangent);
                 colors.Add(new Color(0f, 0f, 0f, 0f));
+                uv2.Add(new Vector2(biomeHint, eHere));
             }
 
             uv0.Add(new Vector2(0f, 0f));
@@ -421,13 +430,31 @@ namespace Realmz.Cartography
             tris.Add(baseIdx + 3);
         }
 
+        private static float EncodeBiomeHint(CartographyBiomeZone zone)
+        {
+            switch (zone)
+            {
+                case CartographyBiomeZone.SunlitWildflower:
+                    return 0.25f;
+                case CartographyBiomeZone.RiverbankReed:
+                    return 0.50f;
+                case CartographyBiomeZone.ForestShade:
+                    return 0.75f;
+                case CartographyBiomeZone.Blocked:
+                    return 1.00f;
+                default:
+                    return 0.00f;
+            }
+        }
+
         private static void SampleCornerWeights(
             CartographyWorldData data,
             float wx,
             float worldY,
             float tierElevation,
             out Color splatColor,
-            out float creaseAO)
+            out float creaseAO,
+            out float biomeHint)
         {
             int ix = Mathf.FloorToInt(wx - 0.001f);
             int iy = Mathf.FloorToInt(worldY - 0.001f);
@@ -437,6 +464,7 @@ namespace Realmz.Cartography
             float sumB = 0f;
             float sumA = 0f;
             float sumAO = 0f;
+            float sumBiome = 0f;
             int count = 0;
             bool touchesHigherTier = false;
 
@@ -459,6 +487,7 @@ namespace Realmz.Cartography
                         sumB += t.CobbleWeight;
                         sumA += t.MudWeight;
                         sumAO += t.CreaseAO;
+                        sumBiome += EncodeBiomeHint(t.BiomeZone);
                         count++;
                     }
                     else if (t.Elevation > tierElevation + 0.03f)
@@ -473,12 +502,14 @@ namespace Realmz.Cartography
                 CartographyTile fallback = data.GetTile(Mathf.FloorToInt(wx), Mathf.FloorToInt(worldY));
                 splatColor = new Color(fallback.MossWeight, fallback.DirtWeight, fallback.CobbleWeight, fallback.MudWeight);
                 creaseAO = fallback.CreaseAO;
+                biomeHint = EncodeBiomeHint(fallback.BiomeZone);
                 return;
             }
 
             float inv = 1.0f / count;
             splatColor = new Color(sumR * inv, sumG * inv, sumB * inv, sumA * inv);
             creaseAO = sumAO * inv;
+            biomeHint = sumBiome * inv;
 
             if (touchesHigherTier)
             {

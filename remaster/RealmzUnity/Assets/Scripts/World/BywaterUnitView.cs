@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using Realmz.Data;
 using Realmz.Rendering;
 using TMPro;
 using UnityEngine;
@@ -50,13 +51,17 @@ namespace Realmz.World
         private Image _spBarRoot;
         private Image _spFill;
         private TextMeshProUGUI _statusBadgeLabel;
+        private Image _statusBadgeIcon;
 
         private MaterialPropertyBlock _ringPropBlock;
         private MaterialPropertyBlock _spritePropBlock;
 
+        private BywaterAssetCatalog _catalog;
         private TMP_FontAsset _font;
         private Color _baseRingColor = Color.white;
         private float _spriteSize = 2.0f;
+        private float _spriteWidth = 2.0f;
+        private float _spriteHeight = 2.0f;
         private bool _showHud = true;
         private bool _isAlive = true;
         private bool _isAlly = true;
@@ -94,6 +99,11 @@ namespace Realmz.World
             return transform.position + new Vector3(0f, GetVisualHeadHeight() + 0.16f, 0f);
         }
 
+        public void SetCatalog(BywaterAssetCatalog catalog)
+        {
+            _catalog = catalog;
+        }
+
         public void Configure(
             string unitId,
             string displayName,
@@ -102,13 +112,26 @@ namespace Realmz.World
             TMP_FontAsset font,
             float spriteSize = 2.0f,
             bool showHud = true,
-            bool? isAllyOverride = null)
+            bool? isAllyOverride = null,
+            BywaterAssetCatalog catalog = null)
         {
             UnitId = unitId ?? string.Empty;
+            if (catalog != null)
+            {
+                _catalog = catalog;
+            }
             _baseRingColor = ringColor;
             _isAlly = isAllyOverride ?? (ringColor.b >= ringColor.r);
             _font = font;
             _spriteSize = Mathf.Max(0.4f, spriteSize);
+            _spriteWidth = _spriteSize;
+            _spriteHeight = _spriteSize;
+
+            if (_catalog != null && !string.IsNullOrEmpty(UnitId))
+            {
+                billboardMat = _catalog.ResolveCartographyUnitMaterial(UnitId, billboardMat);
+            }
+
             _showHud = showHud;
             _isAlive = true;
             _isCurrentTurn = false;
@@ -172,6 +195,11 @@ namespace Realmz.World
             _detailLabel.text = string.Empty;
             _detailLabel.gameObject.SetActive(false);
             _statusBadgeLabel.gameObject.SetActive(false);
+            if (_statusBadgeIcon != null)
+            {
+                _statusBadgeIcon.sprite = null;
+                _statusBadgeIcon.gameObject.SetActive(false);
+            }
         }
 
         public void SetTeamColor(bool isAlly)
@@ -322,10 +350,10 @@ namespace Realmz.World
             float breathScale = 1.0f + breathWave * 0.025f;
             float tiltDeg = swayWave * 1.4f;
             float tiltRad = tiltDeg * Mathf.Deg2Rad;
-            float halfHeight = _spriteSize * 0.5f * breathScale;
+            float halfHeight = _spriteHeight * 0.5f * breathScale;
 
             Transform spriteTf = _spriteRenderer.transform;
-            spriteTf.localScale = new Vector3(_spriteSize, _spriteSize * breathScale, 1f);
+            spriteTf.localScale = new Vector3(_spriteWidth, _spriteHeight * breathScale, 1f);
             spriteTf.localPosition = new Vector3(-Mathf.Sin(tiltRad) * halfHeight, Mathf.Cos(tiltRad) * halfHeight, 0f);
             spriteTf.localRotation = Quaternion.Euler(0f, 0f, tiltDeg);
         }
@@ -432,6 +460,7 @@ namespace Realmz.World
             {
                 _statusBadgeLabel.text = statusBadge;
             }
+            LayoutStatusBadge();
 
             if (isAlive)
             {
@@ -483,8 +512,59 @@ namespace Realmz.World
                 {
                     _microHudCanvas.gameObject.SetActive(false);
                 }
+                if (_statusBadgeIcon != null)
+                {
+                    _statusBadgeIcon.gameObject.SetActive(false);
+                }
                 _expandedNameplateRoot.SetActive(false);
                 _worldHudCanvas.gameObject.SetActive(false);
+            }
+        }
+
+        public void UpdateConditionBadgeIcon(Sprite iconSprite)
+        {
+            EnsureHierarchy();
+            if (_statusBadgeIcon == null)
+            {
+                return;
+            }
+
+            if (iconSprite == null || !_isAlive || !_showHud)
+            {
+                _statusBadgeIcon.sprite = null;
+                _statusBadgeIcon.gameObject.SetActive(false);
+                LayoutStatusBadge();
+                return;
+            }
+
+            _statusBadgeIcon.sprite = iconSprite;
+            _statusBadgeIcon.color = Color.white;
+            _statusBadgeIcon.gameObject.SetActive(true);
+            LayoutStatusBadge();
+        }
+
+        private void LayoutStatusBadge()
+        {
+            if (_statusBadgeLabel == null)
+            {
+                return;
+            }
+
+            bool iconActive = _statusBadgeIcon != null && _statusBadgeIcon.gameObject.activeSelf && _statusBadgeIcon.sprite != null;
+            bool labelActive = _statusBadgeLabel.gameObject.activeSelf;
+
+            if (iconActive && labelActive)
+            {
+                _statusBadgeIcon.rectTransform.anchoredPosition = new Vector2(-58f, 38f);
+                _statusBadgeLabel.rectTransform.anchoredPosition = new Vector2(14f, 36f);
+            }
+            else if (iconActive)
+            {
+                _statusBadgeIcon.rectTransform.anchoredPosition = new Vector2(0f, 38f);
+            }
+            else
+            {
+                _statusBadgeLabel.rectTransform.anchoredPosition = new Vector2(0f, 36f);
             }
         }
 
@@ -776,8 +856,8 @@ namespace Realmz.World
             }
 
             Transform spriteTf = _spriteRenderer.transform;
-            spriteTf.localPosition = new Vector3(0f, _spriteSize * 0.5f, 0f);
-            spriteTf.localScale = new Vector3(_spriteSize, _spriteSize, 1f);
+            spriteTf.localPosition = new Vector3(0f, _spriteHeight * 0.5f, 0f);
+            spriteTf.localScale = new Vector3(_spriteWidth, _spriteHeight, 1f);
             spriteTf.localRotation = Quaternion.identity;
         }
 
@@ -866,8 +946,8 @@ namespace Realmz.World
 
             GameObject spriteGo = new GameObject("SpriteQuad", typeof(MeshFilter), typeof(MeshRenderer));
             spriteGo.transform.SetParent(_spriteBillboardTransform, false);
-            spriteGo.transform.localPosition = new Vector3(0f, _spriteSize * 0.5f, 0f);
-            spriteGo.transform.localScale = new Vector3(_spriteSize, _spriteSize, 1f);
+            spriteGo.transform.localPosition = new Vector3(0f, _spriteHeight * 0.5f, 0f);
+            spriteGo.transform.localScale = new Vector3(_spriteWidth, _spriteHeight, 1f);
             spriteGo.GetComponent<MeshFilter>().sharedMesh = GetOrCreateSharedUnitQuadMesh();
             _spriteRenderer = spriteGo.GetComponent<MeshRenderer>();
             _spriteRenderer.shadowCastingMode = ShadowCastingMode.On;
@@ -932,6 +1012,16 @@ namespace Realmz.World
             _hpFill = CreateSlimBar(microHudGo.transform, "HpBar", Vector2.zero, new Vector2(92f, 5f), AllyHpBlue);
 
             // 6. WorldHud (hover/Alt expanded nameplate, hidden by default)
+            EnsureWorldHud(headHeight);
+        }
+
+        private void EnsureWorldHud(float headHeight)
+        {
+            if (_worldHudCanvas != null)
+            {
+                return;
+            }
+
             GameObject hudGo = new GameObject("WorldHud");
             hudGo.transform.SetParent(transform, false);
             hudGo.transform.localPosition = new Vector3(0f, headHeight + 0.16f, 0f);
@@ -982,6 +1072,19 @@ namespace Realmz.World
 
             // SP bar
             _spFill = CreateBar(_expandedNameplateRoot.transform, "SpBar", new Vector2(0f, -14f), new Vector2(116f, 6f), new Color(0.18f, 0.78f, 0.96f, 1f), out _spBarRoot);
+
+            // Condition badge icon (32x32) beside label
+            GameObject iconGo = new GameObject("ConditionBadgeIcon");
+            iconGo.transform.SetParent(_expandedNameplateRoot.transform, false);
+            RectTransform iconRt = iconGo.AddComponent<RectTransform>();
+            iconRt.anchorMin = new Vector2(0.5f, 0.5f);
+            iconRt.anchorMax = new Vector2(0.5f, 0.5f);
+            iconRt.anchoredPosition = new Vector2(-58f, 38f);
+            iconRt.sizeDelta = new Vector2(32f, 32f);
+            _statusBadgeIcon = iconGo.AddComponent<Image>();
+            _statusBadgeIcon.preserveAspect = true;
+            _statusBadgeIcon.raycastTarget = false;
+            iconGo.SetActive(false);
 
             // Condition badge
             _statusBadgeLabel = CreateTmpLabel(_expandedNameplateRoot.transform, "ConditionBadge", new Vector2(0f, 36f), new Vector2(176f, 20f), 14f, new Color(0.98f, 0.84f, 0.22f, 1f));

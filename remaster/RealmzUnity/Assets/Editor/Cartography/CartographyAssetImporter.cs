@@ -18,14 +18,26 @@ namespace Realmz.EditorTools.Cartography
         public const string CartographyArtRoot = "Assets/Art/Cartography";
         public const string TilesDir = CartographyArtRoot + "/tiles";
         public const string FoliageDir = CartographyArtRoot + "/foliage";
+        public const string AtlasesDir = CartographyArtRoot + "/Atlases";
         public const string UnitsDir = CartographyArtRoot + "/units";
+        public const string PortraitsDir = CartographyArtRoot + "/Portraits";
+        public const string BuildingsDir = CartographyArtRoot + "/Buildings";
+        public const string PropsDir = CartographyArtRoot + "/Props";
+        public const string SurfacesDir = CartographyArtRoot + "/Surfaces";
+        public const string VfxDir = CartographyArtRoot + "/Vfx";
         public const string IconsDir = CartographyArtRoot + "/Icons";
         public const string MaterialsDir = CartographyArtRoot + "/Materials";
         public const string AlbedoArrayAssetPath = TilesDir + "/CartographyTerrainAlbedoArray.asset";
         public const string NormalArrayAssetPath = TilesDir + "/CartographyTerrainNormalArray.asset";
+        public const string DungeonAlbedoArrayAssetPath = TilesDir + "/CartographyDungeonTerrainAlbedoArray.asset";
+        public const string DungeonNormalArrayAssetPath = TilesDir + "/CartographyDungeonTerrainNormalArray.asset";
         public const string TerrainMaterialPath = MaterialsDir + "/Cartography_Terrain.mat";
+        public const string DungeonTerrainMaterialPath = MaterialsDir + "/Cartography_DungeonTerrain.mat";
         public const string FoliageMaterialPath = MaterialsDir + "/Cartography_FoliageAtlas.mat";
+        public const string DungeonFoliageMaterialPath = MaterialsDir + "/Cartography_FoliageAtlas_DungeonCave.mat";
+        public const string MarshFoliageMaterialPath = MaterialsDir + "/Cartography_FoliageAtlas_MarshAutumn.mat";
         public const string WaterMaterialPath = MaterialsDir + "/Cartography_ShallowWater.mat";
+        public const string DungeonWaterMaterialPath = MaterialsDir + "/Cartography_DungeonWater.mat";
 
         public const int TileLayerSize = 128;
         public const int UnitFrameSize = 128;
@@ -80,7 +92,30 @@ namespace Realmz.EditorTools.Cartography
             "dirt_road",
             "cobble_plaza",
             "river_mud",
-            "cliff_rock"
+            "cliff_rock",
+            "forest_root_dirt",
+            "dark_forest_moss",
+            "fallen_leaves_loam",
+            "highland_scree",
+            "marsh_bog_turf",
+            "swamp_mire_mud",
+            "stagnant_reeds_water",
+            "alpine_frost_grass",
+            "packed_snow_trail",
+            "hearth_ash_stone",
+            "inn_wood_planks",
+            "temple_marble_tile",
+            "shallow_water"
+        };
+
+        private static readonly string[] DungeonTerrainLayerNames =
+        {
+            "dungeon_cavern_stone",
+            "dungeon_cracked_slate",
+            "dungeon_moss_cobble",
+            "dungeon_chasm_void",
+            "granite_cliff_rock",
+            "subterranean_water"
         };
 
         [MenuItem("Realmz/Cartography/Import Assets & Build Texture Arrays")]
@@ -99,8 +134,13 @@ namespace Realmz.EditorTools.Cartography
 
             BuildTerrainTextureArrays(out Texture2DArray albedoArray, out Texture2DArray normalArray);
             CreateOrUpdateTerrainMaterial(albedoArray, normalArray);
+            BuildDungeonTerrainTextureArrays(out Texture2DArray dungeonAlbedoArray, out Texture2DArray dungeonNormalArray);
+            CreateOrUpdateDungeonTerrainMaterial(dungeonAlbedoArray, dungeonNormalArray);
             CreateOrUpdateFoliageMaterial();
+            CreateOrUpdateDungeonFoliageMaterial();
+            CreateOrUpdateMarshFoliageMaterial();
             CreateOrUpdateWaterMaterial();
+            CreateOrUpdateDungeonWaterMaterial();
             CreateOrUpdateAllUnitMaterials();
             foreach (CartographyPropKind kind in Enum.GetValues(typeof(CartographyPropKind)))
             {
@@ -141,11 +181,21 @@ namespace Realmz.EditorTools.Cartography
 
             bool isNormal = assetPath.EndsWith("_n.png", StringComparison.OrdinalIgnoreCase);
             bool isTile = assetPath.IndexOf("/tiles/", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isFoliageAtlas = assetPath.IndexOf("/foliage/", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isFoliageAtlas = assetPath.IndexOf("/foliage/", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                  assetPath.IndexOf("/Atlases/", StringComparison.OrdinalIgnoreCase) >= 0;
             bool isIcon = !isNormal && assetPath.IndexOf("/Icons/", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isPortrait = !isNormal && assetPath.IndexOf("/Portraits/", StringComparison.OrdinalIgnoreCase) >= 0;
             bool isUnitSheet = !isNormal &&
                                assetPath.IndexOf("/units/", StringComparison.OrdinalIgnoreCase) >= 0 &&
                                assetPath.EndsWith("_sheet.png", StringComparison.OrdinalIgnoreCase);
+            bool isProp4f = !isNormal &&
+                            assetPath.IndexOf("/Props/", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                            assetPath.EndsWith("_4f.png", StringComparison.OrdinalIgnoreCase);
+            bool isSurface = !isNormal && assetPath.IndexOf("/Surfaces/", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isVfx = !isNormal && assetPath.IndexOf("/Vfx/", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isFlatFloorProp = !isNormal &&
+                                   (assetPath.EndsWith("/dungeon_iron_grate.png", StringComparison.OrdinalIgnoreCase) ||
+                                    assetPath.EndsWith("/dungeon_spike_trap.png", StringComparison.OrdinalIgnoreCase));
 
             bool dirty = false;
 
@@ -202,7 +252,7 @@ namespace Realmz.EditorTools.Cartography
                     dirty = true;
                 }
             }
-            else if (isIcon)
+            else if (isIcon || isPortrait)
             {
                 if (importer.textureType != TextureImporterType.Sprite)
                 {
@@ -250,7 +300,9 @@ namespace Realmz.EditorTools.Cartography
                 }
 
                 importer.GetSourceTextureWidthAndHeight(out int texW, out int texH);
-                bool sliceAs4Frames = isUnitSheet && texW >= UnitFrameSize * UnitFrameCount && texH == UnitFrameSize;
+                bool sliceAs4Frames = (isUnitSheet || isProp4f || isSurface || isVfx) &&
+                                      texW >= UnitFrameSize * UnitFrameCount &&
+                                      texH == UnitFrameSize;
                 SpriteImportMode desiredMode = sliceAs4Frames ? SpriteImportMode.Multiple : SpriteImportMode.Single;
                 if (importer.spriteImportMode != desiredMode)
                 {
@@ -273,18 +325,22 @@ namespace Realmz.EditorTools.Cartography
                     dirty = true;
                 }
 
+                bool useCenterPivot = isSurface || isVfx || isFlatFloorProp;
+                SpriteAlignment desiredAlign = useCenterPivot ? SpriteAlignment.Center : SpriteAlignment.BottomCenter;
+                Vector2 desiredPivot = useCenterPivot ? new Vector2(0.5f, 0.5f) : new Vector2(0.5f, 0f);
+
                 TextureImporterSettings settings = new TextureImporterSettings();
                 importer.ReadTextureSettings(settings);
-                if (settings.spriteAlignment != (int)SpriteAlignment.BottomCenter ||
-                    (settings.spritePivot - new Vector2(0.5f, 0f)).sqrMagnitude > 0.0001f)
+                if (settings.spriteAlignment != (int)desiredAlign ||
+                    (settings.spritePivot - desiredPivot).sqrMagnitude > 0.0001f)
                 {
-                    settings.spriteAlignment = (int)SpriteAlignment.BottomCenter;
-                    settings.spritePivot = new Vector2(0.5f, 0f);
+                    settings.spriteAlignment = (int)desiredAlign;
+                    settings.spritePivot = desiredPivot;
                     importer.SetTextureSettings(settings);
                     dirty = true;
                 }
 
-                if (sliceAs4Frames && EnsureFourFrameSpriteSheet(importer, assetPath, texW, texH))
+                if (sliceAs4Frames && EnsureFourFrameSpriteSheet(importer, assetPath, texW, texH, desiredAlign, desiredPivot))
                 {
                     dirty = true;
                 }
@@ -318,7 +374,13 @@ namespace Realmz.EditorTools.Cartography
             }
         }
 
-        private static bool EnsureFourFrameSpriteSheet(TextureImporter importer, string assetPath, int texW, int texH)
+        private static bool EnsureFourFrameSpriteSheet(
+            TextureImporter importer,
+            string assetPath,
+            int texW,
+            int texH,
+            SpriteAlignment alignment,
+            Vector2 pivot)
         {
             int frameW = texW / UnitFrameCount;
             int frameH = texH;
@@ -347,8 +409,8 @@ namespace Realmz.EditorTools.Cartography
                         Mathf.Abs(curRect.y) > 0.1f ||
                         Mathf.Abs(curRect.width - frameW) > 0.1f ||
                         Mathf.Abs(curRect.height - frameH) > 0.1f ||
-                        curAlign != (int)SpriteAlignment.BottomCenter ||
-                        (curPivot - new Vector2(0.5f, 0f)).sqrMagnitude > 0.0001f)
+                        curAlign != (int)alignment ||
+                        (curPivot - pivot).sqrMagnitude > 0.0001f)
                     {
                         needsUpdate = true;
                         break;
@@ -367,8 +429,8 @@ namespace Realmz.EditorTools.Cartography
                 SerializedProperty elem = spritesProp.GetArrayElementAtIndex(i);
                 elem.FindPropertyRelative("m_Name").stringValue = $"{baseName}_{i}";
                 elem.FindPropertyRelative("m_Rect").rectValue = new Rect(i * frameW, 0f, frameW, frameH);
-                elem.FindPropertyRelative("m_Alignment").intValue = (int)SpriteAlignment.BottomCenter;
-                elem.FindPropertyRelative("m_Pivot").vector2Value = new Vector2(0.5f, 0f);
+                elem.FindPropertyRelative("m_Alignment").intValue = (int)alignment;
+                elem.FindPropertyRelative("m_Pivot").vector2Value = pivot;
                 SerializedProperty borderProp = elem.FindPropertyRelative("m_Border");
                 if (borderProp != null)
                 {
@@ -402,9 +464,31 @@ namespace Realmz.EditorTools.Cartography
 
         public static void CreateOrUpdateAllUnitMaterials()
         {
+            HashSet<string> processed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (int i = 0; i < UnifiedUnitIds.Length; i++)
             {
-                CreateOrUpdateUnitMaterial(UnifiedUnitIds[i]);
+                if (processed.Add(UnifiedUnitIds[i]))
+                {
+                    CreateOrUpdateUnitMaterial(UnifiedUnitIds[i]);
+                }
+            }
+
+            string fullUnitsDir = Path.GetFullPath(UnitsDir);
+            if (Directory.Exists(fullUnitsDir))
+            {
+                string[] sheets = Directory.GetFiles(fullUnitsDir, "*_sheet.png", SearchOption.TopDirectoryOnly);
+                for (int i = 0; i < sheets.Length; i++)
+                {
+                    string fileName = Path.GetFileName(sheets[i]);
+                    if (fileName.EndsWith("_sheet.png", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string unitId = fileName.Substring(0, fileName.Length - "_sheet.png".Length);
+                        if (processed.Add(unitId))
+                        {
+                            CreateOrUpdateUnitMaterial(unitId);
+                        }
+                    }
+                }
             }
         }
 
@@ -494,11 +578,75 @@ namespace Realmz.EditorTools.Cartography
             return first != null ? first : AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
         }
 
+        public static Sprite[] LoadAllSpriteFrames(string assetPath)
+        {
+            if (string.IsNullOrWhiteSpace(assetPath))
+            {
+                return Array.Empty<Sprite>();
+            }
+
+            UnityEngine.Object[] subAssets = AssetDatabase.LoadAllAssetsAtPath(assetPath);
+            List<Sprite> frames = new List<Sprite>(4);
+            if (subAssets != null)
+            {
+                for (int i = 0; i < subAssets.Length; i++)
+                {
+                    if (subAssets[i] is Sprite s)
+                    {
+                        frames.Add(s);
+                    }
+                }
+            }
+
+            if (frames.Count == 0)
+            {
+                Sprite single = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
+                if (single != null)
+                {
+                    frames.Add(single);
+                }
+            }
+
+            frames.Sort((a, b) => a.rect.x.CompareTo(b.rect.x));
+            return frames.ToArray();
+        }
+
         public static void BuildTerrainTextureArrays(out Texture2DArray albedoArray, out Texture2DArray normalArray)
         {
-            int sliceCount = TerrainLayerNames.Length;
+            PackTerrainTextureArrays(
+                TerrainLayerNames,
+                AlbedoArrayAssetPath,
+                NormalArrayAssetPath,
+                "CartographyTerrainAlbedoArray",
+                "CartographyTerrainNormalArray",
+                out albedoArray,
+                out normalArray);
+        }
 
-            Texture2DArray existingAlbedo = AssetDatabase.LoadAssetAtPath<Texture2DArray>(AlbedoArrayAssetPath);
+        public static void BuildDungeonTerrainTextureArrays(out Texture2DArray albedoArray, out Texture2DArray normalArray)
+        {
+            PackTerrainTextureArrays(
+                DungeonTerrainLayerNames,
+                DungeonAlbedoArrayAssetPath,
+                DungeonNormalArrayAssetPath,
+                "CartographyDungeonTerrainAlbedoArray",
+                "CartographyDungeonTerrainNormalArray",
+                out albedoArray,
+                out normalArray);
+        }
+
+        private static void PackTerrainTextureArrays(
+            string[] layerNames,
+            string albedoAssetPath,
+            string normalAssetPath,
+            string albedoName,
+            string normalName,
+            out Texture2DArray albedoArray,
+            out Texture2DArray normalArray)
+        {
+            int sliceCount = layerNames.Length;
+
+            Texture2DArray existingAlbedo = AssetDatabase.LoadAssetAtPath<Texture2DArray>(albedoAssetPath);
             bool createAlbedo = existingAlbedo == null || existingAlbedo.width != TileLayerSize ||
                                 existingAlbedo.height != TileLayerSize || existingAlbedo.depth != sliceCount;
             bool copyIntoExistingAlbedo = !createAlbedo && !existingAlbedo.isReadable;
@@ -512,7 +660,7 @@ namespace Realmz.EditorTools.Cartography
                     mipChain: false,
                     linear: false)
                 {
-                    name = "CartographyTerrainAlbedoArray",
+                    name = albedoName,
                     filterMode = FilterMode.Point,
                     wrapMode = TextureWrapMode.Repeat
                 };
@@ -522,7 +670,7 @@ namespace Realmz.EditorTools.Cartography
                 albedoArray = existingAlbedo;
             }
 
-            Texture2DArray existingNormal = AssetDatabase.LoadAssetAtPath<Texture2DArray>(NormalArrayAssetPath);
+            Texture2DArray existingNormal = AssetDatabase.LoadAssetAtPath<Texture2DArray>(normalAssetPath);
             bool createNormal = existingNormal == null || existingNormal.width != TileLayerSize ||
                                 existingNormal.height != TileLayerSize || existingNormal.depth != sliceCount;
             bool copyIntoExistingNormal = !createNormal && !existingNormal.isReadable;
@@ -536,7 +684,7 @@ namespace Realmz.EditorTools.Cartography
                     mipChain: false,
                     linear: true)
                 {
-                    name = "CartographyTerrainNormalArray",
+                    name = normalName,
                     filterMode = FilterMode.Point,
                     wrapMode = TextureWrapMode.Repeat
                 };
@@ -548,14 +696,14 @@ namespace Realmz.EditorTools.Cartography
 
             for (int slice = 0; slice < sliceCount; slice++)
             {
-                string layerName = TerrainLayerNames[slice];
+                string layerName = layerNames[slice];
                 string albPath = TilesDir + "/" + layerName + ".png";
                 string nrmPath = TilesDir + "/" + layerName + "_n.png";
 
                 Color32[] albPixels = TryLoadPngPixelsResampled(albPath, TileLayerSize, TileLayerSize, linear: false)
-                    ?? GenerateProceduralTerrainSlice(slice, TileLayerSize);
+                    ?? GenerateProceduralTerrainSlice(slice % 6, TileLayerSize);
                 Color32[] nrmPixels = TryLoadPngPixelsResampled(nrmPath, TileLayerSize, TileLayerSize, linear: true)
-                    ?? GenerateProceduralNormalSlice(slice, TileLayerSize);
+                    ?? GenerateProceduralNormalSlice(slice % 6, TileLayerSize);
 
                 albedoArray.SetPixels32(albPixels, slice);
                 normalArray.SetPixels32(nrmPixels, slice);
@@ -571,7 +719,7 @@ namespace Realmz.EditorTools.Cartography
 
             if (createAlbedo)
             {
-                AssetDatabase.CreateAsset(albedoArray, AlbedoArrayAssetPath);
+                AssetDatabase.CreateAsset(albedoArray, albedoAssetPath);
             }
             else if (copyIntoExistingAlbedo)
             {
@@ -587,7 +735,7 @@ namespace Realmz.EditorTools.Cartography
 
             if (createNormal)
             {
-                AssetDatabase.CreateAsset(normalArray, NormalArrayAssetPath);
+                AssetDatabase.CreateAsset(normalArray, normalAssetPath);
             }
             else if (copyIntoExistingNormal)
             {
@@ -604,12 +752,43 @@ namespace Realmz.EditorTools.Cartography
 
         public static Material CreateOrUpdateTerrainMaterial(Texture2DArray albedoArray, Texture2DArray normalArray)
         {
+            return CreateOrUpdateTerrainMaterialAtPath(
+                TerrainMaterialPath,
+                albedoArray,
+                normalArray,
+                groundValueScale: 0.76f,
+                roadValueBoost: 0.86f,
+                horizonHazeColor: new Color(0.91f, 0.83f, 0.70f, 1f),
+                horizonHazeStrength: 0.09f);
+        }
+
+        public static Material CreateOrUpdateDungeonTerrainMaterial(Texture2DArray albedoArray, Texture2DArray normalArray)
+        {
+            return CreateOrUpdateTerrainMaterialAtPath(
+                DungeonTerrainMaterialPath,
+                albedoArray,
+                normalArray,
+                groundValueScale: 0.42f,
+                roadValueBoost: 0.46f,
+                horizonHazeColor: new Color(0.05f, 0.07f, 0.12f, 1f),
+                horizonHazeStrength: 0.22f);
+        }
+
+        private static Material CreateOrUpdateTerrainMaterialAtPath(
+            string matPath,
+            Texture2DArray albedoArray,
+            Texture2DArray normalArray,
+            float groundValueScale,
+            float roadValueBoost,
+            Color horizonHazeColor,
+            float horizonHazeStrength)
+        {
             Shader shader = Shader.Find("Realmz/CartographyTerrain") ?? Shader.Find("Universal Render Pipeline/Lit");
-            Material mat = AssetDatabase.LoadAssetAtPath<Material>(TerrainMaterialPath);
+            Material mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
             if (mat == null)
             {
                 mat = new Material(shader);
-                AssetDatabase.CreateAsset(mat, TerrainMaterialPath);
+                AssetDatabase.CreateAsset(mat, matPath);
             }
             else if (mat.shader != shader)
             {
@@ -627,10 +806,10 @@ namespace Realmz.EditorTools.Cartography
             if (mat.HasProperty("_MacroScale")) mat.SetFloat("_MacroScale", 0.085f);
             if (mat.HasProperty("_MacroStrength")) mat.SetFloat("_MacroStrength", 0.10f);
             if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.06f);
-            if (mat.HasProperty("_GroundValueScale")) mat.SetFloat("_GroundValueScale", 0.76f);
-            if (mat.HasProperty("_RoadValueBoost")) mat.SetFloat("_RoadValueBoost", 0.86f);
-            if (mat.HasProperty("_HorizonHazeColor")) mat.SetColor("_HorizonHazeColor", new Color(0.91f, 0.83f, 0.70f, 1f));
-            if (mat.HasProperty("_HorizonHazeStrength")) mat.SetFloat("_HorizonHazeStrength", 0.09f);
+            if (mat.HasProperty("_GroundValueScale")) mat.SetFloat("_GroundValueScale", groundValueScale);
+            if (mat.HasProperty("_RoadValueBoost")) mat.SetFloat("_RoadValueBoost", roadValueBoost);
+            if (mat.HasProperty("_HorizonHazeColor")) mat.SetColor("_HorizonHazeColor", horizonHazeColor);
+            if (mat.HasProperty("_HorizonHazeStrength")) mat.SetFloat("_HorizonHazeStrength", horizonHazeStrength);
 
             EditorUtility.SetDirty(mat);
             return mat;
@@ -638,41 +817,79 @@ namespace Realmz.EditorTools.Cartography
 
         public static Material CreateOrUpdateFoliageMaterial()
         {
+            return CreateOrUpdateFoliageMaterialAtPath(
+                FoliageMaterialPath,
+                new[]
+                {
+                    FoliageDir + "/bywater_foliage_atlas.png",
+                    FoliageDir + "/foliage_atlas.png",
+                    FoliageDir + "/cartography_foliage_atlas.png",
+                    CartographyArtRoot + "/bywater_foliage_atlas.png",
+                    CartographyArtRoot + "/foliage_atlas.png"
+                },
+                new[]
+                {
+                    FoliageDir + "/bywater_foliage_atlas_n.png",
+                    FoliageDir + "/foliage_atlas_n.png",
+                    CartographyArtRoot + "/bywater_foliage_atlas_n.png"
+                },
+                new Color(0.44f, 0.52f, 0.42f, 1f),
+                fallbackIfMissing: true);
+        }
+
+        public static Material CreateOrUpdateDungeonFoliageMaterial()
+        {
+            return CreateOrUpdateFoliageMaterialAtPath(
+                DungeonFoliageMaterialPath,
+                new[] { AtlasesDir + "/foliage_atlas_dungeon_cave.png" },
+                new[] { AtlasesDir + "/foliage_atlas_dungeon_cave_n.png" },
+                new Color(0.28f, 0.34f, 0.38f, 1f),
+                fallbackIfMissing: false);
+        }
+
+        public static Material CreateOrUpdateMarshFoliageMaterial()
+        {
+            return CreateOrUpdateFoliageMaterialAtPath(
+                MarshFoliageMaterialPath,
+                new[] { AtlasesDir + "/foliage_atlas_marsh_autumn.png" },
+                new[] { AtlasesDir + "/foliage_atlas_marsh_autumn_n.png" },
+                new Color(0.42f, 0.38f, 0.28f, 1f),
+                fallbackIfMissing: false);
+        }
+
+        private static Material CreateOrUpdateFoliageMaterialAtPath(
+            string matPath,
+            string[] albedoCandidates,
+            string[] normalCandidates,
+            Color rootTint,
+            bool fallbackIfMissing)
+        {
             Shader shader = Shader.Find("Realmz/CartographyBillboard") ?? Shader.Find("Universal Render Pipeline/Lit");
-            Material mat = AssetDatabase.LoadAssetAtPath<Material>(FoliageMaterialPath);
+            Material mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
             if (mat == null)
             {
                 mat = new Material(shader);
-                AssetDatabase.CreateAsset(mat, FoliageMaterialPath);
+                AssetDatabase.CreateAsset(mat, matPath);
             }
             else if (mat.shader != shader)
             {
                 mat.shader = shader;
             }
 
-            Texture2D atlas = FindFirstTextureInCartography(new[]
-            {
-                FoliageDir + "/bywater_foliage_atlas.png",
-                FoliageDir + "/foliage_atlas.png",
-                FoliageDir + "/cartography_foliage_atlas.png",
-                CartographyArtRoot + "/bywater_foliage_atlas.png",
-                CartographyArtRoot + "/foliage_atlas.png"
-            });
-
-            if (atlas == null)
+            Texture2D atlas = FindFirstTextureInCartography(albedoCandidates);
+            if (atlas == null && fallbackIfMissing)
             {
                 atlas = EnsureFallbackFoliageAtlasAsset();
             }
 
-            Texture2D atlasNormal = FindFirstTextureInCartography(new[]
-            {
-                FoliageDir + "/bywater_foliage_atlas_n.png",
-                FoliageDir + "/foliage_atlas_n.png",
-                CartographyArtRoot + "/bywater_foliage_atlas_n.png"
-            });
+            Texture2D atlasNormal = FindFirstTextureInCartography(normalCandidates);
 
             mat.enableInstancing = true;
-            if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", atlas);
+            if (atlas != null)
+            {
+                mat.mainTexture = atlas;
+                if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", atlas);
+            }
             if (mat.HasProperty("_BumpMap") && atlasNormal != null) mat.SetTexture("_BumpMap", atlasNormal);
             if (mat.HasProperty("_IsTwoBankAtlas")) mat.SetFloat("_IsTwoBankAtlas", 1f);
             if (mat.HasProperty("_BillboardMode")) mat.SetFloat("_BillboardMode", 1f);
@@ -681,7 +898,7 @@ namespace Realmz.EditorTools.Cartography
             if (mat.HasProperty("_FrameCount")) mat.SetFloat("_FrameCount", 8f);
             if (mat.HasProperty("_AnimFps")) mat.SetFloat("_AnimFps", 7f);
             if (mat.HasProperty("_Cutoff")) mat.SetFloat("_Cutoff", 0.42f);
-            if (mat.HasProperty("_RootTint")) mat.SetColor("_RootTint", new Color(0.44f, 0.52f, 0.42f, 1f));
+            if (mat.HasProperty("_RootTint")) mat.SetColor("_RootTint", rootTint);
             if (mat.HasProperty("_TintColor")) mat.SetColor("_TintColor", Color.white);
 
             EditorUtility.SetDirty(mat);
@@ -690,39 +907,138 @@ namespace Realmz.EditorTools.Cartography
 
         public static Material CreateOrUpdateWaterMaterial()
         {
+            return CreateOrUpdateWaterMaterialAtPath(
+                WaterMaterialPath,
+                new[]
+                {
+                    TilesDir + "/shallow_water.png",
+                    "Assets/Art/M1/Tiles/shallow_water.png"
+                },
+                new[]
+                {
+                    TilesDir + "/shallow_water_n.png",
+                    "Assets/Art/M1/Tiles/shallow_water_n.png"
+                },
+                new Color(0.16f, 0.38f, 0.46f, 1f),
+                new Color(0.94f, 0.99f, 1.0f, 1f),
+                0.34f);
+        }
+
+        public static Material CreateOrUpdateDungeonWaterMaterial()
+        {
+            return CreateOrUpdateWaterMaterialAtPath(
+                DungeonWaterMaterialPath,
+                new[] { TilesDir + "/subterranean_water.png" },
+                new[] { TilesDir + "/subterranean_water_n.png" },
+                new Color(0.08f, 0.16f, 0.24f, 1f),
+                new Color(0.54f, 0.78f, 0.92f, 1f),
+                0.24f);
+        }
+
+        private static Material CreateOrUpdateWaterMaterialAtPath(
+            string matPath,
+            string[] albedoCandidates,
+            string[] normalCandidates,
+            Color baseColor,
+            Color shimmerColor,
+            float shimmerStrength)
+        {
             Shader shader = Shader.Find("Realmz/CartographyWater")
                 ?? Shader.Find("Universal Render Pipeline/Lit");
-            Material mat = AssetDatabase.LoadAssetAtPath<Material>(WaterMaterialPath);
+            Material mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
             if (mat == null)
             {
                 mat = new Material(shader);
-                AssetDatabase.CreateAsset(mat, WaterMaterialPath);
+                AssetDatabase.CreateAsset(mat, matPath);
             }
             else if (mat.shader != shader)
             {
                 mat.shader = shader;
             }
 
-            Texture2D waterAlbedo = FindFirstTextureInCartography(new[]
-            {
-                TilesDir + "/shallow_water.png",
-                "Assets/Art/M1/Tiles/shallow_water.png"
-            });
-            Texture2D waterNormal = FindFirstTextureInCartography(new[]
-            {
-                TilesDir + "/shallow_water_n.png",
-                "Assets/Art/M1/Tiles/shallow_water_n.png"
-            });
+            Texture2D waterAlbedo = FindFirstTextureInCartography(albedoCandidates);
+            Texture2D waterNormal = FindFirstTextureInCartography(normalCandidates);
 
             if (mat.HasProperty("_BaseMap") && waterAlbedo != null) mat.SetTexture("_BaseMap", waterAlbedo);
             if (mat.HasProperty("_BumpMap") && waterNormal != null) mat.SetTexture("_BumpMap", waterNormal);
-            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", new Color(0.16f, 0.38f, 0.46f, 1f));
-            if (mat.HasProperty("_ShimmerColor")) mat.SetColor("_ShimmerColor", new Color(0.94f, 0.99f, 1.0f, 1f));
-            if (mat.HasProperty("_ShimmerStrength")) mat.SetFloat("_ShimmerStrength", 0.34f);
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", baseColor);
+            if (mat.HasProperty("_ShimmerColor")) mat.SetColor("_ShimmerColor", shimmerColor);
+            if (mat.HasProperty("_ShimmerStrength")) mat.SetFloat("_ShimmerStrength", shimmerStrength);
             if (mat.HasProperty("_WaveScale")) mat.SetFloat("_WaveScale", 2.0f);
 
             EditorUtility.SetDirty(mat);
             return mat;
+        }
+
+        public static Material CreateOrUpdateStripMaterial(string key, Texture2D albedo, Texture2D normal, bool isVfx)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return null;
+            }
+
+            string matPath = $"{MaterialsDir}/Cartography_{(isVfx ? "Vfx" : "Surface")}_{key}.mat";
+            Shader shader = Shader.Find("Realmz/CartographyBillboard") ?? Shader.Find("Universal Render Pipeline/Lit");
+            Material mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
+            if (mat == null)
+            {
+                mat = new Material(shader);
+                AssetDatabase.CreateAsset(mat, matPath);
+            }
+            else if (mat.shader != shader)
+            {
+                mat.shader = shader;
+            }
+
+            mat.enableInstancing = false;
+            if (albedo != null)
+            {
+                mat.mainTexture = albedo;
+                if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", albedo);
+            }
+            if (normal != null && mat.HasProperty("_BumpMap"))
+            {
+                mat.SetTexture("_BumpMap", normal);
+            }
+            if (mat.HasProperty("_BumpScale")) mat.SetFloat("_BumpScale", 0.55f);
+            if (mat.HasProperty("_IsTwoBankAtlas")) mat.SetFloat("_IsTwoBankAtlas", 0f);
+            if (mat.HasProperty("_Cols")) mat.SetFloat("_Cols", UnitFrameCount);
+            if (mat.HasProperty("_Rows")) mat.SetFloat("_Rows", 1f);
+            if (mat.HasProperty("_VariantIndex")) mat.SetFloat("_VariantIndex", 0f);
+            if (mat.HasProperty("_FrameCount")) mat.SetFloat("_FrameCount", UnitFrameCount);
+            if (mat.HasProperty("_AnimFps")) mat.SetFloat("_AnimFps", isVfx ? 10.0f : 6.0f);
+            if (mat.HasProperty("_BillboardMode")) mat.SetFloat("_BillboardMode", 0f);
+            if (mat.HasProperty("_CameraPitchTiltDeg")) mat.SetFloat("_CameraPitchTiltDeg", 0f);
+            if (mat.HasProperty("_WindTipSway")) mat.SetFloat("_WindTipSway", 0f);
+            if (mat.HasProperty("_TrampleStrength")) mat.SetFloat("_TrampleStrength", 0f);
+            if (mat.HasProperty("_NormalUpBias")) mat.SetFloat("_NormalUpBias", 0.85f);
+            if (mat.HasProperty("_RootTint")) mat.SetColor("_RootTint", Color.white);
+            if (mat.HasProperty("_TintColor")) mat.SetColor("_TintColor", Color.white);
+            if (mat.HasProperty("_Cutoff")) mat.SetFloat("_Cutoff", 0.35f);
+            if (mat.HasProperty("_ReceiveRootShadowOnly")) mat.SetFloat("_ReceiveRootShadowOnly", 0f);
+            if (mat.HasProperty("_EmissionColor")) mat.SetColor("_EmissionColor", isVfx ? new Color(0.55f, 0.55f, 0.55f, 1f) : Color.black);
+
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        public static Vector2 GetPropSizeMeters(CartographyPropKind kind, Texture2D tex)
+        {
+            if (kind == CartographyPropKind.Campfire4f || kind == CartographyPropKind.DungeonWallSconce4f)
+            {
+                return new Vector2(2.0f, 2.0f);
+            }
+
+            if (tex != null && tex.width > 0 && tex.height > 0)
+            {
+                bool is4Frame = kind == CartographyPropKind.Knight ||
+                                kind == CartographyPropKind.GiantFrog ||
+                                tex.width >= tex.height * 3;
+                float effectiveW = is4Frame ? (tex.width / (float)UnitFrameCount) : tex.width;
+                return new Vector2(effectiveW / 64f, tex.height / 64f);
+            }
+
+            return CartographyWorldData.GetDefaultPropSizeMeters(kind);
         }
 
         public static Material LoadOrCreatePropMaterial(CartographyPropKind kind, out Texture2D tex)
@@ -747,15 +1063,34 @@ namespace Realmz.EditorTools.Cartography
                 mat.shader = shader;
             }
 
-            bool is4FrameSheet = tex != null && tex.height > 0 && tex.width >= tex.height * 3;
+            bool is4FrameSheet = kind == CartographyPropKind.Campfire4f ||
+                                 kind == CartographyPropKind.DungeonWallSconce4f ||
+                                 (tex != null && tex.height > 0 && tex.width >= tex.height * 3);
             bool isBridge = kind == CartographyPropKind.StoneBridge;
+            bool isFlatFloor = kind == CartographyPropKind.DungeonIronGrate ||
+                               kind == CartographyPropKind.DungeonSpikeTrap;
             bool isStoneFenceV = kind == CartographyPropKind.StoneFenceV;
             bool isTree = kind == CartographyPropKind.TreeOakA || kind == CartographyPropKind.TreeOakB ||
                           kind == CartographyPropKind.TreePineA || kind == CartographyPropKind.TreePineB ||
                           kind == CartographyPropKind.TreeWillowA;
+            bool isBuilding = kind == CartographyPropKind.BywaterInn ||
+                              kind == CartographyPropKind.Blacksmith ||
+                              kind == CartographyPropKind.Apothecary ||
+                              kind == CartographyPropKind.Temple ||
+                              kind == CartographyPropKind.Guildhall ||
+                              kind == CartographyPropKind.CottageB ||
+                              kind == CartographyPropKind.CottageC ||
+                              kind == CartographyPropKind.Watchtower;
+            bool isFire = kind == CartographyPropKind.TorchBrazier ||
+                          kind == CartographyPropKind.Campfire4f ||
+                          kind == CartographyPropKind.DungeonWallSconce4f;
 
             mat.enableInstancing = false;
-            if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", tex);
+            if (tex != null)
+            {
+                mat.mainTexture = tex;
+                if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", tex);
+            }
             if (mat.HasProperty("_BumpMap") && normalTex != null) mat.SetTexture("_BumpMap", normalTex);
             if (mat.HasProperty("_IsTwoBankAtlas")) mat.SetFloat("_IsTwoBankAtlas", 0f);
             if (mat.HasProperty("_Cols")) mat.SetFloat("_Cols", is4FrameSheet ? 4f : 1f);
@@ -766,27 +1101,27 @@ namespace Realmz.EditorTools.Cartography
             if (mat.HasProperty("_BillboardMode")) mat.SetFloat("_BillboardMode", 0f);
             if (mat.HasProperty("_CameraPitchTiltDeg"))
             {
-                float pitchTiltDeg = isStoneFenceV ? 30f : (isBridge ? 4f : (isTree ? 14f : 12f));
+                float pitchTiltDeg = isStoneFenceV ? 30f : ((isBridge || isFlatFloor) ? 4f : (isTree ? 14f : 12f));
                 mat.SetFloat("_CameraPitchTiltDeg", pitchTiltDeg);
             }
             if (mat.HasProperty("_WindTipSway")) mat.SetFloat("_WindTipSway", isTree ? 0.028f : 0f);
             if (mat.HasProperty("_TrampleStrength")) mat.SetFloat("_TrampleStrength", 0f);
-            if (mat.HasProperty("_NormalUpBias")) mat.SetFloat("_NormalUpBias", isBridge ? 0.85f : 0.65f);
+            if (mat.HasProperty("_NormalUpBias")) mat.SetFloat("_NormalUpBias", (isBridge || isFlatFloor) ? 0.85f : 0.65f);
             if (mat.HasProperty("_RootTint")) mat.SetColor("_RootTint", new Color(0.68f, 0.70f, 0.68f, 1f));
             if (mat.HasProperty("_TintColor")) mat.SetColor("_TintColor", Color.white);
-            if (mat.HasProperty("_Cutoff")) mat.SetFloat("_Cutoff", 0.45f);
+            if (mat.HasProperty("_Cutoff")) mat.SetFloat("_Cutoff", 0.5f);
             if (mat.HasProperty("_ReceiveRootShadowOnly")) mat.SetFloat("_ReceiveRootShadowOnly", 1f);
 
             Color emissionColor = Color.black;
             float emissionWarmMask = 1f;
             float emissionMinV = 0f;
-            if (kind == CartographyPropKind.TorchBrazier)
+            if (isFire)
             {
                 emissionColor = new Color(2.4f, 1.15f, 0.30f, 1f);
                 emissionWarmMask = 1f;
-                emissionMinV = 0.44f;
+                emissionMinV = kind == CartographyPropKind.TorchBrazier ? 0.44f : 0.30f;
             }
-            else if (kind == CartographyPropKind.BywaterInn)
+            else if (isBuilding)
             {
                 emissionColor = new Color(0.85f, 0.56f, 0.18f, 1f);
                 emissionWarmMask = 1f;
@@ -825,8 +1160,8 @@ namespace Realmz.EditorTools.Cartography
                     return new[]
                     {
                         CartographyArtRoot + "/structures/bywater_inn.png",
-                        CartographyArtRoot + "/buildings/bywater_inn.png",
-                        CartographyArtRoot + "/props/bywater_inn.png",
+                        BuildingsDir + "/bywater_inn.png",
+                        PropsDir + "/bywater_inn.png",
                         "Assets/Art/M1/Props/tavern.png",
                         "Assets/Art/M1/Props/cottage_medieval.png"
                     };
@@ -834,23 +1169,23 @@ namespace Realmz.EditorTools.Cartography
                     return new[]
                     {
                         CartographyArtRoot + "/structures/stone_bridge.png",
-                        CartographyArtRoot + "/props/stone_bridge.png",
-                        CartographyArtRoot + "/buildings/stone_bridge.png"
+                        PropsDir + "/stone_bridge.png",
+                        BuildingsDir + "/stone_bridge.png"
                     };
                 case CartographyPropKind.StoneFenceH:
                     return new[]
                     {
                         CartographyArtRoot + "/structures/stone_fence_h.png",
-                        CartographyArtRoot + "/props/stone_fence_h.png",
-                        CartographyArtRoot + "/props/stone_fence.png",
+                        PropsDir + "/stone_fence_h.png",
+                        PropsDir + "/stone_fence.png",
                         "Assets/Art/M1/Props/stone_fence.png"
                     };
                 case CartographyPropKind.StoneFenceV:
                     return new[]
                     {
                         CartographyArtRoot + "/structures/stone_fence_v.png",
-                        CartographyArtRoot + "/props/stone_fence_v.png",
-                        CartographyArtRoot + "/props/stone_fence.png",
+                        PropsDir + "/stone_fence_v.png",
+                        PropsDir + "/stone_fence.png",
                         "Assets/Art/M1/Props/stone_fence.png"
                     };
                 case CartographyPropKind.Knight:
@@ -858,7 +1193,7 @@ namespace Realmz.EditorTools.Cartography
                     {
                         UnitsDir + "/hero_knight_sheet.png",
                         UnitsDir + "/knight.png",
-                        CartographyArtRoot + "/props/knight.png",
+                        PropsDir + "/knight.png",
                         "Assets/Art/M1/Heroes/knight.png"
                     };
                 case CartographyPropKind.GiantFrog:
@@ -866,57 +1201,114 @@ namespace Realmz.EditorTools.Cartography
                     {
                         UnitsDir + "/monster_giant_frog_sheet.png",
                         UnitsDir + "/giant_frog.png",
-                        CartographyArtRoot + "/props/giant_frog.png",
+                        PropsDir + "/giant_frog.png",
                         "Assets/Art/M1/Monsters/giant_frog.png"
                     };
                 case CartographyPropKind.TreeOakA:
                     return new[]
                     {
                         CartographyArtRoot + "/trees/tree_oak_a.png",
-                        CartographyArtRoot + "/props/tree_oak_a.png",
+                        PropsDir + "/tree_oak_a.png",
                         "Assets/Art/M1/Props/tree_oak.png"
                     };
                 case CartographyPropKind.TreeOakB:
                     return new[]
                     {
                         CartographyArtRoot + "/trees/tree_oak_b.png",
-                        CartographyArtRoot + "/props/tree_oak_b.png",
+                        PropsDir + "/tree_oak_b.png",
                         "Assets/Art/M1/Props/tree_oak.png"
                     };
                 case CartographyPropKind.TreePineA:
                     return new[]
                     {
                         CartographyArtRoot + "/trees/tree_pine_a.png",
-                        CartographyArtRoot + "/props/tree_pine_a.png",
+                        PropsDir + "/tree_pine_a.png",
                         "Assets/Art/M1/Props/tree_pine.png"
                     };
                 case CartographyPropKind.TreePineB:
                     return new[]
                     {
                         CartographyArtRoot + "/trees/tree_pine_b.png",
-                        CartographyArtRoot + "/props/tree_pine_b.png",
+                        PropsDir + "/tree_pine_b.png",
                         "Assets/Art/M1/Props/tree_pine.png"
                     };
                 case CartographyPropKind.TreeWillowA:
                     return new[]
                     {
                         CartographyArtRoot + "/trees/tree_willow_a.png",
-                        CartographyArtRoot + "/props/tree_willow_a.png",
+                        PropsDir + "/tree_willow_a.png",
                         "Assets/Art/M1/Props/tree_oak.png"
                     };
                 case CartographyPropKind.TorchBrazier:
                     return new[]
                     {
-                        CartographyArtRoot + "/props/torch_brazier.png",
+                        PropsDir + "/torch_brazier.png",
                         "Assets/Art/M1/Props/torch_brazier.png",
                         "Assets/Art/M1/Props/torch.png"
                     };
                 case CartographyPropKind.MarketCrates:
                     return new[]
                     {
-                        CartographyArtRoot + "/props/market_crates.png",
+                        PropsDir + "/market_crates.png",
+                        PropsDir + "/prop_barrels_crates.png",
                         "Assets/Art/M1/Props/market_crates.png"
                     };
+                case CartographyPropKind.Blacksmith:
+                    return new[] { BuildingsDir + "/building_blacksmith.png" };
+                case CartographyPropKind.Apothecary:
+                    return new[] { BuildingsDir + "/building_apothecary.png" };
+                case CartographyPropKind.Temple:
+                    return new[] { BuildingsDir + "/building_temple.png" };
+                case CartographyPropKind.Guildhall:
+                    return new[] { BuildingsDir + "/building_guildhall.png" };
+                case CartographyPropKind.CottageB:
+                    return new[] { BuildingsDir + "/building_cottage_b.png" };
+                case CartographyPropKind.CottageC:
+                    return new[] { BuildingsDir + "/building_cottage_c.png" };
+                case CartographyPropKind.Watchtower:
+                    return new[] { BuildingsDir + "/building_watchtower.png" };
+                case CartographyPropKind.MarketStallA:
+                    return new[] { PropsDir + "/prop_market_stall_a.png" };
+                case CartographyPropKind.MarketStallB:
+                    return new[] { PropsDir + "/prop_market_stall_b.png" };
+                case CartographyPropKind.StoneWell:
+                    return new[] { PropsDir + "/prop_stone_well.png" };
+                case CartographyPropKind.Signpost:
+                    return new[] { PropsDir + "/prop_signpost.png" };
+                case CartographyPropKind.WoodenWagon:
+                    return new[] { PropsDir + "/prop_wooden_wagon.png" };
+                case CartographyPropKind.BarrelsCrates:
+                    return new[] { PropsDir + "/prop_barrels_crates.png" };
+                case CartographyPropKind.CampTent:
+                    return new[] { PropsDir + "/prop_camp_tent.png" };
+                case CartographyPropKind.StoneRuins:
+                    return new[] { PropsDir + "/prop_stone_ruins.png" };
+                case CartographyPropKind.ShrineStatue:
+                    return new[] { PropsDir + "/prop_shrine_statue.png" };
+                case CartographyPropKind.Campfire4f:
+                    return new[] { PropsDir + "/prop_campfire_4f.png" };
+                case CartographyPropKind.DungeonChestClosed:
+                    return new[] { PropsDir + "/dungeon_chest_closed.png" };
+                case CartographyPropKind.DungeonChestOpen:
+                    return new[] { PropsDir + "/dungeon_chest_open.png" };
+                case CartographyPropKind.DungeonDoorClosed:
+                    return new[] { PropsDir + "/dungeon_door_closed.png" };
+                case CartographyPropKind.DungeonDoorOpen:
+                    return new[] { PropsDir + "/dungeon_door_open.png" };
+                case CartographyPropKind.DungeonPillar:
+                    return new[] { PropsDir + "/dungeon_pillar.png" };
+                case CartographyPropKind.DungeonStairsDown:
+                    return new[] { PropsDir + "/dungeon_stairs_down.png" };
+                case CartographyPropKind.DungeonStairsUp:
+                    return new[] { PropsDir + "/dungeon_stairs_up.png" };
+                case CartographyPropKind.DungeonWallSconce4f:
+                    return new[] { PropsDir + "/dungeon_wall_sconce_4f.png" };
+                case CartographyPropKind.DungeonSarcophagus:
+                    return new[] { PropsDir + "/dungeon_sarcophagus.png" };
+                case CartographyPropKind.DungeonSpikeTrap:
+                    return new[] { PropsDir + "/dungeon_spike_trap.png" };
+                case CartographyPropKind.DungeonIronGrate:
+                    return new[] { PropsDir + "/dungeon_iron_grate.png" };
                 default:
                     return Array.Empty<string>();
             }
