@@ -27,6 +27,9 @@ namespace Realmz.World
         private static readonly int TerrainArrayId = Shader.PropertyToID("_TerrainArray");
         private static readonly int GroundValueScaleId = Shader.PropertyToID("_GroundValueScale");
         private static readonly int RoadValueBoostId = Shader.PropertyToID("_RoadValueBoost");
+        private static readonly int SrcBlendId = Shader.PropertyToID("_SrcBlend");
+        private static readonly int DstBlendId = Shader.PropertyToID("_DstBlend");
+        private static readonly int ZWriteId = Shader.PropertyToID("_ZWrite");
         private static readonly int HorizonHazeColorId = Shader.PropertyToID("_HorizonHazeColor");
         private static readonly int HorizonHazeStrengthId = Shader.PropertyToID("_HorizonHazeStrength");
         private static readonly int LanternPoolIntensityId = Shader.PropertyToID("_LanternPoolIntensity");
@@ -34,7 +37,7 @@ namespace Realmz.World
         private static readonly int DeepColorId = Shader.PropertyToID("_DeepColor");
         private static readonly int HeroWorldPosId = Shader.PropertyToID("_HeroWorldPos");
 
-        private const float OccludedPropAlpha = 0.38f;
+        private const float OccludedPropAlpha = 0.42f;
         private const float TreeFadeLerpSpeed = 8f;
 
         private sealed class PropBillboardEntry
@@ -43,12 +46,21 @@ namespace Realmz.World
             public MeshFilter Filter;
             public MeshRenderer Renderer;
             public PixelBillboard Billboard;
+            public Material OriginalMaterial;
             public CartographyPropKind Kind;
             public Vector3 WorldPosition;
             public Vector2 SizeMeters;
             public float CurrentAlpha = 1f;
             public bool IsAnimated4Frame;
             public bool IsFloorDecal;
+        }
+
+        private sealed class NpcUnitEntry
+        {
+            public CartographyNpcPlacement Placement;
+            public BywaterUnitView View;
+            public GameObject PromptRoot;
+            public TMPro.TextMeshPro PromptText;
         }
 
         private sealed class StoneBridgeEntry
@@ -106,12 +118,16 @@ namespace Realmz.World
         private Transform _heroAnchor;
 
         private Transform _propsContainer;
+        private Transform _npcContainer;
         private Transform _bridgesContainer;
         private Transform _torchLightContainer;
         private Transform _portalContainer;
         private Transform _arenaContainer;
 
         private readonly List<PropBillboardEntry> _propPool = new List<PropBillboardEntry>(256);
+        private readonly List<NpcUnitEntry> _npcPool = new List<NpcUnitEntry>(8);
+        private readonly Dictionary<Material, Material> _fadedTransparentMaterialCache = new Dictionary<Material, Material>(16);
+        private int _activeNpcCount;
         private readonly List<StoneBridgeEntry> _bridgePool = new List<StoneBridgeEntry>(4);
         private readonly List<TorchLightEntry> _torchLightPool = new List<TorchLightEntry>(MaxActiveTorchLights);
         private readonly List<PortalMarkerEntry> _portalPool = new List<PortalMarkerEntry>(16);
@@ -198,6 +214,7 @@ namespace Realmz.World
             {
                 RebuildCartographyWorld(map);
                 RebuildCartographyProps(map);
+                RebuildCartographyNpcs(map);
                 RebuildMapPortals(map);
                 CollectMapLightPositions();
             }
@@ -386,6 +403,72 @@ namespace Realmz.World
             _terrainGridHintStrength = Mathf.Max(0f, strength);
         }
 
+        public int ActiveNpcCount => _activeNpcCount;
+
+        public IReadOnlyList<CartographyNpcPlacement> ActiveNpcs =>
+            _cartographyData != null ? _cartographyData.Npcs : System.Array.Empty<CartographyNpcPlacement>();
+
+        public bool TryGetNpcAtCoord(GridCoord coord, out CartographyNpcPlacement npc)
+        {
+            for (int i = 0; i < _activeNpcCount && i < _npcPool.Count; i++)
+            {
+                CartographyNpcPlacement p = _npcPool[i].Placement;
+                if (p.TileX == coord.X && p.TileY == coord.Y)
+                {
+                    npc = p;
+                    return true;
+                }
+            }
+
+            npc = default;
+            return false;
+        }
+
+        public bool TryFindNearestNpc(GridCoord origin, out CartographyNpcPlacement npc, out int distanceTiles)
+        {
+            npc = default;
+            distanceTiles = int.MaxValue;
+            bool found = false;
+
+            for (int i = 0; i < _activeNpcCount && i < _npcPool.Count; i++)
+            {
+                CartographyNpcPlacement p = _npcPool[i].Placement;
+                int dist = Mathf.Max(Mathf.Abs(p.TileX - origin.X), Mathf.Abs(p.TileY - origin.Y));
+                if (dist < distanceTiles)
+                {
+                    distanceTiles = dist;
+                    npc = p;
+                    found = true;
+                }
+            }
+
+            return found;
+        }
+
+        public void UpdateNpcProximityPrompts(GridCoord heroCoord, Vector3 heroWorld, bool hidePrompts = false)
+        {
+            for (int i = 0; i < _activeNpcCount && i < _npcPool.Count; i++)
+            {
+                NpcUnitEntry entry = _npcPool[i];
+                if (entry == null || entry.View == null)
+                {
+                    continue;
+                }
+
+                float dxWorld = heroWorld.x - entry.View.transform.position.x;
+                if (Mathf.Abs(dxWorld) > 0.08f)
+                {
+                    entry.View.SetFacingRight(dxWorld >= 0f);
+                }
+
+                int dist = Mathf.Max(Mathf.Abs(entry.Placement.TileX - heroCoord.X), Mathf.Abs(entry.Placement.TileY - heroCoord.Y));
+                if (entry.PromptRoot != null)
+                {
+                    entry.PromptRoot.SetActive(!hidePrompts && dist <= 2);
+                }
+            }
+        }
+
         public void UpdateTreeOcclusionFade(IReadOnlyList<Vector3> unitWorldPositions, bool fadeCenterBuildingsInCombat = false)
         {
             if (_activePropCount <= 0)
@@ -409,14 +492,14 @@ namespace Realmz.World
                 bool occludes = false;
                 if (IsOccludingPropKind(entry.Kind, fadeCenterBuildingsInCombat) && unitWorldPositions != null)
                 {
-                    float halfWidth = entry.SizeMeters.x * 0.55f;
-                    float maxDepth = entry.SizeMeters.y * 1.15f;
+                    float halfWidth = Mathf.Clamp(entry.SizeMeters.x * 0.38f, 0.55f, 1.75f);
+                    float maxDepth = Mathf.Clamp(entry.SizeMeters.y * 0.72f, 0.90f, 2.75f);
 
                     for (int u = 0; u < unitWorldPositions.Count; u++)
                     {
                         Vector3 unitPos = unitWorldPositions[u];
                         float dz = unitPos.z - entry.WorldPosition.z;
-                        if (dz >= 0f && dz <= maxDepth && Mathf.Abs(unitPos.x - entry.WorldPosition.x) <= halfWidth)
+                        if (dz >= 0.05f && dz <= maxDepth && Mathf.Abs(unitPos.x - entry.WorldPosition.x) <= halfWidth)
                         {
                             occludes = true;
                             break;
@@ -432,6 +515,18 @@ namespace Realmz.World
                 else
                 {
                     entry.CurrentAlpha = Mathf.Lerp(entry.CurrentAlpha, targetAlpha, lerpFactor);
+                }
+
+                bool isTransparentFaded = entry.CurrentAlpha < 0.995f;
+                if (entry.OriginalMaterial != null)
+                {
+                    Material targetMat = isTransparentFaded
+                        ? GetOrCreateFadedTransparentMaterial(entry.OriginalMaterial)
+                        : entry.OriginalMaterial;
+                    if (targetMat != null && !ReferenceEquals(entry.Renderer.sharedMaterial, targetMat))
+                    {
+                        entry.Renderer.sharedMaterial = targetMat;
+                    }
                 }
 
                 Color tint = new Color(1f, 1f, 1f, entry.CurrentAlpha);
@@ -606,6 +701,7 @@ namespace Realmz.World
         private void RebuildCartographyWorld(TileMapData map)
         {
             _cartographyData = CartographyWorldData.BuildFromTileMap(map);
+            map.SetBlockedPropFootprints(_cartographyData.ExportBlockedPropGridCoords());
             bool isDungeon = map.IsDungeon;
             Camera cam = ResolveActiveCamera();
 
@@ -710,7 +806,8 @@ namespace Realmz.World
                     entry.IsAnimated4Frame = isAnimated4f;
                     entry.SizeMeters = new Vector2(sizeX, sizeY);
                     entry.CurrentAlpha = 1f;
-                    entry.Renderer.sharedMaterial = ResolvePropMaterial(prop.Kind);
+                    entry.OriginalMaterial = ResolvePropMaterial(prop.Kind);
+                    entry.Renderer.sharedMaterial = entry.OriginalMaterial;
                     entry.Billboard.targetCamera = cam;
 
                     if (isFloorDecal)
@@ -763,6 +860,126 @@ namespace Realmz.World
             {
                 _bridgePool[i].Root.SetActive(false);
             }
+        }
+
+        private void RebuildCartographyNpcs(TileMapData map)
+        {
+            int npcIdx = 0;
+            if (!map.IsDungeon && _cartographyData != null && _cartographyData.Npcs != null)
+            {
+                IReadOnlyList<CartographyNpcPlacement> npcs = _cartographyData.Npcs;
+                TMPro.TMP_FontAsset font = _catalog != null ? _catalog.uiFont : null;
+                Color npcRingColor = new Color(0.95f, 0.78f, 0.30f, 1f);
+
+                for (int i = 0; i < npcs.Count; i++)
+                {
+                    CartographyNpcPlacement npc = npcs[i];
+                    NpcUnitEntry entry = GetNpcEntry(npcIdx++);
+                    entry.Placement = npc;
+
+                    Material npcMat = _catalog != null
+                        ? _catalog.ResolveCartographyUnitMaterial(npc.NpcId, null)
+                        : null;
+
+                    entry.View.gameObject.SetActive(true);
+                    entry.View.Configure(
+                        npc.NpcId,
+                        npc.DisplayName,
+                        npcMat,
+                        npcRingColor,
+                        font,
+                        spriteSize: 2.0f,
+                        showHud: false,
+                        isAllyOverride: true,
+                        catalog: _catalog);
+                    entry.View.SetWorldPosition(npc.WorldPosition);
+                    entry.View.UpdateStats(1, 1, 0, 0, string.Empty, isCurrentTurn: false, isAlive: true);
+                    if (entry.PromptText != null)
+                    {
+                        string actionVerb = string.Equals(npc.VenueKind, "temple", System.StringComparison.OrdinalIgnoreCase)
+                            ? "Visit"
+                            : "Trade";
+                        entry.PromptText.text = $"[E / Click] {actionVerb}: {npc.DisplayName}";
+                        if (font != null)
+                        {
+                            entry.PromptText.font = font;
+                        }
+                    }
+                    if (entry.PromptRoot != null)
+                    {
+                        entry.PromptRoot.SetActive(false);
+                    }
+                }
+            }
+
+            _activeNpcCount = npcIdx;
+            for (int i = npcIdx; i < _npcPool.Count; i++)
+            {
+                if (_npcPool[i]?.View != null)
+                {
+                    _npcPool[i].View.gameObject.SetActive(false);
+                }
+            }
+        }
+
+        private NpcUnitEntry GetNpcEntry(int index)
+        {
+            while (_npcPool.Count <= index)
+            {
+                GameObject go = new GameObject("TownNpc_" + _npcPool.Count);
+                go.transform.SetParent(_npcContainer, false);
+                BywaterUnitView view = go.AddComponent<BywaterUnitView>();
+
+                GameObject promptGo = new GameObject("NpcInteractPrompt");
+                promptGo.transform.SetParent(go.transform, false);
+                promptGo.transform.localPosition = new Vector3(0f, 2.22f, 0f);
+                promptGo.AddComponent<PixelBillboard>();
+                TMPro.TextMeshPro tmp = promptGo.AddComponent<TMPro.TextMeshPro>();
+                tmp.fontSize = 2.6f;
+                tmp.alignment = TMPro.TextAlignmentOptions.Center;
+                tmp.color = new Color(0.98f, 0.86f, 0.42f, 1f);
+                tmp.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
+                tmp.sortingOrder = 40;
+                RectTransform tmpRt = tmp.rectTransform;
+                tmpRt.sizeDelta = new Vector2(6f, 1f);
+                promptGo.SetActive(false);
+
+                go.SetActive(false);
+                _npcPool.Add(new NpcUnitEntry
+                {
+                    View = view,
+                    PromptRoot = promptGo,
+                    PromptText = tmp
+                });
+            }
+
+            return _npcPool[index];
+        }
+
+        private Material GetOrCreateFadedTransparentMaterial(Material sourceMat)
+        {
+            if (sourceMat == null)
+            {
+                return null;
+            }
+
+            if (_fadedTransparentMaterialCache.TryGetValue(sourceMat, out Material cached) && cached != null)
+            {
+                return cached;
+            }
+
+            Material faded = new Material(sourceMat)
+            {
+                name = sourceMat.name + "_FadeTransparent",
+                hideFlags = HideFlags.HideAndDontSave
+            };
+            faded.SetOverrideTag("RenderType", "Transparent");
+            faded.renderQueue = (int)RenderQueue.Transparent;
+            if (faded.HasProperty(SrcBlendId)) faded.SetFloat(SrcBlendId, (float)BlendMode.SrcAlpha);
+            if (faded.HasProperty(DstBlendId)) faded.SetFloat(DstBlendId, (float)BlendMode.OneMinusSrcAlpha);
+            if (faded.HasProperty(ZWriteId)) faded.SetFloat(ZWriteId, 0f);
+            _fadedTransparentMaterialCache[sourceMat] = faded;
+            return faded;
         }
 
         private void RebuildMapPortals(TileMapData map)
@@ -1323,6 +1540,7 @@ namespace Realmz.World
         private void EnsureContainers()
         {
             if (_propsContainer == null) _propsContainer = CreateChildContainer("Props");
+            if (_npcContainer == null) _npcContainer = CreateChildContainer("TownNpcs");
             if (_bridgesContainer == null) _bridgesContainer = CreateChildContainer("Bridges");
             if (_torchLightContainer == null) _torchLightContainer = CreateChildContainer("TorchLights");
             if (_portalContainer == null) _portalContainer = CreateChildContainer("Portals");
@@ -1721,6 +1939,12 @@ namespace Realmz.World
 
             DestroyResource(_portalBeaconTexture);
             _portalBeaconTexture = null;
+
+            foreach (Material fadedMat in _fadedTransparentMaterialCache.Values)
+            {
+                DestroyResource(fadedMat);
+            }
+            _fadedTransparentMaterialCache.Clear();
         }
 
         private static bool IsFloorDecalPropKind(CartographyPropKind kind)

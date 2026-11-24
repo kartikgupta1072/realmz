@@ -40,6 +40,10 @@ Shader "Realmz/CartographyBillboard"
         _ReceiveRootShadowOnly ("Sample Shadow At Root (0/1)", Float) = 1.0
         _HorizonHazeColor ("North Horizon Haze Color", Color) = (0.91, 0.83, 0.70, 1)
         _HorizonHazeStrength ("North Horizon Haze Strength", Range(0, 0.35)) = 0.08
+
+        [HideInInspector] _SrcBlend ("SrcBlend", Float) = 1.0
+        [HideInInspector] _DstBlend ("DstBlend", Float) = 0.0
+        [HideInInspector] _ZWrite ("ZWrite", Float) = 1.0
     }
 
     SubShader
@@ -279,20 +283,6 @@ Shader "Realmz/CartographyBillboard"
                 rootWS,
                 facingNormalWS);
         }
-
-        static const half kBayer4x4[16] =
-        {
-             1.0h / 16.0h,  9.0h / 16.0h,  3.0h / 16.0h, 11.0h / 16.0h,
-            13.0h / 16.0h,  5.0h / 16.0h, 15.0h / 16.0h,  7.0h / 16.0h,
-             4.0h / 16.0h, 12.0h / 16.0h,  2.0h / 16.0h, 10.0h / 16.0h,
-            16.0h / 16.0h,  8.0h / 16.0h, 14.0h / 16.0h,  6.0h / 16.0h
-        };
-
-        half ComputeBayer4x4Threshold(float2 positionCSxy)
-        {
-            int2 p = int2(floor(positionCSxy)) & 3;
-            return kBayer4x4[(p.y << 2) | p.x];
-        }
         ENDHLSL
 
         Pass
@@ -303,9 +293,10 @@ Shader "Realmz/CartographyBillboard"
                 "LightMode" = "UniversalForward"
             }
 
-            ZWrite On
             ZTest LEqual
             Cull Off
+            Blend [_SrcBlend] [_DstBlend]
+            ZWrite [_ZWrite]
 
             HLSLPROGRAM
             #pragma target 3.0
@@ -388,11 +379,7 @@ Shader "Realmz/CartographyBillboard"
                 clip(baseSample.a - _Cutoff);
 
                 half4 instTint = (half4)CARTO_INST_PROP(_TintColor);
-                if (instTint.a < 0.995h)
-                {
-                    half threshold = ComputeBayer4x4Threshold(input.positionCS.xy);
-                    clip(instTint.a - threshold);
-                }
+                half finalAlpha = saturate(baseSample.a * instTint.a);
 
                 half4 albedoAlpha = half4(baseSample.rgb * instTint.rgb, baseSample.a);
 
@@ -481,7 +468,7 @@ Shader "Realmz/CartographyBillboard"
                 color = clamp(color, half3(0.0h, 0.0h, 0.0h), half3(64.0h, 64.0h, 64.0h));
                 color = MixFog(color, input.fogFactor);
 
-                return half4(color, 1.0h);
+                return half4(color, finalAlpha);
             }
             ENDHLSL
         }
@@ -629,11 +616,7 @@ Shader "Realmz/CartographyBillboard"
                 clip(baseAlpha - _Cutoff);
 
                 half tintAlpha = (half)CARTO_INST_PROP(_TintColor).a;
-                if (tintAlpha < 0.995h)
-                {
-                    half threshold = ComputeBayer4x4Threshold(input.positionCS.xy);
-                    clip(tintAlpha - threshold);
-                }
+                clip(tintAlpha - 0.995h);
 
                 return input.positionCS.z;
             }

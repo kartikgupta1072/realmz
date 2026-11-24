@@ -1389,7 +1389,7 @@ namespace Realmz.EditorTests
             BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
             Assert.That(catalog, Is.Not.Null, "BywaterAssetCatalog missing.");
             Assert.That(catalog.heroes.Count, Is.EqualTo(6), "Preserve 6 core heroes.");
-            Assert.That(catalog.unifiedPortraits.Count, Is.EqualTo(12), "Expected 12 unified bronze portraits.");
+            Assert.That(catalog.unifiedPortraits.Count, Is.EqualTo(16), "Expected 16 unified bronze portraits (12 heroes + 4 town NPCs).");
             Assert.That(catalog.extraHeroes.Count, Is.GreaterThanOrEqualTo(6), "Expected >= 6 extraHeroes entries.");
 
             for (int i = 0; i < catalog.heroes.Count; i++)
@@ -1745,6 +1745,422 @@ namespace Realmz.EditorTests
                 safety++;
                 combat.EndTurn();
             }
+        }
+
+        [Test]
+        public void PlayabilityFixes_AllSixBugsFixedAcrossCoreWorldHudAndUnits()
+        {
+            string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            Assert.That(bundle, Is.Not.Null);
+            Assert.That(catalog, Is.Not.Null);
+
+            // Fix #1: Prop footprint blocking (StoneWell (13,10) blocked while spawn (10,9), roads, POIs, portal open)
+            CartographyWorldData landWorld = CartographyWorldData.BuildFromTileMap(bundle.Land0);
+            bundle.Land0.SetBlockedPropFootprints(landWorld.ExportBlockedPropGridCoords());
+            Assert.That(bundle.Land0.BlockedPropTileCount, Is.GreaterThan(0), "Blocked prop footprints should be populated.");
+            Assert.That(bundle.Land0.IsPassable(13, 10, hasBoat: false), Is.False, "StoneWell plaza tile (13,10) must block walkability.");
+            Assert.That(bundle.Land0.IsPassable(10, 9, hasBoat: false), Is.True, "Bywater plaza spawn (10,9) must remain passable.");
+
+            PartyState exploreParty = PartyState.FromBundle(bundle);
+            ExplorationSession session = new ExplorationSession(bundle.Maps, "land_0", exploreParty, new DeterministicDiceRoller(777UL), new GridCoord(10, 9));
+            PathResult wellPath = session.PlanPath(new GridCoord(13, 10), allowDiagonal: true);
+            Assert.That(wellPath.Found, Is.False, "Pathfinding to StoneWell (13,10) must be blocked.");
+
+            for (int i = 0; i < bundle.Land0.PointsOfInterest.Count; i++)
+            {
+                MapPointOfInterest poi = bundle.Land0.PointsOfInterest[i];
+                Assert.That(bundle.Land0.IsPassable(poi.X, poi.Y, hasBoat: false), Is.True, $"POI {poi.Id} must remain passable.");
+                PathResult poiPath = session.PlanPath(poi.Coord, allowDiagonal: true);
+                Assert.That(poiPath.Found, Is.True, $"POI {poi.Id} at {poi.Coord} must remain reachable from (10,9).");
+            }
+            for (int i = 0; i < bundle.Land0.Portals.Count; i++)
+            {
+                MapPortal portal = bundle.Land0.Portals[i];
+                Assert.That(bundle.Land0.IsPassable(portal.X, portal.Y, hasBoat: false), Is.True, $"Portal {portal.Id} must remain passable.");
+                PathResult portalPath = session.PlanPath(portal.Coord, allowDiagonal: true);
+                Assert.That(portalPath.Found, Is.True, $"Portal {portal.Id} at {portal.Coord} must remain reachable from (10,9).");
+            }
+
+            // Fix #5 NPCs placed beside venues on blocked tiles with walkable approach neighbors
+            Assert.That(landWorld.Npcs.Count, Is.EqualTo(4), "Expected 4 Town Shopkeeper/Priestess NPCs.");
+            for (int i = 0; i < landWorld.Npcs.Count; i++)
+            {
+                CartographyNpcPlacement npc = landWorld.Npcs[i];
+                Assert.That(bundle.Land0.IsPassable(npc.TileX, npc.TileY, hasBoat: false), Is.False, $"NPC {npc.NpcId} tile should be blocked.");
+                GridCoord adj = FindAdjacentPassableTile(bundle.Land0, new GridCoord(npc.TileX, npc.TileY), hasBoat: false);
+                Assert.That(adj, Is.Not.EqualTo(new GridCoord(npc.TileX, npc.TileY)), $"NPC {npc.NpcId} needs an approachable neighbor tile.");
+            }
+
+            // Fix #2: Shader has zero Bayer checkerboard clip and supports clean transparent fade
+            string shaderText = File.ReadAllText(Path.GetFullPath("Assets/Shaders/CartographyBillboard.shader"));
+            Assert.That(shaderText.Contains("kBayer4x4"), Is.False, "Bayer dither array must be removed from CartographyBillboard.shader.");
+            Assert.That(shaderText.Contains("ComputeBayer4x4Threshold"), Is.False, "Bayer dither function must be removed from CartographyBillboard.shader.");
+
+            GameObject worldGo = new GameObject("TempPlayabilityWorldRenderer");
+            GameObject camGo = new GameObject("TempPlayabilityCamRig");
+            GameObject ctrlGo = new GameObject("TempPlayabilityCtrl");
+            GameObject hudGo = new GameObject("TempPlayabilityHud");
+            GameObject unitGo = new GameObject("TempPlayabilityUnitView");
+            try
+            {
+                BywaterWorldRenderer renderer = worldGo.AddComponent<BywaterWorldRenderer>();
+                renderer.Initialize(catalog);
+                renderer.RenderMap(bundle.Land0, new GridCoord(10, 9), forceRebuild: true);
+                Assert.That(renderer.ActiveNpcCount, Is.EqualTo(4));
+
+                // Fix #4: Wide zoom ceiling >= 32m & manual pan preservation across non-recentering target updates
+                Camera cam = camGo.AddComponent<Camera>();
+                cam.tag = "MainCamera";
+                BywaterCameraRig rig = camGo.AddComponent<BywaterCameraRig>();
+                Assert.That(rig.EffectiveExploreMaxDistance, Is.GreaterThanOrEqualTo(32f), "Explore maxDistance should be >= 32m.");
+                Assert.That(rig.MaxCombatDistance, Is.GreaterThanOrEqualTo(34f), "Combat maxDistance should be >= 34m.");
+
+                // Fix #3: UnitAnimState transitions & ground-locked root transform
+                BywaterUnitView unit = unitGo.AddComponent<BywaterUnitView>();
+                unit.Configure("hero_knight", "Aldric", null, Color.yellow, catalog.uiFont, 2.0f, false, true, catalog);
+                unit.SetWorldPosition(new Vector3(10.5f, 0f, -9.5f));
+                unit.SetAnimState(UnitAnimState.Walk);
+                Assert.That(unit.CurrentAnimState, Is.EqualTo(UnitAnimState.Walk));
+                unit.SetFacingRight(false);
+                Assert.That(unit.FacingRight, Is.False);
+                unit.SetAnimState(UnitAnimState.Attack, 0.45f);
+                Assert.That(unit.CurrentAnimState, Is.EqualTo(UnitAnimState.Attack));
+                unit.SetAnimState(UnitAnimState.Idle);
+                Assert.That(unit.CurrentAnimState, Is.EqualTo(UnitAnimState.Idle));
+
+                // Fix #3 Option A: Overworld leader-only (1 view), Combat/Camp all 6
+                BywaterHudController hud = hudGo.AddComponent<BywaterHudController>();
+                hud.BuildUi(catalog);
+                Assert.That(hud.IsDevToolsVisible, Is.False, "Developer Tools must default OFF.");
+
+                Canvas canvas = hudGo.GetComponentInChildren<Canvas>(true);
+                Assert.That(canvas, Is.Not.Null);
+
+                // Fix #5 Single-Venue Shop Layout (>= 65% ScrollView body, zero ShopTabs, zero TempleHealBtn inside Shop)
+                hud.OpenShop("1", exploreParty, bundle);
+                Canvas.ForceUpdateCanvases();
+                Transform shopModal = FindDescendantByName(canvas.transform, "TownShopModal");
+                Assert.That(shopModal, Is.Not.Null);
+                Assert.That(FindDescendantByName(shopModal, "ShopTabs"), Is.Null, "Cross-shop switcher bar must be removed.");
+                Assert.That(FindDescendantByName(shopModal, "TempleHealBtn"), Is.Null, "Temple button must not live inside Shop modal.");
+
+                Transform shopBody = FindDescendantByName(shopModal, "ShopBody");
+                Transform shopHeader = FindDescendantByName(shopModal, "Header");
+                Transform filterRow = FindDescendantByName(shopModal, "FilterRow");
+                Transform sellHeader = FindDescendantByName(shopModal, "SellHeader");
+                Assert.That(shopBody, Is.Not.Null);
+                Assert.That(shopHeader, Is.Not.Null);
+                Assert.That(filterRow, Is.Not.Null);
+                Assert.That(sellHeader, Is.Not.Null);
+
+                RectTransform shopRt = shopModal.GetComponent<RectTransform>();
+                RectTransform bodyRt = shopBody.GetComponent<RectTransform>();
+                RectTransform headerRt = shopHeader.GetComponent<RectTransform>();
+                RectTransform filterRt = filterRow.GetComponent<RectTransform>();
+                RectTransform sellHeaderRt = sellHeader.GetComponent<RectTransform>();
+                UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(shopRt);
+                float bodyRatio = bodyRt.rect.height / Mathf.Max(1f, shopRt.rect.height);
+                Assert.That(bodyRatio, Is.GreaterThanOrEqualTo(0.65f), $"ShopBody occupied only {bodyRatio:P1} of TownShopModal height.");
+                Assert.That(headerRt.rect.height, Is.LessThanOrEqualTo(76f), $"Shop Header stretched too tall: {headerRt.rect.height}");
+                Assert.That(filterRt.rect.height, Is.LessThanOrEqualTo(44f), $"Shop FilterRow stretched too tall: {filterRt.rect.height}");
+                Assert.That(sellHeaderRt.rect.height, Is.LessThanOrEqualTo(42f), $"Shop SellHeader stretched too tall: {sellHeaderRt.rect.height}");
+
+                Transform shopPortrait = FindDescendantByPathSuffix(shopHeader, "ShopkeeperPortraitFrame/Portrait");
+                Assert.That(shopPortrait, Is.Not.Null, "ShopkeeperPortraitFrame/Portrait should exist in Shop Header.");
+                Assert.That(shopPortrait.GetComponent<UnityEngine.UI.Image>().preserveAspect, Is.True);
+
+                // Fix #2 check: Narrow foreground occlusion fade switches ONLY directly occluding tree to Transparent
+                IReadOnlyList<CartographyPropPlacement> worldProps = landWorld.Props;
+                Vector3 testTreePos = Vector3.zero;
+                bool foundTree = false;
+                for (int i = 0; i < worldProps.Count; i++)
+                {
+                    if (worldProps[i].Kind == CartographyPropKind.TreeOakA ||
+                        worldProps[i].Kind == CartographyPropKind.TreePineA)
+                    {
+                        testTreePos = worldProps[i].WorldPosition;
+                        foundTree = true;
+                        break;
+                    }
+                }
+                Assert.That(foundTree, Is.True, "Expected at least one oak/pine tree prop in land_0.");
+                renderer.UpdateTreeOcclusionFade(new[] { new Vector3(testTreePos.x, testTreePos.y, testTreePos.z + 1.0f) });
+                MeshRenderer[] propRenderers = renderer.GetComponentsInChildren<MeshRenderer>(false);
+                bool sawTransparentFaded = false;
+                bool sawOpaqueCutout = false;
+                for (int i = 0; i < propRenderers.Length; i++)
+                {
+                    Material mat = propRenderers[i].sharedMaterial;
+                    if (mat == null) continue;
+                    if (mat.renderQueue >= (int)UnityEngine.Rendering.RenderQueue.Transparent &&
+                        mat.name.EndsWith("_FadeTransparent", System.StringComparison.Ordinal))
+                    {
+                        sawTransparentFaded = true;
+                    }
+                    else if (mat.renderQueue < (int)UnityEngine.Rendering.RenderQueue.Transparent)
+                    {
+                        sawOpaqueCutout = true;
+                    }
+                }
+                Assert.That(sawTransparentFaded, Is.True, "Occluding foreground tree should swap cleanly to _FadeTransparent material.");
+                Assert.That(sawOpaqueCutout, Is.True, "Non-occluding trees and props should stay crisp AlphaTest cutout.");
+
+                // Fix #5 Temple Shrine Modal isolated from Shop
+                hud.OpenTempleModal(exploreParty, bundle);
+                Assert.That(hud.IsTempleOpen, Is.True);
+                Assert.That(hud.IsShopOpen, Is.False);
+                Transform templeModal = FindDescendantByName(canvas.transform, "TempleShrineModal");
+                Assert.That(templeModal, Is.Not.Null);
+                Assert.That(FindDescendantByName(templeModal, "TempleHealBtn"), Is.Not.Null);
+                Assert.That(FindDescendantByName(templeModal, "TempleCureBtn"), Is.Not.Null);
+                Assert.That(FindDescendantByName(templeModal, "TempleRechargeBtn"), Is.Not.Null);
+                hud.CloseTempleModal();
+
+                // Fix #6 Pause Menu: Quit to Desktop (2-step confirm), no SettingsResumeBtn, clear Sound: ON/MUTED
+                hud.ToggleSettingsModal(true);
+                Transform settingsModal = FindDescendantByName(canvas.transform, "SettingsModal");
+                Assert.That(settingsModal, Is.Not.Null);
+                Assert.That(FindDescendantByName(settingsModal, "SettingsResumeBtn"), Is.Null, "Duplicate bottom SettingsResumeBtn must be removed.");
+                Transform quitBtnTf = FindDescendantByName(settingsModal, "SettingsQuitBtn");
+                Assert.That(quitBtnTf, Is.Not.Null, "SettingsQuitBtn must exist.");
+
+                bool quitFired = false;
+                hud.OnQuitRequested += () => quitFired = true;
+                UnityEngine.UI.Button quitBtn = quitBtnTf.GetComponent<UnityEngine.UI.Button>();
+                quitBtn.onClick.Invoke();
+                Assert.That(quitFired, Is.False, "First click arms quit confirmation.");
+                quitBtn.onClick.Invoke();
+                Assert.That(quitFired, Is.True, "Second click confirms Quit to Desktop.");
+
+                Transform muteLabelTf = FindDescendantByPathSuffix(settingsModal, "MuteRow/RowLabel");
+                Transform muteStateTf = FindDescendantByPathSuffix(settingsModal, "MuteRow/ToggleBtn/Label");
+                Assert.That(muteLabelTf, Is.Not.Null);
+                Assert.That(muteStateTf, Is.Not.Null);
+                Assert.That(muteLabelTf.GetComponent<TMPro.TextMeshProUGUI>().text, Is.EqualTo("Sound"));
+                Assert.That(muteStateTf.GetComponent<TMPro.TextMeshProUGUI>().text, Is.EqualTo("ON"));
+                FindDescendantByPathSuffix(settingsModal, "MuteRow/ToggleBtn").GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                Assert.That(muteStateTf.GetComponent<TMPro.TextMeshProUGUI>().text, Is.EqualTo("MUTED"));
+
+                // Verify Option A Explore Hero View count via BywaterGameController
+                BywaterGameController ctrl = ctrlGo.AddComponent<BywaterGameController>();
+                ctrl.worldRenderer = renderer;
+                ctrl.hudController = hud;
+                ctrl.cameraRig = rig;
+                ctrl.InitializeForTests(bundle, session, 777UL);
+                typeof(BywaterGameController)
+                    .GetMethod("EnterExplorationView", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                    .Invoke(ctrl, new object[] { true });
+                Assert.That(ctrl.ActiveExploreViewCount, Is.EqualTo(1), "Option A must render only 1 leader view in overworld exploration.");
+
+                typeof(BywaterGameController)
+                    .GetMethod("EnterCampMode", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                    .Invoke(ctrl, null);
+                Assert.That(ctrl.ActiveExploreViewCount, Is.EqualTo(6), "Camp mode must spawn all 6 living heroes around campfire.");
+
+                typeof(BywaterGameController)
+                    .GetMethod("ExitCampMode", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                    .Invoke(ctrl, null);
+                Assert.That(ctrl.ActiveExploreViewCount, Is.EqualTo(1), "Exiting camp must return to 1 leader view.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(unitGo);
+                Object.DestroyImmediate(hudGo);
+                Object.DestroyImmediate(ctrlGo);
+                Object.DestroyImmediate(camGo);
+                Object.DestroyImmediate(worldGo);
+            }
+        }
+
+        [Test]
+        public void W240AnimationsAndShopkeepers_All26WalkAttack4NpcSheetsAnd4PortraitsLoadCleanly()
+        {
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            Assert.That(catalog, Is.Not.Null, "BywaterAssetCatalog missing.");
+            Assert.That(catalog.cartographyNpcSheets.Count, Is.EqualTo(4), "Expected 4 Bywater storefront NPC sheets in catalog.");
+
+            string[] unitIds =
+            {
+                "hero_knight", "hero_cleric", "hero_ranger",
+                "hero_mage", "hero_paladin", "hero_rogue",
+                "monster_giant_frog", "monster_goblin_raider", "monster_goblin_archer",
+                "monster_orc_warrior", "monster_giant_rat", "monster_skeleton_warrior",
+                "monster_bandit_cutthroat"
+            };
+            string[] animStates = { "walk", "attack" };
+
+            for (int i = 0; i < unitIds.Length; i++)
+            {
+                string unitId = unitIds[i];
+                for (int a = 0; a < animStates.Length; a++)
+                {
+                    string anim = animStates[a];
+                    string sheetPath = $"Assets/Art/Cartography/units/{unitId}_{anim}_sheet.png";
+                    string normalPath = $"Assets/Art/Cartography/units/{unitId}_{anim}_sheet_n.png";
+
+                    AssertFourFrameUnitSheet(sheetPath, normalPath, $"{unitId}_{anim}_sheet");
+
+                    UnitAnimState state = anim == "walk" ? UnitAnimState.Walk : UnitAnimState.Attack;
+                    Material stateMat = catalog.ResolveCartographyUnitMaterial(unitId, state, null, out bool hasDedicated);
+                    Assert.That(hasDedicated, Is.True, $"Expected dedicated {anim} sheet for {unitId}.");
+                    Assert.That(stateMat, Is.Not.Null, $"Material null for {unitId} {anim}.");
+                    Assert.That(stateMat.shader.name, Is.EqualTo("Realmz/CartographyBillboard"));
+                    Assert.That(stateMat.GetFloat("_Cols"), Is.EqualTo(4f));
+                    Assert.That(stateMat.GetFloat("_FrameCount"), Is.EqualTo(4f));
+                    Assert.That(stateMat.GetTexture("_BaseMap"), Is.Not.Null);
+                    Assert.That(stateMat.GetTexture("_BaseMap").name, Is.EqualTo($"{unitId}_{anim}_sheet"));
+                    Assert.That(stateMat.GetTexture("_BumpMap"), Is.Not.Null, $"Normal map missing on material for {unitId}_{anim}.");
+                }
+            }
+
+            string[] npcIds = { "npc_blacksmith", "npc_tanner", "npc_apothecary", "npc_priestess" };
+            for (int i = 0; i < npcIds.Length; i++)
+            {
+                string npcId = npcIds[i];
+                string sheetPath = $"Assets/Art/Cartography/units/{npcId}_sheet.png";
+                string normalPath = $"Assets/Art/Cartography/units/{npcId}_sheet_n.png";
+                AssertFourFrameUnitSheet(sheetPath, normalPath, $"{npcId}_sheet");
+
+                Material npcMat = catalog.ResolveCartographyUnitMaterial(npcId, UnitAnimState.Idle, null, out bool hasNpc);
+                Assert.That(hasNpc, Is.True, $"Expected dedicated idle sheet for {npcId}.");
+                Assert.That(npcMat, Is.Not.Null, $"NPC material null for {npcId}.");
+                Assert.That(npcMat.GetTexture("_BaseMap").name, Is.EqualTo($"{npcId}_sheet"));
+                Assert.That(npcMat.GetTexture("_BumpMap"), Is.Not.Null, $"NPC normal map missing on material for {npcId}.");
+
+                string portraitPath = $"Assets/Art/Cartography/Portraits/portrait_{npcId}.png";
+                string portraitNormalPath = $"Assets/Art/Cartography/Portraits/portrait_{npcId}_n.png";
+
+                TextureImporter pImp = AssetImporter.GetAtPath(portraitPath) as TextureImporter;
+                Assert.That(pImp, Is.Not.Null, "Missing portrait importer: " + portraitPath);
+                Assert.That(pImp.textureType, Is.EqualTo(TextureImporterType.Sprite));
+                Assert.That(pImp.filterMode, Is.EqualTo(FilterMode.Point));
+                Assert.That(pImp.textureCompression, Is.EqualTo(TextureImporterCompression.Uncompressed));
+                Assert.That(pImp.mipmapEnabled, Is.False);
+                Assert.That(pImp.spritePixelsPerUnit, Is.EqualTo(64f));
+
+                TextureImporter pnImp = AssetImporter.GetAtPath(portraitNormalPath) as TextureImporter;
+                Assert.That(pnImp, Is.Not.Null, "Missing portrait normal importer: " + portraitNormalPath);
+                Assert.That(pnImp.textureType, Is.EqualTo(TextureImporterType.NormalMap));
+                Assert.That(pnImp.sRGBTexture, Is.False);
+                Assert.That(pnImp.filterMode, Is.EqualTo(FilterMode.Point));
+                Assert.That(pnImp.textureCompression, Is.EqualTo(TextureImporterCompression.Uncompressed));
+                Assert.That(pnImp.mipmapEnabled, Is.False);
+
+                Sprite portrait = catalog.GetUnifiedPortrait(npcId);
+                Assert.That(portrait, Is.Not.Null, "GetUnifiedPortrait null for " + npcId);
+                Assert.That(portrait.texture, Is.Not.Null);
+                Assert.That(portrait.texture.width, Is.EqualTo(128));
+                Assert.That(portrait.texture.height, Is.EqualTo(128));
+                Assert.That(portrait.texture.name, Is.EqualTo($"portrait_{npcId}"));
+            }
+
+            // Verify BywaterUnitView swaps actual Walk/Attack/Idle materials and HUD binds all 4 NPC portraits
+            string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
+            PartyState party = PartyState.FromBundle(bundle);
+            bool hadEventSystem = Object.FindFirstObjectByType<EventSystem>() != null;
+            GameObject unitGo = new GameObject("TempW240UnitAnimSwapTest");
+            GameObject hudGo = new GameObject("TempW240NpcHudPortraitTest");
+            try
+            {
+                BywaterUnitView unitView = unitGo.AddComponent<BywaterUnitView>();
+                unitView.Configure("hero_knight", "Aldric", null, Color.cyan, catalog.uiFont, 2.0f, false, true, catalog);
+                Transform spriteQuad = FindDescendantByName(unitView.transform, "SpriteQuad");
+                Assert.That(spriteQuad, Is.Not.Null);
+                MeshRenderer sr = spriteQuad.GetComponent<MeshRenderer>();
+                Assert.That(sr.sharedMaterial.GetTexture("_BaseMap").name, Is.EqualTo("hero_knight_sheet"));
+
+                unitView.SetAnimState(UnitAnimState.Walk);
+                Assert.That(sr.sharedMaterial.GetTexture("_BaseMap").name, Is.EqualTo("hero_knight_walk_sheet"));
+
+                unitView.SetAnimState(UnitAnimState.Attack, 0.45f);
+                Assert.That(sr.sharedMaterial.GetTexture("_BaseMap").name, Is.EqualTo("hero_knight_attack_sheet"));
+
+                unitView.SetAnimState(UnitAnimState.Idle);
+                Assert.That(sr.sharedMaterial.GetTexture("_BaseMap").name, Is.EqualTo("hero_knight_sheet"));
+
+                BywaterHudController hud = hudGo.AddComponent<BywaterHudController>();
+                hud.BuildUi(catalog);
+                Canvas canvas = hudGo.GetComponentInChildren<Canvas>(true);
+
+                (string shopId, string expectedTex)[] shopChecks =
+                {
+                    ("1", "portrait_npc_blacksmith"),
+                    ("4", "portrait_npc_tanner"),
+                    ("10", "portrait_npc_apothecary")
+                };
+                for (int i = 0; i < shopChecks.Length; i++)
+                {
+                    hud.OpenShop(shopChecks[i].shopId, party, bundle);
+                    Transform portraitTf = FindDescendantByPathSuffix(canvas.transform, "ShopkeeperPortraitFrame/Portrait");
+                    Assert.That(portraitTf, Is.Not.Null);
+                    UnityEngine.UI.Image img = portraitTf.GetComponent<UnityEngine.UI.Image>();
+                    Assert.That(img.preserveAspect, Is.True);
+                    Assert.That(img.sprite, Is.Not.Null);
+                    Assert.That(img.sprite.texture.name, Is.EqualTo(shopChecks[i].expectedTex));
+                }
+
+                hud.OpenTempleModal(party, bundle);
+                Transform templePortraitTf = FindDescendantByPathSuffix(canvas.transform, "PriestessPortraitFrame/Portrait");
+                Assert.That(templePortraitTf, Is.Not.Null);
+                UnityEngine.UI.Image templeImg = templePortraitTf.GetComponent<UnityEngine.UI.Image>();
+                Assert.That(templeImg.preserveAspect, Is.True);
+                Assert.That(templeImg.sprite, Is.Not.Null);
+                Assert.That(templeImg.sprite.texture.name, Is.EqualTo("portrait_npc_priestess"));
+            }
+            finally
+            {
+                Object.DestroyImmediate(unitGo);
+                Object.DestroyImmediate(hudGo);
+                if (!hadEventSystem)
+                {
+                    EventSystem createdEs = Object.FindFirstObjectByType<EventSystem>();
+                    if (createdEs != null)
+                    {
+                        Object.DestroyImmediate(createdEs.gameObject);
+                    }
+                }
+            }
+        }
+
+        private static void AssertFourFrameUnitSheet(string sheetPath, string normalPath, string expectedBaseName)
+        {
+            TextureImporter sheetImp = AssetImporter.GetAtPath(sheetPath) as TextureImporter;
+            Assert.That(sheetImp, Is.Not.Null, "Missing unit sheet importer: " + sheetPath);
+            Assert.That(sheetImp.textureType, Is.EqualTo(TextureImporterType.Sprite));
+            Assert.That(sheetImp.spriteImportMode, Is.EqualTo(SpriteImportMode.Multiple), "Expected Multiple 4-frame slice on " + sheetPath);
+            Assert.That(sheetImp.filterMode, Is.EqualTo(FilterMode.Point));
+            Assert.That(sheetImp.textureCompression, Is.EqualTo(TextureImporterCompression.Uncompressed));
+            Assert.That(sheetImp.mipmapEnabled, Is.False);
+            Assert.That(sheetImp.spritePixelsPerUnit, Is.EqualTo(64f));
+
+            Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>(sheetPath);
+            Assert.That(tex, Is.Not.Null, "Missing Texture2D at " + sheetPath);
+            Assert.That(tex.width, Is.EqualTo(512), "Expected 512 width on " + sheetPath);
+            Assert.That(tex.height, Is.EqualTo(128), "Expected 128 height on " + sheetPath);
+
+            Object[] subAssets = AssetDatabase.LoadAllAssetsAtPath(sheetPath);
+            int spriteCount = 0;
+            for (int i = 0; i < subAssets.Length; i++)
+            {
+                if (subAssets[i] is Sprite s)
+                {
+                    spriteCount++;
+                    Assert.That(s.rect.size, Is.EqualTo(new Vector2(128f, 128f)), "Expected 128x128 frame rect on " + sheetPath);
+                    Assert.That(s.name, Does.StartWith(expectedBaseName + "_"));
+                }
+            }
+            Assert.That(spriteCount, Is.EqualTo(4), "Expected 4 sliced frames on " + sheetPath);
+
+            TextureImporter normImp = AssetImporter.GetAtPath(normalPath) as TextureImporter;
+            Assert.That(normImp, Is.Not.Null, "Missing unit normal importer: " + normalPath);
+            Assert.That(normImp.textureType, Is.EqualTo(TextureImporterType.NormalMap));
+            Assert.That(normImp.sRGBTexture, Is.False);
+            Assert.That(normImp.filterMode, Is.EqualTo(FilterMode.Point));
+            Assert.That(normImp.textureCompression, Is.EqualTo(TextureImporterCompression.Uncompressed));
+            Assert.That(normImp.mipmapEnabled, Is.False);
         }
 
         private static GridCoord FindAdjacentPassableTile(TileMapData map, GridCoord origin, bool hasBoat)

@@ -133,6 +133,8 @@ namespace Realmz.Game
             public GameObject Root;
             public Image ItemIcon;
             public TextMeshProUGUI NameText;
+            public TextMeshProUGUI StatsText;
+            public GameObject UpgradeBadge;
             public TextMeshProUGUI PriceText;
             public Button BuyBtn;
             public string BoundShopId;
@@ -222,13 +224,12 @@ namespace Realmz.Game
         private PartyState _cachedParty;
         private BywaterM1Bundle _cachedBundle;
 
-        // Town Shop Modal
+        // Town Shop Modal (Single-Venue)
         private GameObject _shopModalRoot;
+        private Image _shopPortraitImage;
         private TextMeshProUGUI _shopHeaderTitle;
+        private TextMeshProUGUI _shopGreetingLabel;
         private TextMeshProUGUI _shopGoldLabel;
-        private Button _shopTabArmory;
-        private Button _shopTabTannery;
-        private Button _shopTabApothecary;
         private readonly Dictionary<string, Button> _shopCategoryBtns = new Dictionary<string, Button>(StringComparer.OrdinalIgnoreCase);
         private Toggle _shopAffordableToggle;
         private TMP_InputField _shopSearchInput;
@@ -240,6 +241,15 @@ namespace Realmz.Game
         private readonly List<ShopSellRowRefs> _shopSellRowPool = new List<ShopSellRowRefs>(16);
         private string _activeShopId = "1";
         private string _activeShopCategory = "All";
+
+        // Temple Shrine Modal
+        private GameObject _templeModalRoot;
+        private Image _templePortraitImage;
+        private TextMeshProUGUI _templeGoldLabel;
+        private TextMeshProUGUI _templeStatusLabel;
+        private Button _templeHealBtn;
+        private Button _templeCureBtn;
+        private Button _templeRechargeBtn;
 
         // Combat HUD
         private readonly List<InitiativeCardRefs> _initiativeCards = new List<InitiativeCardRefs>(8);
@@ -318,12 +328,15 @@ namespace Realmz.Game
         private Button _settingsSaveBtn;
         private Button _settingsLoadBtn;
         private Button _settingsFleeBtn;
+        private Button _settingsQuitBtn;
+        private TextMeshProUGUI _settingsQuitBtnLabel;
         private bool _isAutoCombatOn;
         private bool _isAutoEndTurnOn;
         private int _battleSpeedIndex;
         private bool _isMuted;
         private bool _nameplatesAlwaysOn;
         private bool _suppressSettingsCallbacks;
+        private bool _quitConfirmArmed;
 
         // Pre-Battle Quick Resolve Modal
         private GameObject _quickResolveModalRoot;
@@ -365,12 +378,13 @@ namespace Realmz.Game
         public event Action<int, int> OnUseStashItemRequested;
         public event Action<CampMode> OnCampModeRequested;
 
-        public event Action<string> OnShopSelected;
         public event Action<string, int> OnBuyItemRequested;
         public event Action<int> OnSellItemRequested;
         public event Action OnSellAllJunkRequested;
         public event Action OnIdentifyAllRequested;
         public event Action OnTempleHealRequested;
+        public event Action OnTempleCureRequested;
+        public event Action OnTempleRechargeRequested;
 
         public event Action<CombatActionMode> OnCombatModeSelected;
         public event Action OnUndoMoveRequested;
@@ -394,6 +408,7 @@ namespace Realmz.Game
         public event Action<bool> OnNameplatesAlwaysOnChanged;
         public event Action<bool> OnDevToolsToggled;
         public event Action OnFleeCombatRequested;
+        public event Action OnQuitRequested;
 
         public event Action OnQuickResolveFightRequested;
         public event Action OnQuickResolveAutoWinRequested;
@@ -404,11 +419,13 @@ namespace Realmz.Game
 
         public bool IsPartyOpen => _partyDrawerRoot != null && _partyDrawerRoot.activeSelf;
         public bool IsShopOpen => _shopModalRoot != null && _shopModalRoot.activeSelf;
+        public bool IsTempleOpen => _templeModalRoot != null && _templeModalRoot.activeSelf;
         public bool IsOutcomeOpen => _outcomeModalRoot != null && _outcomeModalRoot.activeSelf;
         public bool IsSettingsOpen => _settingsModalRoot != null && _settingsModalRoot.activeSelf;
         public bool IsSettingsModalOpen => IsSettingsOpen;
         public bool IsQuickResolveOpen => _quickResolveModalRoot != null && _quickResolveModalRoot.activeSelf;
-        public bool IsModalOpen => IsPartyOpen || IsShopOpen || IsOutcomeOpen || IsSettingsOpen || IsQuickResolveOpen;
+        public bool IsModalOpen => IsPartyOpen || IsShopOpen || IsTempleOpen || IsOutcomeOpen || IsSettingsOpen || IsQuickResolveOpen;
+        public bool IsAnyModalOpen => IsModalOpen;
         public bool IsDevToolsVisible => _isDevToolsVisible;
         public bool IsCursorTooltipActive => _cursorTooltipRoot != null && _cursorTooltipRoot.activeSelf;
         public bool IsLogDrawerExpanded => _combatLogDrawerRoot != null && _combatLogDrawerRoot.activeSelf;
@@ -516,6 +533,7 @@ namespace Realmz.Game
             BuildCombatHud(_canvas.transform);
             BuildPartyDrawer(_canvas.transform);
             BuildShopModal(_canvas.transform);
+            BuildTempleModal(_canvas.transform);
             BuildSettingsModal(_canvas.transform);
             BuildQuickResolveModal(_canvas.transform);
             BuildOutcomeModal(_canvas.transform);
@@ -524,6 +542,7 @@ namespace Realmz.Game
             SetCombatHudActive(false);
             _partyDrawerRoot.SetActive(false);
             _shopModalRoot.SetActive(false);
+            _templeModalRoot.SetActive(false);
             _settingsModalRoot.SetActive(false);
             _quickResolveModalRoot.SetActive(false);
             _outcomeModalRoot.SetActive(false);
@@ -625,13 +644,17 @@ namespace Realmz.Game
             {
                 if (_partyDrawerRoot != null) _partyDrawerRoot.SetActive(false);
                 if (_shopModalRoot != null) _shopModalRoot.SetActive(false);
+                if (_templeModalRoot != null) _templeModalRoot.SetActive(false);
                 if (_quickResolveModalRoot != null) _quickResolveModalRoot.SetActive(false);
+                _quitConfirmArmed = false;
                 RefreshSettingsModalControls();
                 _settingsModalRoot.SetActive(true);
                 _settingsModalRoot.transform.SetAsLastSibling();
             }
             else
             {
+                _quitConfirmArmed = false;
+                RefreshSettingsModalControls();
                 _settingsModalRoot.SetActive(false);
             }
         }
@@ -643,6 +666,7 @@ namespace Realmz.Game
 
         public void CloseSettingsModal()
         {
+            _quitConfirmArmed = false;
             ToggleSettingsModal(false);
         }
 
@@ -692,6 +716,7 @@ namespace Realmz.Game
 
             if (_partyDrawerRoot != null) _partyDrawerRoot.SetActive(false);
             if (_shopModalRoot != null) _shopModalRoot.SetActive(false);
+            if (_templeModalRoot != null) _templeModalRoot.SetActive(false);
             if (_settingsModalRoot != null) _settingsModalRoot.SetActive(false);
 
             _quickResolveTitle.text = string.IsNullOrWhiteSpace(encounterTitle) ? "Encounter Ahead" : encounterTitle;
@@ -740,6 +765,7 @@ namespace Realmz.Game
             if (nextState)
             {
                 if (_shopModalRoot != null) _shopModalRoot.SetActive(false);
+                if (_templeModalRoot != null) _templeModalRoot.SetActive(false);
                 if (_settingsModalRoot != null) _settingsModalRoot.SetActive(false);
             }
 
@@ -752,6 +778,17 @@ namespace Realmz.Game
                     RefreshPartyDrawer(_cachedParty, _cachedBundle, _selectedHeroIndex);
                 }
             }
+        }
+
+        public void CloseAllModals()
+        {
+            if (_partyDrawerRoot != null) _partyDrawerRoot.SetActive(false);
+            if (_shopModalRoot != null) _shopModalRoot.SetActive(false);
+            if (_templeModalRoot != null) _templeModalRoot.SetActive(false);
+            if (_settingsModalRoot != null) _settingsModalRoot.SetActive(false);
+            if (_quickResolveModalRoot != null) _quickResolveModalRoot.SetActive(false);
+            if (_outcomeModalRoot != null) _outcomeModalRoot.SetActive(false);
+            _quitConfirmArmed = false;
         }
 
         public void OpenShop(string shopId, PartyState party, BywaterM1Bundle bundle)
@@ -773,6 +810,10 @@ namespace Realmz.Game
             {
                 _partyDrawerRoot.SetActive(false);
             }
+            if (_templeModalRoot != null)
+            {
+                _templeModalRoot.SetActive(false);
+            }
             if (_settingsModalRoot != null)
             {
                 _settingsModalRoot.SetActive(false);
@@ -788,6 +829,142 @@ namespace Realmz.Game
             if (_shopModalRoot != null)
             {
                 _shopModalRoot.SetActive(false);
+            }
+        }
+
+        public void OpenTempleModal(PartyState party, BywaterM1Bundle bundle)
+        {
+            if (!_uiBuilt || _templeModalRoot == null)
+            {
+                return;
+            }
+
+            _cachedParty = party;
+            _cachedBundle = bundle;
+
+            if (_partyDrawerRoot != null)
+            {
+                _partyDrawerRoot.SetActive(false);
+            }
+            if (_shopModalRoot != null)
+            {
+                _shopModalRoot.SetActive(false);
+            }
+            if (_settingsModalRoot != null)
+            {
+                _settingsModalRoot.SetActive(false);
+            }
+            if (_quickResolveModalRoot != null)
+            {
+                _quickResolveModalRoot.SetActive(false);
+            }
+
+            _templeModalRoot.SetActive(true);
+            _templeModalRoot.transform.SetAsLastSibling();
+            RefreshTempleModal(party, bundle);
+        }
+
+        public void CloseTempleModal()
+        {
+            if (_templeModalRoot != null)
+            {
+                _templeModalRoot.SetActive(false);
+            }
+        }
+
+        public void RefreshTempleModal(PartyState party, BywaterM1Bundle bundle)
+        {
+            if (!_uiBuilt || _templeModalRoot == null)
+            {
+                return;
+            }
+
+            if (party != null)
+            {
+                _cachedParty = party;
+            }
+            if (bundle != null)
+            {
+                _cachedBundle = bundle;
+            }
+
+            if (_templePortraitImage != null)
+            {
+                ApplyNpcPortrait(_templePortraitImage, "npc_priestess", "heal");
+            }
+
+            if (party == null)
+            {
+                if (_templeGoldLabel != null) _templeGoldLabel.text = "Party Gold: 0g";
+                if (_templeStatusLabel != null)
+                {
+                    _templeStatusLabel.text = "Party Status: Ready for shrine blessings.";
+                    _templeStatusLabel.color = BywaterUiHelpers.ParchmentText;
+                }
+                return;
+            }
+
+            if (_templeGoldLabel != null)
+            {
+                _templeGoldLabel.text = $"Party Gold: {party.Gold}g";
+            }
+
+            int injuredCount = 0;
+            int fallenCount = 0;
+            int afflictedCount = 0;
+            int lowChargeCount = 0;
+
+            for (int i = 0; i < party.Members.Count; i++)
+            {
+                PartyMemberState m = party.Members[i];
+                if (m == null) continue;
+                if (m.Hp <= 0) fallenCount++;
+                else if (m.Hp < m.MaxHp) injuredCount++;
+                if (m.CurseStacks > 0 || m.ExhaustionStacks > 0 || m.Conditions.Count > 0) afflictedCount++;
+
+                if (bundle != null && bundle.Items != null)
+                {
+                    foreach (InventoryItem eq in m.Equipped.Values)
+                    {
+                        if (eq != null && bundle.Items.TryGetValue(eq.ItemId, out ItemDefinition def) &&
+                            def.Charges > 0 && eq.RemainingCharges < def.Charges)
+                        {
+                            lowChargeCount++;
+                        }
+                    }
+                }
+            }
+
+            if (bundle != null && bundle.Items != null)
+            {
+                for (int i = 0; i < party.Stash.Count; i++)
+                {
+                    InventoryItem st = party.Stash[i];
+                    if (st != null && bundle.Items.TryGetValue(st.ItemId, out ItemDefinition def) &&
+                        def.Charges > 0 && st.RemainingCharges < def.Charges)
+                    {
+                        lowChargeCount++;
+                    }
+                }
+            }
+
+            if (_templeStatusLabel != null)
+            {
+                if (fallenCount == 0 && injuredCount == 0 && afflictedCount == 0 && lowChargeCount == 0)
+                {
+                    _templeStatusLabel.text = "Party Status: All heroes healthy, uncursed, and relics fully charged.";
+                    _templeStatusLabel.color = BywaterUiHelpers.SuccessGreen;
+                }
+                else
+                {
+                    List<string> summaryParts = new List<string>(4);
+                    if (fallenCount > 0) summaryParts.Add($"{fallenCount} fallen");
+                    if (injuredCount > 0) summaryParts.Add($"{injuredCount} injured");
+                    if (afflictedCount > 0) summaryParts.Add($"{afflictedCount} cursed/ailing");
+                    if (lowChargeCount > 0) summaryParts.Add($"{lowChargeCount} low-charge relic(s)");
+                    _templeStatusLabel.text = "Party Status: " + string.Join(" | ", summaryParts);
+                    _templeStatusLabel.color = BywaterUiHelpers.BrassHighlight;
+                }
             }
         }
 
@@ -1198,12 +1375,23 @@ namespace Realmz.Game
                 return;
             }
 
-            _shopHeaderTitle.text = $"{shop.Name} (Shop #{shop.ShopId})";
-            _shopGoldLabel.text = $"Party Gold: {party.Gold}g";
-
-            BywaterUiHelpers.SetButtonColors(_shopTabArmory, _activeShopId == "1");
-            BywaterUiHelpers.SetButtonColors(_shopTabTannery, _activeShopId == "4");
-            BywaterUiHelpers.SetButtonColors(_shopTabApothecary, _activeShopId == "10");
+            ResolveShopVenueMeta(shop, out string venueTitle, out string venueGreeting, out string npcPortraitKey, out string fallbackIconKey);
+            if (_shopPortraitImage != null)
+            {
+                ApplyNpcPortrait(_shopPortraitImage, npcPortraitKey, fallbackIconKey);
+            }
+            if (_shopHeaderTitle != null)
+            {
+                _shopHeaderTitle.text = venueTitle;
+            }
+            if (_shopGreetingLabel != null)
+            {
+                _shopGreetingLabel.text = venueGreeting;
+            }
+            if (_shopGoldLabel != null)
+            {
+                _shopGoldLabel.text = $"Party Gold: {party.Gold}g";
+            }
 
             foreach (KeyValuePair<string, Button> kvp in _shopCategoryBtns)
             {
@@ -1227,6 +1415,12 @@ namespace Realmz.Game
             {
                 ShopStockView entry = stock[i];
                 string stats = FormatItemStats(entry.Item);
+                if (string.IsNullOrEmpty(stats) && !string.IsNullOrWhiteSpace(entry.Item.Category))
+                {
+                    stats = entry.Item.Category;
+                }
+                bool isUpgrade = IsShopItemUpgrade(party, entry.Item, bundle.Items);
+
                 ShopBuyRowRefs rowRef = GetOrCreateShopBuyRow(i);
                 rowRef.BoundShopId = shop.ShopId;
                 rowRef.BoundItemId = entry.Item.Id;
@@ -1238,8 +1432,17 @@ namespace Realmz.Game
                     rowRef.ItemIcon.color = entry.CanAfford ? Color.white : new Color(0.65f, 0.65f, 0.70f, 0.85f);
                     rowRef.ItemIcon.gameObject.SetActive(buySprite != null);
                 }
-                rowRef.NameText.text = $"{entry.Item.Name}{(string.IsNullOrEmpty(stats) ? "" : " (" + stats + ")")}";
+                rowRef.NameText.text = entry.Item.Name;
                 rowRef.NameText.color = entry.CanAfford ? BywaterUiHelpers.ParchmentText : BywaterUiHelpers.MutedSlate;
+                if (rowRef.StatsText != null)
+                {
+                    rowRef.StatsText.text = stats;
+                    rowRef.StatsText.gameObject.SetActive(!string.IsNullOrEmpty(stats));
+                }
+                if (rowRef.UpgradeBadge != null)
+                {
+                    rowRef.UpgradeBadge.SetActive(isUpgrade);
+                }
                 rowRef.PriceText.text = $"{entry.EffectivePrice}g";
                 rowRef.PriceText.color = entry.CanAfford ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.DangerRed;
                 rowRef.BuyBtn.interactable = entry.CanAfford;
@@ -1301,7 +1504,9 @@ namespace Realmz.Game
                 BywaterUiHelpers.CardBg,
                 withBrassOutline: false);
             LayoutElement rowLe = row.gameObject.AddComponent<LayoutElement>();
-            rowLe.preferredHeight = 50f;
+            rowLe.minHeight = 54f;
+            rowLe.preferredHeight = 56f;
+            rowLe.flexibleHeight = 0f;
 
             HorizontalLayoutGroup hlg = row.gameObject.AddComponent<HorizontalLayoutGroup>();
             hlg.padding = new RectOffset(8, 8, 4, 4);
@@ -1309,29 +1514,89 @@ namespace Realmz.Game
             hlg.childControlWidth = true;
             hlg.childControlHeight = true;
             hlg.childForceExpandWidth = false;
-            hlg.childForceExpandHeight = true;
+            hlg.childForceExpandHeight = false;
+            hlg.childAlignment = TextAnchor.MiddleLeft;
 
             Image iconImg = BywaterUiHelpers.CreateImage(row, "Icon", null, Color.white, preserveAspect: true);
+            iconImg.preserveAspect = true;
             iconImg.raycastTarget = false;
             LayoutElement iconLe = iconImg.gameObject.AddComponent<LayoutElement>();
-            iconLe.preferredWidth = 28f;
-            iconLe.preferredHeight = 28f;
-            iconLe.minWidth = 28f;
-            iconLe.minHeight = 28f;
+            iconLe.preferredWidth = 32f;
+            iconLe.preferredHeight = 32f;
+            iconLe.minWidth = 32f;
+            iconLe.minHeight = 32f;
+            iconLe.flexibleHeight = 0f;
             iconImg.gameObject.SetActive(false);
 
+            GameObject infoCol = new GameObject("InfoCol", typeof(RectTransform), typeof(VerticalLayoutGroup));
+            infoCol.transform.SetParent(row, false);
+            LayoutElement infoLe = infoCol.AddComponent<LayoutElement>();
+            infoLe.flexibleWidth = 1f;
+            infoLe.preferredHeight = 46f;
+            infoLe.flexibleHeight = 0f;
+
+            VerticalLayoutGroup infoVlg = infoCol.GetComponent<VerticalLayoutGroup>();
+            infoVlg.spacing = 1f;
+            infoVlg.childControlWidth = true;
+            infoVlg.childControlHeight = true;
+            infoVlg.childForceExpandWidth = true;
+            infoVlg.childForceExpandHeight = false;
+            infoVlg.childAlignment = TextAnchor.MiddleLeft;
+
             TextMeshProUGUI label = BywaterUiHelpers.CreateLabel(
-                row,
+                infoCol.transform,
                 "Name",
                 string.Empty,
                 _font,
-                15f,
+                15.5f,
                 BywaterUiHelpers.ParchmentText,
                 TextAlignmentOptions.MidlineLeft,
+                FontStyles.Bold,
                 wrap: false);
             label.overflowMode = TextOverflowModes.Truncate;
-            LayoutElement labelLe = label.gameObject.AddComponent<LayoutElement>();
-            labelLe.flexibleWidth = 1f;
+            label.gameObject.AddComponent<LayoutElement>().preferredHeight = 23f;
+
+            TextMeshProUGUI statsLbl = BywaterUiHelpers.CreateLabel(
+                infoCol.transform,
+                "Stats",
+                string.Empty,
+                _font,
+                15f,
+                BywaterUiHelpers.MutedSlate,
+                TextAlignmentOptions.MidlineLeft,
+                wrap: false);
+            statsLbl.overflowMode = TextOverflowModes.Truncate;
+            statsLbl.gameObject.AddComponent<LayoutElement>().preferredHeight = 20f;
+
+            RectTransform upgradeBadgeRt = BywaterUiHelpers.CreatePanel(
+                row,
+                "UpgradeBadge",
+                new Color(0.08f, 0.25f, 0.13f, 0.96f),
+                withBrassOutline: true,
+                outlinePx: 1.2f);
+            BywaterUiHelpers.SetBorderColor(upgradeBadgeRt, BywaterUiHelpers.SuccessGreen);
+            LayoutElement badgeLe = upgradeBadgeRt.gameObject.AddComponent<LayoutElement>();
+            badgeLe.preferredWidth = 96f;
+            badgeLe.minWidth = 96f;
+            badgeLe.preferredHeight = 26f;
+            badgeLe.flexibleWidth = 0f;
+            badgeLe.flexibleHeight = 0f;
+
+            TextMeshProUGUI upgradeLbl = BywaterUiHelpers.CreateLabel(
+                upgradeBadgeRt,
+                "UpgradeLabel",
+                "[UPGRADE]",
+                _font,
+                15f,
+                BywaterUiHelpers.SuccessGreen,
+                TextAlignmentOptions.Center,
+                FontStyles.Bold,
+                wrap: false);
+            upgradeLbl.rectTransform.anchorMin = Vector2.zero;
+            upgradeLbl.rectTransform.anchorMax = Vector2.one;
+            upgradeLbl.rectTransform.offsetMin = Vector2.zero;
+            upgradeLbl.rectTransform.offsetMax = Vector2.zero;
+            upgradeBadgeRt.gameObject.SetActive(false);
 
             TextMeshProUGUI priceLbl = BywaterUiHelpers.CreateLabel(
                 row,
@@ -1344,13 +1609,17 @@ namespace Realmz.Game
                 FontStyles.Bold,
                 wrap: false);
             LayoutElement priceLe = priceLbl.gameObject.AddComponent<LayoutElement>();
-            priceLe.preferredWidth = 76f;
+            priceLe.preferredWidth = 68f;
+            priceLe.preferredHeight = 32f;
+            priceLe.flexibleHeight = 0f;
 
             ShopBuyRowRefs rowRef = new ShopBuyRowRefs
             {
                 Root = row.gameObject,
                 ItemIcon = iconImg,
                 NameText = label,
+                StatsText = statsLbl,
+                UpgradeBadge = upgradeBadgeRt.gameObject,
                 PriceText = priceLbl
             };
 
@@ -1362,7 +1631,9 @@ namespace Realmz.Game
                 () => OnBuyItemRequested?.Invoke(rowRef.BoundShopId, rowRef.BoundItemId),
                 15f);
             LayoutElement buyLe = buyBtn.gameObject.AddComponent<LayoutElement>();
-            buyLe.preferredWidth = 78f;
+            buyLe.preferredWidth = 74f;
+            buyLe.preferredHeight = 36f;
+            buyLe.flexibleHeight = 0f;
             rowRef.BuyBtn = buyBtn;
 
             _shopBuyRowPool.Add(rowRef);
@@ -2633,6 +2904,7 @@ namespace Realmz.Game
             {
                 if (_partyDrawerRoot != null) _partyDrawerRoot.SetActive(false);
                 if (_shopModalRoot != null) _shopModalRoot.SetActive(false);
+                if (_templeModalRoot != null) _templeModalRoot.SetActive(false);
                 if (_quickResolveModalRoot != null) _quickResolveModalRoot.SetActive(false);
             }
             else
@@ -3011,6 +3283,7 @@ namespace Realmz.Game
                 cardHlg.childAlignment = TextAnchor.MiddleLeft;
 
                 RectTransform portraitFrameRt = BywaterUiHelpers.CreatePortraitFrame(cardRt, "PortraitFrame", 74f, out Image portrait);
+                portrait.preserveAspect = true;
                 Image[] conditionBadges = CreateConditionBadgeStrip(portraitFrameRt, 18f);
 
                 GameObject infoCol = new GameObject("Info", typeof(RectTransform), typeof(VerticalLayoutGroup));
@@ -3280,57 +3553,102 @@ namespace Realmz.Game
             rootVlg.childControlHeight = true;
             rootVlg.childForceExpandHeight = false;
 
-            // Header
+            // Header (max 68px height)
             GameObject header = new GameObject("Header", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             header.transform.SetParent(modal, false);
-            header.AddComponent<LayoutElement>().preferredHeight = 44f;
+            LayoutElement headerLe = header.AddComponent<LayoutElement>();
+            headerLe.minHeight = 64f;
+            headerLe.preferredHeight = 68f;
+            headerLe.flexibleHeight = 0f;
             HorizontalLayoutGroup hHlg = header.GetComponent<HorizontalLayoutGroup>();
-            hHlg.spacing = 10f;
+            hHlg.spacing = 12f;
             hHlg.childControlWidth = true;
             hHlg.childControlHeight = true;
             hHlg.childForceExpandWidth = false;
+            hHlg.childForceExpandHeight = false;
+            hHlg.childAlignment = TextAnchor.MiddleLeft;
 
-            _shopHeaderTitle = BywaterUiHelpers.CreateLabel(header.transform, "ShopTitle", "Bywater Armory", _font, 21f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            RectTransform portraitFrame = BywaterUiHelpers.CreatePortraitFrame(header.transform, "ShopkeeperPortraitFrame", 56f, out _shopPortraitImage);
+            _shopPortraitImage.preserveAspect = true;
+            LayoutElement portraitFrameLe = portraitFrame.GetComponent<LayoutElement>();
+            if (portraitFrameLe != null)
+            {
+                portraitFrameLe.flexibleHeight = 0f;
+            }
+
+            GameObject titleStack = new GameObject("TitleStack", typeof(RectTransform), typeof(VerticalLayoutGroup));
+            titleStack.transform.SetParent(header.transform, false);
+            LayoutElement titleStackLe = titleStack.AddComponent<LayoutElement>();
+            titleStackLe.flexibleWidth = 1f;
+            titleStackLe.minHeight = 52f;
+            titleStackLe.preferredHeight = 60f;
+            titleStackLe.flexibleHeight = 0f;
+            VerticalLayoutGroup titleVlg = titleStack.GetComponent<VerticalLayoutGroup>();
+            titleVlg.spacing = 2f;
+            titleVlg.childControlWidth = true;
+            titleVlg.childControlHeight = true;
+            titleVlg.childForceExpandWidth = true;
+            titleVlg.childForceExpandHeight = false;
+            titleVlg.childAlignment = TextAnchor.MiddleLeft;
+
+            _shopHeaderTitle = BywaterUiHelpers.CreateLabel(
+                titleStack.transform,
+                "ShopTitle",
+                "Bywater Armory - Master Blacksmith Borin",
+                _font,
+                20f,
+                BywaterUiHelpers.BrassHighlight,
+                TextAlignmentOptions.MidlineLeft,
+                FontStyles.Bold,
+                wrap: false);
+            _shopHeaderTitle.overflowMode = TextOverflowModes.Truncate;
             BywaterUiHelpers.AddTextDropShadow(_shopHeaderTitle);
-            _shopHeaderTitle.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+            LayoutElement shopTitleLe = _shopHeaderTitle.gameObject.AddComponent<LayoutElement>();
+            shopTitleLe.preferredHeight = 30f;
+            shopTitleLe.flexibleHeight = 0f;
+
+            _shopGreetingLabel = BywaterUiHelpers.CreateLabel(
+                titleStack.transform,
+                "ShopGreeting",
+                "Fine steel, shields, and field provisions for the road.",
+                _font,
+                15f,
+                BywaterUiHelpers.MutedSlate,
+                TextAlignmentOptions.MidlineLeft,
+                wrap: false);
+            _shopGreetingLabel.overflowMode = TextOverflowModes.Truncate;
+            LayoutElement greetingLe = _shopGreetingLabel.gameObject.AddComponent<LayoutElement>();
+            greetingLe.preferredHeight = 22f;
+            greetingLe.flexibleHeight = 0f;
 
             _shopGoldLabel = BywaterUiHelpers.CreateLabel(header.transform, "ShopGold", "Party Gold: 400g", _font, 16.5f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineRight, FontStyles.Bold, wrap: false);
-            _shopGoldLabel.gameObject.AddComponent<LayoutElement>().preferredWidth = 210f;
-
-            Button templeBtn = BywaterUiHelpers.CreateButton(header.transform, "TempleHealBtn", "Temple Heal (25g)", _font, () => OnTempleHealRequested?.Invoke(), 15f);
-            templeBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 180f;
+            LayoutElement goldLe = _shopGoldLabel.gameObject.AddComponent<LayoutElement>();
+            goldLe.preferredWidth = 185f;
+            goldLe.preferredHeight = 40f;
+            goldLe.flexibleHeight = 0f;
 
             Button closeBtn = BywaterUiHelpers.CreateButton(header.transform, "CloseShopBtn", "Close", _font, CloseShopModal, 15.5f);
-            closeBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 94f;
+            LayoutElement closeLe = closeBtn.gameObject.AddComponent<LayoutElement>();
+            closeLe.preferredWidth = 94f;
+            closeLe.preferredHeight = 40f;
+            closeLe.flexibleHeight = 0f;
 
-            // Shop Tabs
-            GameObject tabsRow = new GameObject("ShopTabs", typeof(RectTransform), typeof(HorizontalLayoutGroup));
-            tabsRow.transform.SetParent(modal, false);
-            tabsRow.AddComponent<LayoutElement>().preferredHeight = 40f;
-            HorizontalLayoutGroup tabsHlg = tabsRow.GetComponent<HorizontalLayoutGroup>();
-            tabsHlg.spacing = 8f;
-            tabsHlg.childControlWidth = true;
-            tabsHlg.childControlHeight = true;
-            tabsHlg.childForceExpandWidth = false;
-
-            _shopTabArmory = BywaterUiHelpers.CreateButton(tabsRow.transform, "TabArmory", "Armory #1", _font, () => SelectShop("1"), 15.5f);
-            _shopTabArmory.gameObject.AddComponent<LayoutElement>().preferredWidth = 160f;
-            _shopTabTannery = BywaterUiHelpers.CreateButton(tabsRow.transform, "TabTannery", "Tannery #4", _font, () => SelectShop("4"), 15.5f);
-            _shopTabTannery.gameObject.AddComponent<LayoutElement>().preferredWidth = 160f;
-            _shopTabApothecary = BywaterUiHelpers.CreateButton(tabsRow.transform, "TabApothecary", "Apothecary #10", _font, () => SelectShop("10"), 15.5f);
-            _shopTabApothecary.gameObject.AddComponent<LayoutElement>().preferredWidth = 185f;
-
-            // Filter Bar
+            // Filter Bar (36px fixed height)
             GameObject filterRow = new GameObject("FilterRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             filterRow.transform.SetParent(modal, false);
-            filterRow.AddComponent<LayoutElement>().preferredHeight = 40f;
+            LayoutElement filterLe = filterRow.AddComponent<LayoutElement>();
+            filterLe.minHeight = 36f;
+            filterLe.preferredHeight = 36f;
+            filterLe.flexibleHeight = 0f;
             HorizontalLayoutGroup fHlg = filterRow.GetComponent<HorizontalLayoutGroup>();
             fHlg.spacing = 6f;
             fHlg.childControlWidth = true;
             fHlg.childControlHeight = true;
             fHlg.childForceExpandWidth = false;
+            fHlg.childForceExpandHeight = false;
+            fHlg.childAlignment = TextAnchor.MiddleLeft;
 
-            string[] categories = { "All", "Weapon", "Armor", "Helm", "Shield", "Potion", "Supply" };
+            string[] categories = { "All", "Weapon", "Armor", "Shield", "Potion" };
             for (int i = 0; i < categories.Length; i++)
             {
                 string cat = categories[i];
@@ -3339,27 +3657,40 @@ namespace Realmz.Game
                     _activeShopCategory = cat;
                     RefreshShopModal(_cachedParty, _cachedBundle);
                 }, 15f);
-                catBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 92f;
+                LayoutElement catLe = catBtn.gameObject.AddComponent<LayoutElement>();
+                catLe.preferredWidth = 90f;
+                catLe.preferredHeight = 32f;
+                catLe.flexibleHeight = 0f;
                 _shopCategoryBtns[cat] = catBtn;
             }
 
             _shopAffordableToggle = CreateAffordableToggle(filterRow.transform);
-            _shopAffordableToggle.gameObject.AddComponent<LayoutElement>().preferredWidth = 160f;
+            LayoutElement affLe = _shopAffordableToggle.gameObject.AddComponent<LayoutElement>();
+            affLe.preferredWidth = 156f;
+            affLe.preferredHeight = 32f;
+            affLe.flexibleHeight = 0f;
             _shopAffordableToggle.onValueChanged.AddListener(_ => RefreshShopModal(_cachedParty, _cachedBundle));
 
             _shopSearchInput = BywaterUiHelpers.CreateInputField(filterRow.transform, "ShopSearchInput", "Search items...", _font, 15.5f);
-            _shopSearchInput.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+            LayoutElement searchLe = _shopSearchInput.gameObject.AddComponent<LayoutElement>();
+            searchLe.flexibleWidth = 1f;
+            searchLe.preferredHeight = 32f;
+            searchLe.flexibleHeight = 0f;
             _shopSearchInput.onValueChanged.AddListener(_ => RefreshShopModal(_cachedParty, _cachedBundle));
 
-            // Body columns (Buy Stock vs Sell Stash)
+            // Body columns (Buy Stock vs Sell Stash, >= 70% of 800px modal height)
             GameObject body = new GameObject("ShopBody", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             body.transform.SetParent(modal, false);
-            body.AddComponent<LayoutElement>().flexibleHeight = 1f;
+            LayoutElement bodyLe = body.AddComponent<LayoutElement>();
+            bodyLe.minHeight = 520f;
+            bodyLe.preferredHeight = 630f;
+            bodyLe.flexibleHeight = 1f;
             HorizontalLayoutGroup bHlg = body.GetComponent<HorizontalLayoutGroup>();
             bHlg.spacing = 14f;
             bHlg.childControlWidth = true;
             bHlg.childControlHeight = true;
             bHlg.childForceExpandWidth = false;
+            bHlg.childForceExpandHeight = true;
 
             // Buy Column
             RectTransform buyCol = BywaterUiHelpers.CreatePanel(body.transform, "BuyCol", BywaterUiHelpers.PanelBg, withBrassOutline: true, outlinePx: 1f);
@@ -3399,22 +3730,36 @@ namespace Realmz.Game
 
             GameObject sellHeader = new GameObject("SellHeader", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             sellHeader.transform.SetParent(sellCol, false);
-            sellHeader.AddComponent<LayoutElement>().preferredHeight = 36f;
+            LayoutElement sellHeaderLe = sellHeader.AddComponent<LayoutElement>();
+            sellHeaderLe.minHeight = 36f;
+            sellHeaderLe.preferredHeight = 36f;
+            sellHeaderLe.flexibleHeight = 0f;
             HorizontalLayoutGroup shHlg = sellHeader.GetComponent<HorizontalLayoutGroup>();
             shHlg.spacing = 8f;
             shHlg.childControlWidth = true;
             shHlg.childControlHeight = true;
             shHlg.childForceExpandWidth = false;
+            shHlg.childForceExpandHeight = false;
+            shHlg.childAlignment = TextAnchor.MiddleLeft;
 
             TextMeshProUGUI sellTitle = BywaterUiHelpers.CreateLabel(sellHeader.transform, "SellTitle", "Party Stash (Sell)", _font, 17f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
             BywaterUiHelpers.AddTextDropShadow(sellTitle);
-            sellTitle.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+            LayoutElement sellTitleLe = sellTitle.gameObject.AddComponent<LayoutElement>();
+            sellTitleLe.flexibleWidth = 1f;
+            sellTitleLe.preferredHeight = 32f;
+            sellTitleLe.flexibleHeight = 0f;
 
             Button junkBtn = BywaterUiHelpers.CreateButton(sellHeader.transform, "SellJunkBtn", "Sell All Junk", _font, () => OnSellAllJunkRequested?.Invoke(), 15f);
-            junkBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 132f;
+            LayoutElement junkLe = junkBtn.gameObject.AddComponent<LayoutElement>();
+            junkLe.preferredWidth = 132f;
+            junkLe.preferredHeight = 32f;
+            junkLe.flexibleHeight = 0f;
 
             Button idBtn = BywaterUiHelpers.CreateButton(sellHeader.transform, "IdentifyAllBtn", "Identify All", _font, () => OnIdentifyAllRequested?.Invoke(), 15f);
-            idBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 126f;
+            LayoutElement idLe = idBtn.gameObject.AddComponent<LayoutElement>();
+            idLe.preferredWidth = 126f;
+            idLe.preferredHeight = 32f;
+            idLe.flexibleHeight = 0f;
 
             _shopSellScroll = BywaterUiHelpers.CreateScrollView(sellCol, "ShopSellScroll", _font, spacing: 5f);
             _shopSellScroll.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
@@ -3428,6 +3773,233 @@ namespace Realmz.Game
                 BywaterUiHelpers.MutedSlate);
             _shopSellEmptyLabel.gameObject.AddComponent<LayoutElement>().preferredHeight = 34f;
             _shopSellEmptyLabel.gameObject.SetActive(false);
+        }
+
+        private void BuildTempleModal(Transform parent)
+        {
+            RectTransform modal = BywaterUiHelpers.CreatePanel(parent, "TempleShrineModal", BywaterUiHelpers.PanelDarkBg, withBrassOutline: true, outlinePx: 2f);
+            modal.anchorMin = new Vector2(0.5f, 0.5f);
+            modal.anchorMax = new Vector2(0.5f, 0.5f);
+            modal.pivot = new Vector2(0.5f, 0.5f);
+            modal.anchoredPosition = new Vector2(0f, 8f);
+            modal.sizeDelta = new Vector2(800f, 476f);
+            _templeModalRoot = modal.gameObject;
+
+            VerticalLayoutGroup rootVlg = modal.gameObject.AddComponent<VerticalLayoutGroup>();
+            rootVlg.padding = new RectOffset(16, 16, 14, 14);
+            rootVlg.spacing = 10f;
+            rootVlg.childControlWidth = true;
+            rootVlg.childControlHeight = true;
+            rootVlg.childForceExpandHeight = false;
+
+            // Header (64-68px height)
+            GameObject header = new GameObject("Header", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+            header.transform.SetParent(modal, false);
+            LayoutElement headerLe = header.AddComponent<LayoutElement>();
+            headerLe.minHeight = 64f;
+            headerLe.preferredHeight = 68f;
+            headerLe.flexibleHeight = 0f;
+            HorizontalLayoutGroup hHlg = header.GetComponent<HorizontalLayoutGroup>();
+            hHlg.spacing = 12f;
+            hHlg.childControlWidth = true;
+            hHlg.childControlHeight = true;
+            hHlg.childForceExpandWidth = false;
+            hHlg.childForceExpandHeight = false;
+            hHlg.childAlignment = TextAnchor.MiddleLeft;
+
+            RectTransform portraitFrame = BywaterUiHelpers.CreatePortraitFrame(header.transform, "PriestessPortraitFrame", 56f, out _templePortraitImage);
+            _templePortraitImage.preserveAspect = true;
+            LayoutElement portraitFrameLe = portraitFrame.GetComponent<LayoutElement>();
+            if (portraitFrameLe != null)
+            {
+                portraitFrameLe.flexibleHeight = 0f;
+            }
+            ApplyNpcPortrait(_templePortraitImage, "npc_priestess", "heal");
+
+            GameObject titleStack = new GameObject("TitleStack", typeof(RectTransform), typeof(VerticalLayoutGroup));
+            titleStack.transform.SetParent(header.transform, false);
+            LayoutElement titleStackLe = titleStack.AddComponent<LayoutElement>();
+            titleStackLe.flexibleWidth = 1f;
+            titleStackLe.minHeight = 52f;
+            titleStackLe.preferredHeight = 60f;
+            titleStackLe.flexibleHeight = 0f;
+            VerticalLayoutGroup titleVlg = titleStack.GetComponent<VerticalLayoutGroup>();
+            titleVlg.spacing = 2f;
+            titleVlg.childControlWidth = true;
+            titleVlg.childControlHeight = true;
+            titleVlg.childForceExpandWidth = true;
+            titleVlg.childForceExpandHeight = false;
+            titleVlg.childAlignment = TextAnchor.MiddleLeft;
+
+            TextMeshProUGUI titleLbl = BywaterUiHelpers.CreateLabel(
+                titleStack.transform,
+                "TempleTitle",
+                "Bywater Magistrate & Shrine",
+                _font,
+                20f,
+                BywaterUiHelpers.BrassHighlight,
+                TextAlignmentOptions.MidlineLeft,
+                FontStyles.Bold,
+                wrap: false);
+            titleLbl.overflowMode = TextOverflowModes.Truncate;
+            BywaterUiHelpers.AddTextDropShadow(titleLbl);
+            LayoutElement titleLblLe = titleLbl.gameObject.AddComponent<LayoutElement>();
+            titleLblLe.preferredHeight = 30f;
+            titleLblLe.flexibleHeight = 0f;
+
+            TextMeshProUGUI greetingLbl = BywaterUiHelpers.CreateLabel(
+                titleStack.transform,
+                "TempleGreeting",
+                "High Priestess Elara offers sacred restoration, cleansing, or arcane renewal.",
+                _font,
+                15f,
+                BywaterUiHelpers.MutedSlate,
+                TextAlignmentOptions.MidlineLeft,
+                wrap: false);
+            greetingLbl.overflowMode = TextOverflowModes.Truncate;
+            LayoutElement greetingLe = greetingLbl.gameObject.AddComponent<LayoutElement>();
+            greetingLe.preferredHeight = 22f;
+            greetingLe.flexibleHeight = 0f;
+
+            _templeGoldLabel = BywaterUiHelpers.CreateLabel(header.transform, "TempleGold", "Party Gold: 400g", _font, 16.5f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineRight, FontStyles.Bold, wrap: false);
+            LayoutElement goldLe = _templeGoldLabel.gameObject.AddComponent<LayoutElement>();
+            goldLe.preferredWidth = 165f;
+            goldLe.preferredHeight = 40f;
+            goldLe.flexibleHeight = 0f;
+
+            Button closeBtn = BywaterUiHelpers.CreateButton(header.transform, "CloseTempleBtn", "Close", _font, CloseTempleModal, 15.5f);
+            LayoutElement closeLe = closeBtn.gameObject.AddComponent<LayoutElement>();
+            closeLe.preferredWidth = 94f;
+            closeLe.preferredHeight = 40f;
+            closeLe.flexibleHeight = 0f;
+
+            // Body
+            RectTransform body = BywaterUiHelpers.CreatePanel(modal, "TempleBody", BywaterUiHelpers.PanelBg, withBrassOutline: true, outlinePx: 1f);
+            LayoutElement bodyLe = body.gameObject.AddComponent<LayoutElement>();
+            bodyLe.flexibleHeight = 1f;
+            VerticalLayoutGroup bodyVlg = body.gameObject.AddComponent<VerticalLayoutGroup>();
+            bodyVlg.padding = new RectOffset(14, 14, 12, 12);
+            bodyVlg.spacing = 10f;
+            bodyVlg.childControlWidth = true;
+            bodyVlg.childControlHeight = true;
+            bodyVlg.childForceExpandWidth = true;
+            bodyVlg.childForceExpandHeight = false;
+
+            RectTransform statusBar = BywaterUiHelpers.CreatePanel(body, "PartyConditionStatus", BywaterUiHelpers.CardBg, withBrassOutline: true, outlinePx: 1f);
+            LayoutElement statusLe = statusBar.gameObject.AddComponent<LayoutElement>();
+            statusLe.preferredHeight = 40f;
+            statusLe.flexibleHeight = 0f;
+            _templeStatusLabel = BywaterUiHelpers.CreateLabel(
+                statusBar,
+                "StatusText",
+                "Party Status: All heroes healthy, uncursed, and relics fully charged.",
+                _font,
+                15.5f,
+                BywaterUiHelpers.InfoCyan,
+                TextAlignmentOptions.MidlineLeft,
+                FontStyles.Bold,
+                wrap: false);
+            _templeStatusLabel.overflowMode = TextOverflowModes.Truncate;
+            _templeStatusLabel.rectTransform.anchorMin = Vector2.zero;
+            _templeStatusLabel.rectTransform.anchorMax = Vector2.one;
+            _templeStatusLabel.rectTransform.offsetMin = new Vector2(12f, 2f);
+            _templeStatusLabel.rectTransform.offsetMax = new Vector2(-12f, -2f);
+
+            _templeHealBtn = AddTempleServiceCard(
+                body,
+                "TempleHealCard",
+                "Sacred Restoration",
+                "Restores full HP and revives fallen heroes at the shrine.",
+                "TempleHealBtn",
+                "Blessing of Restoration (25g)",
+                () => OnTempleHealRequested?.Invoke());
+
+            _templeCureBtn = AddTempleServiceCard(
+                body,
+                "TempleCureCard",
+                "Purification Rite",
+                "Cleanses curses, exhaustion stacks, and lingering conditions.",
+                "TempleCureBtn",
+                "Cleanse Curse & Ailments (20g)",
+                () => OnTempleCureRequested?.Invoke());
+
+            _templeRechargeBtn = AddTempleServiceCard(
+                body,
+                "TempleRechargeCard",
+                "Arcane Conduit",
+                "Restores spent charges on enchanted staves, wands, and relics.",
+                "TempleRechargeBtn",
+                "Arcane Recharge (30g)",
+                () => OnTempleRechargeRequested?.Invoke());
+        }
+
+        private Button AddTempleServiceCard(
+            Transform parent,
+            string cardName,
+            string serviceTitle,
+            string serviceDesc,
+            string buttonName,
+            string buttonLabel,
+            UnityEngine.Events.UnityAction onClick)
+        {
+            RectTransform card = BywaterUiHelpers.CreatePanel(parent, cardName, BywaterUiHelpers.CardBg, withBrassOutline: true, outlinePx: 1.2f);
+            LayoutElement cardLe = card.gameObject.AddComponent<LayoutElement>();
+            cardLe.preferredHeight = 82f;
+            cardLe.flexibleHeight = 0f;
+
+            HorizontalLayoutGroup hlg = card.gameObject.AddComponent<HorizontalLayoutGroup>();
+            hlg.padding = new RectOffset(14, 14, 10, 10);
+            hlg.spacing = 14f;
+            hlg.childControlWidth = true;
+            hlg.childControlHeight = true;
+            hlg.childForceExpandWidth = false;
+            hlg.childForceExpandHeight = false;
+            hlg.childAlignment = TextAnchor.MiddleLeft;
+
+            GameObject textCol = new GameObject("TextCol", typeof(RectTransform), typeof(VerticalLayoutGroup));
+            textCol.transform.SetParent(card, false);
+            LayoutElement textColLe = textCol.AddComponent<LayoutElement>();
+            textColLe.flexibleWidth = 1f;
+            textColLe.preferredHeight = 58f;
+            textColLe.flexibleHeight = 0f;
+
+            VerticalLayoutGroup vlg = textCol.GetComponent<VerticalLayoutGroup>();
+            vlg.spacing = 3f;
+            vlg.childControlWidth = true;
+            vlg.childControlHeight = true;
+            vlg.childForceExpandWidth = true;
+            vlg.childForceExpandHeight = false;
+
+            TextMeshProUGUI titleLbl = BywaterUiHelpers.CreateLabel(
+                textCol.transform,
+                "ServiceTitle",
+                serviceTitle,
+                _font,
+                17f,
+                BywaterUiHelpers.BrassHighlight,
+                TextAlignmentOptions.MidlineLeft,
+                FontStyles.Bold,
+                wrap: false);
+            BywaterUiHelpers.AddTextDropShadow(titleLbl);
+            titleLbl.gameObject.AddComponent<LayoutElement>().preferredHeight = 24f;
+
+            TextMeshProUGUI descLbl = BywaterUiHelpers.CreateLabel(
+                textCol.transform,
+                "ServiceDesc",
+                serviceDesc,
+                _font,
+                15f,
+                BywaterUiHelpers.MutedSlate,
+                TextAlignmentOptions.MidlineLeft,
+                wrap: true);
+            descLbl.gameObject.AddComponent<LayoutElement>().preferredHeight = 28f;
+
+            Button btn = BywaterUiHelpers.CreateButton(card, buttonName, buttonLabel, _font, onClick, 15.5f);
+            LayoutElement btnLe = btn.gameObject.AddComponent<LayoutElement>();
+            btnLe.preferredWidth = 280f;
+            btnLe.preferredHeight = 46f;
+            btnLe.flexibleHeight = 0f;
+            return btn;
         }
 
         private Toggle CreateAffordableToggle(Transform parent)
@@ -3458,13 +4030,6 @@ namespace Realmz.Game
             toggle.targetGraphic = root.GetComponent<Image>();
             toggle.graphic = checkMark;
             return toggle;
-        }
-
-        private void SelectShop(string shopId)
-        {
-            _activeShopId = shopId;
-            OnShopSelected?.Invoke(shopId);
-            RefreshShopModal(_cachedParty, _cachedBundle);
         }
 
         private void BuildCombatHud(Transform parent)
@@ -3898,7 +4463,8 @@ namespace Realmz.Game
             _combatMovePip = BywaterUiHelpers.CreateLabel(pipsRow.transform, "MovePip", "6/6", _font, 15f, new Color(0.18f, 0.84f, 0.44f, 1f), TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
             _combatMovePip.gameObject.AddComponent<LayoutElement>().preferredWidth = 34f;
 
-            _combatStdPipIcon = BywaterUiHelpers.CreateImage(pipsRow.transform, "StdPipIcon", BywaterUiHelpers.GetProceduralIconSprite("circle"), new Color(0.98f, 0.80f, 0.08f, 1f));
+            _combatStdPipIcon = BywaterUiHelpers.CreateImage(pipsRow.transform, "StdPipIcon", BywaterUiHelpers.GetProceduralIconSprite("circle"), new Color(0.98f, 0.80f, 0.08f, 1f), preserveAspect: true);
+            _combatStdPipIcon.preserveAspect = true;
             _combatStdPipIcon.raycastTarget = false;
             LayoutElement stdIconLe = _combatStdPipIcon.gameObject.AddComponent<LayoutElement>();
             stdIconLe.preferredWidth = 17f;
@@ -3906,7 +4472,8 @@ namespace Realmz.Game
             _combatStdPip = BywaterUiHelpers.CreateLabel(pipsRow.transform, "StdPip", "Act", _font, 15f, new Color(0.98f, 0.80f, 0.08f, 1f), TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
             _combatStdPip.gameObject.AddComponent<LayoutElement>().preferredWidth = 32f;
 
-            _combatSwiftPipIcon = BywaterUiHelpers.CreateImage(pipsRow.transform, "SwiftPipIcon", BywaterUiHelpers.GetProceduralIconSprite("diamond"), new Color(0.22f, 0.74f, 0.97f, 1f));
+            _combatSwiftPipIcon = BywaterUiHelpers.CreateImage(pipsRow.transform, "SwiftPipIcon", BywaterUiHelpers.GetProceduralIconSprite("diamond"), new Color(0.22f, 0.74f, 0.97f, 1f), preserveAspect: true);
+            _combatSwiftPipIcon.preserveAspect = true;
             _combatSwiftPipIcon.raycastTarget = false;
             LayoutElement swiftIconLe = _combatSwiftPipIcon.gameObject.AddComponent<LayoutElement>();
             swiftIconLe.preferredWidth = 17f;
@@ -4276,8 +4843,8 @@ namespace Realmz.Game
             BywaterUiHelpers.AddTextDropShadow(title);
             title.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
 
-            Button closeBtn = BywaterUiHelpers.CreateButton(header.transform, "CloseSettingsBtn", "Resume", _font, CloseSettingsModal, 15.5f);
-            closeBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 108f;
+            Button closeBtn = BywaterUiHelpers.CreateButton(header.transform, "CloseSettingsBtn", "Resume [Esc]", _font, CloseSettingsModal, 15.5f);
+            closeBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 136f;
 
             // Toggles row 1: Auto-Combat & Auto-End Turn
             _settingsAutoCombatBtn = AddSettingsToggleRow(modal, "AutoCombatRow", "Auto-Combat [A]", out _settingsAutoCombatLabel, () =>
@@ -4324,7 +4891,7 @@ namespace Realmz.Game
                 if (!_suppressSettingsCallbacks) OnSfxVolumeChanged?.Invoke(val);
             });
 
-            _settingsMuteBtn = AddSettingsToggleRow(modal, "MuteRow", "Audio Mute", out _settingsMuteLabel, () =>
+            _settingsMuteBtn = AddSettingsToggleRow(modal, "MuteRow", "Sound", out _settingsMuteLabel, () =>
             {
                 _isMuted = !_isMuted;
                 UpdateCombatAudioPillVisual();
@@ -4379,7 +4946,8 @@ namespace Realmz.Game
                 OnFleeCombatRequested?.Invoke();
             }, 15.5f);
             AttachHorizontalIconToButton(_settingsFleeBtn, "flee", 20f);
-            BywaterUiHelpers.CreateButton(actionRow.transform, "SettingsResumeBtn", "Resume", _font, CloseSettingsModal, 15.5f);
+            _settingsQuitBtn = BywaterUiHelpers.CreateButton(actionRow.transform, "SettingsQuitBtn", "Quit to Desktop", _font, HandleQuitButtonClicked, 15.5f);
+            _settingsQuitBtnLabel = _settingsQuitBtn.GetComponentInChildren<TextMeshProUGUI>();
 
             // Keybinds Legend (15pt floor)
             RectTransform legendBox = BywaterUiHelpers.CreatePanel(modal, "KeybindsLegend", BywaterUiHelpers.PanelBg, withBrassOutline: true, outlinePx: 1f);
@@ -4487,8 +5055,24 @@ namespace Realmz.Game
                 _settingsGridOpacityValueText.text = $"{Mathf.RoundToInt(_settingsGridOpacitySlider.value * 100f)}%";
             }
 
-            if (_settingsMuteLabel != null) _settingsMuteLabel.text = _isMuted ? "MUTED" : "ACTIVE";
-            if (_settingsMuteBtn != null) BywaterUiHelpers.SetButtonColors(_settingsMuteBtn, _isMuted);
+            if (_settingsMuteLabel != null)
+            {
+                _settingsMuteLabel.text = _isMuted ? "MUTED" : "ON";
+                _settingsMuteLabel.color = _isMuted ? BywaterUiHelpers.DangerRed : BywaterUiHelpers.BrassHighlight;
+            }
+            if (_settingsMuteBtn != null)
+            {
+                BywaterUiHelpers.SetButtonColors(_settingsMuteBtn, !_isMuted);
+                if (_isMuted)
+                {
+                    Image muteBg = _settingsMuteBtn.GetComponent<Image>();
+                    if (muteBg != null)
+                    {
+                        muteBg.color = new Color(0.24f, 0.09f, 0.11f, 0.96f);
+                    }
+                    BywaterUiHelpers.SetBorderColor(_settingsMuteBtn.transform, BywaterUiHelpers.DangerRed);
+                }
+            }
 
             if (_settingsNameplatesLabel != null) _settingsNameplatesLabel.text = _nameplatesAlwaysOn ? "Always On" : "Hover / Hold Alt";
             if (_settingsNameplatesBtn != null) BywaterUiHelpers.SetButtonColors(_settingsNameplatesBtn, _nameplatesAlwaysOn);
@@ -4503,6 +5087,38 @@ namespace Realmz.Game
                 _settingsFleeBtn.gameObject.SetActive(_isCombatHudActive);
                 _settingsFleeBtn.interactable = _isCombatHudActive;
             }
+            if (_settingsQuitBtnLabel != null)
+            {
+                _settingsQuitBtnLabel.text = _quitConfirmArmed ? "Confirm Quit?" : "Quit to Desktop";
+                _settingsQuitBtnLabel.color = _quitConfirmArmed ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.ParchmentText;
+            }
+            if (_settingsQuitBtn != null)
+            {
+                BywaterUiHelpers.SetButtonColors(_settingsQuitBtn, false);
+                if (_quitConfirmArmed)
+                {
+                    Image quitBg = _settingsQuitBtn.GetComponent<Image>();
+                    if (quitBg != null)
+                    {
+                        quitBg.color = new Color(0.38f, 0.11f, 0.12f, 0.98f);
+                    }
+                    BywaterUiHelpers.SetBorderColor(_settingsQuitBtn.transform, BywaterUiHelpers.BrassHighlight);
+                }
+            }
+        }
+
+        private void HandleQuitButtonClicked()
+        {
+            if (!_quitConfirmArmed)
+            {
+                _quitConfirmArmed = true;
+                RefreshSettingsModalControls();
+                return;
+            }
+
+            _quitConfirmArmed = false;
+            RefreshSettingsModalControls();
+            OnQuitRequested?.Invoke();
         }
 
         private void BuildQuickResolveModal(Transform parent)
@@ -4677,13 +5293,185 @@ namespace Realmz.Game
                 return string.Empty;
             }
 
-            List<string> parts = new List<string>(4);
+            List<string> parts = new List<string>(5);
             if (!string.IsNullOrWhiteSpace(item.DamageDice)) parts.Add("Dmg " + item.DamageDice);
             if (item.WeaponBonus != 0) parts.Add($"+{item.WeaponBonus} Hit");
             if (item.ArmorClassBonus != 0) parts.Add($"+{item.ArmorClassBonus} AC");
             if (item.Range > 1) parts.Add($"Rng {item.Range}");
             if (!string.IsNullOrWhiteSpace(item.HealDice)) parts.Add("Heal " + item.HealDice);
+            if (item.Weight > 0) parts.Add($"Wt {item.Weight}");
             return string.Join(", ", parts);
+        }
+
+        private static void ResolveShopVenueMeta(
+            ShopDefinition shop,
+            out string title,
+            out string greeting,
+            out string portraitKey,
+            out string fallbackIconKey)
+        {
+            string shopId = shop != null ? shop.ShopId : string.Empty;
+            string shopName = shop != null && !string.IsNullOrWhiteSpace(shop.Name) ? shop.Name : "Bywater Merchant";
+            switch (shopId)
+            {
+                case "1":
+                    title = "Bywater Armory - Master Blacksmith Borin";
+                    greeting = "Forged blades, shields, and sturdy gear for the road.";
+                    portraitKey = "npc_blacksmith";
+                    fallbackIconKey = "sword";
+                    break;
+                case "4":
+                    title = "Bywater Tannery - Tanner Mira";
+                    greeting = "Hardened leather, hides, and rugged trail gear.";
+                    portraitKey = "npc_tanner";
+                    fallbackIconKey = "shield";
+                    break;
+                case "10":
+                    title = "Bywater Apothecary - Alchemist Orin";
+                    greeting = "Elixirs, poultices, and warding draughts brewed fresh.";
+                    portraitKey = "npc_apothecary";
+                    fallbackIconKey = "potion";
+                    break;
+                default:
+                    title = shopName;
+                    greeting = "Browse shop stock or sell unneeded items from your stash.";
+                    portraitKey = "npc_blacksmith";
+                    fallbackIconKey = "sword";
+                    break;
+            }
+        }
+
+        private void ApplyNpcPortrait(Image target, string npcKey, string fallbackProceduralKey)
+        {
+            if (target == null)
+            {
+                return;
+            }
+
+            Sprite portrait = null;
+            if (_catalog != null && !string.IsNullOrWhiteSpace(npcKey))
+            {
+                portrait = _catalog.GetUnifiedPortrait(npcKey) ?? _catalog.GetHotbarIcon(npcKey);
+            }
+
+            target.preserveAspect = true;
+            if (portrait != null)
+            {
+                target.sprite = portrait;
+                target.color = Color.white;
+            }
+            else
+            {
+                target.sprite = BywaterUiHelpers.GetProceduralIconSprite(fallbackProceduralKey);
+                target.color = BywaterUiHelpers.BrassHighlight;
+            }
+        }
+
+        private static bool IsShopItemUpgrade(
+            PartyState party,
+            ItemDefinition candidate,
+            IReadOnlyDictionary<int, ItemDefinition> items)
+        {
+            if (party == null || candidate == null || items == null)
+            {
+                return false;
+            }
+
+            if (!PartyMemberState.TryParseSlot(candidate.Slot, out EquipmentSlot slot))
+            {
+                return false;
+            }
+
+            bool isWeaponSlot = slot == EquipmentSlot.Weapon || slot == EquipmentSlot.MissileWeapon;
+            float candidateScore = ScoreItemForSlot(candidate, isWeaponSlot);
+            if (candidateScore <= 0f)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < party.Members.Count; i++)
+            {
+                PartyMemberState member = party.Members[i];
+                if (member == null || !member.IsAlive)
+                {
+                    continue;
+                }
+
+                InventoryItem equipped = member.GetEquipped(slot);
+                if (equipped == null)
+                {
+                    return true;
+                }
+
+                if (!items.TryGetValue(equipped.ItemId, out ItemDefinition current))
+                {
+                    return true;
+                }
+
+                float currentScore = ScoreItemForSlot(current, isWeaponSlot);
+                if (candidateScore > currentScore + 0.01f)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static float ScoreItemForSlot(ItemDefinition item, bool isWeaponSlot)
+        {
+            if (item == null)
+            {
+                return 0f;
+            }
+
+            if (isWeaponSlot)
+            {
+                return EstimateDiceAverage(item.DamageDice) + item.WeaponBonus * 2.5f + item.ArmorClassBonus * 0.5f;
+            }
+
+            return item.ArmorClassBonus * 2.0f + item.WeaponBonus * 1.0f + item.MovementMod * 0.25f;
+        }
+
+        private static float EstimateDiceAverage(string dice)
+        {
+            if (string.IsNullOrWhiteSpace(dice))
+            {
+                return 0f;
+            }
+
+            string text = dice.Trim().ToLowerInvariant();
+            int dIndex = text.IndexOf('d');
+            if (dIndex < 0)
+            {
+                return int.TryParse(text, out int flatOnly) ? flatOnly : 0f;
+            }
+
+            int count = 1;
+            if (dIndex > 0 && int.TryParse(text.Substring(0, dIndex), out int parsedCount))
+            {
+                count = Math.Max(1, parsedCount);
+            }
+
+            int bonus = 0;
+            int plusIndex = text.IndexOf('+', dIndex + 1);
+            int minusIndex = text.IndexOf('-', dIndex + 1);
+            int modIndex = plusIndex >= 0 ? plusIndex : minusIndex;
+            string sidesPart = modIndex >= 0
+                ? text.Substring(dIndex + 1, modIndex - (dIndex + 1))
+                : text.Substring(dIndex + 1);
+
+            if (!int.TryParse(sidesPart, out int sides) || sides <= 0)
+            {
+                return 0f;
+            }
+
+            if (modIndex >= 0 && int.TryParse(text.Substring(modIndex), out int parsedBonus))
+            {
+                bonus = parsedBonus;
+            }
+
+            return count * ((sides + 1) * 0.5f) + bonus;
         }
     }
 }

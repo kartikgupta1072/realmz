@@ -33,6 +33,9 @@ namespace Realmz.World
         private static Texture2D _sharedShadowTexture;
         private static Material _sharedChevronMaterial;
         private static Texture2D _sharedChevronTexture;
+        private static Material _sharedDustMaterial;
+        private static Texture2D _sharedDustTexture;
+        private static int _dustMaterialRefCount;
         private static Mesh _sharedUnitQuadMesh;
 
         private MeshRenderer _spriteRenderer;
@@ -55,8 +58,20 @@ namespace Realmz.World
 
         private MaterialPropertyBlock _ringPropBlock;
         private MaterialPropertyBlock _spritePropBlock;
+        private MaterialPropertyBlock _dustPropBlock;
 
+        private string _unitId;
         private BywaterAssetCatalog _catalog;
+        private Material _idleMaterial;
+        private Material _walkMaterial;
+        private Material _attackMaterial;
+        private bool _hasWalkSheet;
+        private bool _hasAttackSheet;
+        private UnitAnimState _animState = UnitAnimState.Idle;
+        private float _attackHoldUntil;
+        private bool _facingRight = true;
+        private bool _registeredDustUser;
+
         private TMP_FontAsset _font;
         private Color _baseRingColor = Color.white;
         private float _spriteSize = 2.0f;
@@ -76,6 +91,21 @@ namespace Realmz.World
         private Coroutine _lungeCoroutine;
         private Coroutine _hitFlashCoroutine;
 
+        private struct DustPuffInstance
+        {
+            public GameObject Root;
+            public MeshRenderer Renderer;
+            public Vector3 StartPos;
+            public Vector3 Velocity;
+            public float GroundY;
+            public float Age;
+            public float Lifetime;
+            public bool Active;
+        }
+
+        private readonly List<DustPuffInstance> _dustPuffs = new List<DustPuffInstance>(8);
+        private readonly List<Vector3> _pathScratch = new List<Vector3>(16);
+
         private struct StaggerEntry
         {
             public BywaterUnitView View;
@@ -86,7 +116,14 @@ namespace Realmz.World
         private static readonly List<StaggerEntry> _staggerScratch = new List<StaggerEntry>(16);
         private static readonly List<Vector2> _placedNameplatesScratch = new List<Vector2>(16);
 
-        public string UnitId { get; private set; }
+        public string UnitId
+        {
+            get => _unitId;
+            private set => _unitId = value;
+        }
+
+        public UnitAnimState CurrentAnimState => _animState;
+        public bool FacingRight => _facingRight;
         public bool IsNameplateVisible => _nameplateVisible && _showHud && _isAlive;
 
         private float GetVisualHeadHeight()
@@ -102,6 +139,80 @@ namespace Realmz.World
         public void SetCatalog(BywaterAssetCatalog catalog)
         {
             _catalog = catalog;
+            if (_catalog != null && !string.IsNullOrEmpty(_unitId))
+            {
+                ResolveStateMaterials(_idleMaterial);
+                ApplyAnimStateMaterial();
+            }
+        }
+
+        public void SetAnimState(UnitAnimState state, float holdSeconds = 0f)
+        {
+            _animState = state;
+            if (state == UnitAnimState.Attack && holdSeconds > 0f)
+            {
+                _attackHoldUntil = Time.time + holdSeconds;
+            }
+            else if (state != UnitAnimState.Attack)
+            {
+                _attackHoldUntil = 0f;
+            }
+
+            ApplyAnimStateMaterial();
+        }
+
+        public void SetFacingRight(bool facingRight)
+        {
+            _facingRight = facingRight;
+            if (_spriteBillboardTransform != null)
+            {
+                _spriteBillboardTransform.localScale = new Vector3(_facingRight ? 1f : -1f, 1f, 1f);
+            }
+        }
+
+        private void ResolveStateMaterials(Material fallback)
+        {
+            if (_catalog != null && !string.IsNullOrEmpty(_unitId))
+            {
+                _idleMaterial = _catalog.ResolveCartographyUnitMaterial(_unitId, UnitAnimState.Idle, fallback, out _);
+                _walkMaterial = _catalog.ResolveCartographyUnitMaterial(_unitId, UnitAnimState.Walk, _idleMaterial, out _hasWalkSheet);
+                _attackMaterial = _catalog.ResolveCartographyUnitMaterial(_unitId, UnitAnimState.Attack, _idleMaterial, out _hasAttackSheet);
+            }
+            else
+            {
+                _idleMaterial = fallback;
+                _walkMaterial = fallback;
+                _attackMaterial = fallback;
+                _hasWalkSheet = false;
+                _hasAttackSheet = false;
+            }
+        }
+
+        private void ApplyAnimStateMaterial()
+        {
+            if (_spriteRenderer == null)
+            {
+                return;
+            }
+
+            Material targetMat;
+            switch (_animState)
+            {
+                case UnitAnimState.Walk:
+                    targetMat = (_hasWalkSheet && _walkMaterial != null) ? _walkMaterial : _idleMaterial;
+                    break;
+                case UnitAnimState.Attack:
+                    targetMat = (_hasAttackSheet && _attackMaterial != null) ? _attackMaterial : _idleMaterial;
+                    break;
+                default:
+                    targetMat = _idleMaterial;
+                    break;
+            }
+
+            if (targetMat != null && _spriteRenderer.sharedMaterial != targetMat)
+            {
+                _spriteRenderer.sharedMaterial = targetMat;
+            }
         }
 
         public void Configure(
@@ -127,10 +238,8 @@ namespace Realmz.World
             _spriteWidth = _spriteSize;
             _spriteHeight = _spriteSize;
 
-            if (_catalog != null && !string.IsNullOrEmpty(UnitId))
-            {
-                billboardMat = _catalog.ResolveCartographyUnitMaterial(UnitId, billboardMat);
-            }
+            ResolveStateMaterials(billboardMat);
+            billboardMat = _idleMaterial;
 
             _showHud = showHud;
             _isAlive = true;
@@ -139,9 +248,13 @@ namespace Realmz.World
             _lastDetailLine = null;
             _verticalStaggerWorld = 0f;
             _isHitFlashing = false;
+            _animState = UnitAnimState.Idle;
+            _attackHoldUntil = 0f;
+            _facingRight = true;
             _idlePhase = ComputeDeterministicPhase(UnitId);
             _windPhaseNorm = _idlePhase / (Mathf.PI * 2f);
 
+            StopMoveCoroutine();
             StopLungeCoroutine();
             StopHitFlashCoroutine();
             EnsureHierarchy();
@@ -150,6 +263,7 @@ namespace Realmz.World
             if (_spriteBillboardTransform != null)
             {
                 _spriteBillboardTransform.localPosition = Vector3.zero;
+                _spriteBillboardTransform.localScale = Vector3.one;
             }
 
             _spriteRenderer.sharedMaterial = billboardMat;
@@ -326,6 +440,16 @@ namespace Realmz.World
 
         private void Update()
         {
+            UpdateDustPuffs(Time.deltaTime);
+
+            if (_animState == UnitAnimState.Attack &&
+                _attackHoldUntil > 0f &&
+                Time.time >= _attackHoldUntil &&
+                _lungeCoroutine == null)
+            {
+                SetAnimState(_moveCoroutine != null ? UnitAnimState.Walk : UnitAnimState.Idle);
+            }
+
             if (_turnChevronTransform != null && _isCurrentTurn && _isAlive)
             {
                 float bob = Mathf.Sin(Time.time * 4.2f + _idlePhase) * 0.055f;
@@ -337,7 +461,12 @@ namespace Realmz.World
                 return;
             }
 
-            if (!_isAlive || _moveCoroutine != null || _lungeCoroutine != null)
+            if (_moveCoroutine != null)
+            {
+                return;
+            }
+
+            if (!_isAlive || _lungeCoroutine != null)
             {
                 ResetSpriteIdlePose();
                 return;
@@ -378,13 +507,33 @@ namespace Realmz.World
                 return;
             }
 
+            _pathScratch.Clear();
+            for (int i = 0; i < worldPoints.Count; i++)
+            {
+                _pathScratch.Add(worldPoints[i]);
+            }
+
+            Vector3 finalPoint = _pathScratch[_pathScratch.Count - 1];
+            float finalDeltaX = ComputeHorizontalDelta(transform.position, finalPoint);
+            if (Mathf.Abs(finalDeltaX) > 0.02f)
+            {
+                SetFacingRight(finalDeltaX >= 0f);
+            }
+
             if (!Application.isPlaying || !gameObject.activeInHierarchy || stepDuration <= 0.001f)
             {
-                transform.position = worldPoints[worldPoints.Count - 1];
+                transform.position = finalPoint;
+                if (_spriteBillboardTransform != null && _lungeCoroutine == null)
+                {
+                    _spriteBillboardTransform.localPosition = Vector3.zero;
+                }
+                ResetSpriteIdlePose();
+                SetAnimState(UnitAnimState.Idle);
                 return;
             }
 
-            _moveCoroutine = StartCoroutine(MovePathRoutine(worldPoints, stepDuration));
+            SetAnimState(UnitAnimState.Walk);
+            _moveCoroutine = StartCoroutine(MovePathRoutine(_pathScratch, stepDuration));
         }
 
         public void SetHp(int hp, int maxHp)
@@ -578,6 +727,14 @@ namespace Realmz.World
                 return;
             }
 
+            float targetDeltaX = ComputeHorizontalDelta(transform.position, targetWorldPos);
+            if (Mathf.Abs(targetDeltaX) > 0.02f)
+            {
+                SetFacingRight(targetDeltaX >= 0f);
+            }
+
+            SetAnimState(UnitAnimState.Attack, Mathf.Max(0.42f, totalDuration));
+
             Vector3 delta = targetWorldPos - transform.position;
             delta.y = 0f;
             Vector3 dir = delta.sqrMagnitude > 0.0001f ? delta.normalized : Vector3.forward;
@@ -597,16 +754,19 @@ namespace Realmz.World
             EnsureHierarchy();
             StopHitFlashCoroutine();
 
+            float hitDuration = Mathf.Max(0.25f, duration);
             if (!Application.isPlaying || !gameObject.activeInHierarchy || duration <= 0.001f)
             {
                 _isHitFlashing = false;
                 ApplySpriteTint(GetNormalSpriteTint());
+                SetAnimState(_moveCoroutine != null ? UnitAnimState.Walk : UnitAnimState.Idle);
                 return;
             }
 
+            SetAnimState(UnitAnimState.Hit);
             _isHitFlashing = true;
             ApplyHitFlashTint();
-            _hitFlashCoroutine = StartCoroutine(HitFlashRoutine(duration));
+            _hitFlashCoroutine = StartCoroutine(HitFlashRoutine(hitDuration));
         }
 
         public void ShowFloatingText(string message, Color color)
@@ -685,26 +845,75 @@ namespace Realmz.World
 
         private IEnumerator MovePathRoutine(IReadOnlyList<Vector3> points, float stepDuration)
         {
+            float totalElapsed = 0f;
+            float dustTimer = 0f;
+            float dustInterval = Mathf.Max(0.10f, stepDuration * 0.5f);
+            EmitDustPuffBurst(transform.position, 2);
+
             for (int i = 0; i < points.Count; i++)
             {
                 Vector3 start = transform.position;
                 Vector3 end = points[i];
-                float elapsed = 0f;
+                float deltaX = ComputeHorizontalDelta(start, end);
+                if (Mathf.Abs(deltaX) > 0.02f)
+                {
+                    SetFacingRight(deltaX >= 0f);
+                }
 
+                float elapsed = 0f;
                 while (elapsed < stepDuration)
                 {
-                    elapsed += Time.deltaTime;
+                    float dt = Time.deltaTime;
+                    elapsed += dt;
+                    totalElapsed += dt;
+                    dustTimer += dt;
+
                     float t = Mathf.Clamp01(elapsed / stepDuration);
-                    Vector3 pos = Vector3.Lerp(start, end, t);
-                    pos.y += Mathf.Sin(t * Mathf.PI) * 0.14f;
-                    transform.position = pos;
+                    // Fix #3: keep root transform.position flush on ground elevation so UnderRing and ContactShadow never lift.
+                    transform.position = Vector3.Lerp(start, end, t);
+
+                    float stridePhase = totalElapsed * 15.0f;
+                    if (_spriteBillboardTransform != null && _lungeCoroutine == null)
+                    {
+                        float bobY = Mathf.Abs(Mathf.Sin(stridePhase)) * 0.10f;
+                        _spriteBillboardTransform.localPosition = new Vector3(0f, bobY, 0f);
+                    }
+
+                    if (_spriteRenderer != null)
+                    {
+                        float walkTiltDeg = Mathf.Sin(stridePhase) * (_hasWalkSheet ? 1.8f : 4.2f);
+                        float tiltRad = walkTiltDeg * Mathf.Deg2Rad;
+                        float halfH = _spriteHeight * 0.5f;
+                        Transform spriteTf = _spriteRenderer.transform;
+                        spriteTf.localScale = new Vector3(_spriteWidth, _spriteHeight, 1f);
+                        spriteTf.localPosition = new Vector3(-Mathf.Sin(tiltRad) * halfH, Mathf.Cos(tiltRad) * halfH, 0f);
+                        spriteTf.localRotation = Quaternion.Euler(0f, 0f, walkTiltDeg);
+                    }
+
+                    if (dustTimer >= dustInterval)
+                    {
+                        dustTimer = 0f;
+                        EmitDustPuffBurst(transform.position, 2);
+                    }
+
                     yield return null;
                 }
 
                 transform.position = end;
             }
 
+            if (_spriteBillboardTransform != null && _lungeCoroutine == null)
+            {
+                _spriteBillboardTransform.localPosition = Vector3.zero;
+            }
+
+            ResetSpriteIdlePose();
             _moveCoroutine = null;
+
+            if (_animState == UnitAnimState.Walk)
+            {
+                SetAnimState(UnitAnimState.Idle);
+            }
         }
 
         private IEnumerator AttackLungeRoutine(Vector3 peakLocalOffset, float totalDuration)
@@ -750,6 +959,11 @@ namespace Realmz.World
             _isHitFlashing = false;
             _hitFlashCoroutine = null;
             ApplySpriteTint(GetNormalSpriteTint());
+
+            if (_animState == UnitAnimState.Hit)
+            {
+                SetAnimState(_moveCoroutine != null ? UnitAnimState.Walk : UnitAnimState.Idle);
+            }
         }
 
         private static IEnumerator AnimateArcingFloatingText(
@@ -815,6 +1029,15 @@ namespace Realmz.World
             {
                 StopCoroutine(_moveCoroutine);
                 _moveCoroutine = null;
+                if (_spriteBillboardTransform != null && _lungeCoroutine == null)
+                {
+                    _spriteBillboardTransform.localPosition = Vector3.zero;
+                }
+                ResetSpriteIdlePose();
+                if (_animState == UnitAnimState.Walk)
+                {
+                    SetAnimState(UnitAnimState.Idle);
+                }
             }
         }
 
@@ -841,6 +1064,10 @@ namespace Realmz.World
             }
 
             _isHitFlashing = false;
+            if (_animState == UnitAnimState.Hit)
+            {
+                SetAnimState(_moveCoroutine != null ? UnitAnimState.Walk : UnitAnimState.Idle);
+            }
         }
 
         private Color GetNormalSpriteTint()
@@ -970,9 +1197,9 @@ namespace Realmz.World
             GameObject ringGo = GameObject.CreatePrimitive(PrimitiveType.Quad);
             ringGo.name = "UnderRing";
             ringGo.transform.SetParent(transform, false);
-            ringGo.transform.localPosition = new Vector3(0f, 0.02f, 0f);
+            ringGo.transform.localPosition = new Vector3(0f, 0.06f, 0f);
             ringGo.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-            ringGo.transform.localScale = new Vector3(0.86f, 0.86f, 1f);
+            ringGo.transform.localScale = new Vector3(0.96f, 0.96f, 1f);
             DestroyCollider(ringGo);
             _underRingRenderer = ringGo.GetComponent<MeshRenderer>();
             _underRingRenderer.shadowCastingMode = ShadowCastingMode.Off;
@@ -1408,6 +1635,275 @@ namespace Realmz.World
             tex.SetPixels(pixels);
             tex.Apply(false, true);
             return tex;
+        }
+
+        private static float ComputeHorizontalDelta(Vector3 fromWorld, Vector3 toWorld)
+        {
+            Vector3 delta = toWorld - fromWorld;
+            delta.y = 0f;
+            Camera cam = Camera.main;
+            Vector3 rightAxis = cam != null ? cam.transform.right : Vector3.right;
+            rightAxis.y = 0f;
+            if (rightAxis.sqrMagnitude < 0.0001f)
+            {
+                rightAxis = Vector3.right;
+            }
+            else
+            {
+                rightAxis.Normalize();
+            }
+
+            return Vector3.Dot(delta, rightAxis);
+        }
+
+        private void EmitDustPuffBurst(Vector3 footWorldPos, int count)
+        {
+            if (!Application.isPlaying || !gameObject.activeInHierarchy || count <= 0)
+            {
+                return;
+            }
+
+            Material dustMat = GetOrCreateSharedDustMaterial();
+            if (dustMat == null)
+            {
+                return;
+            }
+
+            if (!_registeredDustUser)
+            {
+                _registeredDustUser = true;
+                _dustMaterialRefCount++;
+            }
+
+            Mesh quadMesh = GetOrCreateSharedUnitQuadMesh();
+            for (int i = 0; i < count; i++)
+            {
+                int slotIndex = AcquireDustPuffSlot(quadMesh, dustMat);
+                if (slotIndex < 0)
+                {
+                    break;
+                }
+
+                DustPuffInstance puff = _dustPuffs[slotIndex];
+                float angle = UnityEngine.Random.Range(0f, Mathf.PI * 2f);
+                float radius = UnityEngine.Random.Range(0.06f, 0.22f);
+                Vector3 radial = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
+
+                puff.StartPos = footWorldPos + radial * radius + new Vector3(0f, 0.04f, 0f);
+                puff.Velocity = radial * UnityEngine.Random.Range(0.24f, 0.52f) + new Vector3(0f, UnityEngine.Random.Range(0.18f, 0.36f), 0f);
+                puff.GroundY = footWorldPos.y;
+                puff.Age = 0f;
+                puff.Lifetime = UnityEngine.Random.Range(0.24f, 0.34f);
+                puff.Active = true;
+
+                puff.Root.transform.position = puff.StartPos;
+                puff.Root.transform.localScale = Vector3.one * 0.16f;
+                puff.Root.SetActive(true);
+                ApplyDustPuffColor(puff.Renderer, new Color(0.76f, 0.70f, 0.58f, 0.50f));
+                _dustPuffs[slotIndex] = puff;
+            }
+        }
+
+        private int AcquireDustPuffSlot(Mesh quadMesh, Material dustMat)
+        {
+            for (int i = 0; i < _dustPuffs.Count; i++)
+            {
+                if (!_dustPuffs[i].Active && _dustPuffs[i].Root != null)
+                {
+                    return i;
+                }
+            }
+
+            if (_dustPuffs.Count >= 8)
+            {
+                int oldestIndex = 0;
+                float oldestAge = -1f;
+                for (int i = 0; i < _dustPuffs.Count; i++)
+                {
+                    if (_dustPuffs[i].Root != null && _dustPuffs[i].Age > oldestAge)
+                    {
+                        oldestAge = _dustPuffs[i].Age;
+                        oldestIndex = i;
+                    }
+                }
+                return _dustPuffs[oldestIndex].Root != null ? oldestIndex : -1;
+            }
+
+            GameObject go = new GameObject("FootstepDustPuff", typeof(MeshFilter), typeof(MeshRenderer));
+            go.GetComponent<MeshFilter>().sharedMesh = quadMesh;
+            MeshRenderer mr = go.GetComponent<MeshRenderer>();
+            mr.sharedMaterial = dustMat;
+            mr.shadowCastingMode = ShadowCastingMode.Off;
+            mr.receiveShadows = false;
+            go.AddComponent<PixelBillboard>();
+            go.SetActive(false);
+
+            _dustPuffs.Add(new DustPuffInstance
+            {
+                Root = go,
+                Renderer = mr,
+                Active = false
+            });
+            return _dustPuffs.Count - 1;
+        }
+
+        private void UpdateDustPuffs(float dt)
+        {
+            if (_dustPuffs.Count == 0)
+            {
+                return;
+            }
+
+            for (int i = 0; i < _dustPuffs.Count; i++)
+            {
+                DustPuffInstance puff = _dustPuffs[i];
+                if (!puff.Active || puff.Root == null)
+                {
+                    continue;
+                }
+
+                puff.Age += dt;
+                if (puff.Age >= puff.Lifetime)
+                {
+                    puff.Active = false;
+                    puff.Root.SetActive(false);
+                    _dustPuffs[i] = puff;
+                    continue;
+                }
+
+                float t = Mathf.Clamp01(puff.Age / Mathf.Max(0.01f, puff.Lifetime));
+                Vector3 pos = puff.StartPos + puff.Velocity * puff.Age;
+                if (pos.y < puff.GroundY + 0.02f)
+                {
+                    pos.y = puff.GroundY + 0.02f;
+                }
+                puff.Root.transform.position = pos;
+
+                float scale = Mathf.Lerp(0.16f, 0.34f, t);
+                puff.Root.transform.localScale = Vector3.one * scale;
+                float alpha = Mathf.Lerp(0.50f, 0f, t * t);
+                ApplyDustPuffColor(puff.Renderer, new Color(0.76f, 0.70f, 0.58f, alpha));
+                _dustPuffs[i] = puff;
+            }
+        }
+
+        private void ApplyDustPuffColor(MeshRenderer renderer, Color color)
+        {
+            if (renderer == null)
+            {
+                return;
+            }
+
+            _dustPropBlock ??= new MaterialPropertyBlock();
+            _dustPropBlock.Clear();
+            _dustPropBlock.SetColor(BaseColorId, color);
+            _dustPropBlock.SetColor(ColorId, color);
+            renderer.SetPropertyBlock(_dustPropBlock);
+        }
+
+        private static Material GetOrCreateSharedDustMaterial()
+        {
+            if (_sharedDustMaterial != null)
+            {
+                return _sharedDustMaterial;
+            }
+
+            if (_sharedDustTexture == null)
+            {
+                _sharedDustTexture = CreateDustPuffTexture(16);
+            }
+
+            _sharedDustMaterial = CreateSharedTransparentMaterial("SharedUnitFootstepDust", _sharedDustTexture, Color.white);
+            return _sharedDustMaterial;
+        }
+
+        private static Texture2D CreateDustPuffTexture(int size)
+        {
+            Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            tex.filterMode = FilterMode.Bilinear;
+            tex.wrapMode = TextureWrapMode.Clamp;
+
+            float half = (size - 1) * 0.5f;
+            Color[] pixels = new Color[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                float ny = (y - half) / half;
+                for (int x = 0; x < size; x++)
+                {
+                    float nx = (x - half) / half;
+                    float dist = Mathf.Sqrt(nx * nx + ny * ny);
+                    float alpha = Mathf.Clamp01(1f - dist);
+                    alpha *= alpha;
+                    pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
+                }
+            }
+
+            tex.SetPixels(pixels);
+            tex.Apply(false, true);
+            return tex;
+        }
+
+        private void OnDisable()
+        {
+            for (int i = 0; i < _dustPuffs.Count; i++)
+            {
+                DustPuffInstance puff = _dustPuffs[i];
+                if (puff.Root != null)
+                {
+                    puff.Root.SetActive(false);
+                }
+                puff.Active = false;
+                _dustPuffs[i] = puff;
+            }
+        }
+
+        private void OnDestroy()
+        {
+            for (int i = 0; i < _dustPuffs.Count; i++)
+            {
+                GameObject puffGo = _dustPuffs[i].Root;
+                if (puffGo != null)
+                {
+                    DestroyRuntimeObject(puffGo);
+                }
+            }
+            _dustPuffs.Clear();
+
+            if (_registeredDustUser)
+            {
+                _registeredDustUser = false;
+                _dustMaterialRefCount = Mathf.Max(0, _dustMaterialRefCount - 1);
+                if (_dustMaterialRefCount == 0)
+                {
+                    if (_sharedDustMaterial != null)
+                    {
+                        DestroyRuntimeObject(_sharedDustMaterial);
+                        _sharedDustMaterial = null;
+                    }
+                    if (_sharedDustTexture != null)
+                    {
+                        DestroyRuntimeObject(_sharedDustTexture);
+                        _sharedDustTexture = null;
+                    }
+                }
+            }
+        }
+
+        private static void DestroyRuntimeObject(Object obj)
+        {
+            if (obj == null)
+            {
+                return;
+            }
+
+            if (Application.isPlaying)
+            {
+                Destroy(obj);
+            }
+            else
+            {
+                DestroyImmediate(obj);
+            }
         }
 
         private static void DestroyCollider(GameObject go)

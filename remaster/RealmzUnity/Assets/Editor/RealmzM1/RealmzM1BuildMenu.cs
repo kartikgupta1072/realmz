@@ -88,5 +88,29 @@ namespace Realmz.EditorTools
             ctrl.WarpToDungeonShowcase();
             return $"Dungeon showcase ready at {ctrl.ExploreSession.Position} on {ctrl.ExploreSession.CurrentMap.MapId}";
         }
+
+        public static string StageShopShowcase(string shopId = "1")
+        {
+            BywaterGameController ctrl = UnityEngine.Object.FindFirstObjectByType<BywaterGameController>();
+            if (ctrl == null)
+            {
+                throw new Exception("BywaterGameController not found in active PlayMode scene.");
+            }
+
+            ctrl.StageShopShowcase(shopId);
+            return $"Shop showcase ready for shop #{shopId} at {ctrl.ExploreSession.Position}";
+        }
+
+        public static string StagePauseShowcase()
+        {
+            BywaterGameController ctrl = UnityEngine.Object.FindFirstObjectByType<BywaterGameController>();
+            if (ctrl == null)
+            {
+                throw new Exception("BywaterGameController not found in active PlayMode scene.");
+            }
+
+            ctrl.StagePauseMenuShowcase();
+            return "Pause menu showcase ready.";
+        }
     }
 }

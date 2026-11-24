@@ -25,18 +25,21 @@ namespace Realmz.World
         [SerializeField] private float exploreDistance = 10.5f;
         [SerializeField] private float combatDistance = 12.5f;
         [SerializeField] private float minDistance = 6.0f;
-        [SerializeField] private float maxDistance = 19.0f;
-        [SerializeField] private float combatMaxDistance = 24.0f;
+        [SerializeField] private float maxDistance = 32.0f;
+        [SerializeField] private float combatMaxDistance = 34.0f;
 
-        public float MaxCombatDistance => Mathf.Max(maxDistance, combatMaxDistance);
+        public float EffectiveExploreMaxDistance => Mathf.Max(maxDistance, 32.0f);
+        public float MaxCombatDistance => Mathf.Max(maxDistance, combatMaxDistance, 34f);
+        public bool HasManualPanOffset => _targetManualOffset.sqrMagnitude > 0.04f || _currentManualOffset.sqrMagnitude > 0.04f;
 
         [Header("Smoothing & Controls")]
-        [SerializeField] private float followSmoothTime = 0.14f;
-        [SerializeField] private float zoomSmoothSpeed = 10f;
-        [SerializeField] private float scrollZoomStep = 1.25f;
-        [SerializeField] private float keyPanSpeed = 11f;
+        [SerializeField] private float followSmoothTime = 0.18f;
+        [SerializeField] private float zoomSmoothSpeed = 9f;
+        [SerializeField] private float panSmoothSpeed = 16f;
+        [SerializeField] private float scrollZoomStep = 1.6f;
+        [SerializeField] private float keyPanSpeed = 12f;
         [SerializeField] private float mouseDragPanSpeed = 0.016f;
-        [SerializeField] private float maxManualPanRadius = 40f;
+        [SerializeField] private float maxManualPanRadius = 60f;
 
         private Camera _cam;
         private Collider _terrainCollider;
@@ -45,7 +48,6 @@ namespace Realmz.World
         private Vector3 _followVelocity;
         private Vector3 _targetManualOffset;
         private Vector3 _currentManualOffset;
-        private Vector3 _offsetVelocity;
         private float _targetDistance;
         private float _currentDistance;
         private bool _hasTarget;
@@ -74,7 +76,7 @@ namespace Realmz.World
                 _cam.fieldOfView = fieldOfView;
             }
 
-            _targetDistance = Mathf.Clamp(defaultDistance, minDistance, maxDistance);
+            _targetDistance = Mathf.Clamp(defaultDistance, minDistance, EffectiveExploreMaxDistance);
             _currentDistance = _targetDistance;
             ApplyCameraTransform();
         }
@@ -97,13 +99,10 @@ namespace Realmz.World
                 Mathf.Infinity,
                 dt);
 
-            _currentManualOffset = Vector3.SmoothDamp(
+            _currentManualOffset = Vector3.Lerp(
                 _currentManualOffset,
                 _targetManualOffset,
-                ref _offsetVelocity,
-                0.08f,
-                Mathf.Infinity,
-                dt);
+                1f - Mathf.Exp(-panSmoothSpeed * dt));
 
             _currentDistance = Mathf.Lerp(_currentDistance, _targetDistance, 1f - Mathf.Exp(-zoomSmoothSpeed * dt));
 
@@ -139,12 +138,12 @@ namespace Realmz.World
             }
         }
 
-        public void FocusWorld(Vector3 worldPos, bool immediate = false)
+        public void FocusWorld(Vector3 worldPos, bool immediate = false, bool recenterManualPan = false)
         {
-            SetFollowTarget(worldPos, immediate);
+            SetFollowTarget(worldPos, immediate, recenterManualPan);
         }
 
-        public void SetFollowTarget(Vector3 worldPos, bool immediate = false)
+        public void SetFollowTarget(Vector3 worldPos, bool immediate = false, bool recenterManualPan = false)
         {
             _followTarget = new Vector3(worldPos.x, 0f, worldPos.z);
             if (_hasWorldBounds)
@@ -161,9 +160,28 @@ namespace Realmz.World
                 _manualOffsetResetImmediate();
                 ApplyCameraTransform();
             }
+            else if (recenterManualPan)
+            {
+                _targetManualOffset = Vector3.zero;
+            }
             else
             {
                 ClampPanTarget();
+            }
+        }
+
+        public void Recenter(bool immediate = false)
+        {
+            if (immediate)
+            {
+                _manualOffsetResetImmediate();
+                _currentFollowPos = _followTarget;
+                _followVelocity = Vector3.zero;
+                ApplyCameraTransform();
+            }
+            else
+            {
+                _targetManualOffset = Vector3.zero;
             }
         }
 
@@ -176,7 +194,7 @@ namespace Realmz.World
 
             _isCombatMode = isCombat;
             float desired = isCombat ? combatDistance : exploreDistance;
-            float activeMax = isCombat ? MaxCombatDistance : maxDistance;
+            float activeMax = isCombat ? MaxCombatDistance : EffectiveExploreMaxDistance;
             _targetDistance = Mathf.Clamp(desired, minDistance, activeMax);
         }
 
@@ -537,7 +555,7 @@ namespace Realmz.World
             if (Mathf.Abs(scrollY) > 0.01f)
             {
                 float normalized = Mathf.Abs(scrollY) >= 10f ? scrollY / 120f : scrollY;
-                float activeMax = _isCombatMode ? MaxCombatDistance : maxDistance;
+                float activeMax = _isCombatMode ? MaxCombatDistance : EffectiveExploreMaxDistance;
                 _targetDistance = Mathf.Clamp(_targetDistance - normalized * scrollZoomStep, minDistance, activeMax);
             }
         }
@@ -565,9 +583,9 @@ namespace Realmz.World
             Keyboard kb = Keyboard.current;
             if (kb != null)
             {
-                if (kb.cKey.wasPressedThisFrame)
+                if (kb.homeKey.wasPressedThisFrame)
                 {
-                    _targetManualOffset = Vector3.zero;
+                    Recenter();
                     return;
                 }
 
@@ -581,8 +599,9 @@ namespace Realmz.World
 
                 if (Mathf.Abs(moveX) > 0.01f || Mathf.Abs(moveZ) > 0.01f)
                 {
+                    float distanceScale = _currentDistance / Mathf.Max(1f, defaultDistance);
                     Vector3 dir = new Vector3(moveX, 0f, moveZ).normalized;
-                    _targetManualOffset += dir * (keyPanSpeed * Time.unscaledDeltaTime);
+                    _targetManualOffset += dir * (keyPanSpeed * distanceScale * Time.unscaledDeltaTime);
                     ClampPanTarget();
                 }
             }
@@ -609,7 +628,6 @@ namespace Realmz.World
         {
             _targetManualOffset = Vector3.zero;
             _currentManualOffset = Vector3.zero;
-            _offsetVelocity = Vector3.zero;
         }
 
         private void UpdateImpactImpulse(float dt)

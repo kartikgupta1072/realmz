@@ -223,6 +223,7 @@ namespace RealmzCore.Data
         private readonly MapPortal[] _portals;
         private readonly MapPointOfInterest[] _pointsOfInterest;
         private readonly EncounterZoneData[] _encounterZones;
+        private readonly HashSet<GridCoord> _blockedPropTiles = new HashSet<GridCoord>();
 
         public TileMapData(
             string mapId,
@@ -309,6 +310,31 @@ namespace RealmzCore.Data
         public IReadOnlyList<MapPointOfInterest> PointsOfInterest => _pointsOfInterest;
         public IReadOnlyList<EncounterZoneData> EncounterZones => _encounterZones;
         public IReadOnlyDictionary<int, TileRule> TileRules => _tileRules;
+        public int BlockedPropTileCount => _blockedPropTiles.Count;
+
+        public void SetBlockedPropFootprints(IEnumerable<GridCoord>? coords)
+        {
+            _blockedPropTiles.Clear();
+            if (coords == null)
+            {
+                return;
+            }
+
+            foreach (GridCoord coord in coords)
+            {
+                if (InBounds(coord))
+                {
+                    _blockedPropTiles.Add(coord);
+                }
+            }
+        }
+
+        public void ClearBlockedPropFootprints()
+        {
+            _blockedPropTiles.Clear();
+        }
+
+        public bool IsBlockedByProp(int x, int y) => _blockedPropTiles.Contains(new GridCoord(x, y));
 
         public bool InBounds(int x, int y)
         {
@@ -373,6 +399,11 @@ namespace RealmzCore.Data
         public bool IsPassable(int x, int y, bool hasBoat = false)
         {
             if (!InBounds(x, y))
+            {
+                return false;
+            }
+
+            if (_blockedPropTiles.Contains(new GridCoord(x, y)))
             {
                 return false;
             }

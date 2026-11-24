@@ -114,8 +114,12 @@ namespace Realmz.Game
         private Vector2 _rightMouseDownPos;
         private readonly List<Vector3> _treeFadePositionsScratch = new List<Vector3>(16);
         private readonly List<BywaterUnitView> _nameplateStaggerViewsScratch = new List<BywaterUnitView>(16);
+        private bool _wasTempleOpen;
+        private CartographyNpcPlacement? _pendingNpcInteraction;
 
         public bool IsInCombat => _isInCombat;
+        public int ActiveExploreViewCount => _exploreHeroViews.Count;
+        public IReadOnlyList<BywaterUnitView> ExploreHeroViews => _exploreHeroViews;
         public bool ShowAllEnemyIntentArcs => _showAllEnemyIntentArcs;
         public GridCoord ArenaOrigin => new GridCoord(_arenaOriginX, _arenaOriginY);
         public ExplorationSession ExploreSession { get; private set; }
@@ -323,6 +327,7 @@ namespace Realmz.Game
 
             _activeMoveSteps.Clear();
             _activeMoveStepIndex = 0;
+            TryCompletePendingNpcInteraction();
         }
 
         public void StageCombatOverlayShowcaseForCapture()
@@ -495,8 +500,7 @@ namespace Realmz.Game
                 ExitCombatToExploration(syncPartyFromCombat: false);
             }
 
-            hudController?.CloseShopModal();
-            hudController?.TogglePartyPanel(false);
+            hudController?.CloseAllModals();
             hudController?.HideOutcomeModal();
             hudController?.HideToast();
 
@@ -529,6 +533,53 @@ namespace Realmz.Game
 
             _showcaseMouseAnchor = Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero;
             _freezeHoverForShowcase = true;
+        }
+
+        public void StageShopShowcase(string shopId = "1")
+        {
+            if (ExploreSession == null || Bundle == null || hudController == null)
+            {
+                return;
+            }
+
+            if (_isInCombat)
+            {
+                ExitCombatToExploration(syncPartyFromCombat: false);
+            }
+
+            if (_isCampActive)
+            {
+                ExitCampMode();
+            }
+
+            hudController.CloseAllModals();
+            if (ExploreSession.CurrentMap.IsDungeon)
+            {
+                ExploreSession = new ExplorationSession(Bundle.Maps, "land_0", ExploreSession.Party, _roller, new GridCoord(7, 11));
+            }
+            else
+            {
+                ExploreSession.MoveAlongPath(new GridCoord(7, 11), autoHaltOnEvents: false);
+            }
+
+            ResetPartyTrailHistory(ExploreSession.Position, ExploreSession.CurrentMap, ExploreSession.Facing);
+            EnterExplorationView(immediateCamera: true);
+            hudController.OpenShop(shopId, ExploreSession.Party, Bundle);
+            RefreshNpcPrompts();
+        }
+
+        public void StagePauseMenuShowcase()
+        {
+            if (ExploreSession == null || Bundle == null || hudController == null)
+            {
+                return;
+            }
+
+            WarpToOverworldTownShowcase();
+            hudController.CloseAllModals();
+            SyncHudSettings();
+            hudController.ToggleSettingsModal(true);
+            RefreshNpcPrompts();
         }
 
         public void WarpToDungeonShowcase()
@@ -649,16 +700,14 @@ namespace Realmz.Game
             hudController.OnUseStashItemRequested += HandleUseStashItem;
             hudController.OnCampModeRequested += HandleCampRest;
 
-            hudController.OnShopSelected += shopId =>
-            {
-                audioDirector?.PlayUiClick();
-                hudController.RefreshShopModal(ExploreSession.Party, Bundle);
-            };
             hudController.OnBuyItemRequested += HandleBuyItem;
             hudController.OnSellItemRequested += HandleSellItem;
             hudController.OnSellAllJunkRequested += HandleSellAllJunk;
             hudController.OnIdentifyAllRequested += HandleIdentifyAll;
             hudController.OnTempleHealRequested += HandleTempleHeal;
+            hudController.OnTempleCureRequested += HandleTempleCure;
+            hudController.OnTempleRechargeRequested += HandleTempleRecharge;
+            hudController.OnQuitRequested += HandleQuitToDesktop;
 
             hudController.OnCombatModeSelected += HandleCombatModeSelected;
             hudController.OnUndoMoveRequested += HandleUndoMove;
@@ -751,6 +800,13 @@ namespace Realmz.Game
             }
             _wasShopOpen = shopOpen;
 
+            bool templeOpen = hudController != null && hudController.IsTempleOpen;
+            if (_wasTempleOpen && !templeOpen && !_isInCombat && !_isCampActive)
+            {
+                PlayExploreMapMusic();
+            }
+            _wasTempleOpen = templeOpen;
+
             if (_isCampActive && (hudController == null || !hudController.IsPartyOpen))
             {
                 ExitCampMode();
@@ -797,6 +853,16 @@ namespace Realmz.Game
                     {
                         PlayExploreMapMusic();
                     }
+                    RefreshNpcPrompts();
+                }
+                else if (hudController != null && hudController.IsTempleOpen)
+                {
+                    hudController.CloseTempleModal();
+                    if (!_isInCombat)
+                    {
+                        PlayExploreMapMusic();
+                    }
+                    RefreshNpcPrompts();
                 }
                 else if (hudController != null && hudController.IsPartyOpen)
                 {
@@ -912,8 +978,21 @@ namespace Realmz.Game
                 HandleToggleShop();
                 return;
             }
+            if (kb.eKey.wasPressedThisFrame)
+            {
+                TryInteractNearbyNpcOrPoi();
+                return;
+            }
             if (kb.cKey.wasPressedThisFrame)
             {
+                if (cameraRig != null && cameraRig.HasManualPanOffset)
+                {
+                    audioDirector?.PlayUiClick();
+                    cameraRig.Recenter();
+                    hudController?.ShowToast("Camera centered on party.", 1.5f);
+                    return;
+                }
+
                 if (_isCampActive)
                 {
                     hudController?.TogglePartyPanel(false);
@@ -963,6 +1042,7 @@ namespace Realmz.Game
 
             if (dx != 0 || dy != 0)
             {
+                _pendingNpcInteraction = null;
                 if (_isCampActive)
                 {
                     ExitCampMode();
@@ -1024,7 +1104,7 @@ namespace Realmz.Game
             if (cameraRig != null)
             {
                 cameraRig.SetCombatMode(false);
-                cameraRig.SetFollowTarget(leaderWorldPos, immediateCamera);
+                cameraRig.SetFollowTarget(leaderWorldPos, immediateCamera, recenterManualPan: immediateCamera);
             }
 
             PlayExploreMapMusic();
@@ -1034,6 +1114,7 @@ namespace Realmz.Game
             hudController?.HideOutcomeModal();
             hudController?.HideQuickResolveModal();
             RefreshContextualExplorePoi();
+            RefreshNpcPrompts();
             hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false, _lastContextPoiLabel);
             UpdateActiveTreeOcclusionFade();
         }
@@ -1067,9 +1148,10 @@ namespace Realmz.Game
 
             TMP_FontAsset font = assetCatalog != null ? assetCatalog.uiFont : null;
             IReadOnlyList<PartyMemberState> members = ExploreSession.Party.Members;
+            int maxViews = _isCampActive ? MaxTrailingPartyViews : 1;
             int livingViewIdx = 0;
 
-            for (int i = 0; i < members.Count && livingViewIdx < MaxTrailingPartyViews; i++)
+            for (int i = 0; i < members.Count && livingViewIdx < maxViews; i++)
             {
                 PartyMemberState member = members[i];
                 if (!member.IsAlive)
@@ -1115,7 +1197,8 @@ namespace Realmz.Game
                     font,
                     spriteSize: 2.0f,
                     showHud: false,
-                    isAllyOverride: true);
+                    isAllyOverride: true,
+                    catalog: assetCatalog);
                 view.UpdateStats(member.Hp, member.MaxHp, member.Sp, member.MaxSp, string.Empty, livingViewIdx == 0, true);
                 _exploreHeroViews.Add(view);
                 livingViewIdx++;
@@ -1302,16 +1385,42 @@ namespace Realmz.Game
                 ExitCampMode();
             }
 
+            if (worldRenderer != null && worldRenderer.TryGetNpcAtCoord(worldCoord, out CartographyNpcPlacement clickedNpc))
+            {
+                GridCoord npcCoord = new GridCoord(clickedNpc.TileX, clickedNpc.TileY);
+                if (ExploreSession.Position.ChebyshevDistance(npcCoord) <= 1)
+                {
+                    _pendingNpcInteraction = null;
+                    InteractWithNpc(clickedNpc);
+                    return;
+                }
+
+                if (TryFindAdjacentPassableTile(map, ExploreSession.Position, npcCoord, ExploreSession.Party.HasBoat, out GridCoord approachCoord))
+                {
+                    _pendingNpcInteraction = clickedNpc;
+                    StartWalkToExploreTile(approachCoord);
+                    return;
+                }
+            }
+
+            _pendingNpcInteraction = null;
+
             if (worldCoord == ExploreSession.Position)
             {
                 return;
             }
 
+            StartWalkToExploreTile(worldCoord);
+        }
+
+        private void StartWalkToExploreTile(GridCoord destCoord)
+        {
             StopExploreWalkCoroutine();
 
-            PathResult path = ExploreSession.PlanPath(worldCoord, allowDiagonal: true);
+            PathResult path = ExploreSession.PlanPath(destCoord, allowDiagonal: true);
             if (!path.Found || path.Steps.Count == 0)
             {
+                _pendingNpcInteraction = null;
                 hudController?.ShowToast("Path blocked.", 1.6f);
                 return;
             }
@@ -1349,6 +1458,7 @@ namespace Realmz.Game
                     _activeMoveSteps.Clear();
                     _activeMoveStepIndex = 0;
                     _exploreWalkCoroutine = null;
+                    _pendingNpcInteraction = null;
                     HandleExplorationStepHalt(stepRes);
                     yield break;
                 }
@@ -1359,6 +1469,7 @@ namespace Realmz.Game
             _activeMoveSteps.Clear();
             _activeMoveStepIndex = 0;
             _exploreWalkCoroutine = null;
+            TryCompletePendingNpcInteraction();
         }
 
         private bool ExecuteSingleExploreStep(GridCoord nextTile, bool animate, out ExplorationStepResult stepRes)
@@ -1426,7 +1537,7 @@ namespace Realmz.Game
             worldRenderer?.UpdateHeroWorldPosition(leaderPos);
             worldRenderer?.SetPartyTorchPosition(leaderPos, map.IsDungeon);
             biomeAtmosphere?.UpdateFocusPosition(leaderPos);
-            cameraRig?.SetFollowTarget(leaderPos, immediate: !doAnimate);
+            cameraRig?.SetFollowTarget(leaderPos, immediate: !doAnimate, recenterManualPan: true);
 
             if (stepRes.TorchExpiredThisStep)
             {
@@ -1435,6 +1546,7 @@ namespace Realmz.Game
 
             _exploreHoverDirty = true;
             RefreshContextualExplorePoi();
+            RefreshNpcPrompts();
             hudController?.RefreshExploreHud(
                 ExploreSession,
                 Bundle,
@@ -1591,11 +1703,15 @@ namespace Realmz.Game
             {
                 hudController?.OpenShop(poi.ShopId, ExploreSession.Party, Bundle);
                 audioDirector?.PlayMusic("shop", 0.7f);
+                RefreshNpcPrompts();
                 hudController?.ShowToast($"Entered {poi.Label}", 2.2f);
             }
             else if (kind == "temple")
             {
-                HandleTempleHeal();
+                hudController?.OpenTempleModal(ExploreSession.Party, Bundle);
+                audioDirector?.PlayMusic("temple", 0.6f);
+                RefreshNpcPrompts();
+                hudController?.ShowToast($"Entered {poi.Label}", 2.2f);
             }
             else if (kind == "tavern")
             {
@@ -1673,14 +1789,16 @@ namespace Realmz.Game
             worldRenderer?.SetCampfireActive(false, Vector3.zero);
             if (!_isInCombat)
             {
-                SyncExploreHeroViewsToTrail(immediate: false);
+                EnsureExploreHeroViews();
+                SyncExploreHeroViewsToTrail(immediate: true);
                 PlayExploreMapMusic();
+                RefreshNpcPrompts();
             }
         }
 
         private void HandleToggleShop()
         {
-            if (hudController == null)
+            if (hudController == null || ExploreSession == null)
             {
                 return;
             }
@@ -1698,12 +1816,56 @@ namespace Realmz.Game
                 {
                     PlayExploreMapMusic();
                 }
+                RefreshNpcPrompts();
+                return;
             }
-            else
+
+            if (hudController.IsTempleOpen)
             {
-                hudController.OpenShop(hudController.ActiveShopId, ExploreSession.Party, Bundle);
-                audioDirector?.PlayMusic("shop", 0.7f);
+                hudController.CloseTempleModal();
             }
+
+            if (TryFindNearbyVenue(out string nearbyVenueKind, out string nearbyShopId, out string nearbyLabel))
+            {
+                if (string.Equals(nearbyVenueKind, "temple", StringComparison.OrdinalIgnoreCase))
+                {
+                    hudController.OpenTempleModal(ExploreSession.Party, Bundle);
+                    audioDirector?.PlayMusic("temple", 0.6f);
+                }
+                else if (!string.IsNullOrEmpty(nearbyShopId))
+                {
+                    hudController.OpenShop(nearbyShopId, ExploreSession.Party, Bundle);
+                    audioDirector?.PlayMusic("shop", 0.7f);
+                }
+                RefreshNpcPrompts();
+                if (!string.IsNullOrEmpty(nearbyLabel))
+                {
+                    hudController.ShowToast($"Trading with {nearbyLabel}.", 2.0f);
+                }
+                return;
+            }
+
+            if (ExploreSession.CurrentMap != null &&
+                !ExploreSession.CurrentMap.IsDungeon &&
+                worldRenderer != null &&
+                worldRenderer.TryFindNearestNpc(ExploreSession.Position, out CartographyNpcPlacement nearestNpc, out _))
+            {
+                GridCoord npcCoord = new GridCoord(nearestNpc.TileX, nearestNpc.TileY);
+                if (TryFindAdjacentPassableTile(
+                    ExploreSession.CurrentMap,
+                    ExploreSession.Position,
+                    npcCoord,
+                    ExploreSession.Party.HasBoat,
+                    out GridCoord approachCoord))
+                {
+                    _pendingNpcInteraction = nearestNpc;
+                    StartWalkToExploreTile(approachCoord);
+                    hudController.ShowToast($"Heading to {nearestNpc.DisplayName}...", 2.2f);
+                    return;
+                }
+            }
+
+            hudController.ShowToast("Walk to the Blacksmith, Tannery stall, Apothecary, or Shrine to trade.", 2.6f);
         }
 
         private void HandleQuickShrine()
@@ -1735,7 +1897,9 @@ namespace Realmz.Game
             ExploreSession.MoveAlongPath(shrineSpot, autoHaltOnEvents: false);
             ResetPartyTrailHistory(ExploreSession.Position, ExploreSession.CurrentMap, ExploreSession.Facing);
             EnterExplorationView(immediateCamera: true);
-            HandleTempleHeal();
+            hudController?.OpenTempleModal(ExploreSession.Party, Bundle);
+            audioDirector?.PlayMusic("temple", 0.6f);
+            RefreshNpcPrompts();
         }
 
         private void HandleQuickWarpPortal()
@@ -1814,6 +1978,7 @@ namespace Realmz.Game
             }
 
             StopExploreWalkCoroutine();
+            hudController?.CloseAllModals();
             if (_isCampActive)
             {
                 _isCampActive = false;
@@ -2005,7 +2170,7 @@ namespace Realmz.Game
             for (int i = 0; i < ExploreSession.Party.Members.Count; i++)
             {
                 PartyMemberState m = ExploreSession.Party.Members[i];
-                if (m.Hp < m.MaxHp || m.ExhaustionStacks > 0 || m.CurseStacks > 0 || m.Conditions.Count > 0)
+                if (m.Hp < m.MaxHp || m.Sp < m.MaxSp || m.ExhaustionStacks > 0 || m.CurseStacks > 0 || m.Conditions.Count > 0)
                 {
                     needsHeal = true;
                     break;
@@ -2029,6 +2194,10 @@ namespace Realmz.Game
                 {
                     hudController.RefreshShopModal(ExploreSession.Party, Bundle);
                 }
+                if (hudController != null && hudController.IsTempleOpen)
+                {
+                    hudController.RefreshTempleModal(ExploreSession.Party, Bundle);
+                }
                 hudController?.ShowToast("Bywater Shrine blessing restored full HP and cleared ailments (-25g).", 2.8f);
             }
             else
@@ -2036,6 +2205,68 @@ namespace Realmz.Game
                 audioDirector?.PlayUiClick();
                 hudController?.ShowToast("Not enough gold for Shrine blessing (25g required).", 2.4f);
             }
+        }
+
+        private void HandleTempleCure()
+        {
+            if (ExploreSession == null)
+            {
+                return;
+            }
+
+            if (ExploreSession.TriggerTempleCureCurse(20))
+            {
+                audioDirector?.PlaySpell("heal");
+                EnsureExploreHeroViews();
+                hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false);
+                hudController?.RefreshTempleModal(ExploreSession.Party, Bundle);
+                hudController?.ShowToast("Sacred cleansing removed curses, exhaustion, and ailments (-20g).", 2.6f);
+            }
+            else
+            {
+                audioDirector?.PlayUiClick();
+                string msg = ExploreSession.Party.Gold < 20
+                    ? "Not enough gold for sacred cleansing (20g required)."
+                    : "No curses, exhaustion, or detrimental ailments affect the party.";
+                hudController?.ShowToast(msg, 2.4f);
+            }
+        }
+
+        private void HandleTempleRecharge()
+        {
+            if (ExploreSession == null || Bundle == null)
+            {
+                return;
+            }
+
+            int recharged = ExploreSession.TriggerTempleRechargeItems(Bundle.Items, 30);
+            if (recharged > 0)
+            {
+                audioDirector?.PlaySpell("heal");
+                hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false);
+                hudController?.RefreshTempleModal(ExploreSession.Party, Bundle);
+                hudController?.ShowToast($"Recharged {recharged} enchanted item(s) (-30g).", 2.6f);
+            }
+            else if (recharged < 0)
+            {
+                audioDirector?.PlayUiClick();
+                hudController?.ShowToast("Not enough gold for Arcane Recharge (30g required).", 2.4f);
+            }
+            else
+            {
+                audioDirector?.PlayUiClick();
+                hudController?.ShowToast("All charged relics and staves are already full.", 2.2f);
+            }
+        }
+
+        private void HandleQuitToDesktop()
+        {
+            audioDirector?.PlayUiClick();
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+#else
+            Application.Quit();
+#endif
         }
 
         private void StartTacticalCombat(List<MonsterDefinition> monstersToSpawn, string title)
@@ -2046,6 +2277,7 @@ namespace Realmz.Game
             }
 
             StopExploreWalkCoroutine();
+            hudController?.CloseAllModals();
             if (_isCampActive)
             {
                 _isCampActive = false;
@@ -2281,7 +2513,8 @@ namespace Realmz.Game
                     font,
                     spriteSize: 2.0f,
                     showHud: true,
-                    isAllyOverride: c.Side == CombatSide.Hero);
+                    isAllyOverride: c.Side == CombatSide.Hero,
+                    catalog: assetCatalog);
                 view.SetWorldPosition(GridToWorldAtElevation(LocalToWorld(c.Position)));
                 _combatUnitViews[c.Id] = view;
             }
@@ -4867,6 +5100,228 @@ namespace Realmz.Game
                     }
                 }
             }
+
+            if (worldRenderer != null && !map.IsDungeon)
+            {
+                IReadOnlyList<CartographyNpcPlacement> npcs = worldRenderer.ActiveNpcs;
+                for (int i = 0; i < npcs.Count; i++)
+                {
+                    CartographyNpcPlacement npc = npcs[i];
+                    if (Math.Max(Math.Abs(npc.TileX - pos.X), Math.Abs(npc.TileY - pos.Y)) <= 1)
+                    {
+                        CartographyNpcPlacement capturedNpc = npc;
+                        label = string.Equals(npc.VenueKind, "temple", StringComparison.OrdinalIgnoreCase)
+                            ? $"Visit {npc.DisplayName}"
+                            : $"Trade: {npc.DisplayName}";
+                        action = () => InteractWithNpc(capturedNpc);
+                        return;
+                    }
+                }
+            }
+        }
+
+        private void TryInteractNearbyNpcOrPoi()
+        {
+            if (_isInCombat || ExploreSession == null || ExploreSession.CurrentMap == null)
+            {
+                return;
+            }
+
+            if (TryFindNearbyNpc(out CartographyNpcPlacement npc))
+            {
+                InteractWithNpc(npc);
+                return;
+            }
+
+            FindContextualExplorePoi(out _, out Action action);
+            if (action != null)
+            {
+                action.Invoke();
+                return;
+            }
+
+            hudController?.ShowToast("Move closer to a merchant or doorway to interact [E].", 1.8f);
+        }
+
+        private void InteractWithNpc(CartographyNpcPlacement npc)
+        {
+            if (hudController == null || ExploreSession == null)
+            {
+                return;
+            }
+
+            audioDirector?.PlayUiClick();
+            if (_isCampActive)
+            {
+                ExitCampMode();
+            }
+
+            if (string.Equals(npc.VenueKind, "temple", StringComparison.OrdinalIgnoreCase))
+            {
+                hudController.OpenTempleModal(ExploreSession.Party, Bundle);
+                audioDirector?.PlayMusic("temple", 0.6f);
+            }
+            else if (!string.IsNullOrEmpty(npc.ShopId))
+            {
+                hudController.OpenShop(npc.ShopId, ExploreSession.Party, Bundle);
+                audioDirector?.PlayMusic("shop", 0.7f);
+            }
+
+            RefreshNpcPrompts();
+        }
+
+        private void TryCompletePendingNpcInteraction()
+        {
+            if (!_pendingNpcInteraction.HasValue || ExploreSession == null)
+            {
+                return;
+            }
+
+            CartographyNpcPlacement target = _pendingNpcInteraction.Value;
+            _pendingNpcInteraction = null;
+            GridCoord npcCoord = new GridCoord(target.TileX, target.TileY);
+            if (ExploreSession.Position.ChebyshevDistance(npcCoord) <= 1)
+            {
+                InteractWithNpc(target);
+            }
+        }
+
+        private bool TryFindNearbyNpc(out CartographyNpcPlacement npc)
+        {
+            if (worldRenderer != null &&
+                ExploreSession != null &&
+                ExploreSession.CurrentMap != null &&
+                !ExploreSession.CurrentMap.IsDungeon)
+            {
+                IReadOnlyList<CartographyNpcPlacement> npcs = worldRenderer.ActiveNpcs;
+                GridCoord pos = ExploreSession.Position;
+                for (int i = 0; i < npcs.Count; i++)
+                {
+                    CartographyNpcPlacement candidate = npcs[i];
+                    if (Math.Max(Math.Abs(candidate.TileX - pos.X), Math.Abs(candidate.TileY - pos.Y)) <= 1)
+                    {
+                        npc = candidate;
+                        return true;
+                    }
+                }
+            }
+
+            npc = default;
+            return false;
+        }
+
+        private bool TryFindNearbyVenue(out string venueKind, out string shopId, out string label)
+        {
+            venueKind = string.Empty;
+            shopId = string.Empty;
+            label = string.Empty;
+            if (ExploreSession == null || ExploreSession.CurrentMap == null)
+            {
+                return false;
+            }
+
+            if (TryFindNearbyNpc(out CartographyNpcPlacement nearbyNpc))
+            {
+                venueKind = nearbyNpc.VenueKind;
+                shopId = nearbyNpc.ShopId;
+                label = nearbyNpc.DisplayName;
+                return true;
+            }
+
+            TileMapData map = ExploreSession.CurrentMap;
+            GridCoord pos = ExploreSession.Position;
+            for (int maxDist = 0; maxDist <= 1; maxDist++)
+            {
+                for (int i = 0; i < map.PointsOfInterest.Count; i++)
+                {
+                    MapPointOfInterest poi = map.PointsOfInterest[i];
+                    if (poi.Coord.ChebyshevDistance(pos) != maxDist)
+                    {
+                        continue;
+                    }
+
+                    string kind = (poi.Kind ?? string.Empty).Trim().ToLowerInvariant();
+                    if (kind == "shop" && !string.IsNullOrEmpty(poi.ShopId))
+                    {
+                        venueKind = "shop";
+                        shopId = poi.ShopId;
+                        label = poi.Label;
+                        return true;
+                    }
+                    if (kind == "temple")
+                    {
+                        venueKind = "temple";
+                        shopId = string.Empty;
+                        label = poi.Label;
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private bool TryFindAdjacentPassableTile(
+            TileMapData map,
+            GridCoord from,
+            GridCoord center,
+            bool hasBoat,
+            out GridCoord bestCoord)
+        {
+            bestCoord = default;
+            if (map == null)
+            {
+                return false;
+            }
+
+            int bestScore = int.MaxValue;
+            bool found = false;
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    if (dx == 0 && dy == 0)
+                    {
+                        continue;
+                    }
+
+                    GridCoord candidate = new GridCoord(center.X + dx, center.Y + dy);
+                    if (!map.InBounds(candidate) || !map.IsPassable(candidate.X, candidate.Y, hasBoat))
+                    {
+                        continue;
+                    }
+
+                    if (_explorePathfinder != null)
+                    {
+                        if (!_explorePathfinder.FindPathSteps(map, from, candidate, _explorePreviewSteps, out _, allowDiagonal: true, hasBoat: hasBoat))
+                        {
+                            continue;
+                        }
+                    }
+
+                    int score = _explorePathfinder != null ? _explorePreviewSteps.Count : candidate.ManhattanDistance(from);
+                    if (score < bestScore)
+                    {
+                        bestScore = score;
+                        bestCoord = candidate;
+                        found = true;
+                    }
+                }
+            }
+
+            return found;
+        }
+
+        private void RefreshNpcPrompts()
+        {
+            if (worldRenderer == null || ExploreSession == null)
+            {
+                return;
+            }
+
+            bool hidePrompts = _isInCombat || _isCampActive || (hudController != null && hudController.IsModalOpen);
+            Vector3 heroPos = GridToWorldAtElevation(ExploreSession.Position);
+            worldRenderer.UpdateNpcProximityPrompts(ExploreSession.Position, heroPos, hidePrompts);
         }
 
         private void TriggerContextualPortal(MapPortal portal)

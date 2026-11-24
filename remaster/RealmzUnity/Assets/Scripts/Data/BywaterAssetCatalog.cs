@@ -5,6 +5,14 @@ using UnityEngine;
 
 namespace Realmz.Data
 {
+    public enum UnitAnimState
+    {
+        Idle = 0,
+        Walk = 1,
+        Attack = 2,
+        Hit = 3
+    }
+
     /// <summary>
     /// Central ScriptableObject holding imported M1 materials, sprites, portraits, and UI font assets
     /// for City of Bywater rendering and UI binding.
@@ -95,6 +103,7 @@ namespace Realmz.Data
         [Header("W-234 Cartography Unit Sheets & Hotbar Icons")]
         public List<HotbarIconEntry> hotbarIcons = new List<HotbarIconEntry>();
         public List<CartographyUnitSheetEntry> cartographyUnitSheets = new List<CartographyUnitSheetEntry>();
+        public List<CartographyUnitSheetEntry> cartographyNpcSheets = new List<CartographyUnitSheetEntry>();
 
         public List<HeroArtEntry> heroes = new List<HeroArtEntry>();
         public List<MonsterArtEntry> monsters = new List<MonsterArtEntry>();
@@ -125,6 +134,8 @@ namespace Realmz.Data
         {
             public string unitKey;
             public Material unitSheetMaterial;
+            public Material walkMaterial;
+            public Material attackMaterial;
         }
 
         [Serializable]
@@ -144,6 +155,8 @@ namespace Realmz.Data
             public int portraitId;
             public Material billboardMaterial;
             public Material unitSheetMaterial;
+            public Material walkMaterial;
+            public Material attackMaterial;
             public Sprite sprite;
             public Sprite portrait;
         }
@@ -155,6 +168,8 @@ namespace Realmz.Data
             public string displayName;
             public Material billboardMaterial;
             public Material unitSheetMaterial;
+            public Material walkMaterial;
+            public Material attackMaterial;
             public Sprite sprite;
             public Rect portraitPixelRect;
             public string archetypeKey;
@@ -319,38 +334,163 @@ namespace Realmz.Data
         /// </summary>
         public Material ResolveCartographyUnitMaterial(string unitId, Material fallback)
         {
+            return ResolveCartographyUnitMaterial(unitId, UnitAnimState.Idle, fallback, out _);
+        }
+
+        /// <summary>
+        /// Resolves an optional Cartography unit sheet material for the given unit ID and animation state,
+        /// falling back cleanly to the Idle sheet (with hasDedicatedSheet = false) when no dedicated
+        /// Walk/Attack strip exists, and mapping town NPCs to clean archetype sheets until NPC strips drop in.
+        /// </summary>
+        public Material ResolveCartographyUnitMaterial(
+            string unitId,
+            UnitAnimState animState,
+            Material fallback,
+            out bool hasDedicatedSheet)
+        {
+            hasDedicatedSheet = false;
             if (string.IsNullOrWhiteSpace(unitId))
             {
                 return fallback;
             }
 
             string normalized = unitId.Trim();
-            string heroAlias = ResolveHeroSheetKey(normalized);
+            string npcAlias = ResolveNpcSheetKey(normalized);
+            string heroAlias = string.IsNullOrEmpty(npcAlias) ? ResolveHeroSheetKey(normalized) : string.Empty;
             string monsterAlias = string.Empty;
-            if (string.IsNullOrEmpty(heroAlias))
+            if (string.IsNullOrEmpty(npcAlias) && string.IsNullOrEmpty(heroAlias))
             {
                 TryResolveMonsterArchetype(normalized, 0, out monsterAlias);
             }
-            string canonicalKey = !string.IsNullOrEmpty(heroAlias)
-                ? heroAlias
-                : (!string.IsNullOrEmpty(monsterAlias) ? monsterAlias : normalized.ToLowerInvariant());
 
-            if (cartographyUnitSheets != null)
+            string canonicalKey = !string.IsNullOrEmpty(npcAlias)
+                ? npcAlias
+                : (!string.IsNullOrEmpty(heroAlias)
+                    ? heroAlias
+                    : (!string.IsNullOrEmpty(monsterAlias) ? monsterAlias : normalized.ToLowerInvariant()));
+
+            Material resolved = ResolveSheetMaterialForKey(
+                normalized,
+                canonicalKey,
+                animState,
+                fallback,
+                out hasDedicatedSheet);
+            if (resolved != null)
             {
-                for (int i = 0; i < cartographyUnitSheets.Count; i++)
-                {
-                    CartographyUnitSheetEntry entry = cartographyUnitSheets[i];
-                    if (entry == null || entry.unitSheetMaterial == null)
-                    {
-                        continue;
-                    }
+                return resolved;
+            }
 
-                    if (string.Equals(entry.unitKey, normalized, StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(entry.unitKey, canonicalKey, StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrEmpty(npcAlias))
+            {
+                string[] npcFallbacks = GetNpcFallbackUnitKeys(npcAlias);
+                for (int i = 0; i < npcFallbacks.Length; i++)
+                {
+                    string fbKey = npcFallbacks[i];
+                    Material fbMat = ResolveSheetMaterialForKey(
+                        fbKey,
+                        fbKey,
+                        animState,
+                        fallback,
+                        out bool fbDedicated);
+                    if (fbMat != null)
                     {
-                        return entry.unitSheetMaterial;
+                        hasDedicatedSheet = (animState == UnitAnimState.Walk || animState == UnitAnimState.Attack)
+                            ? fbDedicated
+                            : true;
+                        return fbMat;
                     }
                 }
+            }
+
+            return fallback;
+        }
+
+        private Material ResolveSheetMaterialForKey(
+            string normalized,
+            string canonicalKey,
+            UnitAnimState animState,
+            Material fallback,
+            out bool hasDedicatedSheet)
+        {
+            hasDedicatedSheet = false;
+
+            if (animState == UnitAnimState.Walk || animState == UnitAnimState.Attack)
+            {
+                Material serializedStateMat = FindSerializedStateMaterial(normalized, canonicalKey, animState);
+                if (serializedStateMat != null)
+                {
+                    hasDedicatedSheet = true;
+                    return serializedStateMat;
+                }
+
+#if UNITY_EDITOR
+                string stateSuffix = animState == UnitAnimState.Walk ? "walk" : "attack";
+                string stateMatPath = $"Assets/Art/Cartography/Materials/Cartography_Unit_{canonicalKey}_{stateSuffix}.mat";
+                Material editorStateMat = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>(stateMatPath);
+                if (editorStateMat != null)
+                {
+                    hasDedicatedSheet = true;
+                    return editorStateMat;
+                }
+
+                string stateSheetPath = $"Assets/Art/Cartography/units/{canonicalKey}_{stateSuffix}_sheet.png";
+                Texture2D stateSheetTex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(stateSheetPath);
+                if (stateSheetTex != null)
+                {
+                    string stateNormalPath = $"Assets/Art/Cartography/units/{canonicalKey}_{stateSuffix}_sheet_n.png";
+                    Texture2D stateNormalTex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(stateNormalPath);
+                    Material runtimeStateMat = GetOrCreateRuntimeUnitSheetMaterial(
+                        canonicalKey,
+                        animState,
+                        stateSheetTex,
+                        stateNormalTex,
+                        fallback);
+                    if (runtimeStateMat != null)
+                    {
+                        hasDedicatedSheet = true;
+                        return runtimeStateMat;
+                    }
+                }
+#endif
+            }
+
+            Material idleMat = ResolveIdleSheetMaterial(normalized, canonicalKey, fallback);
+            if (idleMat != null)
+            {
+                hasDedicatedSheet = animState == UnitAnimState.Idle;
+                return idleMat;
+            }
+
+            return null;
+        }
+
+        private Material FindSerializedStateMaterial(string normalized, string canonicalKey, UnitAnimState animState)
+        {
+            Material fromSheets = FindSheetEntryStateMaterial(cartographyUnitSheets, normalized, canonicalKey, animState)
+                ?? FindSheetEntryStateMaterial(cartographyNpcSheets, normalized, canonicalKey, animState);
+            if (fromSheets != null)
+            {
+                return fromSheets;
+            }
+
+            Material fromHeroes = FindHeroStateMaterial(heroes, normalized, canonicalKey, animState)
+                ?? FindHeroStateMaterial(extraHeroes, normalized, canonicalKey, animState);
+            if (fromHeroes != null)
+            {
+                return fromHeroes;
+            }
+
+            return FindMonsterStateMaterial(expandedMonsters, normalized, canonicalKey, animState)
+                ?? FindMonsterStateMaterial(monsters, normalized, canonicalKey, animState);
+        }
+
+        private Material ResolveIdleSheetMaterial(string normalized, string canonicalKey, Material fallback)
+        {
+            Material fromSheets = FindSheetEntryStateMaterial(cartographyUnitSheets, normalized, canonicalKey, UnitAnimState.Idle)
+                ?? FindSheetEntryStateMaterial(cartographyNpcSheets, normalized, canonicalKey, UnitAnimState.Idle);
+            if (fromSheets != null)
+            {
+                return fromSheets;
             }
 
             Material heroSheet = FindHeroSheetMaterial(heroes, normalized, canonicalKey)
@@ -380,37 +520,80 @@ namespace Realmz.Data
             Texture2D sheetTex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(sheetPath);
             if (sheetTex != null)
             {
-                _runtimeUnitSheetMaterials ??= new Dictionary<string, Material>(StringComparer.OrdinalIgnoreCase);
-                if (_runtimeUnitSheetMaterials.TryGetValue(lookupKey, out Material cached) && cached != null)
-                {
-                    return cached;
-                }
-
-                Shader cartoShader = Shader.Find("Realmz/CartographyBillboard");
-                Material mat = fallback != null
-                    ? new Material(fallback)
-                    : (cartoShader != null ? new Material(cartoShader) : null);
-                if (mat != null)
-                {
-                    mat.name = $"CartographyUnit_{lookupKey}_Runtime";
-                    mat.hideFlags = HideFlags.HideAndDontSave;
-                    mat.mainTexture = sheetTex;
-                    if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", sheetTex);
-                    if (mat.HasProperty("_IsTwoBankAtlas")) mat.SetFloat("_IsTwoBankAtlas", 0f);
-                    if (mat.HasProperty("_Cols")) mat.SetFloat("_Cols", 4f);
-                    if (mat.HasProperty("_Rows")) mat.SetFloat("_Rows", 1f);
-                    if (mat.HasProperty("_FrameCount")) mat.SetFloat("_FrameCount", 4f);
-                    if (mat.HasProperty("_AnimFps")) mat.SetFloat("_AnimFps", 5.5f);
-                    if (mat.HasProperty("_BillboardMode")) mat.SetFloat("_BillboardMode", 0f);
-                    if (mat.HasProperty("_CameraPitchTiltDeg")) mat.SetFloat("_CameraPitchTiltDeg", 0f);
-                    if (mat.HasProperty("_RootTint")) mat.SetColor("_RootTint", Color.white);
-                    _runtimeUnitSheetMaterials[lookupKey] = mat;
-                    return mat;
-                }
+                string normalPath = $"Assets/Art/Cartography/units/{lookupKey}_sheet_n.png";
+                Texture2D normalTex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(normalPath);
+                return GetOrCreateRuntimeUnitSheetMaterial(
+                    lookupKey,
+                    UnitAnimState.Idle,
+                    sheetTex,
+                    normalTex,
+                    fallback);
             }
 #endif
 
-            return fallback;
+            return null;
+        }
+
+        private Material GetOrCreateRuntimeUnitSheetMaterial(
+            string lookupKey,
+            UnitAnimState animState,
+            Texture2D sheetTex,
+            Texture2D normalTex,
+            Material fallback)
+        {
+            if (sheetTex == null)
+            {
+                return null;
+            }
+
+            _runtimeUnitSheetMaterials ??= new Dictionary<string, Material>(StringComparer.OrdinalIgnoreCase);
+            string cacheKey = $"{lookupKey}_{(int)animState}";
+            if (_runtimeUnitSheetMaterials.TryGetValue(cacheKey, out Material cached) && cached != null)
+            {
+                return cached;
+            }
+
+            Shader cartoShader = Shader.Find("Realmz/CartographyBillboard");
+            Material mat = cartoShader != null
+                ? new Material(cartoShader)
+                : (fallback != null ? new Material(fallback) : null);
+            if (mat == null)
+            {
+                return null;
+            }
+
+            float animFps = animState == UnitAnimState.Walk
+                ? 8.5f
+                : (animState == UnitAnimState.Attack ? 10.0f : 5.5f);
+
+            mat.name = $"CartographyUnit_{lookupKey}_{animState}_Runtime";
+            mat.hideFlags = HideFlags.HideAndDontSave;
+            mat.enableInstancing = false;
+            mat.mainTexture = sheetTex;
+            if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", sheetTex);
+            if (mat.HasProperty("_BumpMap")) mat.SetTexture("_BumpMap", normalTex);
+            if (mat.HasProperty("_BumpScale")) mat.SetFloat("_BumpScale", 0.70f);
+            if (mat.HasProperty("_IsTwoBankAtlas")) mat.SetFloat("_IsTwoBankAtlas", 0f);
+            if (mat.HasProperty("_Cols")) mat.SetFloat("_Cols", 4f);
+            if (mat.HasProperty("_Rows")) mat.SetFloat("_Rows", 1f);
+            if (mat.HasProperty("_VariantIndex")) mat.SetFloat("_VariantIndex", 0f);
+            if (mat.HasProperty("_FrameCount")) mat.SetFloat("_FrameCount", 4f);
+            if (mat.HasProperty("_AnimFps")) mat.SetFloat("_AnimFps", animFps);
+            if (mat.HasProperty("_BillboardMode")) mat.SetFloat("_BillboardMode", 0f);
+            if (mat.HasProperty("_CameraPitchTiltDeg")) mat.SetFloat("_CameraPitchTiltDeg", 0f);
+            if (mat.HasProperty("_WindTipSway")) mat.SetFloat("_WindTipSway", 0f);
+            if (mat.HasProperty("_TrampleStrength")) mat.SetFloat("_TrampleStrength", 0f);
+            if (mat.HasProperty("_WindGustInfluence")) mat.SetFloat("_WindGustInfluence", 0.08f);
+            if (mat.HasProperty("_NormalUpBias")) mat.SetFloat("_NormalUpBias", 0.55f);
+            if (mat.HasProperty("_RootTint")) mat.SetColor("_RootTint", Color.white);
+            if (mat.HasProperty("_TintColor")) mat.SetColor("_TintColor", Color.white);
+            if (mat.HasProperty("_Cutoff")) mat.SetFloat("_Cutoff", 0.45f);
+            if (mat.HasProperty("_ReceiveRootShadowOnly")) mat.SetFloat("_ReceiveRootShadowOnly", 0f);
+            if (mat.HasProperty("_HorizonHazeStrength")) mat.SetFloat("_HorizonHazeStrength", 0.08f);
+            if (mat.HasProperty("_EmissionColor")) mat.SetColor("_EmissionColor", Color.black);
+
+            _runtimeUnitSheetMaterials[cacheKey] = mat;
+            return mat;
         }
 
         /// <summary>
@@ -452,14 +635,40 @@ namespace Realmz.Data
             return Realmz.Cartography.CartographyWorldData.GetDefaultPropSizeMeters(kind);
         }
 
-        public Sprite GetUnifiedPortrait(string keyOrArchetype)
+        public Sprite GetUnifiedPortrait(string portraitKeyOrId, int portraitId = 0)
         {
-            if (string.IsNullOrWhiteSpace(keyOrArchetype))
+            if (string.IsNullOrWhiteSpace(portraitKeyOrId))
             {
+                if (portraitId > 0)
+                {
+                    HeroArtEntry byId = FindHeroInList(heroes, null, portraitId, null)
+                        ?? FindHeroInList(extraHeroes, null, portraitId, null);
+                    if (byId != null && byId.portrait != null)
+                    {
+                        return byId.portrait;
+                    }
+                }
                 return null;
             }
 
-            string normalized = keyOrArchetype.Trim().ToLowerInvariant();
+            string normalized = portraitKeyOrId.Trim().ToLowerInvariant();
+            string npcKey = ResolveNpcSheetKey(normalized);
+            if (!string.IsNullOrEmpty(npcKey))
+            {
+                Sprite npcPortrait = FindUnifiedPortraitExact(npcKey)
+                    ?? FindUnifiedPortraitExact(npcKey.Substring("npc_".Length));
+                if (npcPortrait != null)
+                {
+                    return npcPortrait;
+                }
+
+                string npcFallback = GetNpcFallbackPortraitKey(npcKey);
+                if (!string.IsNullOrEmpty(npcFallback))
+                {
+                    return GetUnifiedPortrait(npcFallback, portraitId);
+                }
+            }
+
             string heroSheetKey = ResolveHeroSheetKey(normalized);
             if (!string.IsNullOrEmpty(heroSheetKey))
             {
@@ -475,29 +684,45 @@ namespace Realmz.Data
                 normalized = normalized.Substring("hero_".Length);
             }
 
+            Sprite found = FindUnifiedPortraitExact(normalized);
+            if (found != null)
+            {
+                return found;
+            }
+
+            HeroArtEntry heroEntry = FindHeroInList(heroes, portraitKeyOrId, portraitId, portraitKeyOrId)
+                ?? FindHeroInList(extraHeroes, portraitKeyOrId, portraitId, portraitKeyOrId);
+            if (heroEntry != null && heroEntry.portrait != null)
+            {
+                return heroEntry.portrait;
+            }
+
+            return null;
+        }
+
+        private Sprite FindUnifiedPortraitExact(string normalizedKey)
+        {
+            if (string.IsNullOrWhiteSpace(normalizedKey))
+            {
+                return null;
+            }
+
             if (unifiedPortraits != null)
             {
                 for (int i = 0; i < unifiedPortraits.Count; i++)
                 {
                     HotbarIconEntry entry = unifiedPortraits[i];
                     if (entry != null && entry.sprite != null &&
-                        (string.Equals(entry.key, normalized, StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(entry.key, "portrait_" + normalized, StringComparison.OrdinalIgnoreCase)))
+                        (string.Equals(entry.key, normalizedKey, StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(entry.key, "portrait_" + normalizedKey, StringComparison.OrdinalIgnoreCase)))
                     {
                         return entry.sprite;
                     }
                 }
             }
 
-            HeroArtEntry heroEntry = FindHeroInList(heroes, keyOrArchetype, 0, keyOrArchetype)
-                ?? FindHeroInList(extraHeroes, keyOrArchetype, 0, keyOrArchetype);
-            if (heroEntry != null && heroEntry.portrait != null)
-            {
-                return heroEntry.portrait;
-            }
-
 #if UNITY_EDITOR
-            string portraitPath = $"Assets/Art/Cartography/Portraits/portrait_{normalized}.png";
+            string portraitPath = $"Assets/Art/Cartography/Portraits/portrait_{normalizedKey}.png";
             Sprite editorPortrait = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(portraitPath);
             if (editorPortrait != null)
             {
@@ -942,6 +1167,164 @@ namespace Realmz.Data
                 }
             }
             return null;
+        }
+
+        private static Material FindSheetEntryStateMaterial(
+            List<CartographyUnitSheetEntry> list,
+            string normalized,
+            string canonicalKey,
+            UnitAnimState animState)
+        {
+            if (list == null) return null;
+            for (int i = 0; i < list.Count; i++)
+            {
+                CartographyUnitSheetEntry entry = list[i];
+                if (entry == null) continue;
+                if (!string.Equals(entry.unitKey, normalized, StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(entry.unitKey, canonicalKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                Material mat = animState == UnitAnimState.Walk
+                    ? entry.walkMaterial
+                    : (animState == UnitAnimState.Attack ? entry.attackMaterial : entry.unitSheetMaterial);
+                if (mat != null)
+                {
+                    return mat;
+                }
+            }
+            return null;
+        }
+
+        private static Material FindHeroStateMaterial(
+            List<HeroArtEntry> list,
+            string normalized,
+            string canonicalKey,
+            UnitAnimState animState)
+        {
+            if (list == null) return null;
+            for (int i = 0; i < list.Count; i++)
+            {
+                HeroArtEntry entry = list[i];
+                if (entry == null) continue;
+                if (!string.Equals(entry.id, normalized, StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(entry.id, canonicalKey, StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(entry.archetype, normalized, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                Material mat = animState == UnitAnimState.Walk
+                    ? entry.walkMaterial
+                    : (animState == UnitAnimState.Attack ? entry.attackMaterial : entry.unitSheetMaterial);
+                if (mat != null)
+                {
+                    return mat;
+                }
+            }
+            return null;
+        }
+
+        private static Material FindMonsterStateMaterial(
+            List<MonsterArtEntry> list,
+            string normalized,
+            string canonicalKey,
+            UnitAnimState animState)
+        {
+            if (list == null) return null;
+            for (int i = 0; i < list.Count; i++)
+            {
+                MonsterArtEntry entry = list[i];
+                if (entry == null) continue;
+                if (!string.Equals(entry.key, normalized, StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(entry.key, canonicalKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                Material mat = animState == UnitAnimState.Walk
+                    ? entry.walkMaterial
+                    : (animState == UnitAnimState.Attack ? entry.attackMaterial : entry.unitSheetMaterial);
+                if (mat != null)
+                {
+                    return mat;
+                }
+            }
+            return null;
+        }
+
+        private static string ResolveNpcSheetKey(string unitId)
+        {
+            if (string.IsNullOrWhiteSpace(unitId))
+            {
+                return string.Empty;
+            }
+
+            switch (unitId.Trim().ToLowerInvariant())
+            {
+                case "npc_blacksmith":
+                case "blacksmith":
+                case "portrait_npc_blacksmith":
+                case "portrait_blacksmith":
+                    return "npc_blacksmith";
+                case "npc_tanner":
+                case "tanner":
+                case "portrait_npc_tanner":
+                case "portrait_tanner":
+                    return "npc_tanner";
+                case "npc_apothecary":
+                case "apothecary":
+                case "portrait_npc_apothecary":
+                case "portrait_apothecary":
+                    return "npc_apothecary";
+                case "npc_priestess":
+                case "priestess":
+                case "portrait_npc_priestess":
+                case "portrait_priestess":
+                    return "npc_priestess";
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static readonly string[] BlacksmithFallbacks = { "monster_town_guard", "hero_barbarian" };
+        private static readonly string[] TannerFallbacks = { "hero_ranger" };
+        private static readonly string[] ApothecaryFallbacks = { "hero_enchanter", "hero_mage" };
+        private static readonly string[] PriestessFallbacks = { "hero_cleric" };
+
+        private static string[] GetNpcFallbackUnitKeys(string npcKey)
+        {
+            switch (npcKey)
+            {
+                case "npc_blacksmith":
+                    return BlacksmithFallbacks;
+                case "npc_tanner":
+                    return TannerFallbacks;
+                case "npc_apothecary":
+                    return ApothecaryFallbacks;
+                case "npc_priestess":
+                    return PriestessFallbacks;
+                default:
+                    return Array.Empty<string>();
+            }
+        }
+
+        private static string GetNpcFallbackPortraitKey(string npcKey)
+        {
+            switch (npcKey)
+            {
+                case "npc_blacksmith":
+                    return "barbarian";
+                case "npc_tanner":
+                    return "ranger";
+                case "npc_apothecary":
+                    return "enchanter";
+                case "npc_priestess":
+                    return "cleric";
+                default:
+                    return string.Empty;
+            }
         }
 
         /// <summary>

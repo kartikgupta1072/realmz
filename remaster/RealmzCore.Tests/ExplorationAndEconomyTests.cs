@@ -229,5 +229,164 @@ namespace RealmzCore.Tests
             Assert.Equal(0, hero.ExhaustionStacks);
             Assert.Equal(2, full.ExhaustionCleared);
         }
+
+        [Fact]
+        public void TileMapData_BlockedPropFootprints_BlocksPassabilityPathingAndClearsCleanly()
+        {
+            int[] tiles = new int[25];
+            for (int i = 0; i < tiles.Length; i++)
+            {
+                tiles[i] = 61;
+            }
+
+            Dictionary<int, TileRule> rules = new Dictionary<int, TileRule>
+            {
+                [61] = new TileRule(61, passable: true, moveCost: 1)
+            };
+
+            TileMapData map = new TileMapData(
+                "prop_test",
+                "Bywater",
+                0,
+                isDungeon: false,
+                width: 5,
+                height: 5,
+                tiles: tiles,
+                startSpawn: new GridCoord(0, 0),
+                tileRules: rules);
+
+            Assert.Equal(0, map.BlockedPropTileCount);
+            Assert.False(map.IsBlockedByProp(2, 0));
+            Assert.True(map.IsPassable(2, 0));
+
+            map.SetBlockedPropFootprints(new[]
+            {
+                new GridCoord(2, 0),
+                new GridCoord(2, 1),
+                new GridCoord(-1, 0),
+                new GridCoord(10, 10)
+            });
+
+            Assert.Equal(2, map.BlockedPropTileCount);
+            Assert.True(map.IsBlockedByProp(2, 0));
+            Assert.True(map.IsBlockedByProp(2, 1));
+            Assert.False(map.IsPassable(2, 0));
+            Assert.False(map.IsPassable(2, 1));
+            Assert.True(map.IsPassable(2, 2));
+
+            PathResult path = AStarPathfinder.FindPath(map, new GridCoord(0, 0), new GridCoord(4, 0));
+            Assert.True(path.Found);
+            Assert.DoesNotContain(new GridCoord(2, 0), path.Steps);
+            Assert.DoesNotContain(new GridCoord(2, 1), path.Steps);
+
+            HeroPresetData hero = new HeroPresetData("kevlar", "Kevlar", hp: 20, maxHp: 20, sp: 5, maxSp: 5, ac: 10, toHit: 10);
+            PartyState party = new PartyState(new[] { new PartyMemberState(hero) }, gold: 50);
+            ExplorationSession session = new ExplorationSession(
+                new Dictionary<string, TileMapData> { ["prop_test"] = map },
+                "prop_test",
+                party);
+
+            PathResult sessionPlan = session.PlanPath(new GridCoord(4, 0));
+            Assert.True(sessionPlan.Found);
+            Assert.DoesNotContain(new GridCoord(2, 0), sessionPlan.Steps);
+
+            ExplorationStepResult step1 = session.StepOneTile(new GridCoord(1, 0));
+            Assert.True(step1.Moved);
+
+            ExplorationStepResult blockedStep = session.StepOneTile(new GridCoord(2, 0));
+            Assert.False(blockedStep.Moved);
+            Assert.Equal(ExplorationHaltReason.Blocked, blockedStep.HaltReason);
+            Assert.Equal(new GridCoord(1, 0), session.Position);
+
+            map.ClearBlockedPropFootprints();
+            Assert.Equal(0, map.BlockedPropTileCount);
+            Assert.False(map.IsBlockedByProp(2, 0));
+            Assert.True(map.IsPassable(2, 0));
+
+            PathResult unblockedPlan = session.PlanPath(new GridCoord(4, 0));
+            Assert.True(unblockedPlan.Found);
+
+            ExplorationStepResult step2 = session.StepOneTile(new GridCoord(2, 0));
+            Assert.True(step2.Moved);
+            Assert.Equal(new GridCoord(2, 0), session.Position);
+        }
+
+        [Fact]
+        public void ExplorationSession_TempleCureCurseAndRechargeItems_SpendGoldAndRestoreProperly()
+        {
+            int[] tiles = new int[9];
+            for (int i = 0; i < tiles.Length; i++) tiles[i] = 61;
+
+            TileMapData map = new TileMapData(
+                "temple_test",
+                "Bywater",
+                0,
+                isDungeon: false,
+                width: 3,
+                height: 3,
+                tiles: tiles,
+                startSpawn: new GridCoord(1, 1),
+                tileRules: new Dictionary<int, TileRule> { [61] = new TileRule(61, passable: true, moveCost: 1) });
+
+            Dictionary<int, ItemDefinition> catalog = BuildTestCatalog();
+            catalog[9] = new ItemDefinition(9, "Wand of Sparks", "Charged wand", "Weapon", "Weapon", "1d6", basePrice: 200, charges: 10);
+            catalog[10] = new ItemDefinition(10, "Amulet of Ward", "Charged amulet", "Misc", "", basePrice: 150, charges: 5);
+
+            HeroPresetData hero = new HeroPresetData("kevlar", "Kevlar", hp: 20, maxHp: 30, sp: 5, maxSp: 10, ac: 10, toHit: 20);
+            PartyMemberState member = new PartyMemberState(hero, catalog);
+            PartyState party = new PartyState(new[] { member }, gold: 10);
+
+            party.AddItemToStash(9, 1, isIdentified: true, charges: 3);
+            Assert.True(party.EquipFromStash(0, 0, catalog));
+            party.AddItemToStash(10, 1, isIdentified: true, charges: 1);
+            party.AddItemToStash(10, 1, isIdentified: true, charges: 5); // Already full
+
+            ExplorationSession session = new ExplorationSession(
+                new Dictionary<string, TileMapData> { ["temple_test"] = map },
+                "temple_test",
+                party);
+
+            // Nothing to cure yet.
+            Assert.False(session.TriggerTempleCureCurse(20));
+            Assert.Equal(10, party.Gold);
+
+            member.CurseStacks = 2;
+            member.ExhaustionStacks = 1;
+            member.Conditions.Apply(CharConditionId.Cursed);
+            member.Conditions.Apply(CharConditionId.Poisoned);
+            member.Conditions.Apply(CharConditionId.Silenced);
+            member.Conditions.Apply(CharConditionId.HinderedAttacks);
+            member.Conditions.Apply(CharConditionId.MagicAura);
+
+            // Insufficient gold leaves gold, curses, and items unchanged.
+            Assert.False(session.TriggerTempleCureCurse(20));
+            Assert.Equal(-1, session.TriggerTempleRechargeItems(catalog, 30));
+            Assert.Equal(10, party.Gold);
+            Assert.Equal(2, member.CurseStacks);
+            Assert.Equal(3, member.GetEquipped(EquipmentSlot.Weapon)!.RemainingCharges);
+
+            party.Gold = 100;
+
+            Assert.True(session.TriggerTempleCureCurse(20));
+            Assert.Equal(80, party.Gold);
+            Assert.Equal(0, member.CurseStacks);
+            Assert.Equal(0, member.ExhaustionStacks);
+            Assert.False(member.Conditions.Has(CharConditionId.Cursed));
+            Assert.False(member.Conditions.Has(CharConditionId.Poisoned));
+            Assert.False(member.Conditions.Has(CharConditionId.Silenced));
+            Assert.False(member.Conditions.Has(CharConditionId.HinderedAttacks));
+            Assert.True(member.Conditions.Has(CharConditionId.MagicAura));
+
+            int recharged = session.TriggerTempleRechargeItems(catalog, 30);
+            Assert.Equal(2, recharged);
+            Assert.Equal(50, party.Gold);
+            Assert.Equal(10, member.GetEquipped(EquipmentSlot.Weapon)!.RemainingCharges);
+            Assert.Equal(5, party.Stash[0].RemainingCharges);
+            Assert.Equal(5, party.Stash[1].RemainingCharges);
+
+            // Recharging again with full charges does nothing and spends no gold.
+            Assert.Equal(0, session.TriggerTempleRechargeItems(catalog, 30));
+            Assert.Equal(50, party.Gold);
+        }
     }
 }

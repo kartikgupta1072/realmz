@@ -78,6 +78,14 @@ namespace Realmz.EditorTools
             new MonsterSpec { Key = "monster_bandit_cutthroat", LegacyM1Key = "bandit_cutthroat", DisplayName = "Bandit Cutthroat" }
         };
 
+        private static readonly string[] NpcSheetKeys =
+        {
+            "npc_blacksmith",
+            "npc_tanner",
+            "npc_apothecary",
+            "npc_priestess"
+        };
+
         private static readonly string[] LegacyM1MonsterTextureKeys =
         {
             "giant_frog",
@@ -161,6 +169,8 @@ namespace Realmz.EditorTools
                 CreateOrUpdateBillboardMaterial(legacyMatPath, legacyAlbedo, legacyNormal, 0.18f, subtleTorchEmission: false);
 
                 Material unitSheetMat = Realmz.EditorTools.Cartography.CartographyAssetImporter.CreateOrUpdateUnitMaterial(spec.Id);
+                Material walkMat = CreateOrUpdateVariantUnitMaterial(spec.Id, "walk", 8.5f);
+                Material attackMat = CreateOrUpdateVariantUnitMaterial(spec.Id, "attack", 10.0f);
                 Sprite frameZeroSprite = Realmz.EditorTools.Cartography.CartographyAssetImporter.LoadFirstSpriteFrame(sheetAlbedoPath)
                     ?? AssetDatabase.LoadAssetAtPath<Sprite>(legacyAlbedoPath);
                 Sprite portrait = AssetDatabase.LoadAssetAtPath<Sprite>(unifiedPortraitPath)
@@ -174,13 +184,17 @@ namespace Realmz.EditorTools
                     portraitId = spec.PortraitId,
                     billboardMaterial = unitSheetMat,
                     unitSheetMaterial = unitSheetMat,
+                    walkMaterial = walkMat,
+                    attackMaterial = attackMat,
                     sprite = frameZeroSprite,
                     portrait = portrait
                 });
                 catalog.cartographyUnitSheets.Add(new BywaterAssetCatalog.CartographyUnitSheetEntry
                 {
                     unitKey = spec.Id,
-                    unitSheetMaterial = unitSheetMat
+                    unitSheetMaterial = unitSheetMat,
+                    walkMaterial = walkMat,
+                    attackMaterial = attackMat
                 });
             }
 
@@ -192,6 +206,8 @@ namespace Realmz.EditorTools
                 string sheetAlbedoPath = $"{Realmz.EditorTools.Cartography.CartographyAssetImporter.UnitsDir}/{spec.Id}_sheet.png";
                 string unifiedPortraitPath = $"{Realmz.EditorTools.Cartography.CartographyAssetImporter.PortraitsDir}/portrait_{spec.Key}.png";
                 Material unitSheetMat = Realmz.EditorTools.Cartography.CartographyAssetImporter.CreateOrUpdateUnitMaterial(spec.Id);
+                Material walkMat = CreateOrUpdateVariantUnitMaterial(spec.Id, "walk", 8.5f);
+                Material attackMat = CreateOrUpdateVariantUnitMaterial(spec.Id, "attack", 10.0f);
                 Sprite frameZeroSprite = Realmz.EditorTools.Cartography.CartographyAssetImporter.LoadFirstSpriteFrame(sheetAlbedoPath);
                 Sprite portrait = AssetDatabase.LoadAssetAtPath<Sprite>(unifiedPortraitPath);
 
@@ -203,6 +219,8 @@ namespace Realmz.EditorTools
                     portraitId = spec.PortraitId,
                     billboardMaterial = unitSheetMat,
                     unitSheetMaterial = unitSheetMat,
+                    walkMaterial = walkMat,
+                    attackMaterial = attackMat,
                     sprite = frameZeroSprite,
                     portrait = portrait
                 });
@@ -217,6 +235,8 @@ namespace Realmz.EditorTools
                 MonsterSpec spec = MonsterSpecs[i];
                 string sheetAlbedoPath = $"{Realmz.EditorTools.Cartography.CartographyAssetImporter.UnitsDir}/{spec.Key}_sheet.png";
                 Material unitSheetMat = Realmz.EditorTools.Cartography.CartographyAssetImporter.CreateOrUpdateUnitMaterial(spec.Key);
+                Material walkMat = CreateOrUpdateVariantUnitMaterial(spec.Key, "walk", 8.5f);
+                Material attackMat = CreateOrUpdateVariantUnitMaterial(spec.Key, "attack", 10.0f);
                 Sprite frameZeroSprite = Realmz.EditorTools.Cartography.CartographyAssetImporter.LoadFirstSpriteFrame(sheetAlbedoPath);
                 if (frameZeroSprite == null && !string.IsNullOrEmpty(spec.LegacyM1Key))
                 {
@@ -229,6 +249,8 @@ namespace Realmz.EditorTools
                     displayName = spec.DisplayName,
                     billboardMaterial = unitSheetMat,
                     unitSheetMaterial = unitSheetMat,
+                    walkMaterial = walkMat,
+                    attackMaterial = attackMat,
                     sprite = frameZeroSprite,
                     portraitPixelRect = ComputeFrameZeroPortraitRect(sheetAlbedoPath),
                     archetypeKey = spec.Key
@@ -236,7 +258,35 @@ namespace Realmz.EditorTools
                 catalog.cartographyUnitSheets.Add(new BywaterAssetCatalog.CartographyUnitSheetEntry
                 {
                     unitKey = spec.Key,
-                    unitSheetMaterial = unitSheetMat
+                    unitSheetMaterial = unitSheetMat,
+                    walkMaterial = walkMat,
+                    attackMaterial = attackMat
+                });
+            }
+
+            // 2a. Town NPC sheets (populated when PNGs exist on disk, keeping cartographyUnitSheets at exact count 13)
+            catalog.cartographyNpcSheets = new List<BywaterAssetCatalog.CartographyUnitSheetEntry>(NpcSheetKeys.Length);
+            for (int i = 0; i < NpcSheetKeys.Length; i++)
+            {
+                string npcKey = NpcSheetKeys[i];
+                string npcSheetPath = $"{Realmz.EditorTools.Cartography.CartographyAssetImporter.UnitsDir}/{npcKey}_sheet.png";
+                Texture2D npcAlbedo = AssetDatabase.LoadAssetAtPath<Texture2D>(npcSheetPath);
+                Material npcWalkMat = CreateOrUpdateVariantUnitMaterial(npcKey, "walk", 8.5f);
+                Material npcAttackMat = CreateOrUpdateVariantUnitMaterial(npcKey, "attack", 10.0f);
+                if (npcAlbedo == null && npcWalkMat == null && npcAttackMat == null)
+                {
+                    continue;
+                }
+
+                Material npcIdleMat = npcAlbedo != null
+                    ? Realmz.EditorTools.Cartography.CartographyAssetImporter.CreateOrUpdateUnitMaterial(npcKey)
+                    : null;
+                catalog.cartographyNpcSheets.Add(new BywaterAssetCatalog.CartographyUnitSheetEntry
+                {
+                    unitKey = npcKey,
+                    unitSheetMaterial = npcIdleMat,
+                    walkMaterial = npcWalkMat,
+                    attackMaterial = npcAttackMat
                 });
             }
 
@@ -1222,6 +1272,57 @@ namespace Realmz.EditorTools
             return list;
         }
 
+        private static Material CreateOrUpdateVariantUnitMaterial(string unitId, string stateSuffix, float animFps)
+        {
+            if (string.IsNullOrWhiteSpace(unitId) || string.IsNullOrWhiteSpace(stateSuffix))
+            {
+                return null;
+            }
+
+            string normalized = unitId.Trim().ToLowerInvariant();
+            string unitsDir = Realmz.EditorTools.Cartography.CartographyAssetImporter.UnitsDir;
+            string albedoPath = $"{unitsDir}/{normalized}_{stateSuffix}_sheet.png";
+            Texture2D albedo = AssetDatabase.LoadAssetAtPath<Texture2D>(albedoPath);
+            if (albedo == null)
+            {
+                return null;
+            }
+
+            string normalPath = $"{unitsDir}/{normalized}_{stateSuffix}_sheet_n.png";
+            Texture2D normal = AssetDatabase.LoadAssetAtPath<Texture2D>(normalPath);
+
+            string matsDir = Realmz.EditorTools.Cartography.CartographyAssetImporter.MaterialsDir;
+            EnsureFolder(matsDir);
+            string matPath = $"{matsDir}/Cartography_Unit_{normalized}_{stateSuffix}.mat";
+            Material mat = LoadOrCreateMaterial(matPath, "Realmz/CartographyBillboard", "Universal Render Pipeline/Lit");
+            mat.enableInstancing = false;
+            mat.mainTexture = albedo;
+            if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", albedo);
+            if (mat.HasProperty("_BumpMap")) mat.SetTexture("_BumpMap", normal);
+            if (mat.HasProperty("_BumpScale")) mat.SetFloat("_BumpScale", 0.70f);
+            if (mat.HasProperty("_IsTwoBankAtlas")) mat.SetFloat("_IsTwoBankAtlas", 0f);
+            if (mat.HasProperty("_Cols")) mat.SetFloat("_Cols", 4f);
+            if (mat.HasProperty("_Rows")) mat.SetFloat("_Rows", 1f);
+            if (mat.HasProperty("_VariantIndex")) mat.SetFloat("_VariantIndex", 0f);
+            if (mat.HasProperty("_FrameCount")) mat.SetFloat("_FrameCount", 4f);
+            if (mat.HasProperty("_AnimFps")) mat.SetFloat("_AnimFps", animFps);
+            if (mat.HasProperty("_BillboardMode")) mat.SetFloat("_BillboardMode", 0f);
+            if (mat.HasProperty("_CameraPitchTiltDeg")) mat.SetFloat("_CameraPitchTiltDeg", 0f);
+            if (mat.HasProperty("_WindTipSway")) mat.SetFloat("_WindTipSway", 0f);
+            if (mat.HasProperty("_TrampleStrength")) mat.SetFloat("_TrampleStrength", 0f);
+            if (mat.HasProperty("_WindGustInfluence")) mat.SetFloat("_WindGustInfluence", 0.08f);
+            if (mat.HasProperty("_NormalUpBias")) mat.SetFloat("_NormalUpBias", 0.55f);
+            if (mat.HasProperty("_RootTint")) mat.SetColor("_RootTint", Color.white);
+            if (mat.HasProperty("_TintColor")) mat.SetColor("_TintColor", Color.white);
+            if (mat.HasProperty("_Cutoff")) mat.SetFloat("_Cutoff", 0.45f);
+            if (mat.HasProperty("_ReceiveRootShadowOnly")) mat.SetFloat("_ReceiveRootShadowOnly", 0f);
+            if (mat.HasProperty("_HorizonHazeStrength")) mat.SetFloat("_HorizonHazeStrength", 0.08f);
+            if (mat.HasProperty("_EmissionColor")) mat.SetColor("_EmissionColor", Color.black);
+
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
         private static List<BywaterAssetCatalog.MonsterArtEntry> CollectExpandedMonsters()
         {
             List<BywaterAssetCatalog.MonsterArtEntry> list = new List<BywaterAssetCatalog.MonsterArtEntry>(48);
@@ -1237,6 +1338,9 @@ namespace Realmz.EditorTools
             {
                 string fileName = Path.GetFileName(files[i]);
                 if (fileName.EndsWith("_n.png", StringComparison.OrdinalIgnoreCase) ||
+                    fileName.EndsWith("_walk_sheet.png", StringComparison.OrdinalIgnoreCase) ||
+                    fileName.EndsWith("_attack_sheet.png", StringComparison.OrdinalIgnoreCase) ||
+                    fileName.EndsWith("_hit_sheet.png", StringComparison.OrdinalIgnoreCase) ||
                     !fileName.EndsWith("_sheet.png", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
@@ -1245,6 +1349,8 @@ namespace Realmz.EditorTools
                 string unitKey = fileName.Substring(0, fileName.Length - "_sheet.png".Length).ToLowerInvariant();
                 string sheetAssetPath = $"{Realmz.EditorTools.Cartography.CartographyAssetImporter.UnitsDir}/{fileName}";
                 Material unitSheetMat = Realmz.EditorTools.Cartography.CartographyAssetImporter.CreateOrUpdateUnitMaterial(unitKey);
+                Material walkMat = CreateOrUpdateVariantUnitMaterial(unitKey, "walk", 8.5f);
+                Material attackMat = CreateOrUpdateVariantUnitMaterial(unitKey, "attack", 10.0f);
                 Sprite frameZeroSprite = Realmz.EditorTools.Cartography.CartographyAssetImporter.LoadFirstSpriteFrame(sheetAssetPath);
 
                 string shortName = unitKey.StartsWith("monster_", StringComparison.Ordinal)
@@ -1257,6 +1363,8 @@ namespace Realmz.EditorTools
                     displayName = ToDisplayName(shortName),
                     billboardMaterial = unitSheetMat,
                     unitSheetMaterial = unitSheetMat,
+                    walkMaterial = walkMat,
+                    attackMaterial = attackMat,
                     sprite = frameZeroSprite,
                     portraitPixelRect = ComputeFrameZeroPortraitRect(sheetAssetPath),
                     archetypeKey = unitKey

@@ -106,6 +106,19 @@ namespace Realmz.Cartography
         public float Intensity;
     }
 
+    [Serializable]
+    public struct CartographyNpcPlacement
+    {
+        public string NpcId;
+        public string DisplayName;
+        public string ShopId;
+        public string VenueKind;
+        public int TileX;
+        public int TileY;
+        public Vector3 WorldPosition;
+        public string Greeting;
+    }
+
     /// <summary>
     /// Pure C# data layout for both the 18x18 Bywater proof diorama and arbitrary 90x90 Realmz maps.
     /// Canonical coordinates map tile (x, y) with x in [0, Width-1] (West->East +X) and
@@ -135,6 +148,8 @@ namespace Realmz.Cartography
         private readonly CartographyTile[,] _tiles;
         private readonly List<CartographyPropPlacement> _props = new List<CartographyPropPlacement>(128);
         private readonly List<CartographyLanternSource> _lanterns = new List<CartographyLanternSource>(32);
+        private readonly List<CartographyNpcPlacement> _npcs = new List<CartographyNpcPlacement>(8);
+        private readonly HashSet<Vector2Int> _blockedPropTiles = new HashSet<Vector2Int>();
 
         public int Width { get; }
         public int Height { get; }
@@ -143,6 +158,23 @@ namespace Realmz.Cartography
 
         public IReadOnlyList<CartographyPropPlacement> Props => _props;
         public IReadOnlyList<CartographyLanternSource> Lanterns => _lanterns;
+        public IReadOnlyList<CartographyNpcPlacement> Npcs => _npcs;
+        public IReadOnlyCollection<Vector2Int> BlockedPropTiles => _blockedPropTiles;
+
+        public bool IsBlockedByProp(int x, int y)
+        {
+            return _blockedPropTiles.Contains(new Vector2Int(x, y));
+        }
+
+        public IReadOnlyList<GridCoord> ExportBlockedPropGridCoords()
+        {
+            List<GridCoord> coords = new List<GridCoord>(_blockedPropTiles.Count);
+            foreach (Vector2Int tile in _blockedPropTiles)
+            {
+                coords.Add(new GridCoord(tile.x, tile.y));
+            }
+            return coords;
+        }
 
         public CartographyWorldData()
             : this(GridWidth, GridHeight, false)
@@ -609,6 +641,8 @@ namespace Realmz.Cartography
         {
             _props.Clear();
             _lanterns.Clear();
+            _npcs.Clear();
+            _blockedPropTiles.Clear();
 
             if (map.IsDungeon)
             {
@@ -618,6 +652,9 @@ namespace Realmz.Cartography
             {
                 PopulateOutdoorPropsAndLanterns(map, kinds);
             }
+
+            StripProtectedTilesFromBlockedProps(map, kinds);
+            EnforceReachabilityGuard(map, kinds);
         }
 
         private void PopulateDungeonPropsAndLanterns(TileMapData map, BywaterTileKind[,] kinds)
@@ -773,6 +810,7 @@ namespace Realmz.Cartography
                         Vector3 pos = GridToWorld(x, y, GetElevation(x, y));
                         Vector2 sz = GetDefaultPropSizeMeters(CartographyPropKind.DungeonPillar);
                         AddProp(CartographyPropKind.DungeonPillar, pos.x, pos.y + 0.01f, pos.z, sz.x, sz.y);
+                        TryBlockPropTile(map, kinds, x, y);
                         continue;
                     }
 
@@ -790,6 +828,7 @@ namespace Realmz.Cartography
                             : CartographyPropKind.DungeonChestClosed;
                         Vector2 sz = GetDefaultPropSizeMeters(propKind);
                         AddProp(propKind, pos.x, pos.y + 0.01f, pos.z, sz.x, sz.y);
+                        TryBlockPropTile(map, kinds, x, y);
                         continue;
                     }
 
@@ -983,6 +1022,18 @@ namespace Realmz.Cartography
                     CanopyStrength = 0.42f
                 });
                 placedOutdoorProps.Add(new Vector2Int(tx, ty));
+                if (IsSolidBlockingPropKind(buildingKind))
+                {
+                    for (int i = 0; i < cluster.Count; i++)
+                    {
+                        Vector2Int pt = cluster[i];
+                        if (kinds[pt.x, pt.y] != BywaterTileKind.TownBuildingDoor)
+                        {
+                            TryBlockPropTile(map, kinds, pt.x, pt.y);
+                        }
+                    }
+                    TryBlockPropTile(map, kinds, tx, ty);
+                }
                 _lanterns.Add(new CartographyLanternSource
                 {
                     WorldXZ = new Vector2(pos.x, pos.z),
@@ -1014,16 +1065,22 @@ namespace Realmz.Cartography
                         CanopyStrength = 0.42f
                     });
                     placedOutdoorProps.Add(new Vector2Int(ax, ay));
+                    TryBlockPropTile(map, kinds, ax, ay);
                     placedApothecary = true;
                 }
             }
+
+            // Ensure Tannery has a MarketStallA beside it, then spawn shopkeeper/priestess NPCs before flora & plaza dressing.
+            EnsureTanneryMarketStall(map, kinds, placedOutdoorProps);
+            HashSet<Vector2Int> npcTiles = PopulateOutdoorShopkeeperNpcs(map, kinds, isBuildingTile, placedOutdoorProps);
 
             // 2. Natural flora, fences, ruins, and road/portal lanterns
             for (int y = 0; y < h; y++)
             {
                 for (int x = 0; x < w; x++)
                 {
-                    if (isBuildingTile[x, y] || IsProtectedRoadOrDoorway(map, kinds, x, y))
+                    Vector2Int tileCoord = new Vector2Int(x, y);
+                    if (isBuildingTile[x, y] || IsProtectedRoadOrDoorway(map, kinds, x, y) || npcTiles.Contains(tileCoord))
                     {
                         continue;
                     }
@@ -1039,11 +1096,12 @@ namespace Realmz.Cartography
                             // Wilderness 181..185 outside the town cluster become stone ruins or canopy trees
                             if (x > 32 || y > 32)
                             {
-                                if ((vHash % 5) == 0 && !IsTooCloseToList(placedOutdoorProps, x, y, 25))
+                                if ((vHash % 5) == 0 && !_blockedPropTiles.Contains(tileCoord) && !IsTooCloseToList(placedOutdoorProps, x, y, 25))
                                 {
                                     Vector2 ruinSz = GetDefaultPropSizeMeters(CartographyPropKind.StoneRuins);
                                     AddProp(CartographyPropKind.StoneRuins, pos.x, pos.y, pos.z, ruinSz.x, ruinSz.y);
-                                    placedOutdoorProps.Add(new Vector2Int(x, y));
+                                    placedOutdoorProps.Add(tileCoord);
+                                    TryBlockPropTile(map, kinds, x, y);
                                 }
                             }
                             break;
@@ -1056,25 +1114,41 @@ namespace Realmz.Cartography
                                 ? CartographyPropKind.StoneFenceV
                                 : CartographyPropKind.StoneFenceH;
                             AddProp(fenceKind, pos.x, pos.y, pos.z, 1.15f, 1.25f);
+                            if (kind != BywaterTileKind.Cobblestone && kind != BywaterTileKind.DirtPath)
+                            {
+                                TryBlockPropTile(map, kinds, x, y);
+                            }
                             break;
                         }
 
                         case BywaterOutdoorPropKind.OakTree:
+                        {
+                            Vector3 treePos = ComputeRoadsideTreeWorldPosition(kinds, x, y, w, h, pos);
                             AddCanopyTree((vHash & 2) == 0 ? CartographyPropKind.TreeOakA : CartographyPropKind.TreeOakB,
-                                pos.x, pos.y, pos.z, 2.5f, 3.0f, 2.0f);
+                                treePos.x, treePos.y, treePos.z, 2.5f, 3.0f, 2.0f);
+                            TryBlockPropTile(map, kinds, x, y);
                             break;
+                        }
 
                         case BywaterOutdoorPropKind.PineTree:
+                        {
+                            Vector3 treePos = ComputeRoadsideTreeWorldPosition(kinds, x, y, w, h, pos);
                             AddCanopyTree((vHash & 2) == 0 ? CartographyPropKind.TreePineA : CartographyPropKind.TreePineB,
-                                pos.x, pos.y, pos.z, 2.2f, 3.3f, 1.7f);
+                                treePos.x, treePos.y, treePos.z, 2.2f, 3.3f, 1.7f);
+                            TryBlockPropTile(map, kinds, x, y);
                             break;
+                        }
 
                         case BywaterOutdoorPropKind.MarketCrates:
                             if (!IsNearPortalOrDoorway(map, kinds, x, y, 1) && !IsTooCloseToList(placedOutdoorProps, x, y, 9))
                             {
                                 Vector2 bcSz = GetDefaultPropSizeMeters(CartographyPropKind.BarrelsCrates);
                                 AddProp(CartographyPropKind.BarrelsCrates, pos.x, pos.y, pos.z, bcSz.x, bcSz.y);
-                                placedOutdoorProps.Add(new Vector2Int(x, y));
+                                placedOutdoorProps.Add(tileCoord);
+                                if (kind != BywaterTileKind.Cobblestone && kind != BywaterTileKind.DirtPath)
+                                {
+                                    TryBlockPropTile(map, kinds, x, y);
+                                }
                             }
                             break;
                     }
@@ -1118,12 +1192,20 @@ namespace Realmz.Cartography
             {
                 int fx = fixedPlazaAnchors[i].px;
                 int fy = fixedPlazaAnchors[i].py;
-                if (IsCleanPlazaOrEdgeTile(map, kinds, fx, fy) && !IsTooCloseToList(placedOutdoorProps, fx, fy, 4))
+                Vector2Int anchorCoord = new Vector2Int(fx, fy);
+                if (!npcTiles.Contains(anchorCoord) &&
+                    !_blockedPropTiles.Contains(anchorCoord) &&
+                    IsCleanPlazaOrEdgeTile(map, kinds, fx, fy) &&
+                    !IsTooCloseToList(placedOutdoorProps, fx, fy, 4))
                 {
                     Vector3 fPos = GridToWorld(fx, fy, GetElevation(fx, fy));
                     Vector2 fSz = GetDefaultPropSizeMeters(fixedPlazaAnchors[i].pKind);
                     AddProp(fixedPlazaAnchors[i].pKind, fPos.x, fPos.y, fPos.z, fSz.x, fSz.y);
-                    placedOutdoorProps.Add(new Vector2Int(fx, fy));
+                    placedOutdoorProps.Add(anchorCoord);
+                    if (IsSolidBlockingPropKind(fixedPlazaAnchors[i].pKind))
+                    {
+                        TryBlockPropTile(map, kinds, fx, fy);
+                    }
                 }
             }
 
@@ -1143,7 +1225,11 @@ namespace Realmz.Cartography
             {
                 for (int x = 3; x <= 26 && x < w; x++)
                 {
-                    if (!IsCleanPlazaOrEdgeTile(map, kinds, x, y) || IsTooCloseToList(placedOutdoorProps, x, y, 12))
+                    Vector2Int plazaCoord = new Vector2Int(x, y);
+                    if (npcTiles.Contains(plazaCoord) ||
+                        _blockedPropTiles.Contains(plazaCoord) ||
+                        !IsCleanPlazaOrEdgeTile(map, kinds, x, y) ||
+                        IsTooCloseToList(placedOutdoorProps, x, y, 12))
                     {
                         continue;
                     }
@@ -1160,7 +1246,11 @@ namespace Realmz.Cartography
                     Vector3 pos = GridToWorld(x, y, GetElevation(x, y));
                     Vector2 sz = GetDefaultPropSizeMeters(dressKind);
                     AddProp(dressKind, pos.x, pos.y, pos.z, sz.x, sz.y);
-                    placedOutdoorProps.Add(new Vector2Int(x, y));
+                    placedOutdoorProps.Add(plazaCoord);
+                    if (IsSolidBlockingPropKind(dressKind))
+                    {
+                        TryBlockPropTile(map, kinds, x, y);
+                    }
                 }
             }
 
@@ -1174,7 +1264,11 @@ namespace Realmz.Cartography
                         continue;
                     }
 
-                    if (!IsCleanPlazaOrEdgeTile(map, kinds, x, y) || IsTooCloseToList(placedOutdoorProps, x, y, 64))
+                    Vector2Int outskirtCoord = new Vector2Int(x, y);
+                    if (npcTiles.Contains(outskirtCoord) ||
+                        _blockedPropTiles.Contains(outskirtCoord) ||
+                        !IsCleanPlazaOrEdgeTile(map, kinds, x, y) ||
+                        IsTooCloseToList(placedOutdoorProps, x, y, 64))
                     {
                         continue;
                     }
@@ -1199,7 +1293,11 @@ namespace Realmz.Cartography
                     Vector3 pos = GridToWorld(x, y, GetElevation(x, y));
                     Vector2 sz = GetDefaultPropSizeMeters(outskirtKind);
                     AddProp(outskirtKind, pos.x, pos.y, pos.z, sz.x, sz.y);
-                    placedOutdoorProps.Add(new Vector2Int(x, y));
+                    placedOutdoorProps.Add(outskirtCoord);
+                    if (IsSolidBlockingPropKind(outskirtKind))
+                    {
+                        TryBlockPropTile(map, kinds, x, y);
+                    }
 
                     if (outskirtKind == CartographyPropKind.Campfire4f)
                     {
@@ -1704,6 +1802,8 @@ namespace Realmz.Cartography
         {
             _props.Clear();
             _lanterns.Clear();
+            _npcs.Clear();
+            _blockedPropTiles.Clear();
 
             for (int legacyZ = 0; legacyZ < GridHeight; legacyZ++)
             {
@@ -1998,6 +2098,959 @@ namespace Realmz.Cartography
                 CanopyRadius = canopyRadius,
                 CanopyStrength = 0.72f
             });
+        }
+
+        private static bool IsSolidBlockingPropKind(CartographyPropKind kind)
+        {
+            switch (kind)
+            {
+                case CartographyPropKind.StoneWell:
+                case CartographyPropKind.MarketStallA:
+                case CartographyPropKind.MarketStallB:
+                case CartographyPropKind.WoodenWagon:
+                case CartographyPropKind.BarrelsCrates:
+                case CartographyPropKind.Signpost:
+                case CartographyPropKind.ShrineStatue:
+                case CartographyPropKind.StoneRuins:
+                case CartographyPropKind.CampTent:
+                case CartographyPropKind.Campfire4f:
+                case CartographyPropKind.TreeOakA:
+                case CartographyPropKind.TreeOakB:
+                case CartographyPropKind.TreePineA:
+                case CartographyPropKind.TreePineB:
+                case CartographyPropKind.TreeWillowA:
+                case CartographyPropKind.BywaterInn:
+                case CartographyPropKind.Blacksmith:
+                case CartographyPropKind.Apothecary:
+                case CartographyPropKind.Temple:
+                case CartographyPropKind.Guildhall:
+                case CartographyPropKind.CottageB:
+                case CartographyPropKind.CottageC:
+                case CartographyPropKind.Watchtower:
+                case CartographyPropKind.StoneFenceH:
+                case CartographyPropKind.StoneFenceV:
+                case CartographyPropKind.DungeonChestClosed:
+                case CartographyPropKind.DungeonChestOpen:
+                case CartographyPropKind.DungeonPillar:
+                case CartographyPropKind.DungeonSarcophagus:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static bool IsProtectedTileForBlocking(TileMapData map, BywaterTileKind[,] kinds, int x, int y)
+        {
+            if (!map.InBounds(x, y))
+            {
+                return true;
+            }
+
+            if (map.StartSpawn.X == x && map.StartSpawn.Y == y)
+            {
+                return true;
+            }
+
+            if (!map.IsDungeon && x == 10 && y == 9)
+            {
+                return true;
+            }
+
+            if (map.GetPortalAt(x, y) != null || map.GetPointOfInterestAt(x, y) != null)
+            {
+                return true;
+            }
+
+            BywaterTileKind k = kinds[x, y];
+            return k == BywaterTileKind.TownBuildingDoor ||
+                   k == BywaterTileKind.DungeonDoor ||
+                   k == BywaterTileKind.DungeonStairs ||
+                   k == BywaterTileKind.Cobblestone ||
+                   k == BywaterTileKind.DirtPath;
+        }
+
+        private void TryBlockPropTile(TileMapData map, BywaterTileKind[,] kinds, int x, int y)
+        {
+            if (!IsProtectedTileForBlocking(map, kinds, x, y))
+            {
+                _blockedPropTiles.Add(new Vector2Int(x, y));
+            }
+        }
+
+        private void StripProtectedTilesFromBlockedProps(TileMapData map, BywaterTileKind[,] kinds)
+        {
+            if (_blockedPropTiles.Count == 0)
+            {
+                return;
+            }
+
+            List<Vector2Int> toRemove = null;
+            foreach (Vector2Int tile in _blockedPropTiles)
+            {
+                if (IsProtectedTileForBlocking(map, kinds, tile.x, tile.y))
+                {
+                    toRemove ??= new List<Vector2Int>(8);
+                    toRemove.Add(tile);
+                }
+            }
+
+            if (toRemove != null)
+            {
+                for (int i = 0; i < toRemove.Count; i++)
+                {
+                    _blockedPropTiles.Remove(toRemove[i]);
+                }
+            }
+        }
+
+        private Vector3 ComputeRoadsideTreeWorldPosition(
+            BywaterTileKind[,] kinds,
+            int x,
+            int y,
+            int w,
+            int h,
+            Vector3 basePos)
+        {
+            float awayX = 0f;
+            float awayY = 0f;
+
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    if (dx == 0 && dy == 0)
+                    {
+                        continue;
+                    }
+
+                    int nx = x + dx;
+                    int ny = y + dy;
+                    if (nx < 0 || nx >= w || ny < 0 || ny >= h)
+                    {
+                        continue;
+                    }
+
+                    BywaterTileKind nk = kinds[nx, ny];
+                    if (nk == BywaterTileKind.Cobblestone ||
+                        nk == BywaterTileKind.DirtPath ||
+                        nk == BywaterTileKind.TownBuildingDoor)
+                    {
+                        awayX += (x - nx);
+                        awayY += (y - ny);
+                    }
+                }
+            }
+
+            if (awayX == 0f && awayY == 0f)
+            {
+                return basePos;
+            }
+
+            bool IsRoadOrWater(int tx, int ty)
+            {
+                if (tx < 0 || tx >= w || ty < 0 || ty >= h)
+                {
+                    return true;
+                }
+
+                if (_tiles[tx, ty].IsWater)
+                {
+                    return true;
+                }
+
+                BywaterTileKind tk = kinds[tx, ty];
+                return tk == BywaterTileKind.Cobblestone ||
+                       tk == BywaterTileKind.DirtPath ||
+                       tk == BywaterTileKind.TownBuildingDoor;
+            }
+
+            if (awayX > 0f && IsRoadOrWater(x + 1, y)) awayX = 0f;
+            else if (awayX < 0f && IsRoadOrWater(x - 1, y)) awayX = 0f;
+
+            if (awayY > 0f && IsRoadOrWater(x, y + 1)) awayY = 0f;
+            else if (awayY < 0f && IsRoadOrWater(x, y - 1)) awayY = 0f;
+
+            if (awayX != 0f && awayY != 0f)
+            {
+                int sx = awayX > 0f ? 1 : -1;
+                int sy = awayY > 0f ? 1 : -1;
+                if (IsRoadOrWater(x + sx, y + sy))
+                {
+                    if (Mathf.Abs(awayX) >= Mathf.Abs(awayY))
+                    {
+                        awayY = 0f;
+                    }
+                    else
+                    {
+                        awayX = 0f;
+                    }
+                }
+            }
+
+            if (awayX == 0f && awayY == 0f)
+            {
+                return basePos;
+            }
+
+            float len = Mathf.Sqrt(awayX * awayX + awayY * awayY);
+            float shiftX = (awayX / len) * 0.38f;
+            float shiftZ = -(awayY / len) * 0.38f;
+            Vector3 shifted = new Vector3(basePos.x + shiftX, basePos.y, basePos.z + shiftZ);
+            WorldToGrid(shifted, out int targetX, out int targetY);
+            if (IsRoadOrWater(targetX, targetY))
+            {
+                return basePos;
+            }
+
+            return shifted;
+        }
+
+        private void EnsureTanneryMarketStall(
+            TileMapData map,
+            BywaterTileKind[,] kinds,
+            List<Vector2Int> placedOutdoorProps)
+        {
+            MapPointOfInterest tanneryPoi = null;
+            for (int i = 0; i < map.PointsOfInterest.Count; i++)
+            {
+                if (string.Equals(map.PointsOfInterest[i].ShopId, "4", StringComparison.OrdinalIgnoreCase))
+                {
+                    tanneryPoi = map.PointsOfInterest[i];
+                    break;
+                }
+            }
+
+            if (tanneryPoi == null)
+            {
+                return;
+            }
+
+            Vector3 poiWorld = GridToWorld(tanneryPoi.X, tanneryPoi.Y, GetElevation(tanneryPoi.X, tanneryPoi.Y));
+            for (int i = 0; i < _props.Count; i++)
+            {
+                CartographyPropKind pk = _props[i].Kind;
+                if (pk == CartographyPropKind.MarketStallA || pk == CartographyPropKind.MarketStallB)
+                {
+                    float dx = _props[i].WorldPosition.x - poiWorld.x;
+                    float dz = _props[i].WorldPosition.z - poiWorld.z;
+                    if (dx * dx + dz * dz <= 20.25f)
+                    {
+                        return;
+                    }
+                }
+            }
+
+            int w = map.Width;
+            int h = map.Height;
+            for (int pass = 0; pass < 2; pass++)
+            {
+                bool requireRoadAdjacent = pass == 0;
+                int bestX = -1;
+                int bestY = -1;
+                int bestDistSq = int.MaxValue;
+
+                for (int r = 1; r <= 4; r++)
+                {
+                    for (int dy = -r; dy <= r; dy++)
+                    {
+                        for (int dx = -r; dx <= r; dx++)
+                        {
+                            if (Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dy)) != r)
+                            {
+                                continue;
+                            }
+
+                            int sx = tanneryPoi.X + dx;
+                            int sy = tanneryPoi.Y + dy;
+                            if (!map.InBounds(sx, sy) || _tiles[sx, sy].IsWater)
+                            {
+                                continue;
+                            }
+
+                            if (kinds[sx, sy] != BywaterTileKind.Grass || !map.GetTileRule(map.GetTile(sx, sy)).Passable)
+                            {
+                                continue;
+                            }
+
+                            if (IsProtectedRoadOrDoorway(map, kinds, sx, sy) ||
+                                map.GetPointOfInterestAt(sx, sy) != null ||
+                                IsNearPortal(map, sx, sy, 1) ||
+                                (sx == 13 && sy == 10) ||
+                                _blockedPropTiles.Contains(new Vector2Int(sx, sy)))
+                            {
+                                continue;
+                            }
+
+                            if (requireRoadAdjacent && CountRoadNeighbors(kinds, sx, sy, w, h) == 0)
+                            {
+                                continue;
+                            }
+
+                            int dSq = dx * dx + dy * dy;
+                            if (dSq < bestDistSq)
+                            {
+                                bestDistSq = dSq;
+                                bestX = sx;
+                                bestY = sy;
+                            }
+                        }
+                    }
+
+                    if (bestX >= 0)
+                    {
+                        Vector3 stallPos = GridToWorld(bestX, bestY, GetElevation(bestX, bestY));
+                        Vector2 stallSize = GetDefaultPropSizeMeters(CartographyPropKind.MarketStallA);
+                        AddProp(CartographyPropKind.MarketStallA, stallPos.x, stallPos.y, stallPos.z, stallSize.x, stallSize.y);
+                        placedOutdoorProps.Add(new Vector2Int(bestX, bestY));
+                        TryBlockPropTile(map, kinds, bestX, bestY);
+                        return;
+                    }
+                }
+            }
+        }
+
+        private HashSet<Vector2Int> PopulateOutdoorShopkeeperNpcs(
+            TileMapData map,
+            BywaterTileKind[,] kinds,
+            bool[,] isBuildingTile,
+            List<Vector2Int> placedOutdoorProps)
+        {
+            HashSet<Vector2Int> npcTiles = new HashSet<Vector2Int>();
+
+            (string shopId, string kindMatch, string npcId, string displayName, string venueKind, string greeting)[] specs =
+            {
+                ("1", null, "npc_blacksmith", "Master Blacksmith Borin", "shop", "Fine steel and shieldcraft for the road ahead."),
+                ("4", null, "npc_tanner", "Tanner Mira", "shop", "Hardened leather, hides, and rugged trail gear."),
+                ("10", null, "npc_apothecary", "Alchemist Orin", "shop", "Elixirs, poultices, and warding draughts brewed fresh."),
+                (null, "temple", "npc_priestess", "High Priestess Elara", "temple", "Peace upon your band. Seek healing, cleansing, or arcane renewal.")
+            };
+
+            for (int s = 0; s < specs.Length; s++)
+            {
+                MapPointOfInterest targetPoi = null;
+                for (int i = 0; i < map.PointsOfInterest.Count; i++)
+                {
+                    MapPointOfInterest poi = map.PointsOfInterest[i];
+                    if (specs[s].shopId != null)
+                    {
+                        if (string.Equals(poi.ShopId, specs[s].shopId, StringComparison.OrdinalIgnoreCase))
+                        {
+                            targetPoi = poi;
+                            break;
+                        }
+                    }
+                    else if (string.Equals(poi.Kind, specs[s].kindMatch, StringComparison.OrdinalIgnoreCase))
+                    {
+                        targetPoi = poi;
+                        break;
+                    }
+                }
+
+                if (targetPoi == null)
+                {
+                    continue;
+                }
+
+                if (TryFindNpcSpotNear(map, kinds, isBuildingTile, npcTiles, targetPoi.X, targetPoi.Y, out int nx, out int ny))
+                {
+                    Vector2Int coord = new Vector2Int(nx, ny);
+                    npcTiles.Add(coord);
+                    placedOutdoorProps.Add(coord);
+                    TryBlockPropTile(map, kinds, nx, ny);
+                    _npcs.Add(new CartographyNpcPlacement
+                    {
+                        NpcId = specs[s].npcId,
+                        DisplayName = specs[s].displayName,
+                        ShopId = specs[s].shopId ?? string.Empty,
+                        VenueKind = specs[s].venueKind,
+                        TileX = nx,
+                        TileY = ny,
+                        WorldPosition = GridToWorld(nx, ny, GetElevation(nx, ny)),
+                        Greeting = specs[s].greeting
+                    });
+                }
+            }
+
+            return npcTiles;
+        }
+
+        private bool TryFindNpcSpotNear(
+            TileMapData map,
+            BywaterTileKind[,] kinds,
+            bool[,] isBuildingTile,
+            HashSet<Vector2Int> npcTiles,
+            int originX,
+            int originY,
+            out int outX,
+            out int outY)
+        {
+            int w = map.Width;
+            int h = map.Height;
+
+            int globalBestX = -1;
+            int globalBestY = -1;
+            int globalBestScore = int.MaxValue;
+            bool globalBestOccluded = true;
+
+            for (int pass = 0; pass < 2; pass++)
+            {
+                bool pureGrassOnly = pass == 0;
+
+                for (int r = 1; r <= 4; r++)
+                {
+                    for (int dy = -r; dy <= r; dy++)
+                    {
+                        for (int dx = -r; dx <= r; dx++)
+                        {
+                            if (Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dy)) != r)
+                            {
+                                continue;
+                            }
+
+                            int cx = originX + dx;
+                            int cy = originY + dy;
+                            if (!map.InBounds(cx, cy) || _tiles[cx, cy].IsWater)
+                            {
+                                continue;
+                            }
+
+                            if (!map.GetTileRule(map.GetTile(cx, cy)).Passable)
+                            {
+                                continue;
+                            }
+
+                            BywaterTileKind k = kinds[cx, cy];
+                            if (pureGrassOnly)
+                            {
+                                if (k != BywaterTileKind.Grass)
+                                {
+                                    continue;
+                                }
+                            }
+                            else if (k != BywaterTileKind.Grass
+                                && k != BywaterTileKind.ForestCover
+                                && k != BywaterTileKind.DirtPath
+                                && k != BywaterTileKind.Cobblestone)
+                            {
+                                continue;
+                            }
+
+                            Vector2Int candidate = new Vector2Int(cx, cy);
+                            if (isBuildingTile[cx, cy] ||
+                                IsProtectedRoadOrDoorway(map, kinds, cx, cy) ||
+                                map.GetPointOfInterestAt(cx, cy) != null ||
+                                (cx == 13 && cy == 10) ||
+                                _blockedPropTiles.Contains(candidate) ||
+                                npcTiles.Contains(candidate))
+                            {
+                                continue;
+                            }
+
+                            int openNeighbors = CountApproachableNeighbors(map, cx, cy);
+                            if (openNeighbors < (k == BywaterTileKind.DirtPath || k == BywaterTileKind.Cobblestone ? 2 : 1))
+                            {
+                                continue;
+                            }
+
+                            bool blockedSouthByBuilding = IsCandidateOccludedSouth(map, isBuildingTile, cx, cy);
+                            int roadNeighbors = CountRoadNeighbors(kinds, cx, cy, w, h);
+                            int dSq = dx * dx + dy * dy;
+                            int foregroundBias = dy < 0 ? 18 : 0;
+                            int surfacePenalty = k == BywaterTileKind.Grass ? 0 : (k == BywaterTileKind.ForestCover ? 8 : 35);
+                            int score = dSq * 10
+                                + (blockedSouthByBuilding ? 240 : 0)
+                                + foregroundBias
+                                + surfacePenalty
+                                - (roadNeighbors > 0 ? 15 : 0)
+                                - Mathf.Min(openNeighbors, 4);
+                            if (score < globalBestScore)
+                            {
+                                globalBestScore = score;
+                                globalBestX = cx;
+                                globalBestY = cy;
+                                globalBestOccluded = blockedSouthByBuilding;
+                            }
+                        }
+                    }
+                }
+
+                if (globalBestX >= 0 && !globalBestOccluded)
+                {
+                    outX = globalBestX;
+                    outY = globalBestY;
+                    return true;
+                }
+            }
+
+            if (globalBestX >= 0)
+            {
+                outX = globalBestX;
+                outY = globalBestY;
+                return true;
+            }
+
+            outX = 0;
+            outY = 0;
+            return false;
+        }
+
+        private bool IsCandidateOccludedSouth(TileMapData map, bool[,] isBuildingTile, int cx, int cy)
+        {
+            for (int by = 1; by <= 3; by++)
+            {
+                for (int bx = -1; bx <= 1; bx++)
+                {
+                    int sbX = cx + bx;
+                    int sbY = cy + by;
+                    if (map.InBounds(sbX, sbY) && isBuildingTile[sbX, sbY])
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            Vector3 candWorld = GridToWorld(cx, cy, GetElevation(cx, cy));
+            for (int i = 0; i < _props.Count; i++)
+            {
+                CartographyPropPlacement prop = _props[i];
+                if (!IsTallBuildingPropKind(prop.Kind))
+                {
+                    continue;
+                }
+
+                float southDeltaZ = candWorld.z - prop.WorldPosition.z;
+                if (southDeltaZ >= -0.35f &&
+                    southDeltaZ <= prop.SizeMeters.y * 0.90f &&
+                    Mathf.Abs(candWorld.x - prop.WorldPosition.x) <= prop.SizeMeters.x * 0.52f)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool IsTallBuildingPropKind(CartographyPropKind kind)
+        {
+            switch (kind)
+            {
+                case CartographyPropKind.BywaterInn:
+                case CartographyPropKind.Blacksmith:
+                case CartographyPropKind.Apothecary:
+                case CartographyPropKind.Temple:
+                case CartographyPropKind.Guildhall:
+                case CartographyPropKind.CottageB:
+                case CartographyPropKind.CottageC:
+                case CartographyPropKind.Watchtower:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private int CountApproachableNeighbors(TileMapData map, int x, int y)
+        {
+            int count = 0;
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    if (dx == 0 && dy == 0)
+                    {
+                        continue;
+                    }
+
+                    int nx = x + dx;
+                    int ny = y + dy;
+                    if (IsTileWalkableForGuard(map, nx, ny, ignoreBlocks: false))
+                    {
+                        count++;
+                    }
+                }
+            }
+            return count;
+        }
+
+        private void EnforceReachabilityGuard(TileMapData map, BywaterTileKind[,] kinds)
+        {
+            if (_blockedPropTiles.Count == 0)
+            {
+                return;
+            }
+
+            Vector2Int primarySeed;
+            if (!map.IsDungeon)
+            {
+                if (IsTileWalkableForGuard(map, 10, 9, ignoreBlocks: true))
+                {
+                    primarySeed = new Vector2Int(10, 9);
+                }
+                else if (IsTileWalkableForGuard(map, map.StartSpawn.X, map.StartSpawn.Y, ignoreBlocks: true))
+                {
+                    primarySeed = new Vector2Int(map.StartSpawn.X, map.StartSpawn.Y);
+                }
+                else
+                {
+                    return;
+                }
+            }
+            else
+            {
+                if (IsTileWalkableForGuard(map, 33, 72, ignoreBlocks: true))
+                {
+                    primarySeed = new Vector2Int(33, 72);
+                }
+                else if (map.Portals.Count > 0 && IsTileWalkableForGuard(map, map.Portals[0].X, map.Portals[0].Y, ignoreBlocks: true))
+                {
+                    primarySeed = new Vector2Int(map.Portals[0].X, map.Portals[0].Y);
+                }
+                else if (IsTileWalkableForGuard(map, map.StartSpawn.X, map.StartSpawn.Y, ignoreBlocks: true))
+                {
+                    primarySeed = new Vector2Int(map.StartSpawn.X, map.StartSpawn.Y);
+                }
+                else
+                {
+                    return;
+                }
+            }
+
+            bool[,] baseReachable = ComputeReachableBfs(map, primarySeed, ignoreBlocks: true);
+            HashSet<Vector2Int> npcTileSet = new HashSet<Vector2Int>();
+            for (int i = 0; i < _npcs.Count; i++)
+            {
+                npcTileSet.Add(new Vector2Int(_npcs[i].TileX, _npcs[i].TileY));
+            }
+
+            int maxIterations = Mathf.Min(128, _blockedPropTiles.Count + 4);
+            for (int iter = 0; iter < maxIterations; iter++)
+            {
+                bool[,] reached = ComputeReachableBfs(map, primarySeed, ignoreBlocks: false);
+                Vector2Int unreachableTarget = new Vector2Int(-1, -1);
+
+                if (map.InBounds(map.StartSpawn.X, map.StartSpawn.Y) &&
+                    baseReachable[map.StartSpawn.X, map.StartSpawn.Y] &&
+                    !reached[map.StartSpawn.X, map.StartSpawn.Y])
+                {
+                    unreachableTarget = new Vector2Int(map.StartSpawn.X, map.StartSpawn.Y);
+                }
+
+                if (unreachableTarget.x < 0)
+                {
+                    for (int i = 0; i < map.PointsOfInterest.Count; i++)
+                    {
+                        MapPointOfInterest poi = map.PointsOfInterest[i];
+                        if (map.InBounds(poi.X, poi.Y) && baseReachable[poi.X, poi.Y] && !reached[poi.X, poi.Y])
+                        {
+                            unreachableTarget = new Vector2Int(poi.X, poi.Y);
+                            break;
+                        }
+                    }
+                }
+
+                if (unreachableTarget.x < 0)
+                {
+                    for (int i = 0; i < map.Portals.Count; i++)
+                    {
+                        MapPortal portal = map.Portals[i];
+                        if (map.InBounds(portal.X, portal.Y) && baseReachable[portal.X, portal.Y] && !reached[portal.X, portal.Y])
+                        {
+                            unreachableTarget = new Vector2Int(portal.X, portal.Y);
+                            break;
+                        }
+                    }
+                }
+
+                if (unreachableTarget.x < 0)
+                {
+                    for (int i = 0; i < _npcs.Count; i++)
+                    {
+                        CartographyNpcPlacement npc = _npcs[i];
+                        bool hasApproach = false;
+                        Vector2Int fallbackApproach = new Vector2Int(-1, -1);
+
+                        for (int dy = -1; dy <= 1 && !hasApproach; dy++)
+                        {
+                            for (int dx = -1; dx <= 1; dx++)
+                            {
+                                if (dx == 0 && dy == 0) continue;
+                                int ax = npc.TileX + dx;
+                                int ay = npc.TileY + dy;
+                                if (!map.InBounds(ax, ay) || !baseReachable[ax, ay])
+                                {
+                                    continue;
+                                }
+
+                                if (reached[ax, ay] && !_blockedPropTiles.Contains(new Vector2Int(ax, ay)))
+                                {
+                                    hasApproach = true;
+                                    break;
+                                }
+
+                                if (fallbackApproach.x < 0 || !npcTileSet.Contains(new Vector2Int(ax, ay)))
+                                {
+                                    fallbackApproach = new Vector2Int(ax, ay);
+                                }
+                            }
+                        }
+
+                        if (!hasApproach && fallbackApproach.x >= 0)
+                        {
+                            unreachableTarget = fallbackApproach;
+                            break;
+                        }
+                    }
+                }
+
+                if (unreachableTarget.x < 0)
+                {
+                    break;
+                }
+
+                if (!UnblockMinimumCostPathToTarget(map, primarySeed, unreachableTarget, npcTileSet))
+                {
+                    break;
+                }
+            }
+
+            // Keep IsProtectedTileForBlocking invariant even after any guard step.
+            StripProtectedTilesFromBlockedProps(map, kinds);
+        }
+
+        private bool IsTileWalkableForGuard(TileMapData map, int x, int y, bool ignoreBlocks)
+        {
+            if (!map.InBounds(x, y))
+            {
+                return false;
+            }
+
+            if (_tiles[x, y].IsWater)
+            {
+                return false;
+            }
+
+            TileRule rule = map.GetTileRule(map.GetTile(x, y));
+            if (!rule.Passable || rule.NeedsBoat)
+            {
+                return false;
+            }
+
+            return ignoreBlocks || !_blockedPropTiles.Contains(new Vector2Int(x, y));
+        }
+
+        private bool[,] ComputeReachableBfs(TileMapData map, Vector2Int seed, bool ignoreBlocks)
+        {
+            int w = map.Width;
+            int h = map.Height;
+            bool[,] visited = new bool[w, h];
+            if (!IsTileWalkableForGuard(map, seed.x, seed.y, ignoreBlocks))
+            {
+                return visited;
+            }
+
+            Queue<Vector2Int> queue = new Queue<Vector2Int>(256);
+            visited[seed.x, seed.y] = true;
+            queue.Enqueue(seed);
+
+            while (queue.Count > 0)
+            {
+                Vector2Int cur = queue.Dequeue();
+                for (int dy = -1; dy <= 1; dy++)
+                {
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        if (dx == 0 && dy == 0)
+                        {
+                            continue;
+                        }
+
+                        int nx = cur.x + dx;
+                        int ny = cur.y + dy;
+                        if (nx < 0 || nx >= w || ny < 0 || ny >= h || visited[nx, ny])
+                        {
+                            continue;
+                        }
+
+                        if (!IsTileWalkableForGuard(map, nx, ny, ignoreBlocks))
+                        {
+                            continue;
+                        }
+
+                        if (dx != 0 && dy != 0 &&
+                            !IsTileWalkableForGuard(map, cur.x + dx, cur.y, ignoreBlocks) &&
+                            !IsTileWalkableForGuard(map, cur.x, cur.y + dy, ignoreBlocks))
+                        {
+                            continue;
+                        }
+
+                        visited[nx, ny] = true;
+                        queue.Enqueue(new Vector2Int(nx, ny));
+                    }
+                }
+            }
+
+            return visited;
+        }
+
+        private bool UnblockMinimumCostPathToTarget(
+            TileMapData map,
+            Vector2Int seed,
+            Vector2Int target,
+            HashSet<Vector2Int> npcTileSet)
+        {
+            if (TryUnblockPath(map, seed, target, npcTileSet, allowDiagonal: false))
+            {
+                return true;
+            }
+
+            return TryUnblockPath(map, seed, target, npcTileSet, allowDiagonal: true);
+        }
+
+        private bool TryUnblockPath(
+            TileMapData map,
+            Vector2Int seed,
+            Vector2Int target,
+            HashSet<Vector2Int> npcTileSet,
+            bool allowDiagonal)
+        {
+            int w = map.Width;
+            int h = map.Height;
+            int[,] dist = new int[w, h];
+            int[,] parentX = new int[w, h];
+            int[,] parentY = new int[w, h];
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    dist[x, y] = int.MaxValue;
+                    parentX[x, y] = -1;
+                    parentY[x, y] = -1;
+                }
+            }
+
+            List<(int cost, int x, int y)> heap = new List<(int, int, int)>(256);
+            void HeapPush(int cost, int x, int y)
+            {
+                heap.Add((cost, x, y));
+                int idx = heap.Count - 1;
+                while (idx > 0)
+                {
+                    int p = (idx - 1) >> 1;
+                    if (heap[p].cost <= heap[idx].cost) break;
+                    (int, int, int) tmp = heap[p];
+                    heap[p] = heap[idx];
+                    heap[idx] = tmp;
+                    idx = p;
+                }
+            }
+
+            (int cost, int x, int y) HeapPop()
+            {
+                (int, int, int) top = heap[0];
+                int last = heap.Count - 1;
+                heap[0] = heap[last];
+                heap.RemoveAt(last);
+                int idx = 0;
+                while (true)
+                {
+                    int l = idx * 2 + 1;
+                    int r = l + 1;
+                    int smallest = idx;
+                    if (l < heap.Count && heap[l].cost < heap[smallest].cost) smallest = l;
+                    if (r < heap.Count && heap[r].cost < heap[smallest].cost) smallest = r;
+                    if (smallest == idx) break;
+                    (int, int, int) tmp = heap[idx];
+                    heap[idx] = heap[smallest];
+                    heap[smallest] = tmp;
+                    idx = smallest;
+                }
+                return top;
+            }
+
+            dist[seed.x, seed.y] = 0;
+            HeapPush(0, seed.x, seed.y);
+
+            while (heap.Count > 0)
+            {
+                (int curCost, int cx, int cy) = HeapPop();
+                if (curCost > dist[cx, cy])
+                {
+                    continue;
+                }
+
+                if (cx == target.x && cy == target.y)
+                {
+                    break;
+                }
+
+                for (int dy = -1; dy <= 1; dy++)
+                {
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        if (dx == 0 && dy == 0) continue;
+                        if (!allowDiagonal && dx != 0 && dy != 0) continue;
+
+                        int nx = cx + dx;
+                        int ny = cy + dy;
+                        if (!IsTileWalkableForGuard(map, nx, ny, ignoreBlocks: true))
+                        {
+                            continue;
+                        }
+
+                        if (dx != 0 && dy != 0 &&
+                            !IsTileWalkableForGuard(map, cx + dx, cy, ignoreBlocks: true) &&
+                            !IsTileWalkableForGuard(map, cx, cy + dy, ignoreBlocks: true))
+                        {
+                            continue;
+                        }
+
+                        Vector2Int nCoord = new Vector2Int(nx, ny);
+                        int stepCost = 1;
+                        if (_blockedPropTiles.Contains(nCoord))
+                        {
+                            stepCost += npcTileSet.Contains(nCoord) ? 10000 : 100;
+                        }
+
+                        int newCost = curCost + stepCost;
+                        if (newCost < dist[nx, ny])
+                        {
+                            dist[nx, ny] = newCost;
+                            parentX[nx, ny] = cx;
+                            parentY[nx, ny] = cy;
+                            HeapPush(newCost, nx, ny);
+                        }
+                    }
+                }
+            }
+
+            if (dist[target.x, target.y] == int.MaxValue)
+            {
+                return false;
+            }
+
+            bool removedAny = false;
+            int tx = target.x;
+            int ty = target.y;
+            while (tx >= 0 && ty >= 0)
+            {
+                Vector2Int cur = new Vector2Int(tx, ty);
+                if (_blockedPropTiles.Contains(cur))
+                {
+                    _blockedPropTiles.Remove(cur);
+                    removedAny = true;
+                }
+
+                if (tx == seed.x && ty == seed.y)
+                {
+                    break;
+                }
+
+                int px = parentX[tx, ty];
+                int py = parentY[tx, ty];
+                tx = px;
+                ty = py;
+            }
+
+            return removedAny;
         }
 
         public static int DeterministicHash(int x, int y, int salt)

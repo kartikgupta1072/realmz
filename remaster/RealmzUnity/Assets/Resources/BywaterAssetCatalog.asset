@@ -265,30 +265,73 @@ MonoBehaviour:
   cartographyUnitSheets:
   - unitKey: hero_knight
     unitSheetMaterial: {fileID: 2100000, guid: ee720a9db0940ac41a3bbef61f187a05, type: 2}
+    walkMaterial: {fileID: 2100000, guid: b56aaec7d01df50408dfa65946e50205, type: 2}
+    attackMaterial: {fileID: 2100000, guid: fdee17fe2b8d9774f9824ec04d0066f2, type: 2}
   - unitKey: hero_cleric
     unitSheetMaterial: {fileID: 2100000, guid: 561e660dd67fe8745b959c5ff6425e93, type: 2}
+    walkMaterial: {fileID: 2100000, guid: 20203860ccf32334da2830ae80553985, type: 2}
+    attackMaterial: {fileID: 2100000, guid: ad8eb1b3e00d94f47a09ba8723c9c96f, type: 2}
   - unitKey: hero_ranger
     unitSheetMaterial: {fileID: 2100000, guid: eaba74c95ea5e30439910c615b20eca2, type: 2}
+    walkMaterial: {fileID: 2100000, guid: 7f23669e8603d7240a6693da15ad6641, type: 2}
+    attackMaterial: {fileID: 2100000, guid: cee0c3088a8fb3d489fd2a85ab9a7e1f, type: 2}
   - unitKey: hero_mage
     unitSheetMaterial: {fileID: 2100000, guid: 84ed66dec8232e64e97fb31cb0a43d4b, type: 2}
+    walkMaterial: {fileID: 2100000, guid: 4b5f069592648304f80d535d715735ca, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 2f4dd20e06ccbec46a6b4c3757e1ad06, type: 2}
   - unitKey: hero_paladin
     unitSheetMaterial: {fileID: 2100000, guid: 4e05b11445e441b4dbed25250a6cafdb, type: 2}
+    walkMaterial: {fileID: 2100000, guid: ffe01b32261d4ce4dad7252f9b9c6e1b, type: 2}
+    attackMaterial: {fileID: 2100000, guid: a8055da06673dec45a4b6aa087e10261, type: 2}
   - unitKey: hero_rogue
     unitSheetMaterial: {fileID: 2100000, guid: 54aa26f282a371c49abfebac5dc8a097, type: 2}
+    walkMaterial: {fileID: 2100000, guid: 7f8b45844c242684e8cf73b7e2937b22, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 34930b9a227fd444686efdfe85213fa9, type: 2}
   - unitKey: monster_giant_frog
     unitSheetMaterial: {fileID: 2100000, guid: d399d93badd43a249977e43b09fa9c38, type: 2}
+    walkMaterial: {fileID: 2100000, guid: f40e52e2cbf23aa44ab129478f2e706a, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 89210b549de4dcf46b75a77b58840059, type: 2}
   - unitKey: monster_goblin_raider
     unitSheetMaterial: {fileID: 2100000, guid: 3d19e413858a62e479bdd8ba26dec931, type: 2}
+    walkMaterial: {fileID: 2100000, guid: 55c0d1cd60cc0d0499859ae0dae17454, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 2c3f5f80414da1d47a1d62210cf9a6bb, type: 2}
   - unitKey: monster_goblin_archer
     unitSheetMaterial: {fileID: 2100000, guid: 2be12826b4fd8f94cbedfa6fcb03ba03, type: 2}
+    walkMaterial: {fileID: 2100000, guid: 1e8a6bf49f9bae845853c9b5f09aca09, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 78084d101a9f949428533fa12a5a6c81, type: 2}
   - unitKey: monster_orc_warrior
     unitSheetMaterial: {fileID: 2100000, guid: 4c09501a196dcba46afe3a74190639d2, type: 2}
+    walkMaterial: {fileID: 2100000, guid: fa13180265afafe41be7fdeda1dafcca, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 870d953438d7441428e934a20666c438, type: 2}
   - unitKey: monster_giant_rat
     unitSheetMaterial: {fileID: 2100000, guid: d8e4c930813b079429b1c6626e25ce54, type: 2}
+    walkMaterial: {fileID: 2100000, guid: 02681158d5ca85f4faa6c2f4a2ec6f01, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 11c4c4d976bde0e43879b9e6be903b6a, type: 2}
   - unitKey: monster_skeleton_warrior
     unitSheetMaterial: {fileID: 2100000, guid: 14c5298476660d347a84e30d8663c9d3, type: 2}
+    walkMaterial: {fileID: 2100000, guid: 613c0a24f5befdf47b873e54d7394357, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 412e5f1e9ae659946a3cfa4b83ce7e89, type: 2}
   - unitKey: monster_bandit_cutthroat
     unitSheetMaterial: {fileID: 2100000, guid: c8ec63096eb3a3e48a969785c831d317, type: 2}
+    walkMaterial: {fileID: 2100000, guid: 0b12f783efcccde4b9cef7608df7c98a, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 3c8037c2559005f42b0ca7230911d791, type: 2}
+  cartographyNpcSheets:
+  - unitKey: npc_blacksmith
+    unitSheetMaterial: {fileID: 2100000, guid: ec3a5e30e98b05d4fa8c60676de48f0b, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
+  - unitKey: npc_tanner
+    unitSheetMaterial: {fileID: 2100000, guid: 338e9f38f49cf3e43b904eb4927d1038, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
+  - unitKey: npc_apothecary
+    unitSheetMaterial: {fileID: 2100000, guid: e5570d3d41ccf9241a9e71f159093b0f, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
+  - unitKey: npc_priestess
+    unitSheetMaterial: {fileID: 2100000, guid: 2e5736fb8f7e8844ca1cffa32c34cd0e, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
   heroes:
   - id: hero_knight
     archetype: Knight
@@ -296,6 +339,8 @@ MonoBehaviour:
     portraitId: 275
     billboardMaterial: {fileID: 2100000, guid: ee720a9db0940ac41a3bbef61f187a05, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: ee720a9db0940ac41a3bbef61f187a05, type: 2}
+    walkMaterial: {fileID: 2100000, guid: b56aaec7d01df50408dfa65946e50205, type: 2}
+    attackMaterial: {fileID: 2100000, guid: fdee17fe2b8d9774f9824ec04d0066f2, type: 2}
     sprite: {fileID: 6155189297643300040, guid: 4e99ff8f4abd9b84e9db9e4043e88f7b, type: 3}
     portrait: {fileID: 21300000, guid: ebe3918acdf63cd4e9d07cc82eefd211, type: 3}
   - id: hero_cleric
@@ -304,6 +349,8 @@ MonoBehaviour:
     portraitId: 329
     billboardMaterial: {fileID: 2100000, guid: 561e660dd67fe8745b959c5ff6425e93, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 561e660dd67fe8745b959c5ff6425e93, type: 2}
+    walkMaterial: {fileID: 2100000, guid: 20203860ccf32334da2830ae80553985, type: 2}
+    attackMaterial: {fileID: 2100000, guid: ad8eb1b3e00d94f47a09ba8723c9c96f, type: 2}
     sprite: {fileID: -2544846493698475345, guid: d676b223d1e189143bf90a39fa6d9416, type: 3}
     portrait: {fileID: 21300000, guid: d978bf091fc67954b84d2fcfae9b7550, type: 3}
   - id: hero_ranger
@@ -312,6 +359,8 @@ MonoBehaviour:
     portraitId: 304
     billboardMaterial: {fileID: 2100000, guid: eaba74c95ea5e30439910c615b20eca2, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: eaba74c95ea5e30439910c615b20eca2, type: 2}
+    walkMaterial: {fileID: 2100000, guid: 7f23669e8603d7240a6693da15ad6641, type: 2}
+    attackMaterial: {fileID: 2100000, guid: cee0c3088a8fb3d489fd2a85ab9a7e1f, type: 2}
     sprite: {fileID: -7868594803492491795, guid: f4de9dc345e76fb41a162e178be08092, type: 3}
     portrait: {fileID: 21300000, guid: dec1736c140f033498ce3c95a42f2c2d, type: 3}
   - id: hero_mage
@@ -320,6 +369,8 @@ MonoBehaviour:
     portraitId: 341
     billboardMaterial: {fileID: 2100000, guid: 84ed66dec8232e64e97fb31cb0a43d4b, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 84ed66dec8232e64e97fb31cb0a43d4b, type: 2}
+    walkMaterial: {fileID: 2100000, guid: 4b5f069592648304f80d535d715735ca, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 2f4dd20e06ccbec46a6b4c3757e1ad06, type: 2}
     sprite: {fileID: 410388864010854235, guid: e09de461fbb75bb4a859ebf4d353fe9c, type: 3}
     portrait: {fileID: 21300000, guid: a94932be15c350942938e299bbe33ef2, type: 3}
   - id: hero_paladin
@@ -328,6 +379,8 @@ MonoBehaviour:
     portraitId: 311
     billboardMaterial: {fileID: 2100000, guid: 4e05b11445e441b4dbed25250a6cafdb, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 4e05b11445e441b4dbed25250a6cafdb, type: 2}
+    walkMaterial: {fileID: 2100000, guid: ffe01b32261d4ce4dad7252f9b9c6e1b, type: 2}
+    attackMaterial: {fileID: 2100000, guid: a8055da06673dec45a4b6aa087e10261, type: 2}
     sprite: {fileID: -1787679304370085976, guid: ce83e150187eb2e4aa0aac77087f178a, type: 3}
     portrait: {fileID: 21300000, guid: 14fcb011401eca442965b5162a1bd177, type: 3}
   - id: hero_rogue
@@ -336,6 +389,8 @@ MonoBehaviour:
     portraitId: 363
     billboardMaterial: {fileID: 2100000, guid: 54aa26f282a371c49abfebac5dc8a097, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 54aa26f282a371c49abfebac5dc8a097, type: 2}
+    walkMaterial: {fileID: 2100000, guid: 7f8b45844c242684e8cf73b7e2937b22, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 34930b9a227fd444686efdfe85213fa9, type: 2}
     sprite: {fileID: 102566648275596218, guid: 400cb035fa86f9e4a8f8ac7023ec8933, type: 3}
     portrait: {fileID: 21300000, guid: c71600a3633077041b4d238ab89137c5, type: 3}
   monsters:
@@ -343,6 +398,8 @@ MonoBehaviour:
     displayName: Giant Frog
     billboardMaterial: {fileID: 2100000, guid: d399d93badd43a249977e43b09fa9c38, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: d399d93badd43a249977e43b09fa9c38, type: 2}
+    walkMaterial: {fileID: 2100000, guid: f40e52e2cbf23aa44ab129478f2e706a, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 89210b549de4dcf46b75a77b58840059, type: 2}
     sprite: {fileID: -7631220298004938683, guid: 133e6ab5929f79847bc4a76d21060ebc, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -355,6 +412,8 @@ MonoBehaviour:
     displayName: Goblin Raider
     billboardMaterial: {fileID: 2100000, guid: 3d19e413858a62e479bdd8ba26dec931, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 3d19e413858a62e479bdd8ba26dec931, type: 2}
+    walkMaterial: {fileID: 2100000, guid: 55c0d1cd60cc0d0499859ae0dae17454, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 2c3f5f80414da1d47a1d62210cf9a6bb, type: 2}
     sprite: {fileID: -2508873913612103028, guid: 6e2f801152d60f240bff57ad1bcaaa56, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -367,6 +426,8 @@ MonoBehaviour:
     displayName: Goblin Archer
     billboardMaterial: {fileID: 2100000, guid: 2be12826b4fd8f94cbedfa6fcb03ba03, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 2be12826b4fd8f94cbedfa6fcb03ba03, type: 2}
+    walkMaterial: {fileID: 2100000, guid: 1e8a6bf49f9bae845853c9b5f09aca09, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 78084d101a9f949428533fa12a5a6c81, type: 2}
     sprite: {fileID: 2760720447104234719, guid: 9cab83d46d58f7042af10dc03ca09a69, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -379,6 +440,8 @@ MonoBehaviour:
     displayName: Orc Warrior
     billboardMaterial: {fileID: 2100000, guid: 4c09501a196dcba46afe3a74190639d2, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 4c09501a196dcba46afe3a74190639d2, type: 2}
+    walkMaterial: {fileID: 2100000, guid: fa13180265afafe41be7fdeda1dafcca, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 870d953438d7441428e934a20666c438, type: 2}
     sprite: {fileID: -1738930717127524091, guid: 4dd062d66d9d4c14da0556b7a9b8833f, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -391,6 +454,8 @@ MonoBehaviour:
     displayName: Giant Rat
     billboardMaterial: {fileID: 2100000, guid: d8e4c930813b079429b1c6626e25ce54, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: d8e4c930813b079429b1c6626e25ce54, type: 2}
+    walkMaterial: {fileID: 2100000, guid: 02681158d5ca85f4faa6c2f4a2ec6f01, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 11c4c4d976bde0e43879b9e6be903b6a, type: 2}
     sprite: {fileID: -3246495356005557760, guid: 03915c8b00ed84a4a9453863fe45ed35, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -403,6 +468,8 @@ MonoBehaviour:
     displayName: Skeleton Warrior
     billboardMaterial: {fileID: 2100000, guid: 14c5298476660d347a84e30d8663c9d3, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 14c5298476660d347a84e30d8663c9d3, type: 2}
+    walkMaterial: {fileID: 2100000, guid: 613c0a24f5befdf47b873e54d7394357, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 412e5f1e9ae659946a3cfa4b83ce7e89, type: 2}
     sprite: {fileID: -1368396221391136136, guid: d491bc10c3cfd5e45b89877a0628a827, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -415,6 +482,8 @@ MonoBehaviour:
     displayName: Bandit Cutthroat
     billboardMaterial: {fileID: 2100000, guid: c8ec63096eb3a3e48a969785c831d317, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: c8ec63096eb3a3e48a969785c831d317, type: 2}
+    walkMaterial: {fileID: 2100000, guid: 0b12f783efcccde4b9cef7608df7c98a, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 3c8037c2559005f42b0ca7230911d791, type: 2}
     sprite: {fileID: 9146512343708235907, guid: c47fc4b9508c1e942bf1b7ed3e5fd53c, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -430,6 +499,8 @@ MonoBehaviour:
     portraitId: 0
     billboardMaterial: {fileID: 2100000, guid: 83a2ea3713a0c2542a61c1568f94b772, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 83a2ea3713a0c2542a61c1568f94b772, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 7481747477788541286, guid: 69566144393f34f44a628c34f30d13d0, type: 3}
     portrait: {fileID: 21300000, guid: f47c2d87aef5fe347849a29f07abc341, type: 3}
   - id: hero_assassin
@@ -438,6 +509,8 @@ MonoBehaviour:
     portraitId: 0
     billboardMaterial: {fileID: 2100000, guid: 5ba2f5093046d5c45ad2eaa1d0236453, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 5ba2f5093046d5c45ad2eaa1d0236453, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: -2566361393268529990, guid: c9e0865e4fb8adb41aaa0e960181a500, type: 3}
     portrait: {fileID: 21300000, guid: 01d2444c4ad2b614a916e6c878f30349, type: 3}
   - id: hero_barbarian
@@ -446,6 +519,8 @@ MonoBehaviour:
     portraitId: 0
     billboardMaterial: {fileID: 2100000, guid: 3236d022414e16246a571ffbc34d3ebc, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 3236d022414e16246a571ffbc34d3ebc, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: -8150205889363191576, guid: a3c5f0a3ca1071140b375ff2879f53e3, type: 3}
     portrait: {fileID: 21300000, guid: d7ef17e7019c525489370fa884e857b4, type: 3}
   - id: hero_druid
@@ -454,6 +529,8 @@ MonoBehaviour:
     portraitId: 0
     billboardMaterial: {fileID: 2100000, guid: 300cdf3712d4be140862562081e8799e, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 300cdf3712d4be140862562081e8799e, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 7183124212861438544, guid: f8028f663db790d4fa2cb5b8394f1248, type: 3}
     portrait: {fileID: 21300000, guid: fef8735172b71fc4c919339c82abe5dd, type: 3}
   - id: hero_enchanter
@@ -462,6 +539,8 @@ MonoBehaviour:
     portraitId: 0
     billboardMaterial: {fileID: 2100000, guid: 477f417901f9cf3498b0137aac2dc913, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 477f417901f9cf3498b0137aac2dc913, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 5687990352248190393, guid: 70f869aa32aa33d4c93f13541e908a5a, type: 3}
     portrait: {fileID: 21300000, guid: d1351150710e8a745bcbef73c8eac7b2, type: 3}
   - id: hero_monk
@@ -470,6 +549,8 @@ MonoBehaviour:
     portraitId: 0
     billboardMaterial: {fileID: 2100000, guid: cbcac3d10d71c914abb52cf282553b88, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: cbcac3d10d71c914abb52cf282553b88, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: -1664421014446581825, guid: cd151c1d5e69c524eafde9d81a2dcddc, type: 3}
     portrait: {fileID: 21300000, guid: c7abbe9b3d1d09340a6782e9cc30a5cf, type: 3}
   unifiedPortraits:
@@ -491,6 +572,14 @@ MonoBehaviour:
     sprite: {fileID: 21300000, guid: a94932be15c350942938e299bbe33ef2, type: 3}
   - key: monk
     sprite: {fileID: 21300000, guid: c7abbe9b3d1d09340a6782e9cc30a5cf, type: 3}
+  - key: npc_apothecary
+    sprite: {fileID: 21300000, guid: 6a58ff3b1e44530429c93cd2e72bb511, type: 3}
+  - key: npc_blacksmith
+    sprite: {fileID: 21300000, guid: 2410affd509f8ba4596e392977f71868, type: 3}
+  - key: npc_priestess
+    sprite: {fileID: 21300000, guid: b93929fa009f82541873732f691e459f, type: 3}
+  - key: npc_tanner
+    sprite: {fileID: 21300000, guid: e3b7e6e9a40b9eb4d84f9c1d7a582b4d, type: 3}
   - key: paladin
     sprite: {fileID: 21300000, guid: 14fcb011401eca442965b5162a1bd177, type: 3}
   - key: ranger
@@ -502,6 +591,8 @@ MonoBehaviour:
     displayName: Bandit Cutthroat
     billboardMaterial: {fileID: 2100000, guid: c8ec63096eb3a3e48a969785c831d317, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: c8ec63096eb3a3e48a969785c831d317, type: 2}
+    walkMaterial: {fileID: 2100000, guid: 0b12f783efcccde4b9cef7608df7c98a, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 3c8037c2559005f42b0ca7230911d791, type: 2}
     sprite: {fileID: 9146512343708235907, guid: c47fc4b9508c1e942bf1b7ed3e5fd53c, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -514,6 +605,8 @@ MonoBehaviour:
     displayName: Carrion Grub
     billboardMaterial: {fileID: 2100000, guid: a27e46e9e62fd794e89f2db2be313af4, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: a27e46e9e62fd794e89f2db2be313af4, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 8424494968956445617, guid: 21a90bf8aef20654bb6bd89df518642c, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -526,6 +619,8 @@ MonoBehaviour:
     displayName: Cave Bear
     billboardMaterial: {fileID: 2100000, guid: 5e70e650305f6a54c829e7fd4a42347b, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 5e70e650305f6a54c829e7fd4a42347b, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 3530259241310773449, guid: 05ae15fa9421be5448285584e40a0213, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -538,6 +633,8 @@ MonoBehaviour:
     displayName: Cave Lizard
     billboardMaterial: {fileID: 2100000, guid: b0c5052d00a2c734b892fa3c202749d3, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: b0c5052d00a2c734b892fa3c202749d3, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 5543713750232288245, guid: 28ab8099b136f5a4da2b9ac0ea611f59, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -550,6 +647,8 @@ MonoBehaviour:
     displayName: Cave Troll
     billboardMaterial: {fileID: 2100000, guid: de99a4ef5f313a04ab9e81a7f9dc29d6, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: de99a4ef5f313a04ab9e81a7f9dc29d6, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: -1292063101765268366, guid: b7c22135cbe561e48810e3fcadcf1ce5, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -562,6 +661,8 @@ MonoBehaviour:
     displayName: Dark Cultist
     billboardMaterial: {fileID: 2100000, guid: 28992c9f4d47957488b09aaa76762ec2, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 28992c9f4d47957488b09aaa76762ec2, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: -5121336456687923913, guid: 7f387b649a8c8714fb8985c9784c1f98, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -574,6 +675,8 @@ MonoBehaviour:
     displayName: Demon Lord
     billboardMaterial: {fileID: 2100000, guid: d7c8993a65bfb1247b2fbd5a11730750, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: d7c8993a65bfb1247b2fbd5a11730750, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 222002721491654487, guid: 09c194e7bb6d148459fba52624b0d402, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -586,6 +689,8 @@ MonoBehaviour:
     displayName: Dragon Wyrm
     billboardMaterial: {fileID: 2100000, guid: 7097e8fafdcdd224cbe14d0ab8245c21, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 7097e8fafdcdd224cbe14d0ab8245c21, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 1263496446602428089, guid: 8ec2034006aace1498b0ffb3744bcc9b, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -598,6 +703,8 @@ MonoBehaviour:
     displayName: Evil Mage
     billboardMaterial: {fileID: 2100000, guid: 614058e16b418c64a9c990587f4df754, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 614058e16b418c64a9c990587f4df754, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 4586936416759649645, guid: 98b5bf2dc8324244a815ffe94d2fbab4, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -610,6 +717,8 @@ MonoBehaviour:
     displayName: Ghoul
     billboardMaterial: {fileID: 2100000, guid: 654953047fd33e145a0e0081f6015e75, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 654953047fd33e145a0e0081f6015e75, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 5395461353538515996, guid: 89707c14df891e342a1e5e712e079f66, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -622,6 +731,8 @@ MonoBehaviour:
     displayName: Giant Bat
     billboardMaterial: {fileID: 2100000, guid: 003fb7f9a601f3b40bd340f55978fb26, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 003fb7f9a601f3b40bd340f55978fb26, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: -6074367537873315661, guid: 1f54b4305d7f965488224c287deb00ff, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -634,6 +745,8 @@ MonoBehaviour:
     displayName: Giant Beetle
     billboardMaterial: {fileID: 2100000, guid: 1a5fc45a0909e7242a21794aa74b652a, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 1a5fc45a0909e7242a21794aa74b652a, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 3809046594702418333, guid: 80b70421884c90b42b318d1a9a95777f, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -646,6 +759,8 @@ MonoBehaviour:
     displayName: Giant Boar
     billboardMaterial: {fileID: 2100000, guid: b583bdd21b2d439418ba5c411b11c684, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: b583bdd21b2d439418ba5c411b11c684, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 1826565787040340114, guid: 0b256e5b282aca84c90612dc1b0619ec, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -658,6 +773,8 @@ MonoBehaviour:
     displayName: Giant Centipede
     billboardMaterial: {fileID: 2100000, guid: 571c8d4cce28c1e4ea72599b208cbdde, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 571c8d4cce28c1e4ea72599b208cbdde, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 7787722373306900694, guid: 9799cf15f43e637478f26a1fddb9cf76, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -670,6 +787,8 @@ MonoBehaviour:
     displayName: Giant Frog
     billboardMaterial: {fileID: 2100000, guid: d399d93badd43a249977e43b09fa9c38, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: d399d93badd43a249977e43b09fa9c38, type: 2}
+    walkMaterial: {fileID: 2100000, guid: f40e52e2cbf23aa44ab129478f2e706a, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 89210b549de4dcf46b75a77b58840059, type: 2}
     sprite: {fileID: -7631220298004938683, guid: 133e6ab5929f79847bc4a76d21060ebc, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -682,6 +801,8 @@ MonoBehaviour:
     displayName: Giant Rat
     billboardMaterial: {fileID: 2100000, guid: d8e4c930813b079429b1c6626e25ce54, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: d8e4c930813b079429b1c6626e25ce54, type: 2}
+    walkMaterial: {fileID: 2100000, guid: 02681158d5ca85f4faa6c2f4a2ec6f01, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 11c4c4d976bde0e43879b9e6be903b6a, type: 2}
     sprite: {fileID: -3246495356005557760, guid: 03915c8b00ed84a4a9453863fe45ed35, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -694,6 +815,8 @@ MonoBehaviour:
     displayName: Giant Scorpion
     billboardMaterial: {fileID: 2100000, guid: 626766d59d22923499d456286a017283, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 626766d59d22923499d456286a017283, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: -4452153808678118066, guid: af2dafd497a04384f9458ed4e8e4db5a, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -706,6 +829,8 @@ MonoBehaviour:
     displayName: Giant Snake
     billboardMaterial: {fileID: 2100000, guid: 2641c70970e9312448d7484b9cc414be, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 2641c70970e9312448d7484b9cc414be, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 8684503345605705329, guid: 146013bcf56a5a34bab3c6c6a2f44736, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -718,6 +843,8 @@ MonoBehaviour:
     displayName: Giant Spider
     billboardMaterial: {fileID: 2100000, guid: e3b8040da6bcade46a0ce7a2ad2e31f4, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: e3b8040da6bcade46a0ce7a2ad2e31f4, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 5848720855175241531, guid: 55c012f1f844435488b05ef41aa679ad, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -730,6 +857,8 @@ MonoBehaviour:
     displayName: Giant Wasp
     billboardMaterial: {fileID: 2100000, guid: b9853b32fdad8444a89f552f5ab48b63, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: b9853b32fdad8444a89f552f5ab48b63, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: -2577235305787871326, guid: feb358848048d5f44a2ea53fa0a73ab7, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -742,6 +871,8 @@ MonoBehaviour:
     displayName: Goblin Archer
     billboardMaterial: {fileID: 2100000, guid: 2be12826b4fd8f94cbedfa6fcb03ba03, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 2be12826b4fd8f94cbedfa6fcb03ba03, type: 2}
+    walkMaterial: {fileID: 2100000, guid: 1e8a6bf49f9bae845853c9b5f09aca09, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 78084d101a9f949428533fa12a5a6c81, type: 2}
     sprite: {fileID: 2760720447104234719, guid: 9cab83d46d58f7042af10dc03ca09a69, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -754,6 +885,8 @@ MonoBehaviour:
     displayName: Goblin Raider
     billboardMaterial: {fileID: 2100000, guid: 3d19e413858a62e479bdd8ba26dec931, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 3d19e413858a62e479bdd8ba26dec931, type: 2}
+    walkMaterial: {fileID: 2100000, guid: 55c0d1cd60cc0d0499859ae0dae17454, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 2c3f5f80414da1d47a1d62210cf9a6bb, type: 2}
     sprite: {fileID: -2508873913612103028, guid: 6e2f801152d60f240bff57ad1bcaaa56, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -766,6 +899,8 @@ MonoBehaviour:
     displayName: Goblin Shaman
     billboardMaterial: {fileID: 2100000, guid: 28d958a579e3fba48b642860fb75ce7c, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 28d958a579e3fba48b642860fb75ce7c, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 1309301592392449272, guid: 48ec927b88ac6be45967e58c21bd0416, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -778,6 +913,8 @@ MonoBehaviour:
     displayName: Hill Giant
     billboardMaterial: {fileID: 2100000, guid: 851b01a113ee02344825b1cb560d0cb2, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 851b01a113ee02344825b1cb560d0cb2, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: -3091486958581683229, guid: cdc4134434f92964aaa543a75b55bf21, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -790,6 +927,8 @@ MonoBehaviour:
     displayName: Kobold Skirmisher
     billboardMaterial: {fileID: 2100000, guid: 9da6ff7dc9adaa740a1eb3ed3f2bec04, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 9da6ff7dc9adaa740a1eb3ed3f2bec04, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 425520087542665605, guid: e6aeaeec2cda8564682edae7666bd649, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -802,6 +941,8 @@ MonoBehaviour:
     displayName: Minotaur
     billboardMaterial: {fileID: 2100000, guid: 11273ff6a76a40647943ca0e50915126, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 11273ff6a76a40647943ca0e50915126, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 4572981067780276238, guid: 40bf54c3d7d4a3946b91dce8ac205773, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -814,6 +955,8 @@ MonoBehaviour:
     displayName: Mummy
     billboardMaterial: {fileID: 2100000, guid: e72b732e7771032488892bbdd3339452, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: e72b732e7771032488892bbdd3339452, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: -3252037265851407744, guid: 144986f34e09f6046ba531d6bf3b27f1, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -826,6 +969,8 @@ MonoBehaviour:
     displayName: Mush Creature
     billboardMaterial: {fileID: 2100000, guid: 16fe01b3a578228448ccca52f51c9ba5, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 16fe01b3a578228448ccca52f51c9ba5, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: -3484798178821990445, guid: 8ffe61eb5fe9dba4795096b8a99a9435, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -838,6 +983,8 @@ MonoBehaviour:
     displayName: Ogre Brute
     billboardMaterial: {fileID: 2100000, guid: 208a4375a5f35f34b9fe7401387bdb44, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 208a4375a5f35f34b9fe7401387bdb44, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 649241296540711285, guid: bab6d5869d2206243bfe5a86aac9d7eb, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -850,6 +997,8 @@ MonoBehaviour:
     displayName: Orc Shaman
     billboardMaterial: {fileID: 2100000, guid: 57dc9367478b8b6448f19d1a316f068f, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 57dc9367478b8b6448f19d1a316f068f, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 7890915234171356457, guid: 5a039ad887333ce43ab6e61f1b71cc37, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -862,6 +1011,8 @@ MonoBehaviour:
     displayName: Orc Warrior
     billboardMaterial: {fileID: 2100000, guid: 4c09501a196dcba46afe3a74190639d2, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 4c09501a196dcba46afe3a74190639d2, type: 2}
+    walkMaterial: {fileID: 2100000, guid: fa13180265afafe41be7fdeda1dafcca, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 870d953438d7441428e934a20666c438, type: 2}
     sprite: {fileID: -1738930717127524091, guid: 4dd062d66d9d4c14da0556b7a9b8833f, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -874,6 +1025,8 @@ MonoBehaviour:
     displayName: Rat Demilord
     billboardMaterial: {fileID: 2100000, guid: 29f48ae5d70c3d14396a4b7746ae7f1c, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 29f48ae5d70c3d14396a4b7746ae7f1c, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 2211111085963001323, guid: 3740ed735cb5752429b76d02818fd583, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -886,6 +1039,8 @@ MonoBehaviour:
     displayName: Sabre Feline
     billboardMaterial: {fileID: 2100000, guid: 6d6caf3c2f4f4bd4dbf188b69de02e1d, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 6d6caf3c2f4f4bd4dbf188b69de02e1d, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: -5797477988151075341, guid: 010a13ab779a208499f7900e34d191d6, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -898,6 +1053,8 @@ MonoBehaviour:
     displayName: Skeletal Beast
     billboardMaterial: {fileID: 2100000, guid: af7aeedb33ccb2b4280b4955225831ec, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: af7aeedb33ccb2b4280b4955225831ec, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 7052001527884100781, guid: 0f8f7fb002de99d41ad8aeceb52fdd2b, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -910,6 +1067,8 @@ MonoBehaviour:
     displayName: Skeletal Giant
     billboardMaterial: {fileID: 2100000, guid: 17ba036a94b0477489d646c6767a5060, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 17ba036a94b0477489d646c6767a5060, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 4778567476878718981, guid: ad466d6d75f9e9945bd62a59fb470150, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -922,6 +1081,8 @@ MonoBehaviour:
     displayName: Skeleton Archer
     billboardMaterial: {fileID: 2100000, guid: e429bed89d8ea674ebe6fee051ae3fdb, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: e429bed89d8ea674ebe6fee051ae3fdb, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 2058713861568744319, guid: d14134cdd511f69418a4f8aace7751e0, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -934,6 +1095,8 @@ MonoBehaviour:
     displayName: Skeleton Warrior
     billboardMaterial: {fileID: 2100000, guid: 14c5298476660d347a84e30d8663c9d3, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 14c5298476660d347a84e30d8663c9d3, type: 2}
+    walkMaterial: {fileID: 2100000, guid: 613c0a24f5befdf47b873e54d7394357, type: 2}
+    attackMaterial: {fileID: 2100000, guid: 412e5f1e9ae659946a3cfa4b83ce7e89, type: 2}
     sprite: {fileID: -1368396221391136136, guid: d491bc10c3cfd5e45b89877a0628a827, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -946,6 +1109,8 @@ MonoBehaviour:
     displayName: Slime Ooze
     billboardMaterial: {fileID: 2100000, guid: c7816c3def021ff4c995b52730fa48d3, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: c7816c3def021ff4c995b52730fa48d3, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 2551915780556770821, guid: 3d1aabf699b339142b62ca86f85e1576, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -958,6 +1123,8 @@ MonoBehaviour:
     displayName: Town Guard
     billboardMaterial: {fileID: 2100000, guid: 7761e0c75227b3e438e7945f979f4d39, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 7761e0c75227b3e438e7945f979f4d39, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 8076018495705950779, guid: ac13905d932fd494f8bd06330df49e0d, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -970,6 +1137,8 @@ MonoBehaviour:
     displayName: Widow Spider
     billboardMaterial: {fileID: 2100000, guid: 66b5ed9e74db5a54ea3f3acf8664b7d0, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 66b5ed9e74db5a54ea3f3acf8664b7d0, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: -1188695681098979713, guid: 5667d8fca144f4a4ca5c5b6ad212561a, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -982,6 +1151,8 @@ MonoBehaviour:
     displayName: Wolf Worg
     billboardMaterial: {fileID: 2100000, guid: a5c9f04890d3c3240854f5e991e71001, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: a5c9f04890d3c3240854f5e991e71001, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: -380380235706222377, guid: f1f7dc5a16d18c44a82de8abae39b503, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -994,6 +1165,8 @@ MonoBehaviour:
     displayName: Wraith Spectre
     billboardMaterial: {fileID: 2100000, guid: 5e9dab5c42e01254487ab21ac4673d0b, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 5e9dab5c42e01254487ab21ac4673d0b, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: -657055641550580713, guid: 1c6c78c492cf9374aa1384fd78c4f7b6, type: 3}
     portraitPixelRect:
       serializedVersion: 2
@@ -1006,6 +1179,8 @@ MonoBehaviour:
     displayName: Zombie
     billboardMaterial: {fileID: 2100000, guid: 47844a42243c3d340880a7a9f66a9ef3, type: 2}
     unitSheetMaterial: {fileID: 2100000, guid: 47844a42243c3d340880a7a9f66a9ef3, type: 2}
+    walkMaterial: {fileID: 0}
+    attackMaterial: {fileID: 0}
     sprite: {fileID: 4028654748672563809, guid: 9983ee5cdb413f545967f6844fa05cd9, type: 3}
     portraitPixelRect:
       serializedVersion: 2

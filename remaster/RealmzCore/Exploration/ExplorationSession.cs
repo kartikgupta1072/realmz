@@ -442,6 +442,25 @@ namespace RealmzCore.Exploration
             }
         }
 
+        private static readonly CharConditionId[] DetrimentalTempleConditions =
+        {
+            CharConditionId.Cursed,
+            CharConditionId.Poisoned,
+            CharConditionId.RunsAway,
+            CharConditionId.Helpless,
+            CharConditionId.Tangled,
+            CharConditionId.Stupid,
+            CharConditionId.Slow,
+            CharConditionId.TurnedToStone,
+            CharConditionId.Blind,
+            CharConditionId.Diseased,
+            CharConditionId.Confused,
+            CharConditionId.EnergyDrain,
+            CharConditionId.HinderedAttacks,
+            CharConditionId.HinderedDefense,
+            CharConditionId.Silenced
+        };
+
         public bool TriggerTempleHeal(int goldCost = 25)
         {
             if (goldCost < 0 || Party.Gold < goldCost)
@@ -470,6 +489,108 @@ namespace RealmzCore.Exploration
             }
 
             return true;
+        }
+
+        public bool TriggerTempleCureCurse(int goldCost = 20)
+        {
+            if (goldCost < 0 || Party.Gold < goldCost)
+            {
+                return false;
+            }
+
+            bool anyNeedsCure = false;
+            for (int i = 0; i < Party.Members.Count; i++)
+            {
+                PartyMemberState m = Party.Members[i];
+                if (m.Hp > 0 && (m.CurseStacks > 0 || m.ExhaustionStacks > 0 || m.Conditions.Count > 0))
+                {
+                    anyNeedsCure = true;
+                    break;
+                }
+            }
+
+            if (!anyNeedsCure)
+            {
+                return false;
+            }
+
+            Party.Gold -= goldCost;
+
+            for (int i = 0; i < Party.Members.Count; i++)
+            {
+                PartyMemberState m = Party.Members[i];
+                if (m.Hp <= 0)
+                {
+                    continue;
+                }
+
+                m.ExhaustionStacks = 0;
+                m.CurseStacks = 0;
+                for (int c = 0; c < DetrimentalTempleConditions.Length; c++)
+                {
+                    m.Conditions.Remove(DetrimentalTempleConditions[c]);
+                }
+            }
+
+            return true;
+        }
+
+        public int TriggerTempleRechargeItems(IReadOnlyDictionary<int, ItemDefinition> items, int goldCost = 30)
+        {
+            if (items == null)
+            {
+                return 0;
+            }
+
+            if (goldCost < 0)
+            {
+                return -1;
+            }
+
+            List<(InventoryItem Item, int MaxCharges)> eligible = new List<(InventoryItem, int)>();
+
+            for (int i = 0; i < Party.Members.Count; i++)
+            {
+                PartyMemberState m = Party.Members[i];
+                foreach (InventoryItem equipped in m.Equipped.Values)
+                {
+                    if (items.TryGetValue(equipped.ItemId, out ItemDefinition? def) &&
+                        def.Charges > 0 &&
+                        equipped.RemainingCharges < def.Charges)
+                    {
+                        eligible.Add((equipped, def.Charges));
+                    }
+                }
+            }
+
+            for (int i = 0; i < Party.Stash.Count; i++)
+            {
+                InventoryItem stashItem = Party.Stash[i];
+                if (items.TryGetValue(stashItem.ItemId, out ItemDefinition? def) &&
+                    def.Charges > 0 &&
+                    stashItem.RemainingCharges < def.Charges)
+                {
+                    eligible.Add((stashItem, def.Charges));
+                }
+            }
+
+            if (eligible.Count == 0)
+            {
+                return 0;
+            }
+
+            if (Party.Gold < goldCost)
+            {
+                return -1;
+            }
+
+            Party.Gold -= goldCost;
+            for (int i = 0; i < eligible.Count; i++)
+            {
+                eligible[i].Item.RemainingCharges = eligible[i].MaxCharges;
+            }
+
+            return eligible.Count;
         }
 
         private void UpdateFacing(GridCoord from, GridCoord to)
