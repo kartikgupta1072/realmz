@@ -241,6 +241,7 @@ namespace Realmz.Game
         private readonly List<ShopSellRowRefs> _shopSellRowPool = new List<ShopSellRowRefs>(16);
         private string _activeShopId = "1";
         private string _activeShopCategory = "All";
+        private bool _lastShopAffordableOnly;
 
         // Temple Shrine Modal
         private GameObject _templeModalRoot;
@@ -817,6 +818,12 @@ namespace Realmz.Game
             if (_settingsModalRoot != null)
             {
                 _settingsModalRoot.SetActive(false);
+            }
+
+            if (_shopAffordableToggle != null)
+            {
+                _lastShopAffordableOnly = false;
+                _shopAffordableToggle.SetIsOnWithoutNotify(false);
             }
 
             _shopModalRoot.SetActive(true);
@@ -3118,12 +3125,19 @@ namespace Realmz.Game
             _warpBtn = AddTopButton(bar, "WarpBtn", "Warp Portal", 122f, () => OnWarpPortalRequested?.Invoke());
             _shopBtn = AddTopButton(bar, "ShopBtn", "Shop (B)", 98f, () => OnToggleShopRequested?.Invoke());
             _shrineBtn = AddTopButton(bar, "ShrineBtn", "Shrine", 84f, () => OnShrineRequested?.Invoke());
-            _contextPoiBtn = AddTopButton(bar, "ContextPoiBtn", "Enter Shop", 156f, () =>
+            _contextPoiBtn = AddTopButton(bar, "ContextPoiBtn", "Enter Shop", 196f, () =>
             {
                 if (_contextPoiAction != null) _contextPoiAction.Invoke();
                 else OnContextPoiRequested?.Invoke();
             });
             _contextPoiBtnLabel = _contextPoiBtn.GetComponentInChildren<TextMeshProUGUI>();
+            if (_contextPoiBtnLabel != null)
+            {
+                _contextPoiBtnLabel.enableAutoSizing = true;
+                _contextPoiBtnLabel.fontSizeMin = 10.5f;
+                _contextPoiBtnLabel.fontSizeMax = 14.5f;
+                _contextPoiBtnLabel.overflowMode = TextOverflowModes.Truncate;
+            }
             BywaterUiHelpers.SetButtonColors(_contextPoiBtn, true);
 
             _partyBtn = AddTopButton(bar, "PartyBtn", "Party (P)", 104f, () => OnTogglePartyRequested?.Invoke());
@@ -3669,7 +3683,19 @@ namespace Realmz.Game
             affLe.preferredWidth = 156f;
             affLe.preferredHeight = 32f;
             affLe.flexibleHeight = 0f;
-            _shopAffordableToggle.onValueChanged.AddListener(_ => RefreshShopModal(_cachedParty, _cachedBundle));
+            _shopAffordableToggle.onValueChanged.AddListener(isOn =>
+            {
+                if (CanvasUpdateRegistry.IsRebuildingLayout() || CanvasUpdateRegistry.IsRebuildingGraphics())
+                {
+                    return;
+                }
+                if (isOn == _lastShopAffordableOnly)
+                {
+                    return;
+                }
+                _lastShopAffordableOnly = isOn;
+                RefreshShopModal(_cachedParty, _cachedBundle);
+            });
 
             _shopSearchInput = BywaterUiHelpers.CreateInputField(filterRow.transform, "ShopSearchInput", "Search items...", _font, 15.5f);
             LayoutElement searchLe = _shopSearchInput.gameObject.AddComponent<LayoutElement>();
@@ -4006,7 +4032,6 @@ namespace Realmz.Game
         {
             RectTransform root = BywaterUiHelpers.CreatePanel(parent, "AffordableToggle", BywaterUiHelpers.ButtonBg, withBrassOutline: true, outlinePx: 1.2f);
             Toggle toggle = root.gameObject.AddComponent<Toggle>();
-            toggle.isOn = false;
 
             RectTransform box = BywaterUiHelpers.CreatePanel(root, "CheckBox", BywaterUiHelpers.InputBg, withBrassOutline: true, outlinePx: 1f);
             box.anchorMin = new Vector2(0f, 0.5f);
@@ -4029,6 +4054,7 @@ namespace Realmz.Game
 
             toggle.targetGraphic = root.GetComponent<Image>();
             toggle.graphic = checkMark;
+            toggle.SetIsOnWithoutNotify(false);
             return toggle;
         }
 
@@ -4263,7 +4289,7 @@ namespace Realmz.Game
             for (int i = 0; i < 3; i++)
             {
                 TextMeshProUGUI line = BywaterUiHelpers.CreateLabel(tickerPanel, $"TickerLine_{i}", string.Empty, _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, wrap: false);
-                line.overflowMode = TextOverflowModes.Ellipsis;
+                line.overflowMode = TextOverflowModes.Truncate;
                 line.gameObject.AddComponent<LayoutElement>().preferredHeight = 22f;
                 _tickerLines.Add(line);
             }

@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using Realmz.Cartography;
+using Realmz.Game;
 using RealmzCore.Data;
 using TMPro;
 using UnityEngine;
@@ -30,24 +32,34 @@ namespace Realmz.World
 
         public float EffectiveExploreMaxDistance => Mathf.Max(maxDistance, 32.0f);
         public float MaxCombatDistance => Mathf.Max(maxDistance, combatMaxDistance, 34f);
+        public float TargetDistance => _targetDistance;
+        public float CurrentDistance => _currentDistance;
+        public float KeyPanSpeed => keyPanSpeed;
+        public Vector3 TargetManualOffset => _targetManualOffset;
+        public Vector3 CurrentManualOffset => _currentManualOffset;
         public bool HasManualPanOffset => _targetManualOffset.sqrMagnitude > 0.04f || _currentManualOffset.sqrMagnitude > 0.04f;
 
         [Header("Smoothing & Controls")]
         [SerializeField] private float followSmoothTime = 0.18f;
         [SerializeField] private float zoomSmoothSpeed = 9f;
-        [SerializeField] private float panSmoothSpeed = 16f;
+        [SerializeField] private float panSmoothSpeed = 12f;
         [SerializeField] private float scrollZoomStep = 1.6f;
-        [SerializeField] private float keyPanSpeed = 12f;
+        [SerializeField] private float keyPanSpeed = 4.2f;
+        [SerializeField] private float keyPanAccel = 22f;
+        [SerializeField] private float keyPanShiftMultiplier = 1.65f;
         [SerializeField] private float mouseDragPanSpeed = 0.016f;
         [SerializeField] private float maxManualPanRadius = 60f;
 
         private Camera _cam;
         private Collider _terrainCollider;
+        private BywaterHudController _hudController;
+        private Func<bool> _externalModalBlockCheck;
         private Vector3 _followTarget;
         private Vector3 _currentFollowPos;
         private Vector3 _followVelocity;
         private Vector3 _targetManualOffset;
         private Vector3 _currentManualOffset;
+        private Vector3 _keyPanVelocity;
         private float _targetDistance;
         private float _currentDistance;
         private bool _hasTarget;
@@ -120,6 +132,47 @@ namespace Realmz.World
             _terrainCollider = col;
         }
 
+        public void SetHudController(BywaterHudController hudController)
+        {
+            _hudController = hudController;
+        }
+
+        public void SetExternalModalBlockCheck(Func<bool> check)
+        {
+            _externalModalBlockCheck = check;
+        }
+
+        public bool IsAnyModalOpen()
+        {
+            if (_externalModalBlockCheck != null && _externalModalBlockCheck())
+            {
+                return true;
+            }
+
+            if (_hudController == null)
+            {
+                _hudController = FindFirstObjectByType<BywaterHudController>();
+            }
+
+            return _hudController != null && _hudController.IsAnyModalOpen;
+        }
+
+        public bool IsPointerOverUiElement()
+        {
+            EventSystem es = EventSystem.current;
+            return es != null && es.IsPointerOverGameObject();
+        }
+
+        public bool ShouldBlockPointerWorldInput()
+        {
+            return IsAnyModalOpen() || IsPointerOverUiElement();
+        }
+
+        public bool ShouldBlockKeyboardPanInput()
+        {
+            return IsAnyModalOpen() || IsTypingInInputField() || IsPointerOverUiElement();
+        }
+
         public void SetWorldBounds(int width, int height)
         {
             if (width > 0 && height > 0)
@@ -163,6 +216,7 @@ namespace Realmz.World
             else if (recenterManualPan)
             {
                 _targetManualOffset = Vector3.zero;
+                _keyPanVelocity = Vector3.zero;
             }
             else
             {
@@ -182,6 +236,7 @@ namespace Realmz.World
             else
             {
                 _targetManualOffset = Vector3.zero;
+                _keyPanVelocity = Vector3.zero;
             }
         }
 
@@ -543,6 +598,82 @@ namespace Realmz.World
             return true;
         }
 
+        public float ApplyScrollZoomDelta(float scrollY)
+        {
+            if (ShouldBlockPointerWorldInput())
+            {
+                return 0f;
+            }
+
+            if (Mathf.Abs(scrollY) <= 0.01f)
+            {
+                return 0f;
+            }
+
+            float oldTarget = _targetDistance;
+            float normalized = Mathf.Abs(scrollY) >= 10f ? scrollY / 120f : scrollY;
+            float activeMax = _isCombatMode ? MaxCombatDistance : EffectiveExploreMaxDistance;
+            float newTarget = Mathf.Clamp(_targetDistance - normalized * scrollZoomStep, minDistance, activeMax);
+            _targetDistance = newTarget;
+            return newTarget - oldTarget;
+        }
+
+        public Vector3 ApplyPointerDragPan(Vector2 screenDelta, bool isRightPressed)
+        {
+            if (!isRightPressed || ShouldBlockPointerWorldInput())
+            {
+                return Vector3.zero;
+            }
+
+            if (screenDelta.sqrMagnitude <= 0.0001f)
+            {
+                return Vector3.zero;
+            }
+
+            Vector3 oldOffset = _targetManualOffset;
+            float distanceScale = Mathf.Clamp(Mathf.Sqrt(Mathf.Max(0.4f, _currentDistance / Mathf.Max(1f, defaultDistance))), 0.7f, 1.8f);
+            Vector3 dragPan = new Vector3(-screenDelta.x, 0f, -screenDelta.y) * (mouseDragPanSpeed * distanceScale);
+            _targetManualOffset += dragPan;
+            ClampPanTarget();
+            return _targetManualOffset - oldOffset;
+        }
+
+        public Vector3 ApplyKeyboardPanInput(Vector2 moveAxis, bool shiftHeld, float dt)
+        {
+            if (ShouldBlockKeyboardPanInput())
+            {
+                _keyPanVelocity = Vector3.zero;
+                return Vector3.zero;
+            }
+
+            float safeDt = Mathf.Max(0f, dt);
+            Vector3 desiredVelocity = Vector3.zero;
+            if (moveAxis.sqrMagnitude > 0.0001f)
+            {
+                Vector3 desiredDir = new Vector3(moveAxis.x, 0f, moveAxis.y).normalized;
+                float distanceScale = Mathf.Clamp(Mathf.Sqrt(Mathf.Max(0.4f, _currentDistance / Mathf.Max(1f, defaultDistance))), 0.7f, 1.8f);
+                float speed = keyPanSpeed * distanceScale * (shiftHeld ? keyPanShiftMultiplier : 1f);
+                desiredVelocity = desiredDir * speed;
+            }
+
+            float blend = 1f - Mathf.Exp(-keyPanAccel * safeDt);
+            _keyPanVelocity = Vector3.Lerp(_keyPanVelocity, desiredVelocity, blend);
+            if (desiredVelocity == Vector3.zero && _keyPanVelocity.sqrMagnitude < 0.0001f)
+            {
+                _keyPanVelocity = Vector3.zero;
+            }
+
+            if (_keyPanVelocity.sqrMagnitude <= 0.000001f || safeDt <= 0f)
+            {
+                return Vector3.zero;
+            }
+
+            Vector3 oldOffset = _targetManualOffset;
+            _targetManualOffset += _keyPanVelocity * safeDt;
+            ClampPanTarget();
+            return _targetManualOffset - oldOffset;
+        }
+
         private void HandleZoomInput()
         {
             Mouse mouse = Mouse.current;
@@ -552,32 +683,27 @@ namespace Realmz.World
             }
 
             float scrollY = mouse.scroll.ReadValue().y;
-            if (Mathf.Abs(scrollY) > 0.01f)
-            {
-                float normalized = Mathf.Abs(scrollY) >= 10f ? scrollY / 120f : scrollY;
-                float activeMax = _isCombatMode ? MaxCombatDistance : EffectiveExploreMaxDistance;
-                _targetDistance = Mathf.Clamp(_targetDistance - normalized * scrollZoomStep, minDistance, activeMax);
-            }
+            ApplyScrollZoomDelta(scrollY);
         }
 
         private void HandlePanInput()
         {
-            if (IsTypingInInputField())
+            if (IsAnyModalOpen() || IsTypingInInputField())
             {
+                _keyPanVelocity = Vector3.zero;
                 return;
             }
 
             Mouse mouse = Mouse.current;
             if (mouse != null && mouse.rightButton.isPressed)
             {
-                Vector2 delta = mouse.delta.ReadValue();
-                if (delta.sqrMagnitude > 0.0001f)
-                {
-                    float distanceScale = _currentDistance / Mathf.Max(1f, defaultDistance);
-                    Vector3 dragPan = new Vector3(-delta.x, 0f, -delta.y) * (mouseDragPanSpeed * distanceScale);
-                    _targetManualOffset += dragPan;
-                    ClampPanTarget();
-                }
+                ApplyPointerDragPan(mouse.delta.ReadValue(), true);
+            }
+
+            if (ShouldBlockKeyboardPanInput())
+            {
+                _keyPanVelocity = Vector3.zero;
+                return;
             }
 
             Keyboard kb = Keyboard.current;
@@ -597,13 +723,12 @@ namespace Realmz.World
                 if (kb.sKey.isPressed || kb.downArrowKey.isPressed) moveZ -= 1f;
                 if (kb.wKey.isPressed || kb.upArrowKey.isPressed) moveZ += 1f;
 
-                if (Mathf.Abs(moveX) > 0.01f || Mathf.Abs(moveZ) > 0.01f)
-                {
-                    float distanceScale = _currentDistance / Mathf.Max(1f, defaultDistance);
-                    Vector3 dir = new Vector3(moveX, 0f, moveZ).normalized;
-                    _targetManualOffset += dir * (keyPanSpeed * distanceScale * Time.unscaledDeltaTime);
-                    ClampPanTarget();
-                }
+                bool shiftHeld = kb.leftShiftKey.isPressed || kb.rightShiftKey.isPressed;
+                ApplyKeyboardPanInput(new Vector2(moveX, moveZ), shiftHeld, Time.unscaledDeltaTime);
+            }
+            else
+            {
+                ApplyKeyboardPanInput(Vector2.zero, false, Time.unscaledDeltaTime);
             }
         }
 
@@ -628,6 +753,7 @@ namespace Realmz.World
         {
             _targetManualOffset = Vector3.zero;
             _currentManualOffset = Vector3.zero;
+            _keyPanVelocity = Vector3.zero;
         }
 
         private void UpdateImpactImpulse(float dt)
@@ -657,7 +783,7 @@ namespace Realmz.World
                 return false;
             }
 
-            return eventSystem.currentSelectedGameObject.GetComponent<TMP_InputField>() != null;
+            return eventSystem.currentSelectedGameObject.GetComponentInParent<TMP_InputField>() != null;
         }
 
         private Camera ResolveCamera()

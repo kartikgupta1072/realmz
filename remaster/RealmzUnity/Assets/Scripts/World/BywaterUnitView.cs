@@ -478,12 +478,10 @@ namespace Realmz.World
 
             float breathScale = 1.0f + breathWave * 0.025f;
             float tiltDeg = swayWave * 1.4f;
-            float tiltRad = tiltDeg * Mathf.Deg2Rad;
-            float halfHeight = _spriteHeight * 0.5f * breathScale;
 
             Transform spriteTf = _spriteRenderer.transform;
             spriteTf.localScale = new Vector3(_spriteWidth, _spriteHeight * breathScale, 1f);
-            spriteTf.localPosition = new Vector3(-Mathf.Sin(tiltRad) * halfHeight, Mathf.Cos(tiltRad) * halfHeight, 0f);
+            spriteTf.localPosition = Vector3.zero;
             spriteTf.localRotation = Quaternion.Euler(0f, 0f, tiltDeg);
         }
 
@@ -813,6 +811,7 @@ namespace Realmz.World
             tmp.alignment = TextAlignmentOptions.Center;
             tmp.color = color;
             tmp.textWrappingMode = TextWrappingModes.NoWrap;
+            tmp.raycastTarget = false;
 
             if (!Application.isPlaying)
             {
@@ -882,11 +881,9 @@ namespace Realmz.World
                     if (_spriteRenderer != null)
                     {
                         float walkTiltDeg = Mathf.Sin(stridePhase) * (_hasWalkSheet ? 1.8f : 4.2f);
-                        float tiltRad = walkTiltDeg * Mathf.Deg2Rad;
-                        float halfH = _spriteHeight * 0.5f;
                         Transform spriteTf = _spriteRenderer.transform;
                         spriteTf.localScale = new Vector3(_spriteWidth, _spriteHeight, 1f);
-                        spriteTf.localPosition = new Vector3(-Mathf.Sin(tiltRad) * halfH, Mathf.Cos(tiltRad) * halfH, 0f);
+                        spriteTf.localPosition = Vector3.zero;
                         spriteTf.localRotation = Quaternion.Euler(0f, 0f, walkTiltDeg);
                     }
 
@@ -1083,7 +1080,7 @@ namespace Realmz.World
             }
 
             Transform spriteTf = _spriteRenderer.transform;
-            spriteTf.localPosition = new Vector3(0f, _spriteHeight * 0.5f, 0f);
+            spriteTf.localPosition = Vector3.zero;
             spriteTf.localScale = new Vector3(_spriteWidth, _spriteHeight, 1f);
             spriteTf.localRotation = Quaternion.identity;
         }
@@ -1173,7 +1170,7 @@ namespace Realmz.World
 
             GameObject spriteGo = new GameObject("SpriteQuad", typeof(MeshFilter), typeof(MeshRenderer));
             spriteGo.transform.SetParent(_spriteBillboardTransform, false);
-            spriteGo.transform.localPosition = new Vector3(0f, _spriteHeight * 0.5f, 0f);
+            spriteGo.transform.localPosition = Vector3.zero;
             spriteGo.transform.localScale = new Vector3(_spriteWidth, _spriteHeight, 1f);
             spriteGo.GetComponent<MeshFilter>().sharedMesh = GetOrCreateSharedUnitQuadMesh();
             _spriteRenderer = spriteGo.GetComponent<MeshRenderer>();
@@ -1278,6 +1275,7 @@ namespace Realmz.World
             pillEdgeRt.sizeDelta = new Vector2(172f, 38f);
             Image pillEdgeImg = pillEdgeGo.AddComponent<Image>();
             pillEdgeImg.color = new Color(0.76f, 0.58f, 0.28f, 0.85f);
+            pillEdgeImg.raycastTarget = false;
 
             GameObject pillGo = new GameObject("NamePill");
             pillGo.transform.SetParent(pillEdgeGo.transform, false);
@@ -1288,6 +1286,7 @@ namespace Realmz.World
             pillRt.offsetMax = new Vector2(-1.5f, -1.5f);
             Image pillImg = pillGo.AddComponent<Image>();
             pillImg.color = new Color(0.06f, 0.08f, 0.14f, 0.92f);
+            pillImg.raycastTarget = false;
 
             // Nameplate
             _nameLabel = CreateTmpLabel(_expandedNameplateRoot.transform, "NameLabel", new Vector2(0f, 18f), new Vector2(188f, 22f), 18f, Color.white);
@@ -1339,6 +1338,7 @@ namespace Realmz.World
 
             Image background = bgGo.AddComponent<Image>();
             background.color = new Color(0.03f, 0.04f, 0.07f, 0.72f);
+            background.raycastTarget = false;
 
             GameObject fillGo = new GameObject("Fill");
             fillGo.transform.SetParent(bgGo.transform, false);
@@ -1350,6 +1350,7 @@ namespace Realmz.World
 
             Image fill = fillGo.AddComponent<Image>();
             fill.color = fillColor;
+            fill.raycastTarget = false;
             return fill;
         }
 
@@ -1374,6 +1375,7 @@ namespace Realmz.World
             tmp.color = color;
             tmp.alignment = TextAlignmentOptions.Center;
             tmp.textWrappingMode = TextWrappingModes.NoWrap;
+            tmp.raycastTarget = false;
             return tmp;
         }
 
@@ -1395,6 +1397,7 @@ namespace Realmz.World
 
             background = bgGo.AddComponent<Image>();
             background.color = new Color(0.06f, 0.07f, 0.11f, 0.85f);
+            background.raycastTarget = false;
 
             GameObject fillGo = new GameObject("Fill");
             fillGo.transform.SetParent(bgGo.transform, false);
@@ -1406,6 +1409,7 @@ namespace Realmz.World
 
             Image fill = fillGo.AddComponent<Image>();
             fill.color = fillColor;
+            fill.raycastTarget = false;
             return fill;
         }
 
@@ -1422,10 +1426,10 @@ namespace Realmz.World
             };
             _sharedUnitQuadMesh.SetVertices(new[]
             {
-                new Vector3(-0.5f, -0.5f, 0f),
-                new Vector3( 0.5f, -0.5f, 0f),
-                new Vector3( 0.5f,  0.5f, 0f),
-                new Vector3(-0.5f,  0.5f, 0f)
+                new Vector3(-0.5f, 0f, 0f),
+                new Vector3( 0.5f, 0f, 0f),
+                new Vector3( 0.5f, 1f, 0f),
+                new Vector3(-0.5f, 1f, 0f)
             });
             _sharedUnitQuadMesh.SetNormals(new[]
             {

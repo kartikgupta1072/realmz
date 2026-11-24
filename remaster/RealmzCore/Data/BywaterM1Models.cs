@@ -366,7 +366,9 @@ namespace RealmzCore.Data
 
             if (rawTile < 0)
             {
-                bool isSolid = _solidNegativeIds.Contains(rawTile);
+                int baseMag = rawTile > -1000 ? -rawTile : 0;
+                bool isSolid = _solidNegativeIds.Contains(rawTile) ||
+                               (baseMag > 0 && _solidNegativeIds.Contains(baseMag));
                 return new TileRule(
                     tileId: rawTile,
                     passable: !isSolid,

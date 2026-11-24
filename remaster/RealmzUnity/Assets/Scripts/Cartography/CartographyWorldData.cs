@@ -150,6 +150,7 @@ namespace Realmz.Cartography
         private readonly List<CartographyLanternSource> _lanterns = new List<CartographyLanternSource>(32);
         private readonly List<CartographyNpcPlacement> _npcs = new List<CartographyNpcPlacement>(8);
         private readonly HashSet<Vector2Int> _blockedPropTiles = new HashSet<Vector2Int>();
+        private readonly HashSet<Vector2Int> _npcBlockedTiles = new HashSet<Vector2Int>();
 
         public int Width { get; }
         public int Height { get; }
@@ -164,6 +165,11 @@ namespace Realmz.Cartography
         public bool IsBlockedByProp(int x, int y)
         {
             return _blockedPropTiles.Contains(new Vector2Int(x, y));
+        }
+
+        public bool IsNpcBlockedTile(int x, int y)
+        {
+            return _npcBlockedTiles.Contains(new Vector2Int(x, y));
         }
 
         public IReadOnlyList<GridCoord> ExportBlockedPropGridCoords()
@@ -643,6 +649,7 @@ namespace Realmz.Cartography
             _lanterns.Clear();
             _npcs.Clear();
             _blockedPropTiles.Clear();
+            _npcBlockedTiles.Clear();
 
             if (map.IsDungeon)
             {
@@ -1024,15 +1031,38 @@ namespace Realmz.Cartography
                 placedOutdoorProps.Add(new Vector2Int(tx, ty));
                 if (IsSolidBlockingPropKind(buildingKind))
                 {
+                    int cMinX = int.MaxValue;
+                    int cMaxX = int.MinValue;
+                    int cMinY = int.MaxValue;
+                    int cMaxY = int.MinValue;
                     for (int i = 0; i < cluster.Count; i++)
                     {
                         Vector2Int pt = cluster[i];
+                        if (pt.x < cMinX) cMinX = pt.x;
+                        if (pt.x > cMaxX) cMaxX = pt.x;
+                        if (pt.y < cMinY) cMinY = pt.y;
+                        if (pt.y > cMaxY) cMaxY = pt.y;
                         if (kinds[pt.x, pt.y] != BywaterTileKind.TownBuildingDoor)
                         {
                             TryBlockPropTile(map, kinds, pt.x, pt.y);
                         }
                     }
-                    TryBlockPropTile(map, kinds, tx, ty);
+
+                    if (cluster.Count >= 2)
+                    {
+                        for (int by = cMinY; by <= cMaxY; by++)
+                        {
+                            for (int bx = cMinX; bx <= cMaxX; bx++)
+                            {
+                                if (map.InBounds(bx, by) && kinds[bx, by] != BywaterTileKind.TownBuildingDoor)
+                                {
+                                    TryBlockPropTile(map, kinds, bx, by);
+                                }
+                            }
+                        }
+                    }
+
+                    BlockSolidPropFootprint(map, kinds, buildingKind, pos.x, pos.z, sz);
                 }
                 _lanterns.Add(new CartographyLanternSource
                 {
@@ -1065,7 +1095,7 @@ namespace Realmz.Cartography
                         CanopyStrength = 0.42f
                     });
                     placedOutdoorProps.Add(new Vector2Int(ax, ay));
-                    TryBlockPropTile(map, kinds, ax, ay);
+                    BlockSolidPropFootprint(map, kinds, CartographyPropKind.Apothecary, pos.x, pos.z, sz);
                     placedApothecary = true;
                 }
             }
@@ -1101,7 +1131,7 @@ namespace Realmz.Cartography
                                     Vector2 ruinSz = GetDefaultPropSizeMeters(CartographyPropKind.StoneRuins);
                                     AddProp(CartographyPropKind.StoneRuins, pos.x, pos.y, pos.z, ruinSz.x, ruinSz.y);
                                     placedOutdoorProps.Add(tileCoord);
-                                    TryBlockPropTile(map, kinds, x, y);
+                                    BlockSolidPropFootprint(map, kinds, CartographyPropKind.StoneRuins, pos.x, pos.z, ruinSz);
                                 }
                             }
                             break;
@@ -1124,18 +1154,18 @@ namespace Realmz.Cartography
                         case BywaterOutdoorPropKind.OakTree:
                         {
                             Vector3 treePos = ComputeRoadsideTreeWorldPosition(kinds, x, y, w, h, pos);
-                            AddCanopyTree((vHash & 2) == 0 ? CartographyPropKind.TreeOakA : CartographyPropKind.TreeOakB,
-                                treePos.x, treePos.y, treePos.z, 2.5f, 3.0f, 2.0f);
-                            TryBlockPropTile(map, kinds, x, y);
+                            CartographyPropKind oakKind = (vHash & 2) == 0 ? CartographyPropKind.TreeOakA : CartographyPropKind.TreeOakB;
+                            AddCanopyTree(oakKind, treePos.x, treePos.y, treePos.z, 2.5f, 3.0f, 2.0f);
+                            BlockSolidPropFootprint(map, kinds, oakKind, treePos.x, treePos.z, new Vector2(2.5f, 3.0f));
                             break;
                         }
 
                         case BywaterOutdoorPropKind.PineTree:
                         {
                             Vector3 treePos = ComputeRoadsideTreeWorldPosition(kinds, x, y, w, h, pos);
-                            AddCanopyTree((vHash & 2) == 0 ? CartographyPropKind.TreePineA : CartographyPropKind.TreePineB,
-                                treePos.x, treePos.y, treePos.z, 2.2f, 3.3f, 1.7f);
-                            TryBlockPropTile(map, kinds, x, y);
+                            CartographyPropKind pineKind = (vHash & 2) == 0 ? CartographyPropKind.TreePineA : CartographyPropKind.TreePineB;
+                            AddCanopyTree(pineKind, treePos.x, treePos.y, treePos.z, 2.2f, 3.3f, 1.7f);
+                            BlockSolidPropFootprint(map, kinds, pineKind, treePos.x, treePos.z, new Vector2(2.2f, 3.3f));
                             break;
                         }
 
@@ -1147,7 +1177,7 @@ namespace Realmz.Cartography
                                 placedOutdoorProps.Add(tileCoord);
                                 if (kind != BywaterTileKind.Cobblestone && kind != BywaterTileKind.DirtPath)
                                 {
-                                    TryBlockPropTile(map, kinds, x, y);
+                                    BlockSolidPropFootprint(map, kinds, CartographyPropKind.BarrelsCrates, pos.x, pos.z, bcSz);
                                 }
                             }
                             break;
@@ -1202,10 +1232,7 @@ namespace Realmz.Cartography
                     Vector2 fSz = GetDefaultPropSizeMeters(fixedPlazaAnchors[i].pKind);
                     AddProp(fixedPlazaAnchors[i].pKind, fPos.x, fPos.y, fPos.z, fSz.x, fSz.y);
                     placedOutdoorProps.Add(anchorCoord);
-                    if (IsSolidBlockingPropKind(fixedPlazaAnchors[i].pKind))
-                    {
-                        TryBlockPropTile(map, kinds, fx, fy);
-                    }
+                    BlockSolidPropFootprint(map, kinds, fixedPlazaAnchors[i].pKind, fPos.x, fPos.z, fSz);
                 }
             }
 
@@ -1247,10 +1274,7 @@ namespace Realmz.Cartography
                     Vector2 sz = GetDefaultPropSizeMeters(dressKind);
                     AddProp(dressKind, pos.x, pos.y, pos.z, sz.x, sz.y);
                     placedOutdoorProps.Add(plazaCoord);
-                    if (IsSolidBlockingPropKind(dressKind))
-                    {
-                        TryBlockPropTile(map, kinds, x, y);
-                    }
+                    BlockSolidPropFootprint(map, kinds, dressKind, pos.x, pos.z, sz);
                 }
             }
 
@@ -1294,10 +1318,7 @@ namespace Realmz.Cartography
                     Vector2 sz = GetDefaultPropSizeMeters(outskirtKind);
                     AddProp(outskirtKind, pos.x, pos.y, pos.z, sz.x, sz.y);
                     placedOutdoorProps.Add(outskirtCoord);
-                    if (IsSolidBlockingPropKind(outskirtKind))
-                    {
-                        TryBlockPropTile(map, kinds, x, y);
-                    }
+                    BlockSolidPropFootprint(map, kinds, outskirtKind, pos.x, pos.z, sz);
 
                     if (outskirtKind == CartographyPropKind.Campfire4f)
                     {
@@ -1804,6 +1825,7 @@ namespace Realmz.Cartography
             _lanterns.Clear();
             _npcs.Clear();
             _blockedPropTiles.Clear();
+            _npcBlockedTiles.Clear();
 
             for (int legacyZ = 0; legacyZ < GridHeight; legacyZ++)
             {
@@ -2177,6 +2199,126 @@ namespace Realmz.Cartography
             }
         }
 
+        private void BlockSolidPropFootprint(
+            TileMapData map,
+            BywaterTileKind[,] kinds,
+            CartographyPropKind kind,
+            float worldX,
+            float worldZ,
+            Vector2 sizeMeters)
+        {
+            if (!IsSolidBlockingPropKind(kind))
+            {
+                return;
+            }
+
+            switch (kind)
+            {
+                case CartographyPropKind.BywaterInn:
+                case CartographyPropKind.Blacksmith:
+                case CartographyPropKind.Apothecary:
+                case CartographyPropKind.Temple:
+                case CartographyPropKind.Guildhall:
+                case CartographyPropKind.CottageB:
+                case CartographyPropKind.CottageC:
+                case CartographyPropKind.Watchtower:
+                {
+                    float halfW = Mathf.Max(0.45f, sizeMeters.x * 0.40f);
+                    float southMargin = 0.48f;
+                    float northDepth = Mathf.Clamp(sizeMeters.y * 0.38f, 0.85f, 1.95f);
+                    int minTileX = Mathf.FloorToInt(worldX - halfW + 0.12f);
+                    int maxTileX = Mathf.FloorToInt(worldX + halfW - 0.12f);
+                    int minTileY = Mathf.FloorToInt(-(worldZ + northDepth) + 0.12f);
+                    int maxTileY = Mathf.FloorToInt(-(worldZ - southMargin) - 0.12f);
+                    for (int y = minTileY; y <= maxTileY; y++)
+                    {
+                        for (int x = minTileX; x <= maxTileX; x++)
+                        {
+                            if (map.InBounds(x, y) && kinds[x, y] != BywaterTileKind.TownBuildingDoor)
+                            {
+                                TryBlockPropTile(map, kinds, x, y);
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                case CartographyPropKind.MarketStallA:
+                case CartographyPropKind.MarketStallB:
+                case CartographyPropKind.WoodenWagon:
+                case CartographyPropKind.CampTent:
+                case CartographyPropKind.StoneRuins:
+                case CartographyPropKind.StoneWell:
+                {
+                    float halfW = Mathf.Max(0.35f, sizeMeters.x * 0.34f);
+                    int minTileX = Mathf.FloorToInt(worldX - halfW + 0.12f);
+                    int maxTileX = Mathf.FloorToInt(worldX + halfW - 0.12f);
+                    int minTileY = Mathf.FloorToInt(-(worldZ + 0.45f) + 0.12f);
+                    int maxTileY = Mathf.FloorToInt(-(worldZ - 0.35f) - 0.12f);
+                    for (int y = minTileY; y <= maxTileY; y++)
+                    {
+                        for (int x = minTileX; x <= maxTileX; x++)
+                        {
+                            if (map.InBounds(x, y))
+                            {
+                                TryBlockPropTile(map, kinds, x, y);
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                case CartographyPropKind.TreeOakA:
+                case CartographyPropKind.TreeOakB:
+                case CartographyPropKind.TreePineA:
+                case CartographyPropKind.TreePineB:
+                case CartographyPropKind.TreeWillowA:
+                {
+                    int trunkX = Mathf.FloorToInt(worldX);
+                    int trunkY = Mathf.FloorToInt(-worldZ);
+                    if (map.InBounds(trunkX, trunkY))
+                    {
+                        TryBlockPropTile(map, kinds, trunkX, trunkY);
+                    }
+
+                    if (sizeMeters.x >= 3.8f)
+                    {
+                        for (int dy = -1; dy <= 1; dy++)
+                        {
+                            for (int dx = -1; dx <= 1; dx++)
+                            {
+                                if (dx == 0 && dy == 0) continue;
+                                int nx = trunkX + dx;
+                                int ny = trunkY + dy;
+                                if (!map.InBounds(nx, ny)) continue;
+                                BywaterTileKind nk = kinds[nx, ny];
+                                if (nk != BywaterTileKind.Grass && nk != BywaterTileKind.ForestCover) continue;
+                                float cx = nx + 0.5f;
+                                float cz = -(ny + 0.5f);
+                                float dSq = (cx - worldX) * (cx - worldX) + (cz - worldZ) * (cz - worldZ);
+                                if (dSq <= 0.85f * 0.85f)
+                                {
+                                    TryBlockPropTile(map, kinds, nx, ny);
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                default:
+                {
+                    int tx = Mathf.FloorToInt(worldX);
+                    int ty = Mathf.FloorToInt(-worldZ);
+                    if (map.InBounds(tx, ty))
+                    {
+                        TryBlockPropTile(map, kinds, tx, ty);
+                    }
+                    break;
+                }
+            }
+        }
+
         private void StripProtectedTilesFromBlockedProps(TileMapData map, BywaterTileKind[,] kinds)
         {
             if (_blockedPropTiles.Count == 0)
@@ -2187,6 +2329,11 @@ namespace Realmz.Cartography
             List<Vector2Int> toRemove = null;
             foreach (Vector2Int tile in _blockedPropTiles)
             {
+                if (_npcBlockedTiles.Contains(tile))
+                {
+                    continue;
+                }
+
                 if (IsProtectedTileForBlocking(map, kinds, tile.x, tile.y))
                 {
                     toRemove ??= new List<Vector2Int>(8);
@@ -2402,7 +2549,7 @@ namespace Realmz.Cartography
                         Vector2 stallSize = GetDefaultPropSizeMeters(CartographyPropKind.MarketStallA);
                         AddProp(CartographyPropKind.MarketStallA, stallPos.x, stallPos.y, stallPos.z, stallSize.x, stallSize.y);
                         placedOutdoorProps.Add(new Vector2Int(bestX, bestY));
-                        TryBlockPropTile(map, kinds, bestX, bestY);
+                        BlockSolidPropFootprint(map, kinds, CartographyPropKind.MarketStallA, stallPos.x, stallPos.z, stallSize);
                         return;
                     }
                 }
@@ -2456,7 +2603,8 @@ namespace Realmz.Cartography
                     Vector2Int coord = new Vector2Int(nx, ny);
                     npcTiles.Add(coord);
                     placedOutdoorProps.Add(coord);
-                    TryBlockPropTile(map, kinds, nx, ny);
+                    _npcBlockedTiles.Add(coord);
+                    _blockedPropTiles.Add(coord);
                     _npcs.Add(new CartographyNpcPlacement
                     {
                         NpcId = specs[s].npcId,
@@ -2539,6 +2687,8 @@ namespace Realmz.Cartography
                             if (isBuildingTile[cx, cy] ||
                                 IsProtectedRoadOrDoorway(map, kinds, cx, cy) ||
                                 map.GetPointOfInterestAt(cx, cy) != null ||
+                                (map.StartSpawn.X == cx && map.StartSpawn.Y == cy) ||
+                                (!map.IsDungeon && cx == 10 && cy == 9) ||
                                 (cx == 13 && cy == 10) ||
                                 _blockedPropTiles.Contains(candidate) ||
                                 npcTiles.Contains(candidate))
@@ -2715,7 +2865,7 @@ namespace Realmz.Cartography
             }
 
             bool[,] baseReachable = ComputeReachableBfs(map, primarySeed, ignoreBlocks: true);
-            HashSet<Vector2Int> npcTileSet = new HashSet<Vector2Int>();
+            HashSet<Vector2Int> npcTileSet = new HashSet<Vector2Int>(_npcBlockedTiles);
             for (int i = 0; i < _npcs.Count; i++)
             {
                 npcTileSet.Add(new Vector2Int(_npcs[i].TileX, _npcs[i].TileY));
@@ -2760,6 +2910,25 @@ namespace Realmz.Cartography
                     }
                 }
 
+                if (unreachableTarget.x < 0 && !map.IsDungeon)
+                {
+                    int mw = map.Width;
+                    int mh = map.Height;
+                    for (int y = 0; y < mh && unreachableTarget.x < 0; y++)
+                    {
+                        for (int x = 0; x < mw; x++)
+                        {
+                            if (kinds[x, y] == BywaterTileKind.TownBuildingDoor &&
+                                baseReachable[x, y] &&
+                                !reached[x, y])
+                            {
+                                unreachableTarget = new Vector2Int(x, y);
+                                break;
+                            }
+                        }
+                    }
+                }
+
                 if (unreachableTarget.x < 0)
                 {
                     for (int i = 0; i < _npcs.Count; i++)
@@ -2780,15 +2949,21 @@ namespace Realmz.Cartography
                                     continue;
                                 }
 
-                                if (reached[ax, ay] && !_blockedPropTiles.Contains(new Vector2Int(ax, ay)))
+                                Vector2Int approachCoord = new Vector2Int(ax, ay);
+                                if (npcTileSet.Contains(approachCoord))
+                                {
+                                    continue;
+                                }
+
+                                if (reached[ax, ay] && !_blockedPropTiles.Contains(approachCoord))
                                 {
                                     hasApproach = true;
                                     break;
                                 }
 
-                                if (fallbackApproach.x < 0 || !npcTileSet.Contains(new Vector2Int(ax, ay)))
+                                if (fallbackApproach.x < 0)
                                 {
-                                    fallbackApproach = new Vector2Int(ax, ay);
+                                    fallbackApproach = approachCoord;
                                 }
                             }
                         }
@@ -3004,10 +3179,15 @@ namespace Realmz.Cartography
                         }
 
                         Vector2Int nCoord = new Vector2Int(nx, ny);
+                        if (npcTileSet.Contains(nCoord) || _npcBlockedTiles.Contains(nCoord))
+                        {
+                            continue;
+                        }
+
                         int stepCost = 1;
                         if (_blockedPropTiles.Contains(nCoord))
                         {
-                            stepCost += npcTileSet.Contains(nCoord) ? 10000 : 100;
+                            stepCost += 100;
                         }
 
                         int newCost = curCost + stepCost;
@@ -3033,7 +3213,7 @@ namespace Realmz.Cartography
             while (tx >= 0 && ty >= 0)
             {
                 Vector2Int cur = new Vector2Int(tx, ty);
-                if (_blockedPropTiles.Contains(cur))
+                if (_blockedPropTiles.Contains(cur) && !npcTileSet.Contains(cur) && !_npcBlockedTiles.Contains(cur))
                 {
                     _blockedPropTiles.Remove(cur);
                     removedAny = true;

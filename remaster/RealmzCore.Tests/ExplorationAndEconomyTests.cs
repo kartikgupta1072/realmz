@@ -388,5 +388,168 @@ namespace RealmzCore.Tests
             Assert.Equal(0, session.TriggerTempleRechargeItems(catalog, 30));
             Assert.Equal(50, party.Gold);
         }
+
+        [Fact]
+        public void ExplorationSession_SetBlockedPropFootprints_RoutesAroundBuildingFootprintAndHaltsDirectStep()
+        {
+            const int width = 10;
+            const int height = 10;
+            int[] tiles = new int[width * height];
+            for (int i = 0; i < tiles.Length; i++)
+            {
+                tiles[i] = 61;
+            }
+
+            Dictionary<int, TileRule> rules = new Dictionary<int, TileRule>
+            {
+                [61] = new TileRule(61, passable: true, moveCost: 1)
+            };
+
+            TileMapData mainMap = new TileMapData(
+                "town_main",
+                "Bywater",
+                0,
+                isDungeon: false,
+                width: width,
+                height: height,
+                tiles: tiles,
+                startSpawn: new GridCoord(1, 4),
+                tileRules: rules);
+
+            TileMapData cellarMap = new TileMapData(
+                "town_cellar",
+                "Bywater Cellar",
+                0,
+                isDungeon: true,
+                width: width,
+                height: height,
+                tiles: (int[])tiles.Clone(),
+                startSpawn: new GridCoord(0, 0),
+                tileRules: rules);
+
+            HeroPresetData hero = new HeroPresetData("kevlar", "Kevlar", hp: 20, maxHp: 20, sp: 5, maxSp: 5, ac: 10, toHit: 10);
+            PartyState party = new PartyState(new[] { new PartyMemberState(hero) }, gold: 50);
+            ExplorationSession session = new ExplorationSession(
+                new Dictionary<string, TileMapData>
+                {
+                    ["town_main"] = mainMap,
+                    ["town_cellar"] = cellarMap
+                },
+                "town_main",
+                party);
+
+            // Realistic 4x3 building wall/interior footprint covering x=3..6, y=3..5.
+            List<GridCoord> buildingFootprint = new List<GridCoord>();
+            for (int y = 3; y <= 5; y++)
+            {
+                for (int x = 3; x <= 6; x++)
+                {
+                    buildingFootprint.Add(new GridCoord(x, y));
+                }
+            }
+
+            session.SetBlockedPropFootprints(buildingFootprint);
+            Assert.Equal(12, mainMap.BlockedPropTileCount);
+
+            // PlanPath to the doorway/destination on the opposite side must route around the exterior perimeter.
+            GridCoord doorwayDest = new GridCoord(7, 4);
+            PathResult path = session.PlanPath(doorwayDest);
+            Assert.True(path.Found);
+            Assert.Equal(doorwayDest, path.Steps[path.Steps.Count - 1]);
+            for (int i = 0; i < buildingFootprint.Count; i++)
+            {
+                Assert.DoesNotContain(buildingFootprint[i], path.Steps);
+            }
+
+            // Step up to the west exterior wall at (2, 4), then attempt to step into building tile (3, 4).
+            ExplorationStepResult approachStep = session.StepOneTile(new GridCoord(2, 4));
+            Assert.True(approachStep.Moved);
+            Assert.Equal(new GridCoord(2, 4), session.Position);
+
+            ExplorationStepResult blockedStep = session.StepOneTile(new GridCoord(3, 4));
+            Assert.False(blockedStep.Moved);
+            Assert.Equal(ExplorationHaltReason.Blocked, blockedStep.HaltReason);
+            Assert.Equal(new GridCoord(2, 4), session.Position);
+
+            // Map-targeted overload updates a non-current map and validates mapId.
+            session.SetBlockedPropFootprints("town_cellar", new[] { new GridCoord(4, 4) });
+            Assert.Equal(1, cellarMap.BlockedPropTileCount);
+            Assert.True(cellarMap.IsBlockedByProp(4, 4));
+            Assert.Throws<System.ArgumentException>(() => session.SetBlockedPropFootprints(" ", buildingFootprint));
+            Assert.Throws<KeyNotFoundException>(() => session.SetBlockedPropFootprints("missing_map", buildingFootprint));
+
+            // ClearBlockedPropFootprints clears current map footprints without affecting other maps.
+            session.ClearBlockedPropFootprints();
+            Assert.Equal(0, mainMap.BlockedPropTileCount);
+            Assert.Equal(1, cellarMap.BlockedPropTileCount);
+        }
+
+        [Fact]
+        public void ExplorationSession_SetBlockedPropFootprints_BlocksNpcTileWhileKeepingAdjacentTilesReachable()
+        {
+            const int width = 7;
+            const int height = 7;
+            int[] tiles = new int[width * height];
+            for (int i = 0; i < tiles.Length; i++)
+            {
+                tiles[i] = 61;
+            }
+
+            Dictionary<int, TileRule> rules = new Dictionary<int, TileRule>
+            {
+                [61] = new TileRule(61, passable: true, moveCost: 1)
+            };
+
+            TileMapData map = new TileMapData(
+                "npc_test",
+                "Bywater",
+                0,
+                isDungeon: false,
+                width: width,
+                height: height,
+                tiles: tiles,
+                startSpawn: new GridCoord(1, 3),
+                tileRules: rules);
+
+            HeroPresetData hero = new HeroPresetData("kevlar", "Kevlar", hp: 20, maxHp: 20, sp: 5, maxSp: 5, ac: 10, toHit: 10);
+            PartyState party = new PartyState(new[] { new PartyMemberState(hero) }, gold: 50);
+            ExplorationSession session = new ExplorationSession(
+                new Dictionary<string, TileMapData> { ["npc_test"] = map },
+                "npc_test",
+                party);
+
+            GridCoord npcTile = new GridCoord(3, 3);
+            session.SetBlockedPropFootprints(new[] { npcTile });
+
+            // PlanPath directly onto the occupied NPC tile must fail.
+            PathResult directPath = session.PlanPath(npcTile);
+            Assert.False(directPath.Found);
+
+            // Step onto adjacent west approach tile (2, 3), then verify StepOneTile onto NPC tile halts as Blocked.
+            ExplorationStepResult westApproach = session.StepOneTile(new GridCoord(2, 3));
+            Assert.True(westApproach.Moved);
+            Assert.Equal(new GridCoord(2, 3), session.Position);
+
+            ExplorationStepResult stepOntoNpc = session.StepOneTile(npcTile);
+            Assert.False(stepOntoNpc.Moved);
+            Assert.Equal(ExplorationHaltReason.Blocked, stepOntoNpc.HaltReason);
+            Assert.Equal(new GridCoord(2, 3), session.Position);
+
+            // Adjacent approach tiles around the NPC remain reachable and PlanPath routes cleanly around the NPC.
+            GridCoord[] adjacentTiles =
+            {
+                new GridCoord(3, 2),
+                new GridCoord(4, 3),
+                new GridCoord(3, 4)
+            };
+
+            for (int i = 0; i < adjacentTiles.Length; i++)
+            {
+                PathResult approachPath = session.PlanPath(adjacentTiles[i]);
+                Assert.True(approachPath.Found);
+                Assert.Equal(adjacentTiles[i], approachPath.Steps[approachPath.Steps.Count - 1]);
+                Assert.DoesNotContain(npcTile, approachPath.Steps);
+            }
+        }
     }
 }

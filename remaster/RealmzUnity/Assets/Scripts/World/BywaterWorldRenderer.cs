@@ -5,6 +5,7 @@ using Realmz.Rendering;
 using RealmzCore.Data;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.UI;
 
 namespace Realmz.World
 {
@@ -60,7 +61,7 @@ namespace Realmz.World
             public CartographyNpcPlacement Placement;
             public BywaterUnitView View;
             public GameObject PromptRoot;
-            public TMPro.TextMeshPro PromptText;
+            public TMPro.TMP_Text PromptText;
         }
 
         private sealed class StoneBridgeEntry
@@ -930,18 +931,53 @@ namespace Realmz.World
                 go.transform.SetParent(_npcContainer, false);
                 BywaterUnitView view = go.AddComponent<BywaterUnitView>();
 
-                GameObject promptGo = new GameObject("NpcInteractPrompt");
+                GameObject promptGo = new GameObject("NpcInteractPrompt", typeof(RectTransform), typeof(Canvas));
                 promptGo.transform.SetParent(go.transform, false);
-                promptGo.transform.localPosition = new Vector3(0f, 2.22f, 0f);
+                promptGo.transform.localPosition = new Vector3(0f, 1.92f, 0f);
+                promptGo.transform.localScale = Vector3.one * 0.0066f;
                 promptGo.AddComponent<PixelBillboard>();
-                TMPro.TextMeshPro tmp = promptGo.AddComponent<TMPro.TextMeshPro>();
-                tmp.fontSize = 2.6f;
+
+                Canvas promptCanvas = promptGo.GetComponent<Canvas>();
+                promptCanvas.renderMode = RenderMode.WorldSpace;
+                promptCanvas.sortingOrder = 40;
+
+                RectTransform promptRt = promptGo.GetComponent<RectTransform>();
+                promptRt.sizeDelta = new Vector2(280f, 44f);
+
+                Image outlineImg = promptGo.AddComponent<Image>();
+                outlineImg.color = new Color(0.761f, 0.580f, 0.278f, 0.90f);
+                outlineImg.raycastTarget = false;
+
+                GameObject innerGo = new GameObject("Inner", typeof(RectTransform), typeof(Image));
+                innerGo.transform.SetParent(promptGo.transform, false);
+                RectTransform innerRt = innerGo.GetComponent<RectTransform>();
+                innerRt.anchorMin = Vector2.zero;
+                innerRt.anchorMax = Vector2.one;
+                innerRt.offsetMin = new Vector2(2f, 2f);
+                innerRt.offsetMax = new Vector2(-2f, -2f);
+                Image innerImg = innerGo.GetComponent<Image>();
+                innerImg.color = new Color(0.059f, 0.078f, 0.133f, 0.92f);
+                innerImg.raycastTarget = false;
+
+                GameObject textGo = new GameObject("PromptText", typeof(RectTransform), typeof(TMPro.TextMeshProUGUI));
+                textGo.transform.SetParent(innerGo.transform, false);
+                RectTransform textRt = textGo.GetComponent<RectTransform>();
+                textRt.anchorMin = Vector2.zero;
+                textRt.anchorMax = Vector2.one;
+                textRt.offsetMin = new Vector2(8f, 3f);
+                textRt.offsetMax = new Vector2(-8f, -3f);
+
+                TMPro.TextMeshProUGUI tmp = textGo.GetComponent<TMPro.TextMeshProUGUI>();
+                tmp.fontSize = 14.5f;
+                tmp.enableAutoSizing = true;
+                tmp.fontSizeMin = 11f;
+                tmp.fontSizeMax = 15f;
+                tmp.textWrappingMode = TMPro.TextWrappingModes.Normal;
+                tmp.overflowMode = TMPro.TextOverflowModes.Truncate;
                 tmp.alignment = TMPro.TextAlignmentOptions.Center;
-                tmp.color = new Color(0.98f, 0.86f, 0.42f, 1f);
-                tmp.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
-                tmp.sortingOrder = 40;
-                RectTransform tmpRt = tmp.rectTransform;
-                tmpRt.sizeDelta = new Vector2(6f, 1f);
+                tmp.color = new Color(0.98f, 0.88f, 0.48f, 1f);
+                tmp.raycastTarget = false;
+
                 promptGo.SetActive(false);
 
                 go.SetActive(false);

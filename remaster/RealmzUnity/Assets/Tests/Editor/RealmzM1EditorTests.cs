@@ -2234,6 +2234,186 @@ namespace Realmz.EditorTests
             return string.Join("/", parts);
         }
 
+        [Test]
+        public void Bug2AndBug7_CameraPanDampedComfortably_AndAllModalsLockZoomPanAndPointerClicks()
+        {
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
+            PartyState party = PartyState.FromBundle(bundle);
+            Assert.That(catalog, Is.Not.Null);
+
+            bool hadEs = Object.FindFirstObjectByType<EventSystem>() != null;
+            GameObject camGo = new GameObject("TempBug27CamRig");
+            GameObject hudGo = new GameObject("TempBug27Hud");
+            try
+            {
+                Camera cam = camGo.AddComponent<Camera>();
+                cam.tag = "MainCamera";
+                BywaterCameraRig rig = camGo.AddComponent<BywaterCameraRig>();
+                BywaterHudController hud = hudGo.AddComponent<BywaterHudController>();
+
+                typeof(BywaterCameraRig).GetMethod("Awake", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.Invoke(rig, null);
+                hud.BuildUi(catalog);
+                rig.SetHudController(hud);
+                rig.SetWorldBounds(90, 90);
+                rig.SetFollowTarget(new Vector3(10.5f, 0f, -9.5f), immediate: true);
+
+                // Bug #2: Tactical pan speed + gentle tap nudge
+                Assert.That(rig.KeyPanSpeed, Is.LessThanOrEqualTo(5.5f), "Keyboard pan speed must be slowed to comfortable tactical pace.");
+                Vector3 nudge = rig.ApplyKeyboardPanInput(Vector2.up, shiftHeld: false, 0.05f);
+                Assert.That(nudge.magnitude, Is.GreaterThan(0.01f).And.LessThan(0.25f), "Quick key tap should gently nudge camera.");
+                Vector3 hold = rig.ApplyKeyboardPanInput(Vector2.up, shiftHeld: false, 0.25f);
+                Vector3 shiftHold = rig.ApplyKeyboardPanInput(Vector2.up, shiftHeld: true, 0.25f);
+                Assert.That(shiftHold.magnitude, Is.GreaterThan(hold.magnitude), "Shift modifier should apply modest boost.");
+                rig.Recenter(immediate: true);
+
+                // Verify normal scroll works when no modal is open
+                float baselineDist = rig.TargetDistance;
+                float openScrollDelta = rig.ApplyScrollZoomDelta(-120f);
+                Assert.That(openScrollDelta, Is.Not.EqualTo(0f), "Scroll should zoom when no modal is open.");
+                float activeDist = rig.TargetDistance;
+                Assert.That(activeDist, Is.Not.EqualTo(baselineDist));
+
+                // Bug #7: Party/Stash modal locks zoom (0.0f delta), keyboard pan, and right-drag pan
+                hud.TogglePartyPanel(true);
+                Assert.That(hud.IsPartyOpen, Is.True);
+                Assert.That(rig.ApplyScrollZoomDelta(240f), Is.EqualTo(0f), "Scroll zoom must be 0.0f delta when Party/Stash modal is open.");
+                Assert.That(rig.ApplyScrollZoomDelta(-240f), Is.EqualTo(0f), "Scroll out must also be 0.0f delta when Party/Stash modal is open.");
+                Assert.That(rig.TargetDistance, Is.EqualTo(activeDist), "TargetDistance must not change during Party/Stash modal scroll.");
+                Assert.That(rig.ApplyKeyboardPanInput(Vector2.one, false, 0.25f), Is.EqualTo(Vector3.zero), "Keyboard pan must be locked while Party/Stash modal is open.");
+                Assert.That(rig.ApplyPointerDragPan(new Vector2(60f, -40f), true), Is.EqualTo(Vector3.zero), "Right-drag pan must be locked while Party/Stash modal is open.");
+                hud.TogglePartyPanel(false);
+
+                // Shop modal lock
+                hud.OpenShop("1", party, bundle);
+                Assert.That(hud.IsShopOpen, Is.True);
+                Assert.That(rig.ApplyScrollZoomDelta(120f), Is.EqualTo(0f));
+                Assert.That(rig.ApplyKeyboardPanInput(Vector2.right, false, 0.2f), Is.EqualTo(Vector3.zero));
+                Assert.That(rig.TargetDistance, Is.EqualTo(activeDist));
+                hud.CloseShopModal();
+
+                // Temple modal lock
+                hud.OpenTempleModal(party, bundle);
+                Assert.That(hud.IsTempleOpen, Is.True);
+                Assert.That(rig.ApplyScrollZoomDelta(120f), Is.EqualTo(0f));
+                Assert.That(rig.ApplyKeyboardPanInput(Vector2.left, false, 0.2f), Is.EqualTo(Vector3.zero));
+                hud.CloseTempleModal();
+
+                // Settings / Pause modal lock
+                hud.ToggleSettingsModal(true);
+                Assert.That(hud.IsSettingsOpen, Is.True);
+                Assert.That(rig.ApplyScrollZoomDelta(-120f), Is.EqualTo(0f));
+                Assert.That(rig.ApplyKeyboardPanInput(Vector2.down, false, 0.2f), Is.EqualTo(Vector3.zero));
+                hud.CloseSettingsModal();
+
+                // Quick Resolve modal lock
+                hud.ShowQuickResolveModal("Skirmish", "Ambushed!");
+                Assert.That(hud.IsQuickResolveOpen, Is.True);
+                Assert.That(rig.ApplyScrollZoomDelta(120f), Is.EqualTo(0f));
+                hud.HideQuickResolveModal();
+
+                // Closing modals restores scroll zoom
+                Assert.That(rig.ApplyScrollZoomDelta(120f), Is.Not.EqualTo(0f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(camGo);
+                Object.DestroyImmediate(hudGo);
+                if (!hadEs)
+                {
+                    EventSystem created = Object.FindFirstObjectByType<EventSystem>();
+                    if (created != null) Object.DestroyImmediate(created.gameObject);
+                }
+            }
+        }
+
+        [Test]
+        public void Bug4_AllFourNpcsBlocked_AdjacentApproachOpensShopAndTemple_AndPromptIsCompactCanvasPill()
+        {
+            string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            PartyState party = PartyState.FromBundle(bundle);
+
+            bool hadEs = Object.FindFirstObjectByType<EventSystem>() != null;
+            GameObject worldGo = new GameObject("TempBug4World");
+            GameObject ctrlGo = new GameObject("TempBug4Ctrl");
+            GameObject hudGo = new GameObject("TempBug4Hud");
+            GameObject camGo = new GameObject("TempBug4Cam");
+            try
+            {
+                BywaterWorldRenderer renderer = worldGo.AddComponent<BywaterWorldRenderer>();
+                renderer.Initialize(catalog);
+                Camera cam = camGo.AddComponent<Camera>();
+                cam.tag = "MainCamera";
+                BywaterCameraRig rig = camGo.AddComponent<BywaterCameraRig>();
+                BywaterHudController hud = hudGo.AddComponent<BywaterHudController>();
+                hud.BuildUi(catalog);
+
+                ExplorationSession session = new ExplorationSession(bundle.Maps, "land_0", party, new DeterministicDiceRoller(555UL), new GridCoord(10, 9));
+                BywaterGameController ctrl = ctrlGo.AddComponent<BywaterGameController>();
+                ctrl.assetCatalog = catalog;
+                ctrl.worldRenderer = renderer;
+                ctrl.hudController = hud;
+                ctrl.cameraRig = rig;
+                ctrl.InitializeForTests(bundle, session, 555UL);
+                typeof(BywaterGameController).GetMethod("EnterExplorationView", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.Invoke(ctrl, new object[] { true });
+
+                Assert.That(renderer.ActiveNpcCount, Is.EqualTo(4));
+                for (int i = 0; i < renderer.ActiveNpcs.Count; i++)
+                {
+                    CartographyNpcPlacement npc = renderer.ActiveNpcs[i];
+                    GridCoord npcCoord = new GridCoord(npc.TileX, npc.TileY);
+                    Assert.That(renderer.CartographyData.IsNpcBlockedTile(npc.TileX, npc.TileY), Is.True, $"NPC {npc.NpcId} must be in NPC block set.");
+                    Assert.That(bundle.Land0.IsPassable(npc.TileX, npc.TileY, false), Is.False, $"NPC {npc.NpcId} tile must be impassable.");
+                    Assert.That(session.StepOneTile(npcCoord).Moved, Is.False, $"Party leader must never step onto {npc.NpcId} tile {npcCoord}.");
+                    Assert.That(session.PlanPath(npcCoord, true).Found, Is.False, $"Direct A* to NPC {npc.NpcId} tile must be blocked.");
+                }
+
+                // Test clicking Borin from spawn (10, 9): routes adjacent, stays off Borin's tile, opens Shop #1
+                CartographyNpcPlacement borin = renderer.ActiveNpcs[0];
+                GridCoord borinCoord = new GridCoord(borin.TileX, borin.TileY);
+                typeof(BywaterGameController).GetMethod("UpdateExplorationInput", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                    ?.Invoke(ctrl, new object[] { borinCoord, true });
+                ctrl.ForceCompleteWalkForTest();
+                Assert.That(session.Position, Is.Not.EqualTo(borinCoord), "Leader must not occupy Borin's tile.");
+                Assert.That(session.Position.ChebyshevDistance(borinCoord), Is.LessThanOrEqualTo(1), "Leader must stop adjacent to Borin.");
+                Assert.That(hud.IsShopOpen, Is.True, "Approaching Borin by click must open Shop #1 modal.");
+                hud.CloseShopModal();
+
+                // Verify compact WorldSpace Canvas prompt pill (world width < 2.5m, raycastTarget == false)
+                Transform npc0 = FindDescendantByName(renderer.transform, "TownNpc_0");
+                Assert.That(npc0, Is.Not.Null);
+                Transform prompt = npc0.Find("NpcInteractPrompt");
+                Assert.That(prompt, Is.Not.Null);
+                Canvas promptCanvas = prompt.GetComponent<Canvas>();
+                Assert.That(promptCanvas, Is.Not.Null);
+                Assert.That(promptCanvas.renderMode, Is.EqualTo(RenderMode.WorldSpace));
+                Assert.That(prompt.GetComponent<UnityEngine.UI.GraphicRaycaster>(), Is.Null);
+                RectTransform promptRt = prompt.GetComponent<RectTransform>();
+                float worldWidth = promptRt.sizeDelta.x * prompt.localScale.x;
+                Assert.That(worldWidth, Is.GreaterThan(0.8f).And.LessThan(2.5f), $"Prompt pill world width {worldWidth} must be compact (<2.5m).");
+                UnityEngine.UI.Graphic[] graphics = prompt.GetComponentsInChildren<UnityEngine.UI.Graphic>(true);
+                for (int g = 0; g < graphics.Length; g++)
+                {
+                    Assert.That(graphics[g].raycastTarget, Is.False, "World prompt UI must not block pointer raycasts.");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(worldGo);
+                Object.DestroyImmediate(ctrlGo);
+                Object.DestroyImmediate(hudGo);
+                Object.DestroyImmediate(camGo);
+                if (!hadEs)
+                {
+                    EventSystem created = Object.FindFirstObjectByType<EventSystem>();
+                    if (created != null) Object.DestroyImmediate(created.gameObject);
+                }
+            }
+        }
+
         private static void AssertPortraitFrameSize(Transform frame, float minSize)
         {
             RectTransform rt = frame.GetComponent<RectTransform>();

@@ -189,6 +189,31 @@ namespace RealmzCore.Exploration
             }
         }
 
+        public void SetBlockedPropFootprints(IEnumerable<GridCoord>? coords)
+        {
+            CurrentMap.SetBlockedPropFootprints(coords);
+        }
+
+        public void SetBlockedPropFootprints(string mapId, IEnumerable<GridCoord>? coords)
+        {
+            if (string.IsNullOrWhiteSpace(mapId))
+            {
+                throw new ArgumentException("Map ID cannot be null or whitespace.", nameof(mapId));
+            }
+
+            if (!_maps.TryGetValue(mapId, out TileMapData? targetMap))
+            {
+                throw new KeyNotFoundException($"Map '{mapId}' not found.");
+            }
+
+            targetMap.SetBlockedPropFootprints(coords);
+        }
+
+        public void ClearBlockedPropFootprints()
+        {
+            CurrentMap.ClearBlockedPropFootprints();
+        }
+
         public PathResult PlanPath(GridCoord target, bool allowDiagonal = true)
         {
             if (target == Position)

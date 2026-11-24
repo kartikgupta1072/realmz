@@ -233,9 +233,12 @@ Shader "Realmz/CartographyBillboard"
             else
             {
                 positionWS = TransformObjectToWorld(positionOS);
-                float h = max(0.0, positionWS.y - rootWS.y);
-                positionWS.y = rootWS.y + h * cos(tiltRad);
-                positionWS += fwdXZ * (h * sin(tiltRad));
+                if (abs(tiltOverrideDeg) > 0.001)
+                {
+                    float h = positionWS.y - rootWS.y;
+                    positionWS.y = rootWS.y + h * cos(tiltRad);
+                    positionWS += fwdXZ * (h * sin(tiltRad));
+                }
             }
 
             // Subtle vertex wind tip sway synchronized with traveling gust wave

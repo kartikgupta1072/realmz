@@ -790,6 +790,163 @@ namespace Realmz.EditorTests
             }
         }
 
+        [Test]
+        public void Bug1_AllUnitsAndAnimStatesHaveFootAnchoredGroundedQuads_AndShaderPreservesRoot()
+        {
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            Assert.That(catalog, Is.Not.Null);
+
+            string shaderText = File.ReadAllText(Path.GetFullPath("Assets/Shaders/CartographyBillboard.shader"));
+            Assert.That(shaderText.Contains("max(0.0, positionWS.y - rootWS.y)"), Is.False,
+                "CartographyBillboard.shader must not clamp below-root vertices upward onto rootWS.y.");
+
+            string[] unitIds =
+            {
+                "hero_knight", "hero_cleric", "hero_ranger",
+                "hero_mage", "hero_paladin", "hero_rogue",
+                "monster_giant_frog", "monster_goblin_raider", "monster_goblin_archer",
+                "monster_orc_warrior", "monster_giant_rat", "monster_skeleton_warrior",
+                "monster_bandit_cutthroat",
+                "npc_blacksmith", "npc_tanner", "npc_apothecary", "npc_priestess"
+            };
+
+            UnitAnimState[] states = { UnitAnimState.Idle, UnitAnimState.Walk, UnitAnimState.Attack };
+            GameObject unitGo = new GameObject("TempBug1GroundingUnit");
+            try
+            {
+                BywaterUnitView view = unitGo.AddComponent<BywaterUnitView>();
+                for (int i = 0; i < unitIds.Length; i++)
+                {
+                    string uid = unitIds[i];
+                    view.Configure(uid, uid, null, Color.yellow, catalog.uiFont, 2.0f, true, true, catalog);
+                    view.SetWorldPosition(new Vector3(10.5f, 0.35f, -9.5f));
+                    view.SetTurnHighlight(true);
+
+                    Transform spriteQuad = view.transform.Find("SpriteBillboard/SpriteQuad");
+                    Transform underRing = view.transform.Find("UnderRing");
+                    Transform contactShadow = view.transform.Find("ContactShadow");
+                    Assert.That(spriteQuad, Is.Not.Null, $"SpriteQuad missing on {uid}");
+                    Assert.That(underRing, Is.Not.Null, $"UnderRing missing on {uid}");
+                    Assert.That(contactShadow, Is.Not.Null, $"ContactShadow missing on {uid}");
+
+                    MeshFilter mf = spriteQuad.GetComponent<MeshFilter>();
+                    Assert.That(mf, Is.Not.Null);
+                    Assert.That(mf.sharedMesh, Is.Not.Null);
+                    Vector3[] verts = mf.sharedMesh.vertices;
+                    float minVertY = float.MaxValue;
+                    float maxVertY = float.MinValue;
+                    for (int v = 0; v < verts.Length; v++)
+                    {
+                        if (verts[v].y < minVertY) minVertY = verts[v].y;
+                        if (verts[v].y > maxVertY) maxVertY = verts[v].y;
+                    }
+                    Assert.That(minVertY, Is.EqualTo(0f).Within(0.001f), $"{uid} shared unit quad must be foot-anchored at y=0.");
+                    Assert.That(maxVertY, Is.EqualTo(1f).Within(0.001f), $"{uid} shared unit quad must span height [0..1].");
+
+                    for (int s = 0; s < states.Length; s++)
+                    {
+                        view.SetAnimState(states[s], 0.45f);
+                        Assert.That(spriteQuad.localPosition, Is.EqualTo(Vector3.zero), $"{uid} ({states[s]}) SpriteQuad localPosition must stay zero.");
+                        Vector3 worldFoot = spriteQuad.TransformPoint(new Vector3(0f, 0f, 0f));
+                        Assert.That(worldFoot.y, Is.EqualTo(view.transform.position.y).Within(0.01f), $"{uid} ({states[s]}) feet must rest at transform Y.");
+                        Assert.That(Mathf.Abs(worldFoot.x - underRing.position.x), Is.LessThan(0.02f));
+                        Assert.That(Mathf.Abs(worldFoot.z - underRing.position.z), Is.LessThan(0.02f));
+                        Assert.That(Mathf.Abs(contactShadow.position.z - underRing.position.z), Is.LessThan(0.02f));
+                    }
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(unitGo);
+            }
+        }
+
+        [Test]
+        public void Bug3_MultiTileBuildingsAndPropsBlockInteriors_DetourCleanly_AndKeepKeyTargetsReachable()
+        {
+            string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
+            CartographyWorldData landWorld = CartographyWorldData.BuildFromTileMap(bundle.Land0);
+            bundle.Land0.SetBlockedPropFootprints(landWorld.ExportBlockedPropGridCoords());
+
+            int blockedBuildingTiles = 0;
+            for (int y = 0; y < bundle.Land0.Height; y++)
+            {
+                for (int x = 0; x < bundle.Land0.Width; x++)
+                {
+                    BywaterTileKind k = BywaterTileClassifier.Classify(bundle.Land0, x, y);
+                    if (k == BywaterTileKind.TownBuildingSolid && !bundle.Land0.IsPassable(x, y, false))
+                    {
+                        blockedBuildingTiles++;
+                    }
+                    if (k == BywaterTileKind.TownBuildingDoor)
+                    {
+                        Assert.That(bundle.Land0.IsPassable(x, y, false), Is.True, $"Doorway ({x},{y}) must stay passable.");
+                    }
+                }
+            }
+            Assert.That(blockedBuildingTiles, Is.GreaterThanOrEqualTo(15), "Solid building footprints must block multi-tile walls/interiors.");
+
+            int multiTileBlockedBuildings = 0;
+            for (int i = 0; i < landWorld.Props.Count; i++)
+            {
+                CartographyPropPlacement pr = landWorld.Props[i];
+                if (pr.Kind != CartographyPropKind.BywaterInn &&
+                    pr.Kind != CartographyPropKind.Blacksmith &&
+                    pr.Kind != CartographyPropKind.Apothecary &&
+                    pr.Kind != CartographyPropKind.Temple &&
+                    pr.Kind != CartographyPropKind.Guildhall &&
+                    pr.Kind != CartographyPropKind.CottageB &&
+                    pr.Kind != CartographyPropKind.CottageC &&
+                    pr.Kind != CartographyPropKind.Watchtower)
+                {
+                    continue;
+                }
+
+                float halfW = Mathf.Max(0.45f, pr.SizeMeters.x * 0.40f);
+                float southMargin = 0.48f;
+                float northDepth = Mathf.Clamp(pr.SizeMeters.y * 0.38f, 0.85f, 1.95f);
+                int minTx = Mathf.FloorToInt(pr.WorldPosition.x - halfW + 0.12f);
+                int maxTx = Mathf.FloorToInt(pr.WorldPosition.x + halfW - 0.12f);
+                int minTy = Mathf.FloorToInt(-(pr.WorldPosition.z + northDepth) + 0.12f);
+                int maxTy = Mathf.FloorToInt(-(pr.WorldPosition.z - southMargin) - 0.12f);
+                int blockedInside = 0;
+                for (int ty = minTy; ty <= maxTy; ty++)
+                {
+                    for (int tx = minTx; tx <= maxTx; tx++)
+                    {
+                        if (bundle.Land0.InBounds(tx, ty) && !bundle.Land0.IsPassable(tx, ty, false))
+                        {
+                            blockedInside++;
+                        }
+                    }
+                }
+                if (blockedInside >= 2)
+                {
+                    multiTileBlockedBuildings++;
+                }
+            }
+            Assert.That(multiTileBlockedBuildings, Is.GreaterThanOrEqualTo(5), "Pack 3 town buildings must block multi-tile footprints.");
+
+            // Verify A* refuses building interior tiles and routes around TownBuildingSolid structures
+            PartyState party = PartyState.FromBundle(bundle);
+            ExplorationSession session = new ExplorationSession(bundle.Maps, "land_0", party, new DeterministicDiceRoller(99UL), new GridCoord(10, 9));
+            PathResult innInteriorPath = session.PlanPath(new GridCoord(6, 5), allowDiagonal: true);
+            Assert.That(innInteriorPath.Found, Is.False, "A* must refuse paths terminating inside solid building tile (6,5).");
+
+            PathResult detour = session.PlanPath(new GridCoord(7, 11), allowDiagonal: true);
+            Assert.That(detour.Found, Is.True, "Path to Inn doorway (7,11) must detour cleanly around solid footprints.");
+            for (int i = 0; i < detour.Steps.Count; i++)
+            {
+                GridCoord s = detour.Steps[i];
+                Assert.That(bundle.Land0.IsBlockedByProp(s.X, s.Y), Is.False, $"Path step {s} must never enter blocked building/prop tile.");
+            }
+
+            // Dungeon portal (89, 48) and all 4 NPC approaches remain 100% reachable
+            PathResult dungeonPortal = session.PlanPath(new GridCoord(89, 48), allowDiagonal: true);
+            Assert.That(dungeonPortal.Found, Is.True, "Dungeon portal (89,48) must remain reachable from town.");
+        }
+
         private static void AssertShaderHasProperty(Shader shader, string propertyName)
         {
             int idx = shader.FindPropertyIndex(propertyName);

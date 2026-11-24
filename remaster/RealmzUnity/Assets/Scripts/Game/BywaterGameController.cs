@@ -129,6 +129,10 @@ namespace Realmz.Game
         public void InitializeForTests(BywaterM1Bundle bundle, ExplorationSession exploreSession, ulong seed = 12345UL)
         {
             ResolveSceneReferences();
+            if (cameraRig != null)
+            {
+                cameraRig.SetHudController(hudController);
+            }
             Bundle = bundle;
             ExploreSession = exploreSession;
             _roller = new DeterministicDiceRoller(seed == 0UL ? 1UL : seed);
@@ -139,6 +143,10 @@ namespace Realmz.Game
         private void Awake()
         {
             ResolveSceneReferences();
+            if (cameraRig != null)
+            {
+                cameraRig.SetHudController(hudController);
+            }
         }
 
         private void Start()
@@ -176,6 +184,11 @@ namespace Realmz.Game
                 SyncHudSettings();
             }
 
+            if (cameraRig != null)
+            {
+                cameraRig.SetHudController(hudController);
+            }
+
             ResetPartyTrailHistory(ExploreSession.Position, ExploreSession.CurrentMap, ExploreSession.Facing);
 
             EnterExplorationView(immediateCamera: true);
@@ -206,20 +219,28 @@ namespace Realmz.Game
             HandleKeyboardShortcuts();
 
             Mouse mouse = Mouse.current;
-            if (hudController != null && (hudController.IsModalOpen || hudController.IsPointerOverUi()))
+            bool isModalOpen = hudController != null && hudController.IsModalOpen;
+            bool pointerOverUi = (hudController != null && hudController.IsPointerOverUi()) ||
+                                 (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject());
+            if (isModalOpen || pointerOverUi)
             {
-                if (hudController.IsModalOpen || !hudController.IsPointerOverUi())
+                if (isModalOpen || !pointerOverUi)
                 {
                     _isHoveringHotbarUi = false;
                 }
 
-                if (!hudController.IsModalOpen && hudController.IsCursorTooltipActive && mouse != null)
+                if (!isModalOpen && hudController != null && hudController.IsCursorTooltipActive && mouse != null)
                 {
                     hudController.UpdateCursorTooltipPosition(mouse.position.ReadValue());
                 }
-                else if (hudController.IsModalOpen)
+                else if (isModalOpen)
                 {
-                    hudController.ClearCombatHoverPreview();
+                    hudController?.ClearCombatHoverPreview();
+                    if (!_isInCombat)
+                    {
+                        gridOverlays?.SetExplorationHoverPath(null, new GridCoord(-1, -1), false);
+                        _exploreHoverDirty = true;
+                    }
                 }
 
                 _rightMouseDownPendingClick = false;
@@ -621,6 +642,10 @@ namespace Realmz.Game
             if (cameraRig == null) cameraRig = FindFirstObjectByType<BywaterCameraRig>();
             if (gridOverlays == null) gridOverlays = FindFirstObjectByType<BywaterGridOverlays>();
             if (hudController == null) hudController = FindFirstObjectByType<BywaterHudController>();
+            if (cameraRig != null && hudController != null)
+            {
+                cameraRig.SetHudController(hudController);
+            }
             if (biomeAtmosphere == null)
             {
                 biomeAtmosphere = FindFirstObjectByType<BywaterBiomeAtmosphere>();
@@ -793,23 +818,38 @@ namespace Realmz.Game
 
         private void SyncExternalModalCloses()
         {
+            bool modalClosed = false;
             bool shopOpen = hudController != null && hudController.IsShopOpen;
-            if (_wasShopOpen && !shopOpen && !_isInCombat && !_isCampActive)
+            if (_wasShopOpen && !shopOpen)
             {
-                PlayExploreMapMusic();
+                modalClosed = true;
+                if (!_isInCombat && !_isCampActive)
+                {
+                    PlayExploreMapMusic();
+                }
             }
             _wasShopOpen = shopOpen;
 
             bool templeOpen = hudController != null && hudController.IsTempleOpen;
-            if (_wasTempleOpen && !templeOpen && !_isInCombat && !_isCampActive)
+            if (_wasTempleOpen && !templeOpen)
             {
-                PlayExploreMapMusic();
+                modalClosed = true;
+                if (!_isInCombat && !_isCampActive)
+                {
+                    PlayExploreMapMusic();
+                }
             }
             _wasTempleOpen = templeOpen;
 
             if (_isCampActive && (hudController == null || !hudController.IsPartyOpen))
             {
                 ExitCampMode();
+                modalClosed = true;
+            }
+
+            if (modalClosed)
+            {
+                RefreshNpcPrompts();
             }
         }
 
@@ -890,6 +930,11 @@ namespace Realmz.Game
 
             if (_isInCombat)
             {
+                if (hudController != null && hudController.IsModalOpen)
+                {
+                    return;
+                }
+
                 if (kb.lKey.wasPressedThisFrame)
                 {
                     audioDirector?.PlayUiClick();
@@ -902,11 +947,6 @@ namespace Realmz.Game
                     CombatSession.Outcome == CombatOutcome.InProgress)
                 {
                     SetAutoCombatEnabled(!_autoCombatEnabled);
-                    return;
-                }
-
-                if (hudController != null && hudController.IsModalOpen)
-                {
                     return;
                 }
 
@@ -967,17 +1007,23 @@ namespace Realmz.Game
                 return;
             }
 
-            if (kb.pKey.wasPressedThisFrame)
+            bool modalOpen = hudController != null && hudController.IsModalOpen;
+            if (kb.pKey.wasPressedThisFrame && (!modalOpen || hudController.IsPartyOpen))
             {
                 audioDirector?.PlayUiClick();
                 hudController?.TogglePartyPanel();
                 return;
             }
-            if (kb.bKey.wasPressedThisFrame)
+            if (kb.bKey.wasPressedThisFrame && (!modalOpen || hudController.IsShopOpen || hudController.IsTempleOpen))
             {
                 HandleToggleShop();
                 return;
             }
+            if (modalOpen)
+            {
+                return;
+            }
+
             if (kb.eKey.wasPressedThisFrame)
             {
                 TryInteractNearbyNpcOrPoi();
@@ -1012,11 +1058,6 @@ namespace Realmz.Game
             if (kb.f9Key.wasPressedThisFrame)
             {
                 HandleLoadGame();
-                return;
-            }
-
-            if (hudController != null && hudController.IsModalOpen)
-            {
                 return;
             }
 
@@ -1070,6 +1111,10 @@ namespace Realmz.Game
                 worldRenderer.SetCombatArenaFrame(0, 0, 0, 0, false);
                 worldRenderer.SetTerrainGridHint(0.0f);
                 worldRenderer.RenderMap(ExploreSession.CurrentMap, ExploreSession.Position, forceRebuild: true);
+                if (worldRenderer.CartographyData != null)
+                {
+                    ExploreSession.SetBlockedPropFootprints(worldRenderer.CartographyData.ExportBlockedPropGridCoords());
+                }
             }
 
             if (gridOverlays != null)
@@ -1080,6 +1125,7 @@ namespace Realmz.Game
 
             if (cameraRig != null)
             {
+                cameraRig.SetHudController(hudController);
                 cameraRig.SetTerrainCollider(worldRenderer != null ? worldRenderer.TerrainCollider : null);
                 if (ExploreSession.CurrentMap != null)
                 {
@@ -1401,6 +1447,10 @@ namespace Realmz.Game
                     StartWalkToExploreTile(approachCoord);
                     return;
                 }
+
+                _pendingNpcInteraction = null;
+                hudController?.ShowToast("Path blocked.", 1.6f);
+                return;
             }
 
             _pendingNpcInteraction = null;
@@ -1416,6 +1466,13 @@ namespace Realmz.Game
         private void StartWalkToExploreTile(GridCoord destCoord)
         {
             StopExploreWalkCoroutine();
+
+            if (worldRenderer != null && worldRenderer.TryGetNpcAtCoord(destCoord, out _))
+            {
+                _pendingNpcInteraction = null;
+                hudController?.ShowToast("Path blocked.", 1.6f);
+                return;
+            }
 
             PathResult path = ExploreSession.PlanPath(destCoord, allowDiagonal: true);
             if (!path.Found || path.Steps.Count == 0)
@@ -1482,6 +1539,16 @@ namespace Realmz.Game
 
             TileMapData map = ExploreSession.CurrentMap;
             GridCoord prevPos = ExploreSession.Position;
+            if (worldRenderer != null && worldRenderer.TryGetNpcAtCoord(nextTile, out _))
+            {
+                stepRes = new ExplorationStepResult(false, prevPos, ExplorationHaltReason.Blocked);
+                if (nextTile != prevPos)
+                {
+                    hudController?.ShowToast("Path blocked.", 1.4f);
+                }
+                return true;
+            }
+
             stepRes = ExploreSession.StepOneTile(nextTile, autoHaltOnEvents: true);
             if (!stepRes.Moved)
             {
@@ -2429,6 +2496,7 @@ namespace Realmz.Game
 
             if (cameraRig != null)
             {
+                cameraRig.SetHudController(hudController);
                 cameraRig.SetTerrainCollider(worldRenderer != null ? worldRenderer.TerrainCollider : null);
                 cameraRig.SetWorldBounds(map.Width, map.Height);
                 cameraRig.SetCombatMode(true);
@@ -5287,6 +5355,11 @@ namespace Realmz.Game
 
                     GridCoord candidate = new GridCoord(center.X + dx, center.Y + dy);
                     if (!map.InBounds(candidate) || !map.IsPassable(candidate.X, candidate.Y, hasBoat))
+                    {
+                        continue;
+                    }
+
+                    if (worldRenderer != null && worldRenderer.TryGetNpcAtCoord(candidate, out _))
                     {
                         continue;
                     }
