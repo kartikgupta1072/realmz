@@ -83,7 +83,7 @@ namespace RealmzCore.Tests
             MapPortal toDungeon = new MapPortal("bywater_dungeon_entry", 89, 48, "dungeon_0", 33, 72, "North", "Crypt Descent");
             MapPortal toLand = new MapPortal("bywater_dungeon_exit", 33, 72, "land_0", 89, 48, "South", "Surface Stairs");
             MapPointOfInterest shopPoi = new MapPointOfInterest("bywater_shop", "shop", 86, 48, "Bywater Outfitter", "general");
-            EncounterZoneData zone = new EncounterZoneData(0, top: 70, left: 34, bottom: 74, right: 38, percent: 100, battleIds: new[] { 42 });
+            EncounterZoneData zone = new EncounterZoneData(0, top: 70, left: 34, bottom: 74, right: 38, percent: 10000, battleIds: new[] { 42 });
 
             TileMapData land0 = new TileMapData(
                 "land_0", "City of Bywater", 0, false, width, height, landTiles,

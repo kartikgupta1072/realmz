@@ -464,7 +464,7 @@ namespace Realmz.Game
         public bool IsSettingsOpen => _settingsModalRoot != null && _settingsModalRoot.activeSelf;
         public bool IsSettingsModalOpen => IsSettingsOpen;
         public bool IsQuickResolveOpen => _quickResolveModalRoot != null && _quickResolveModalRoot.activeSelf;
-        public bool IsModalOpen => IsPartyOpen || IsShopOpen || IsTempleOpen || IsOutcomeOpen || IsSettingsOpen || IsQuickResolveOpen || IsLevelUpModalOpen;
+        public bool IsModalOpen => IsPartyOpen || IsShopOpen || IsTempleOpen || IsOutcomeOpen || IsSettingsOpen || IsQuickResolveOpen || IsLevelUpModalOpen || IsEncounterInterceptOpen;
         public bool IsAnyModalOpen => IsModalOpen;
         public bool IsDevToolsVisible => _isDevToolsVisible;
         public bool IsCursorTooltipActive => _cursorTooltipRoot != null && _cursorTooltipRoot.activeSelf;
@@ -482,7 +482,9 @@ namespace Realmz.Game
             (_saveBtn == null || !_saveBtn.gameObject.activeSelf) &&
             (_loadBtn == null || !_loadBtn.gameObject.activeSelf) &&
             (_topGoldText == null || !_topGoldText.gameObject.activeSelf) &&
-            (_topTorchText == null || !_topTorchText.gameObject.activeSelf);
+            (_topTorchText == null || !_topTorchText.gameObject.activeSelf) &&
+            (_topClockPill == null || !_topClockPill.activeSelf) &&
+            (_topThreatPill == null || !_topThreatPill.activeSelf);
         public bool IsRightSidebarRemoved =>
             _uiBuilt &&
             _combatRoot != null &&
@@ -576,6 +578,7 @@ namespace Realmz.Game
             BuildTempleModal(_canvas.transform);
             BuildSettingsModal(_canvas.transform);
             BuildQuickResolveModal(_canvas.transform);
+            BuildEncounterInterceptModal(_canvas.transform);
             BuildOutcomeModal(_canvas.transform);
             BuildLevelUpModal(_canvas.transform);
             BuildToastBanner(_canvas.transform);
@@ -586,6 +589,7 @@ namespace Realmz.Game
             _templeModalRoot.SetActive(false);
             _settingsModalRoot.SetActive(false);
             _quickResolveModalRoot.SetActive(false);
+            if (_encounterInterceptModalRoot != null) _encounterInterceptModalRoot.SetActive(false);
             _outcomeModalRoot.SetActive(false);
             _toastRoot.SetActive(false);
         }
@@ -690,6 +694,7 @@ namespace Realmz.Game
                 if (_shopModalRoot != null) _shopModalRoot.SetActive(false);
                 if (_templeModalRoot != null) _templeModalRoot.SetActive(false);
                 if (_quickResolveModalRoot != null) _quickResolveModalRoot.SetActive(false);
+                if (_encounterInterceptModalRoot != null) _encounterInterceptModalRoot.SetActive(false);
                 _quitConfirmArmed = false;
                 RefreshSettingsModalControls();
                 _settingsModalRoot.SetActive(true);
@@ -762,6 +767,7 @@ namespace Realmz.Game
             if (_shopModalRoot != null) _shopModalRoot.SetActive(false);
             if (_templeModalRoot != null) _templeModalRoot.SetActive(false);
             if (_settingsModalRoot != null) _settingsModalRoot.SetActive(false);
+            if (_encounterInterceptModalRoot != null) _encounterInterceptModalRoot.SetActive(false);
 
             _quickResolveTitle.text = string.IsNullOrWhiteSpace(encounterTitle) ? "Encounter Ahead" : encounterTitle;
             _quickResolveSummary.text = string.IsNullOrWhiteSpace(summaryText)
@@ -811,6 +817,7 @@ namespace Realmz.Game
                 if (_shopModalRoot != null) _shopModalRoot.SetActive(false);
                 if (_templeModalRoot != null) _templeModalRoot.SetActive(false);
                 if (_settingsModalRoot != null) _settingsModalRoot.SetActive(false);
+                if (_encounterInterceptModalRoot != null) _encounterInterceptModalRoot.SetActive(false);
             }
 
             _partyDrawerRoot.SetActive(nextState);
@@ -831,6 +838,7 @@ namespace Realmz.Game
             if (_templeModalRoot != null) _templeModalRoot.SetActive(false);
             if (_settingsModalRoot != null) _settingsModalRoot.SetActive(false);
             if (_quickResolveModalRoot != null) _quickResolveModalRoot.SetActive(false);
+            if (_encounterInterceptModalRoot != null) _encounterInterceptModalRoot.SetActive(false);
             if (_outcomeModalRoot != null) _outcomeModalRoot.SetActive(false);
             if (_levelUpModalRoot != null) _levelUpModalRoot.SetActive(false);
             _quitConfirmArmed = false;
@@ -862,6 +870,10 @@ namespace Realmz.Game
             if (_settingsModalRoot != null)
             {
                 _settingsModalRoot.SetActive(false);
+            }
+            if (_encounterInterceptModalRoot != null)
+            {
+                _encounterInterceptModalRoot.SetActive(false);
             }
 
             if (_shopAffordableToggle != null)
@@ -908,6 +920,10 @@ namespace Realmz.Game
             if (_quickResolveModalRoot != null)
             {
                 _quickResolveModalRoot.SetActive(false);
+            }
+            if (_encounterInterceptModalRoot != null)
+            {
+                _encounterInterceptModalRoot.SetActive(false);
             }
 
             _templeModalRoot.SetActive(true);
@@ -1103,6 +1119,8 @@ namespace Realmz.Game
                 _lastExploreTurn = session.TurnCount;
                 _topTurnText.text = $"Turn: {session.TurnCount}";
             }
+
+            RefreshEncounterDirectorExploreHud(session);
 
             // Update 6 party strip cards (only touch TMP/RectTransform when stats/selection changed)
             IReadOnlyList<PartyMemberState> members = session.Party.Members;
@@ -3258,6 +3276,7 @@ namespace Realmz.Game
             if (_topGoldText != null) _topGoldText.gameObject.SetActive(!inCombat);
             if (_topTorchText != null) _topTorchText.gameObject.SetActive(!inCombat);
             if (_topTurnText != null) _topTurnText.gameObject.SetActive(!inCombat);
+            ApplyEncounterDirectorTopBarVisibility(inCombat);
             if (_topSpacer != null) _topSpacer.SetActive(true);
 
             // Explore buttons: completely hidden in Combat
@@ -3408,7 +3427,7 @@ namespace Realmz.Game
             _topMapText.overflowMode = TextOverflowModes.Truncate;
             BywaterUiHelpers.AddTextDropShadow(_topMapText);
             LayoutElement mapLe = _topMapText.gameObject.AddComponent<LayoutElement>();
-            mapLe.preferredWidth = 370f;
+            mapLe.preferredWidth = 315f;
 
             _topGoldText = BywaterUiHelpers.CreateLabel(bar, "GoldText", "Gold: 400g", _font, 16f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
             BywaterUiHelpers.AddTextDropShadow(_topGoldText);
@@ -3424,6 +3443,8 @@ namespace Realmz.Game
             BywaterUiHelpers.AddTextDropShadow(_topTurnText);
             LayoutElement turnLe = _topTurnText.gameObject.AddComponent<LayoutElement>();
             turnLe.preferredWidth = 92f;
+
+            BuildEncounterDirectorTopBarPills(bar);
 
             _topSpacer = new GameObject("TopSpacer", typeof(RectTransform), typeof(LayoutElement));
             _topSpacer.transform.SetParent(bar, false);

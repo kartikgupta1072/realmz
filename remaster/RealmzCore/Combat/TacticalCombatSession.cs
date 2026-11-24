@@ -42,7 +42,9 @@ namespace RealmzCore.Combat
             IReadOnlyDictionary<int, ItemDefinition>? items = null,
             IDiceRoller? roller = null,
             RulesetMode mode = RulesetMode.ModernBalanced,
-            PartyState? party = null)
+            PartyState? party = null,
+            CombatInitiativeSurpriseMode surpriseMode = CombatInitiativeSurpriseMode.None,
+            int rewardBonusPercent = 0)
         {
             Grid = grid ?? throw new ArgumentNullException(nameof(grid));
             if (combatants == null)
@@ -78,9 +80,22 @@ namespace RealmzCore.Combat
             Roller = roller ?? new DeterministicDiceRoller(0x434F4D424154UL);
             Mode = mode;
             Party = party;
+            SurpriseMode = surpriseMode;
+            RewardBonusPercent = Math.Max(0, rewardBonusPercent);
             _pathfinder = new AStarPathfinder(Math.Max(grid.Width, 16), Math.Max(grid.Height, 16));
             RoundNumber = 1;
             TurnNumber = 1;
+
+            if (SurpriseMode == CombatInitiativeSurpriseMode.PartyAmbush)
+            {
+                _log.Add(new CombatLogEntry(1, 1, "system", "Scouting", "Ambush",
+                    "SCOUT AMBUSH! Party gains Round 1 initiative advantage."));
+            }
+            else if (SurpriseMode == CombatInitiativeSurpriseMode.EnemySurprisedParty)
+            {
+                _log.Add(new CombatLogEntry(1, 1, "system", "Darkness", "Surprised",
+                    "AMBUSHED IN THE DARK! Enemies strike first on Round 1."));
+            }
 
             RebuildRoundQueue();
             StartCurrentActorTurn();
@@ -93,6 +108,8 @@ namespace RealmzCore.Combat
         public IDiceRoller Roller { get; }
         public RulesetMode Mode { get; }
         public PartyState? Party { get; }
+        public CombatInitiativeSurpriseMode SurpriseMode { get; }
+        public int RewardBonusPercent { get; }
         public IReadOnlyList<CombatantState> Combatants => _combatants;
         public IReadOnlyDictionary<int, SpellDefinition> Spells => _spells;
         public IReadOnlyDictionary<int, ItemDefinition> Items => _items;
@@ -159,7 +176,7 @@ namespace RealmzCore.Combat
                 }
             }
 
-            List<CombatantState> sortedLiving = GetSortedLivingCombatants();
+            List<CombatantState> sortedLiving = GetSortedLivingCombatants(RoundNumber + 1);
             if (sortedLiving.Count == 0)
             {
                 return ribbon;
@@ -2861,14 +2878,14 @@ namespace RealmzCore.Combat
         private void RebuildRoundQueue()
         {
             _roundQueue.Clear();
-            List<CombatantState> sorted = GetSortedLivingCombatants();
+            List<CombatantState> sorted = GetSortedLivingCombatants(RoundNumber);
             for (int i = 0; i < sorted.Count; i++)
             {
                 _roundQueue.Add(sorted[i].Id);
             }
         }
 
-        private List<CombatantState> GetSortedLivingCombatants()
+        private List<CombatantState> GetSortedLivingCombatants(int targetRoundNumber)
         {
             List<CombatantState> living = new List<CombatantState>();
             for (int i = 0; i < _combatants.Count; i++)
@@ -2881,6 +2898,19 @@ namespace RealmzCore.Combat
 
             living.Sort((a, b) =>
             {
+                if (targetRoundNumber == 1 && SurpriseMode != CombatInitiativeSurpriseMode.None && a.Side != b.Side)
+                {
+                    if (SurpriseMode == CombatInitiativeSurpriseMode.PartyAmbush)
+                    {
+                        return a.Side == CombatSide.Hero ? -1 : 1;
+                    }
+
+                    if (SurpriseMode == CombatInitiativeSurpriseMode.EnemySurprisedParty)
+                    {
+                        return a.Side == CombatSide.Monster ? -1 : 1;
+                    }
+                }
+
                 int cmp = b.EffectiveDexterity.CompareTo(a.EffectiveDexterity);
                 if (cmp != 0) return cmp;
                 cmp = a.Side.CompareTo(b.Side);
@@ -2939,6 +2969,19 @@ namespace RealmzCore.Combat
                                 _collectedLootItemIds.Add(lootId);
                             }
                         }
+                    }
+
+                    if (RewardBonusPercent > 0)
+                    {
+                        xp = (int)Math.Round(xp * (1.0 + RewardBonusPercent / 100.0), MidpointRounding.AwayFromZero);
+                        gold = (int)Math.Round(gold * (1.0 + RewardBonusPercent / 100.0), MidpointRounding.AwayFromZero);
+                        _log.Add(new CombatLogEntry(
+                            TurnNumber,
+                            RoundNumber,
+                            "system",
+                            "Night Hunt",
+                            "RewardBonus",
+                            $"Night Hunt Bonus (+{RewardBonusPercent}% XP & Gold): {xp} XP, {gold}g base loot."));
                     }
 
                     TotalXpEarned = xp;

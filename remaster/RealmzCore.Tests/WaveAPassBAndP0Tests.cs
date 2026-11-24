@@ -1122,7 +1122,7 @@ namespace RealmzCore.Tests
 
             MapPointOfInterest poi = new MapPointOfInterest("poi_inn", "inn", 3, 2, "Sleepy Inn");
             MapPortal portal = new MapPortal("portal_stairs", 5, 2, "dungeon_1", 1, 1, "East", "Stairs");
-            EncounterZoneData zone = new EncounterZoneData(0, top: 2, left: 7, bottom: 2, right: 8, percent: 100, battleIds: new[] { 99 });
+            EncounterZoneData zone = new EncounterZoneData(0, top: 2, left: 7, bottom: 2, right: 8, percent: 10000, battleIds: new[] { 99 });
 
             TileMapData mainMap = new TileMapData(
                 "land_0", "Bywater", 0, false, width, height, tiles, new GridCoord(1, 2),

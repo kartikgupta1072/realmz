@@ -92,6 +92,14 @@ namespace Realmz.Game
         private bool _freezeHoverForShowcase;
         private Vector2 _showcaseMouseAnchor;
         private string _activeEncounterZoneKey = string.Empty;
+        private EncounterZoneData _activeEncounterZone;
+        private CombatInitiativeSurpriseMode _activeCombatSurpriseMode;
+        private int _activeCombatRewardBonusPct;
+        private EncounterScoutingReport _pendingScoutingReport;
+        private bool _hasAppliedLightingState;
+        private WorldTimePhase _lastLightingPhase;
+        private bool _lastLightingDungeon;
+        private bool _lastLightingTorch;
 
         private bool _autoCombatEnabled;
         private bool _autoEndTurn;
@@ -112,6 +120,7 @@ namespace Realmz.Game
         private List<MonsterDefinition> _pendingQuickResolveMonsters;
         private string _pendingQuickResolveTitle = string.Empty;
         private string _pendingQuickResolveZoneKey = string.Empty;
+        private EncounterZoneData _pendingQuickResolveZone;
         private bool _rightMouseDownPendingClick;
         private Vector2 _rightMouseDownPos;
         private readonly List<Vector3> _treeFadePositionsScratch = new List<Vector3>(16);
@@ -402,7 +411,10 @@ namespace Realmz.Game
                 return;
             }
 
+            _activeEncounterZone = null;
             _activeEncounterZoneKey = string.Empty;
+            _activeCombatSurpriseMode = CombatInitiativeSurpriseMode.None;
+            _activeCombatRewardBonusPct = 0;
             List<MonsterDefinition> monsters = SelectSkirmishMonsters(ExploreSession.CurrentMap.IsDungeon);
             StartTacticalCombat(monsters, "Bywater Skirmish");
         }
@@ -460,6 +472,7 @@ namespace Realmz.Game
                 ExploreSession.Party,
                 _roller,
                 new GridCoord(18, 54));
+            _hasAppliedLightingState = false;
 
             TriggerDemoSkirmish();
 
@@ -721,6 +734,112 @@ namespace Realmz.Game
             _freezeHoverForShowcase = true;
         }
 
+        public void StageNightTorchExploreShowcaseForCapture(
+            GridCoord? coord = null,
+            int worldClockTurns = 58,
+            int torchTurnsRemaining = 36)
+        {
+            if (ExploreSession == null || Bundle == null)
+            {
+                return;
+            }
+
+            if (_isInCombat)
+            {
+                ExitCombatToExploration(syncPartyFromCombat: false);
+            }
+
+            if (_isCampActive)
+            {
+                ExitCampMode();
+            }
+
+            hudController?.CloseAllModals();
+            hudController?.HideOutcomeModal();
+            hudController?.HideToast();
+
+            GridCoord targetPos = coord ?? new GridCoord(53, 62);
+            if (!Bundle.Maps.TryGetValue("land_0", out TileMapData landMap) ||
+                !landMap.InBounds(targetPos) ||
+                !landMap.IsPassable(targetPos.X, targetPos.Y, ExploreSession.Party.HasBoat))
+            {
+                targetPos = new GridCoord(10, 12);
+            }
+
+            ExploreSession.Party.TorchTurnsRemaining = Math.Max(0, torchTurnsRemaining);
+            ExploreSession = new ExplorationSession(
+                Bundle.Maps,
+                "land_0",
+                ExploreSession.Party,
+                _roller,
+                startPosition: targetPos,
+                initialFacing: "East",
+                initialTurnCount: ExploreSession.TurnCount,
+                clearedEncounterIds: ExploreSession.ClearedEncounterIds,
+                initialWorldClockTurns: Math.Max(0, worldClockTurns),
+                initialPostCombatGraceSteps: 0,
+                initialZoneCooldowns: ExploreSession.ZoneCooldownUntilTurns);
+            _hasAppliedLightingState = false;
+
+            ResetPartyTrailHistory(ExploreSession.Position, ExploreSession.CurrentMap, ExploreSession.Facing);
+            EnterExplorationView(immediateCamera: true);
+
+            _lastExploreHoverCoord = new GridCoord(-1, -1);
+            _exploreHoverDirty = true;
+            hudController?.RefreshExploreHud(
+                ExploreSession,
+                Bundle,
+                ExploreSession.Position,
+                BywaterTileClassifier.Classify(ExploreSession.CurrentMap, ExploreSession.Position.X, ExploreSession.Position.Y),
+                0,
+                ExploreSession.GetCurrentGeography().LocationLabel,
+                true,
+                _lastContextPoiLabel);
+            _showcaseMouseAnchor = Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero;
+            _freezeHoverForShowcase = true;
+        }
+
+        public void StageScoutInterceptShowcaseForCapture(
+            GridCoord? coord = null,
+            int worldClockTurns = 24,
+            int torchTurnsRemaining = 24)
+        {
+            if (ExploreSession == null || Bundle == null || hudController == null)
+            {
+                return;
+            }
+
+            GridCoord targetPos = coord ?? new GridCoord(53, 62);
+            StageNightTorchExploreShowcaseForCapture(targetPos, worldClockTurns, torchTurnsRemaining);
+
+            TileMapData map = ExploreSession.CurrentMap;
+            IReadOnlyList<EncounterZoneData> zones = map.GetZonesAt(ExploreSession.Position.X, ExploreSession.Position.Y);
+            EncounterZoneData zone = zones.Count > 0 ? zones[0] : (map.EncounterZones.Count > 0 ? map.EncounterZones[0] : null);
+            string zoneKey = zone != null ? ExplorationSession.GetEncounterZoneKey(map.MapId, zone) : string.Empty;
+            EncounterGeographyInfo geo = ExploreSession.GetCurrentGeography();
+            List<MonsterDefinition> zoneMonsters = EncounterDirector.BuildEcologyMonsterPack(
+                map,
+                ExploreSession.Position,
+                zone,
+                geo,
+                ExploreSession.CurrentWorldClock,
+                Bundle.Monsters,
+                _roller);
+
+            EncounterScoutingReport report = ExploreSession.CreateScoutingReport(zone, zoneMonsters);
+            QuickResolveSummary qrSummary = null;
+            bool canQr = !report.IsAmbushedInDark && CanOfferQuickResolveForEncounter(zoneMonsters, out qrSummary);
+            string qrRatio = canQr && qrSummary != null ? $"{qrSummary.PowerRatio:F1}x" : string.Empty;
+
+            _pendingScoutingReport = report;
+            _pendingQuickResolveMonsters = zoneMonsters;
+            _pendingQuickResolveTitle = $"{report.Geography.LocationLabel} Encounter";
+            _pendingQuickResolveZoneKey = zoneKey;
+            _pendingQuickResolveZone = zone;
+
+            hudController.ShowEncounterInterceptModal(report, canQr, qrRatio);
+        }
+
         private void ResolveSceneReferences()
         {
             if (worldRenderer == null) worldRenderer = FindFirstObjectByType<BywaterWorldRenderer>();
@@ -894,6 +1013,10 @@ namespace Realmz.Game
 
             hudController.OnQuickResolveFightRequested += HandleQuickResolveFight;
             hudController.OnQuickResolveAutoWinRequested += HandleQuickResolveAutoWin;
+            hudController.OnEncounterEngageRequested += HandleEncounterInterceptEngage;
+            hudController.OnEncounterEvadeRequested += HandleEncounterInterceptEvade;
+            hudController.OnEncounterQuickResolveRequested += HandleEncounterInterceptQuickResolve;
+            hudController.OnLightTorchFromHudRequested += HandleLightTorchFromHud;
 
             hudController.OnContinueAfterVictoryRequested += () =>
             {
@@ -1180,6 +1303,10 @@ namespace Realmz.Game
 
         private void HandleEscapeKey()
         {
+            if (hudController != null && hudController.IsEncounterInterceptOpen)
+            {
+                return;
+            }
             if (hudController != null && hudController.IsQuickResolveOpen)
             {
                 hudController.HideQuickResolveModal();
@@ -1271,14 +1398,9 @@ namespace Realmz.Game
             SyncExploreHeroViewsToTrail(immediate: true);
 
             Vector3 leaderWorldPos = GridToWorldAtElevation(ExploreSession.Position);
-            if (worldRenderer != null)
-            {
-                worldRenderer.UpdateHeroWorldPosition(leaderWorldPos);
-                worldRenderer.SetPartyTorchPosition(leaderWorldPos, ExploreSession.CurrentMap.IsDungeon);
-            }
-
-            biomeAtmosphere?.ApplyBiome(ExploreSession.CurrentMap.IsDungeon, immediate: true);
-            biomeAtmosphere?.UpdateFocusPosition(leaderWorldPos);
+            worldRenderer?.UpdateHeroWorldPosition(leaderWorldPos);
+            _hasAppliedLightingState = false;
+            ApplyAtmosphereAndTorchLighting(leaderWorldPos, forceImmediate: true);
 
             if (cameraRig != null)
             {
@@ -1292,6 +1414,8 @@ namespace Realmz.Game
             _lastExploreHoverCoord = new GridCoord(-1, -1);
             hudController?.HideOutcomeModal();
             hudController?.HideQuickResolveModal();
+            hudController?.HideEncounterInterceptModal();
+            ClearPendingScoutingReport();
             RefreshContextualExplorePoi();
             RefreshNpcPrompts();
             hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false, _lastContextPoiLabel);
@@ -1765,8 +1889,7 @@ namespace Realmz.Game
 
             worldRenderer?.UpdateFocusCenter(stepRes.Position);
             worldRenderer?.UpdateHeroWorldPosition(leaderPos);
-            worldRenderer?.SetPartyTorchPosition(leaderPos, map.IsDungeon);
-            biomeAtmosphere?.UpdateFocusPosition(leaderPos);
+            ApplyAtmosphereAndTorchLighting(leaderPos, forceImmediate: false);
             cameraRig?.SetFollowTarget(leaderPos, immediate: !doAnimate, recenterManualPan: true);
 
             if (stepRes.TorchExpiredThisStep)
@@ -1907,24 +2030,53 @@ namespace Realmz.Game
                     break;
 
                 case ExplorationHaltReason.EncounterZone:
-                    string zoneKey = (res.TriggeredZone != null && ExploreSession.CurrentMap != null)
-                        ? ExplorationSession.GetEncounterZoneKey(ExploreSession.CurrentMap.MapId, res.TriggeredZone)
+                    EncounterZoneData zone = res.TriggeredZone;
+                    string zoneKey = (zone != null && ExploreSession.CurrentMap != null)
+                        ? ExplorationSession.GetEncounterZoneKey(ExploreSession.CurrentMap.MapId, zone)
                         : string.Empty;
-                    List<MonsterDefinition> zoneMonsters = SelectMonstersFromEncounterZone(res.TriggeredZone);
-                    if (!Application.isBatchMode &&
-                        hudController != null &&
-                        CanOfferQuickResolveForEncounter(zoneMonsters, out QuickResolveSummary qrSummary))
+                    EncounterGeographyInfo geo = ExploreSession.GetCurrentGeography();
+                    List<MonsterDefinition> zoneMonsters = zone != null && Bundle != null
+                        ? EncounterDirector.BuildEcologyMonsterPack(
+                            ExploreSession.CurrentMap,
+                            ExploreSession.Position,
+                            zone,
+                            geo,
+                            ExploreSession.CurrentWorldClock,
+                            Bundle.Monsters,
+                            _roller)
+                        : SelectMonstersFromEncounterZone(zone);
+                    EncounterScoutingReport scoutingReport = ExploreSession.CreateScoutingReport(zone, zoneMonsters);
+
+                    QuickResolveSummary qrSummary = null;
+                    bool canQr = !scoutingReport.IsAmbushedInDark &&
+                                 CanOfferQuickResolveForEncounter(zoneMonsters, out qrSummary);
+                    string qrRatioText = canQr && qrSummary != null ? $"{qrSummary.PowerRatio:F1}x" : string.Empty;
+
+                    if (!Application.isBatchMode && hudController != null)
                     {
+                        _pendingScoutingReport = scoutingReport;
                         _pendingQuickResolveMonsters = zoneMonsters;
-                        _pendingQuickResolveTitle = "Encounter Ahead";
+                        _pendingQuickResolveTitle = $"{scoutingReport.Geography.LocationLabel} Encounter";
                         _pendingQuickResolveZoneKey = zoneKey;
-                        hudController.ShowQuickResolveModal(_pendingQuickResolveTitle, BuildQuickResolveSummaryText(zoneMonsters, qrSummary));
+                        _pendingQuickResolveZone = zone;
+                        hudController.ShowEncounterInterceptModal(scoutingReport, canQr, qrRatioText);
+                        if (scoutingReport.IsAmbushedInDark)
+                        {
+                            audioDirector?.PlaySpell("fire");
+                        }
                         break;
                     }
 
+                    _activeEncounterZone = zone;
                     _activeEncounterZoneKey = zoneKey;
+                    _activeCombatSurpriseMode = scoutingReport.ResolveEngageSurpriseMode();
+                    _activeCombatRewardBonusPct = scoutingReport.RewardBonusPct;
                     hudController?.ShowToast("Ambush! Tactical encounter triggered!", 2.5f);
-                    StartTacticalCombat(zoneMonsters, "Encounter Zone Battle");
+                    StartTacticalCombat(
+                        zoneMonsters,
+                        $"{scoutingReport.Geography.LocationLabel} Battle",
+                        _activeCombatSurpriseMode,
+                        _activeCombatRewardBonusPct);
                     break;
             }
         }
@@ -2244,7 +2396,11 @@ namespace Realmz.Game
                 startPosition: startPos,
                 initialFacing: data.facing,
                 initialTurnCount: restored.TurnCount,
-                clearedEncounterIds: restored.ClearedEncounterIds);
+                clearedEncounterIds: restored.ClearedEncounterIds,
+                initialWorldClockTurns: restored.WorldClockTurns,
+                initialPostCombatGraceSteps: restored.PostCombatGraceStepsRemaining,
+                initialZoneCooldowns: restored.ZoneCooldownUntilTurns);
+            _hasAppliedLightingState = false;
 
             _combatLogLines.Clear();
             if (data.combatLogLines != null)
@@ -2361,9 +2517,22 @@ namespace Realmz.Game
                 hudController?.CloseAllModals();
                 hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false);
                 hudController?.ShowToast("Ambush while resting in the wilds!", 2.8f);
-                List<MonsterDefinition> monsters = SelectMonstersFromEncounterZone(ambushZone);
+                EncounterGeographyInfo campGeo = ExploreSession.GetCurrentGeography();
+                List<MonsterDefinition> monsters = Bundle != null
+                    ? EncounterDirector.BuildEcologyMonsterPack(
+                        ExploreSession.CurrentMap,
+                        ExploreSession.Position,
+                        ambushZone,
+                        campGeo,
+                        ExploreSession.CurrentWorldClock,
+                        Bundle.Monsters,
+                        _roller)
+                    : SelectMonstersFromEncounterZone(ambushZone);
+                _activeEncounterZone = ambushZone;
                 _activeEncounterZoneKey = ExplorationSession.GetEncounterZoneKey(ExploreSession.CurrentMap.MapId, ambushZone);
-                StartTacticalCombat(monsters, "Camp Ambush!");
+                _activeCombatSurpriseMode = CombatInitiativeSurpriseMode.EnemySurprisedParty;
+                _activeCombatRewardBonusPct = ExploreSession.CurrentWorldClock.IsNight ? EncounterDirector.NightRewardBonusPercent : 0;
+                StartTacticalCombat(monsters, "Camp Ambush!", _activeCombatSurpriseMode, _activeCombatRewardBonusPct);
                 return;
             }
 
@@ -2377,6 +2546,7 @@ namespace Realmz.Game
 
             audioDirector?.PlaySpell("heal");
             EnsureExploreHeroViews();
+            ApplyAtmosphereAndTorchLighting(GridToWorldAtElevation(ExploreSession.Position), forceImmediate: false);
             hudController?.RefreshPartyDrawer(ExploreSession.Party, Bundle, _selectedPartyHeroIndex);
             hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false);
             string label = mode == CampMode.FullRest ? "Full Rest" : "Quick Bandage";
@@ -2549,12 +2719,26 @@ namespace Realmz.Game
 #endif
         }
 
-        private void StartTacticalCombat(List<MonsterDefinition> monstersToSpawn, string title)
+        private void StartTacticalCombat(
+            List<MonsterDefinition> monstersToSpawn,
+            string title,
+            CombatInitiativeSurpriseMode surpriseMode = CombatInitiativeSurpriseMode.None,
+            int rewardBonusPercent = -1)
         {
             if (monstersToSpawn == null || monstersToSpawn.Count == 0)
             {
                 monstersToSpawn = SelectSkirmishMonsters(ExploreSession.CurrentMap.IsDungeon);
             }
+
+            if (rewardBonusPercent < 0 && ExploreSession != null)
+            {
+                rewardBonusPercent = ExploreSession.CurrentWorldClock.IsNight
+                    ? EncounterDirector.NightRewardBonusPercent
+                    : 0;
+            }
+            int resolvedRewardBonusPct = Math.Max(0, rewardBonusPercent);
+            _activeCombatSurpriseMode = surpriseMode;
+            _activeCombatRewardBonusPct = resolvedRewardBonusPct;
 
             StopExploreWalkCoroutine();
             hudController?.CloseAllModals();
@@ -2666,6 +2850,9 @@ namespace Realmz.Game
                 combatants.Add(CombatantState.FromMonster(def, instanceId, spot, _roller));
             }
 
+            EncounterGeographyInfo combatGeo = ExploreSession.GetCurrentGeography();
+            EncounterDirector.ApplyBiomeArenaFeatures(grid, combatGeo, occupied, _roller);
+
             CombatSession = new TacticalCombatSession(
                 grid,
                 combatants,
@@ -2673,7 +2860,9 @@ namespace Realmz.Game
                 Bundle.Items,
                 _roller,
                 RulesetMode.ModernBalanced,
-                ExploreSession.Party);
+                ExploreSession.Party,
+                _activeCombatSurpriseMode,
+                resolvedRewardBonusPct);
             CombatSession.SurfaceChanged += OnCombatSurfaceChanged;
 
             _isInCombat = true;
@@ -2696,7 +2885,6 @@ namespace Realmz.Game
                 worldRenderer.SetCombatArenaFrame(_arenaOriginX, _arenaOriginY, _arenaWidth, _arenaHeight, true);
                 worldRenderer.SetTerrainGridHint(0.08f);
                 worldRenderer.UpdateHeroWorldPosition(midWorld);
-                worldRenderer.SetPartyTorchPosition(midWorld, map.IsDungeon);
             }
 
             if (gridOverlays != null)
@@ -2705,8 +2893,8 @@ namespace Realmz.Game
                 gridOverlays.SetGridOpacity(_gridOpacity);
             }
 
-            biomeAtmosphere?.ApplyBiome(map.IsDungeon, immediate: true);
-            biomeAtmosphere?.UpdateFocusPosition(midWorld);
+            _hasAppliedLightingState = false;
+            ApplyAtmosphereAndTorchLighting(midWorld, forceImmediate: true);
 
             if (cameraRig != null)
             {
@@ -2728,8 +2916,18 @@ namespace Realmz.Game
             hudController?.CloseShopModal();
             hudController?.TogglePartyPanel(false);
             hudController?.HideQuickResolveModal();
+            hudController?.HideEncounterInterceptModal();
             hudController?.HideOutcomeModal();
-            hudController?.ShowToast($"{title} started!", 2.4f);
+            string combatStartToast = $"{title} started!";
+            if (_activeCombatSurpriseMode == CombatInitiativeSurpriseMode.PartyAmbush)
+            {
+                combatStartToast = $"{title}: Ambush Advantage (+Round 1 Init)!";
+            }
+            else if (_activeCombatSurpriseMode == CombatInitiativeSurpriseMode.EnemySurprisedParty)
+            {
+                combatStartToast = $"{title}: Surprised in Darkness!";
+            }
+            hudController?.ShowToast(combatStartToast, 2.5f);
 
             audioDirector?.PlayMusic("battle", 0.7f);
             if (spawnedGiantFrog)
@@ -4554,11 +4752,22 @@ namespace Realmz.Game
 
             if (CombatSession.Outcome == CombatOutcome.Victory)
             {
-                if (!string.IsNullOrEmpty(_activeEncounterZoneKey))
+                if (_activeEncounterZone != null)
                 {
-                    ExploreSession?.MarkEncounterCleared(_activeEncounterZoneKey);
-                    _activeEncounterZoneKey = string.Empty;
+                    ExploreSession?.CompleteEncounterZone(_activeEncounterZone);
                 }
+                else
+                {
+                    ExploreSession?.GrantPostCombatGrace();
+                    if (!string.IsNullOrEmpty(_activeEncounterZoneKey))
+                    {
+                        ExploreSession?.MarkEncounterCleared(_activeEncounterZoneKey);
+                    }
+                }
+                _activeEncounterZone = null;
+                _activeEncounterZoneKey = string.Empty;
+                _activeCombatSurpriseMode = CombatInitiativeSurpriseMode.None;
+                _activeCombatRewardBonusPct = 0;
 
                 ExploreSession?.SyncAfterCombat(CombatSession, floorDeadToOne: true);
 
@@ -4594,7 +4803,10 @@ namespace Realmz.Game
             }
             else
             {
+                _activeEncounterZone = null;
                 _activeEncounterZoneKey = string.Empty;
+                _activeCombatSurpriseMode = CombatInitiativeSurpriseMode.None;
+                _activeCombatRewardBonusPct = 0;
                 hudController?.ShowOutcomeModal(CombatSession.Outcome, 0, 0, 0, null);
             }
         }
@@ -4629,7 +4841,10 @@ namespace Realmz.Game
             ClearCombatUnitViews();
             gridOverlays?.ClearCombatVfx();
             CombatSession = null;
+            _activeEncounterZone = null;
             _activeEncounterZoneKey = string.Empty;
+            _activeCombatSurpriseMode = CombatInitiativeSurpriseMode.None;
+            _activeCombatRewardBonusPct = 0;
             _hoveredCombatUnitId = null;
             _isHoveringHotbarUi = false;
             _hasPreCombatExplorePos = false;
@@ -5436,6 +5651,7 @@ namespace Realmz.Game
             audioDirector?.PlayUiClick();
             GridCoord returnPos = _preCombatExplorePos;
             bool hasReturnPos = _hasPreCombatExplorePos;
+            ExploreSession?.GrantPostCombatGrace();
             ExitCombatToExploration(syncPartyFromCombat: true);
 
             if (hasReturnPos &&
@@ -6520,24 +6736,186 @@ namespace Realmz.Game
             _pendingQuickResolveZoneKey = string.Empty;
         }
 
+        private void ClearPendingScoutingReport()
+        {
+            _pendingScoutingReport = null;
+            _pendingQuickResolveZone = null;
+        }
+
+        private void HandleEncounterInterceptEngage()
+        {
+            audioDirector?.PlayUiClick();
+            EncounterScoutingReport report = _pendingScoutingReport;
+            List<MonsterDefinition> monsters = _pendingQuickResolveMonsters;
+            string title = !string.IsNullOrWhiteSpace(_pendingQuickResolveTitle)
+                ? _pendingQuickResolveTitle
+                : (report?.Geography != null ? $"{report.Geography.LocationLabel} Battle" : "Encounter Zone Battle");
+            string zoneKey = _pendingQuickResolveZoneKey;
+            EncounterZoneData zone = _pendingQuickResolveZone;
+
+            ClearPendingQuickResolve();
+            ClearPendingScoutingReport();
+
+            if (monsters == null || monsters.Count == 0)
+            {
+                monsters = SelectSkirmishMonsters(ExploreSession != null && ExploreSession.CurrentMap.IsDungeon);
+            }
+
+            _activeEncounterZone = zone;
+            _activeEncounterZoneKey = zoneKey;
+            CombatInitiativeSurpriseMode surprise = report != null
+                ? report.ResolveEngageSurpriseMode()
+                : CombatInitiativeSurpriseMode.None;
+            int bonusPct = report != null
+                ? report.RewardBonusPct
+                : (ExploreSession != null && ExploreSession.CurrentWorldClock.IsNight ? EncounterDirector.NightRewardBonusPercent : 0);
+
+            StartTacticalCombat(monsters, title, surprise, bonusPct);
+        }
+
+        private void HandleEncounterInterceptEvade()
+        {
+            audioDirector?.PlayUiClick();
+            EncounterScoutingReport report = _pendingScoutingReport;
+            List<MonsterDefinition> monsters = _pendingQuickResolveMonsters;
+            string title = !string.IsNullOrWhiteSpace(_pendingQuickResolveTitle)
+                ? _pendingQuickResolveTitle
+                : (report?.Geography != null ? $"{report.Geography.LocationLabel} Battle" : "Encounter Zone Battle");
+            string zoneKey = _pendingQuickResolveZoneKey;
+            EncounterZoneData zone = _pendingQuickResolveZone;
+
+            ClearPendingQuickResolve();
+            ClearPendingScoutingReport();
+
+            if (ExploreSession == null)
+            {
+                return;
+            }
+
+            if (report != null && report.IsAmbushedInDark)
+            {
+                _activeEncounterZone = zone;
+                _activeEncounterZoneKey = zoneKey;
+                StartTacticalCombat(monsters, title, CombatInitiativeSurpriseMode.EnemySurprisedParty, report.RewardBonusPct);
+                return;
+            }
+
+            int roll = _roller != null ? _roller.NextInt(1, 101) : 50;
+            bool evaded = report != null && report.CanEvade && roll <= report.EvadeChancePct;
+            if (evaded)
+            {
+                ExploreSession.ApplyStealthEvade();
+                ApplyAtmosphereAndTorchLighting(GridToWorldAtElevation(ExploreSession.Position), forceImmediate: false);
+                hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false, _lastContextPoiLabel);
+                hudController?.ShowToast(
+                    $"Evaded the patrol! Slipped away ({report.EvadeChancePct}% chance, +{ExplorationSession.DefaultStealthEvadeTurns} turns).",
+                    2.6f);
+                return;
+            }
+
+            _activeEncounterZone = zone;
+            _activeEncounterZoneKey = zoneKey;
+            int bonusPct = report != null
+                ? report.RewardBonusPct
+                : (ExploreSession.CurrentWorldClock.IsNight ? EncounterDirector.NightRewardBonusPercent : 0);
+            hudController?.ShowToast($"Evade failed ({roll} > {report?.EvadeChancePct ?? 0}%) - patrol engages!", 2.4f);
+            StartTacticalCombat(monsters, title, CombatInitiativeSurpriseMode.None, bonusPct);
+        }
+
+        private void HandleEncounterInterceptQuickResolve()
+        {
+            HandleQuickResolveAutoWin();
+        }
+
+        private void HandleLightTorchFromHud()
+        {
+            if (_isInCombat || ExploreSession?.Party == null)
+            {
+                return;
+            }
+
+            bool lit = ExploreSession.Party.TryLightTorchFromStash(out string feedback, Bundle?.Items);
+            if (lit)
+            {
+                audioDirector?.PlaySpell("fire");
+            }
+            else
+            {
+                audioDirector?.PlayUiClick();
+            }
+
+            ApplyAtmosphereAndTorchLighting(GridToWorldAtElevation(ExploreSession.Position), forceImmediate: false);
+            hudController?.RefreshPartyDrawer(ExploreSession.Party, Bundle, _selectedPartyHeroIndex);
+            hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false, _lastContextPoiLabel);
+            if (!string.IsNullOrWhiteSpace(feedback))
+            {
+                hudController?.ShowToast(feedback, 2.4f);
+            }
+        }
+
+        private void ApplyAtmosphereAndTorchLighting(Vector3 focusWorldPos, bool forceImmediate)
+        {
+            if (ExploreSession == null || ExploreSession.CurrentMap == null)
+            {
+                return;
+            }
+
+            TileMapData map = ExploreSession.CurrentMap;
+            WorldClock clock = ExploreSession.CurrentWorldClock;
+            bool hasLitTorch = ExploreSession.Party != null && ExploreSession.Party.TorchTurnsRemaining > 0;
+            bool isNightOrDark = map.IsDungeon || clock.IsNight;
+
+            bool stateChanged = !_hasAppliedLightingState ||
+                                _lastLightingPhase != clock.Phase ||
+                                _lastLightingDungeon != map.IsDungeon ||
+                                _lastLightingTorch != hasLitTorch;
+
+            if (forceImmediate || stateChanged)
+            {
+                _hasAppliedLightingState = true;
+                _lastLightingPhase = clock.Phase;
+                _lastLightingDungeon = map.IsDungeon;
+                _lastLightingTorch = hasLitTorch;
+
+                biomeAtmosphere?.ApplyBiome(map.IsDungeon, clock.Phase, clock.PhaseProgress01, hasLitTorch, forceImmediate);
+                worldRenderer?.ApplyTimeOfDayLighting(clock.Phase, map.IsDungeon, hasLitTorch);
+            }
+
+            biomeAtmosphere?.UpdateFocusPosition(focusWorldPos);
+            worldRenderer?.SetPartyTorchPosition(focusWorldPos, map.IsDungeon, isNightOrDark, hasLitTorch);
+        }
+
         private void HandleQuickResolveFight()
         {
             audioDirector?.PlayUiClick();
+            EncounterScoutingReport report = _pendingScoutingReport;
             List<MonsterDefinition> monsters = _pendingQuickResolveMonsters;
             string title = string.IsNullOrWhiteSpace(_pendingQuickResolveTitle) ? "Encounter Zone Battle" : _pendingQuickResolveTitle;
             string zoneKey = _pendingQuickResolveZoneKey;
+            EncounterZoneData zone = _pendingQuickResolveZone;
             ClearPendingQuickResolve();
+            ClearPendingScoutingReport();
 
+            _activeEncounterZone = zone;
             _activeEncounterZoneKey = zoneKey;
-            StartTacticalCombat(monsters, title);
+            CombatInitiativeSurpriseMode surprise = report != null
+                ? report.ResolveEngageSurpriseMode()
+                : CombatInitiativeSurpriseMode.None;
+            int bonusPct = report != null
+                ? report.RewardBonusPct
+                : (ExploreSession != null && ExploreSession.CurrentWorldClock.IsNight ? EncounterDirector.NightRewardBonusPercent : 0);
+            StartTacticalCombat(monsters, title, surprise, bonusPct);
         }
 
         private void HandleQuickResolveAutoWin()
         {
             audioDirector?.PlayUiClick();
+            EncounterScoutingReport report = _pendingScoutingReport;
             List<MonsterDefinition> monsters = _pendingQuickResolveMonsters;
             string zoneKey = _pendingQuickResolveZoneKey;
+            EncounterZoneData zone = _pendingQuickResolveZone;
             ClearPendingQuickResolve();
+            ClearPendingScoutingReport();
 
             if (ExploreSession == null || Bundle == null || monsters == null || monsters.Count == 0)
             {
@@ -6597,6 +6975,11 @@ namespace Realmz.Game
                 combatants.Add(CombatantState.FromMonster(def, $"mon_{i}_{def.Id}", spot, _roller));
             }
 
+            EncounterDirector.ApplyBiomeArenaFeatures(grid, ExploreSession.GetCurrentGeography(), occupied, _roller);
+            int rewardBonusPct = report != null
+                ? report.RewardBonusPct
+                : (ExploreSession.CurrentWorldClock.IsNight ? EncounterDirector.NightRewardBonusPercent : 0);
+
             TacticalCombatSession qrSession = new TacticalCombatSession(
                 grid,
                 combatants,
@@ -6604,20 +6987,31 @@ namespace Realmz.Game
                 Bundle.Items,
                 _roller,
                 RulesetMode.ModernBalanced,
-                ExploreSession.Party);
+                ExploreSession.Party,
+                CombatInitiativeSurpriseMode.None,
+                rewardBonusPct);
 
             CombatOutcome outcome = qrSession.QuickResolveCombat();
             if (outcome == CombatOutcome.Victory)
             {
-                if (!string.IsNullOrEmpty(zoneKey))
+                if (zone != null)
                 {
-                    ExploreSession.MarkEncounterCleared(zoneKey);
+                    ExploreSession.CompleteEncounterZone(zone);
+                }
+                else
+                {
+                    ExploreSession.GrantPostCombatGrace();
+                    if (!string.IsNullOrEmpty(zoneKey))
+                    {
+                        ExploreSession.MarkEncounterCleared(zoneKey);
+                    }
                 }
 
                 ExploreSession.SyncAfterCombat(qrSession, floorDeadToOne: true);
 
                 EnsureExploreHeroViews();
                 RefreshContextualExplorePoi();
+                ApplyAtmosphereAndTorchLighting(GridToWorldAtElevation(ExploreSession.Position), forceImmediate: false);
                 hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false, _lastContextPoiLabel);
                 audioDirector?.PlayMusic("treasure", 0.7f);
                 audioDirector?.PlayCoin();
@@ -6656,8 +7050,9 @@ namespace Realmz.Game
             }
             else
             {
+                _activeEncounterZone = zone;
                 _activeEncounterZoneKey = zoneKey;
-                StartTacticalCombat(monsters, "Encounter Zone Battle");
+                StartTacticalCombat(monsters, "Encounter Zone Battle", CombatInitiativeSurpriseMode.None, rewardBonusPct);
             }
         }
 

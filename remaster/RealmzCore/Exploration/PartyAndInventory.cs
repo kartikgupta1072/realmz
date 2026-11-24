@@ -811,6 +811,19 @@ namespace RealmzCore.Exploration
         public int QuickBandageCharges { get; set; }
         public bool DeferLevelUp { get; set; }
 
+        public bool TryLightTorchFromStash(out string feedbackMessage, IReadOnlyDictionary<int, ItemDefinition>? catalog = null)
+        {
+            if (!TryConsumeItemCharge(TorchItemId, out _, catalog))
+            {
+                feedbackMessage = "No Torches remaining in shared stash.";
+                return false;
+            }
+
+            TorchTurnsRemaining += 30;
+            feedbackMessage = $"Lit a Torch (+30 turns; {TorchTurnsRemaining} active).";
+            return true;
+        }
+
         public int GetTotalTorchCharges()
         {
             int total = 0;

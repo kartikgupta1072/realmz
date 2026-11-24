@@ -1,3 +1,4 @@
+using RealmzCore.Exploration;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -6,24 +7,87 @@ namespace Realmz.World
 {
     /// <summary>
     /// Controls dynamic URP lighting, ambient trilight, post-processing volume overrides,
-    /// and sunlit atmospheric pollen motes between Sunlit Daylight overworld and Torchlit Dungeon.
+    /// smooth Day/Night survival cycle transitions (Dawn -> Day -> Dusk -> Night),
+    /// and sunlit atmospheric pollen motes between Overworld phases and Torchlit Dungeon.
     /// </summary>
     public sealed class BywaterBiomeAtmosphere : MonoBehaviour
     {
+        private struct AtmosphereState
+        {
+            public Color sunColor;
+            public float sunIntensity;
+            public Quaternion sunRotation;
+            public float shadowStrength;
+            public Color ambientSky;
+            public Color ambientEquator;
+            public Color ambientGround;
+            public float ambientIntensity;
+            public bool fogEnabled;
+            public Color fogColor;
+            public float fogStart;
+            public float fogEnd;
+            public Color cameraBg;
+            public TonemappingMode tonemapping;
+            public float postExposure;
+            public float contrast;
+            public float saturation;
+            public Color splitHighlights;
+            public Color splitShadows;
+            public float splitBalance;
+            public float bloomThreshold;
+            public float bloomIntensity;
+            public float bloomScatter;
+            public float vignetteIntensity;
+            public float vignetteSmoothness;
+            public bool playSunMotes;
+        }
+
         [Header("Scene References")]
         public Light directionalSun;
         public Volume globalVolume;
         public Camera targetCamera;
         public ParticleSystem sunMoteParticles;
 
+        private const float TransitionDurationSeconds = 1.05f;
+
         private Texture2D _runtimeMoteTexture;
         private Material _runtimeMoteMaterial;
+        private AtmosphereState _currentState;
+        private AtmosphereState _targetState;
+        private AtmosphereState _startState;
+        private bool _hasInitializedState;
+        private bool _isTransitioning;
+        private float _transitionElapsed;
 
         public bool IsDungeonActive { get; private set; }
+        public WorldTimePhase CurrentTimePhase { get; private set; } = WorldTimePhase.Day;
+        public bool HasLitTorch { get; private set; }
 
         private void Awake()
         {
             ResolveReferences();
+        }
+
+        private void Update()
+        {
+            if (!_isTransitioning || !Application.isPlaying)
+            {
+                return;
+            }
+
+            _transitionElapsed += Time.unscaledDeltaTime;
+            float rawT = Mathf.Clamp01(_transitionElapsed / TransitionDurationSeconds);
+            float t = rawT * rawT * (3f - 2f * rawT);
+
+            AtmosphereState blended = LerpState(_startState, _targetState, t);
+            _currentState = blended;
+            ApplyAtmosphereStateImmediate(blended);
+
+            if (rawT >= 1f)
+            {
+                _currentState = _targetState;
+                _isTransitioning = false;
+            }
         }
 
         private void OnDestroy()
@@ -57,121 +121,330 @@ namespace Realmz.World
 
         public void ApplyBiome(bool isDungeon, bool immediate = true)
         {
+            ApplyBiome(isDungeon, WorldTimePhase.Day, 0.5f, isDungeon, immediate);
+        }
+
+        public void ApplyBiome(
+            bool isDungeon,
+            WorldTimePhase timePhase,
+            float phaseProgress01 = 0.5f,
+            bool hasLitTorch = false,
+            bool immediate = true)
+        {
             ResolveReferences();
             IsDungeonActive = isDungeon;
+            CurrentTimePhase = timePhase;
+            HasLitTorch = hasLitTorch;
 
-            if (!isDungeon)
+            AtmosphereState desired = BuildTargetState(isDungeon, timePhase, phaseProgress01, hasLitTorch);
+
+            if (immediate || !Application.isPlaying || !_hasInitializedState)
             {
-                ApplySunlitDaylight();
+                _currentState = desired;
+                _targetState = desired;
+                _startState = desired;
+                _hasInitializedState = true;
+                _isTransitioning = false;
+                _transitionElapsed = 0f;
+                ApplyAtmosphereStateImmediate(desired);
             }
             else
             {
-                ApplyTorchlitDungeon();
+                _startState = _currentState;
+                _targetState = desired;
+                _transitionElapsed = 0f;
+                _isTransitioning = true;
             }
         }
 
         public void UpdateFocusPosition(Vector3 worldPos)
         {
-            if (!IsDungeonActive && sunMoteParticles != null)
+            if (!IsDungeonActive && CurrentTimePhase != WorldTimePhase.Night && sunMoteParticles != null)
             {
                 sunMoteParticles.transform.position = new Vector3(worldPos.x, 2.6f, worldPos.z);
             }
         }
 
-        private void ApplySunlitDaylight()
+        private static AtmosphereState BuildTargetState(
+            bool isDungeon,
+            WorldTimePhase timePhase,
+            float phaseProgress01,
+            bool hasLitTorch)
         {
-            if (directionalSun != null)
+            if (isDungeon)
             {
-                directionalSun.color = new Color(1.0f, 0.941f, 0.831f, 1f);
-                directionalSun.intensity = 1.85f;
-                directionalSun.transform.rotation = Quaternion.Euler(44f, -36f, 0f);
-                directionalSun.shadows = LightShadows.Soft;
-                directionalSun.shadowStrength = 0.65f;
+                return BuildDungeonState(hasLitTorch);
             }
 
-            RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.42f, 0.56f, 0.78f, 1f);
-            RenderSettings.ambientEquatorColor = new Color(0.36f, 0.38f, 0.35f, 1f);
-            RenderSettings.ambientGroundColor = new Color(0.22f, 0.21f, 0.18f, 1f);
-            RenderSettings.ambientIntensity = 0.90f;
-            RenderSettings.fog = true;
-            RenderSettings.fogMode = FogMode.Linear;
-            RenderSettings.fogColor = new Color(0.54f, 0.68f, 0.84f, 1f);
-            RenderSettings.fogStartDistance = 38f;
-            RenderSettings.fogEndDistance = 95f;
-
-            if (targetCamera != null)
+            switch (timePhase)
             {
-                targetCamera.backgroundColor = new Color(0.34f, 0.50f, 0.72f, 1f);
-            }
-
-            ApplyVolumeOverrides(
-                tonemappingMode: TonemappingMode.Neutral,
-                postExposure: -0.18f,
-                contrast: 15f,
-                saturation: 14f,
-                splitHighlights: new Color(1.0f, 0.95f, 0.84f, 1f),
-                splitShadows: new Color(0.84f, 0.90f, 1.0f, 1f),
-                splitBalance: 10f,
-                bloomThreshold: 1.40f,
-                bloomIntensity: 0.26f,
-                bloomScatter: 0.58f,
-                vignetteIntensity: 0.12f,
-                vignetteSmoothness: 0.55f);
-
-            EnsureSunMoteParticles();
-            if (sunMoteParticles != null)
-            {
-                ParticleSystem.EmissionModule emission = sunMoteParticles.emission;
-                emission.enabled = true;
-                if (!sunMoteParticles.isPlaying)
-                {
-                    sunMoteParticles.Play();
-                }
+                case WorldTimePhase.Dawn:
+                    return BuildDawnState(phaseProgress01);
+                case WorldTimePhase.Dusk:
+                    return BuildDuskState(phaseProgress01);
+                case WorldTimePhase.Night:
+                    return BuildNightState(hasLitTorch);
+                default:
+                    return BuildSunlitDaylightState();
             }
         }
 
-        private void ApplyTorchlitDungeon()
+        private static AtmosphereState BuildDawnState(float phaseProgress01)
+        {
+            float sunPitch = Mathf.Lerp(24f, 34f, Mathf.Clamp01(phaseProgress01));
+            return new AtmosphereState
+            {
+                sunColor = new Color(1.00f, 0.78f, 0.52f, 1f),
+                sunIntensity = 1.48f,
+                sunRotation = Quaternion.Euler(sunPitch, -56f, 0f),
+                shadowStrength = 0.74f,
+                ambientSky = new Color(0.28f, 0.36f, 0.64f, 1f),
+                ambientEquator = new Color(0.24f, 0.22f, 0.28f, 1f),
+                ambientGround = new Color(0.10f, 0.10f, 0.15f, 1f),
+                ambientIntensity = 0.72f,
+                fogEnabled = true,
+                fogColor = new Color(0.46f, 0.44f, 0.52f, 1f),
+                fogStart = 62f,
+                fogEnd = 138f,
+                cameraBg = new Color(0.28f, 0.36f, 0.54f, 1f),
+                tonemapping = TonemappingMode.Neutral,
+                postExposure = -0.28f,
+                contrast = 18f,
+                saturation = 12f,
+                splitHighlights = new Color(1.0f, 0.88f, 0.68f, 1f),
+                splitShadows = new Color(0.56f, 0.64f, 0.90f, 1f),
+                splitBalance = -6f,
+                bloomThreshold = 1.42f,
+                bloomIntensity = 0.22f,
+                bloomScatter = 0.52f,
+                vignetteIntensity = 0.18f,
+                vignetteSmoothness = 0.52f,
+                playSunMotes = true
+            };
+        }
+
+        private static AtmosphereState BuildSunlitDaylightState()
+        {
+            // Deep cool forest-indigo shadows + far-pushed fog + dialed-back exposure eliminate milky daytime washout.
+            return new AtmosphereState
+            {
+                sunColor = new Color(1.00f, 0.920f, 0.780f, 1f),
+                sunIntensity = 1.82f,
+                sunRotation = Quaternion.Euler(44f, -36f, 0f),
+                shadowStrength = 0.78f,
+                ambientSky = new Color(0.24f, 0.36f, 0.72f, 1f),
+                ambientEquator = new Color(0.16f, 0.21f, 0.32f, 1f),
+                ambientGround = new Color(0.08f, 0.10f, 0.16f, 1f),
+                ambientIntensity = 0.72f,
+                fogEnabled = true,
+                fogColor = new Color(0.36f, 0.50f, 0.72f, 1f),
+                fogStart = 76f,
+                fogEnd = 160f,
+                cameraBg = new Color(0.26f, 0.42f, 0.66f, 1f),
+                tonemapping = TonemappingMode.Neutral,
+                postExposure = -0.32f,
+                contrast = 20f,
+                saturation = 11f,
+                splitHighlights = new Color(1.0f, 0.94f, 0.80f, 1f),
+                splitShadows = new Color(0.52f, 0.64f, 0.92f, 1f),
+                splitBalance = -8f,
+                bloomThreshold = 1.45f,
+                bloomIntensity = 0.18f,
+                bloomScatter = 0.50f,
+                vignetteIntensity = 0.15f,
+                vignetteSmoothness = 0.52f,
+                playSunMotes = true
+            };
+        }
+
+        private static AtmosphereState BuildDuskState(float phaseProgress01)
+        {
+            float sunPitch = Mathf.Lerp(30f, 20f, Mathf.Clamp01(phaseProgress01));
+            return new AtmosphereState
+            {
+                sunColor = new Color(1.00f, 0.60f, 0.34f, 1f),
+                sunIntensity = 1.26f,
+                sunRotation = Quaternion.Euler(sunPitch, 48f, 0f),
+                shadowStrength = 0.72f,
+                ambientSky = new Color(0.22f, 0.22f, 0.46f, 1f),
+                ambientEquator = new Color(0.22f, 0.17f, 0.24f, 1f),
+                ambientGround = new Color(0.09f, 0.08f, 0.14f, 1f),
+                ambientIntensity = 0.76f,
+                fogEnabled = true,
+                fogColor = new Color(0.30f, 0.24f, 0.34f, 1f),
+                fogStart = 54f,
+                fogEnd = 124f,
+                cameraBg = new Color(0.18f, 0.16f, 0.28f, 1f),
+                tonemapping = TonemappingMode.ACES,
+                postExposure = -0.22f,
+                contrast = 18f,
+                saturation = 10f,
+                splitHighlights = new Color(1.0f, 0.74f, 0.52f, 1f),
+                splitShadows = new Color(0.48f, 0.54f, 0.86f, 1f),
+                splitBalance = -12f,
+                bloomThreshold = 1.32f,
+                bloomIntensity = 0.26f,
+                bloomScatter = 0.55f,
+                vignetteIntensity = 0.22f,
+                vignetteSmoothness = 0.50f,
+                playSunMotes = true
+            };
+        }
+
+        private static AtmosphereState BuildNightState(bool hasLitTorch)
+        {
+            return new AtmosphereState
+            {
+                sunColor = new Color(0.56f, 0.70f, 1.00f, 1f),
+                sunIntensity = hasLitTorch ? 0.56f : 0.36f,
+                sunRotation = Quaternion.Euler(46f, -24f, 0f),
+                shadowStrength = 0.42f,
+                ambientSky = new Color(0.15f, 0.24f, 0.50f, 1f),
+                ambientEquator = new Color(0.12f, 0.19f, 0.38f, 1f),
+                ambientGround = new Color(0.08f, 0.12f, 0.24f, 1f),
+                ambientIntensity = hasLitTorch ? 1.15f : 0.88f,
+                fogEnabled = true,
+                fogColor = new Color(0.055f, 0.085f, 0.180f, 1f),
+                fogStart = hasLitTorch ? 38f : 28f,
+                fogEnd = hasLitTorch ? 92f : 68f,
+                cameraBg = new Color(0.035f, 0.055f, 0.125f, 1f),
+                tonemapping = TonemappingMode.ACES,
+                postExposure = hasLitTorch ? 0.08f : -0.14f,
+                contrast = 16f,
+                saturation = 8f,
+                splitHighlights = new Color(0.86f, 0.92f, 1.0f, 1f),
+                splitShadows = new Color(0.46f, 0.56f, 0.92f, 1f),
+                splitBalance = -16f,
+                bloomThreshold = 1.24f,
+                bloomIntensity = 0.34f,
+                bloomScatter = 0.58f,
+                vignetteIntensity = hasLitTorch ? 0.22f : 0.34f,
+                vignetteSmoothness = 0.50f,
+                playSunMotes = false
+            };
+        }
+
+        private static AtmosphereState BuildDungeonState(bool hasLitTorch)
+        {
+            return new AtmosphereState
+            {
+                sunColor = new Color(0.62f, 0.72f, 0.98f, 1f),
+                sunIntensity = hasLitTorch ? 0.44f : 0.30f,
+                sunRotation = Quaternion.Euler(44f, -36f, 0f),
+                shadowStrength = 0.35f,
+                ambientSky = new Color(0.18f, 0.28f, 0.50f, 1f),
+                ambientEquator = new Color(0.14f, 0.22f, 0.42f, 1f),
+                ambientGround = new Color(0.10f, 0.15f, 0.30f, 1f),
+                ambientIntensity = hasLitTorch ? 1.25f : 0.90f,
+                fogEnabled = true,
+                fogColor = new Color(0.055f, 0.072f, 0.130f, 1f),
+                fogStart = hasLitTorch ? 26f : 20f,
+                fogEnd = hasLitTorch ? 62f : 48f,
+                cameraBg = new Color(0.040f, 0.052f, 0.100f, 1f),
+                tonemapping = TonemappingMode.ACES,
+                postExposure = hasLitTorch ? 0.02f : -0.18f,
+                contrast = 16f,
+                saturation = 8f,
+                splitHighlights = new Color(1.0f, 0.88f, 0.72f, 1f),
+                splitShadows = new Color(0.58f, 0.68f, 0.94f, 1f),
+                splitBalance = -18f,
+                bloomThreshold = 1.32f,
+                bloomIntensity = 0.30f,
+                bloomScatter = 0.58f,
+                vignetteIntensity = hasLitTorch ? 0.26f : 0.36f,
+                vignetteSmoothness = 0.48f,
+                playSunMotes = false
+            };
+        }
+
+        private static AtmosphereState LerpState(in AtmosphereState a, in AtmosphereState b, float t)
+        {
+            return new AtmosphereState
+            {
+                sunColor = Color.Lerp(a.sunColor, b.sunColor, t),
+                sunIntensity = Mathf.Lerp(a.sunIntensity, b.sunIntensity, t),
+                sunRotation = Quaternion.Slerp(a.sunRotation, b.sunRotation, t),
+                shadowStrength = Mathf.Lerp(a.shadowStrength, b.shadowStrength, t),
+                ambientSky = Color.Lerp(a.ambientSky, b.ambientSky, t),
+                ambientEquator = Color.Lerp(a.ambientEquator, b.ambientEquator, t),
+                ambientGround = Color.Lerp(a.ambientGround, b.ambientGround, t),
+                ambientIntensity = Mathf.Lerp(a.ambientIntensity, b.ambientIntensity, t),
+                fogEnabled = b.fogEnabled,
+                fogColor = Color.Lerp(a.fogColor, b.fogColor, t),
+                fogStart = Mathf.Lerp(a.fogStart, b.fogStart, t),
+                fogEnd = Mathf.Lerp(a.fogEnd, b.fogEnd, t),
+                cameraBg = Color.Lerp(a.cameraBg, b.cameraBg, t),
+                tonemapping = t >= 0.5f ? b.tonemapping : a.tonemapping,
+                postExposure = Mathf.Lerp(a.postExposure, b.postExposure, t),
+                contrast = Mathf.Lerp(a.contrast, b.contrast, t),
+                saturation = Mathf.Lerp(a.saturation, b.saturation, t),
+                splitHighlights = Color.Lerp(a.splitHighlights, b.splitHighlights, t),
+                splitShadows = Color.Lerp(a.splitShadows, b.splitShadows, t),
+                splitBalance = Mathf.Lerp(a.splitBalance, b.splitBalance, t),
+                bloomThreshold = Mathf.Lerp(a.bloomThreshold, b.bloomThreshold, t),
+                bloomIntensity = Mathf.Lerp(a.bloomIntensity, b.bloomIntensity, t),
+                bloomScatter = Mathf.Lerp(a.bloomScatter, b.bloomScatter, t),
+                vignetteIntensity = Mathf.Lerp(a.vignetteIntensity, b.vignetteIntensity, t),
+                vignetteSmoothness = Mathf.Lerp(a.vignetteSmoothness, b.vignetteSmoothness, t),
+                playSunMotes = b.playSunMotes
+            };
+        }
+
+        private void ApplyAtmosphereStateImmediate(in AtmosphereState state)
         {
             if (directionalSun != null)
             {
-                directionalSun.color = new Color(0.62f, 0.72f, 0.98f, 1f);
-                directionalSun.intensity = 0.45f;
+                directionalSun.color = state.sunColor;
+                directionalSun.intensity = state.sunIntensity;
+                directionalSun.transform.rotation = state.sunRotation;
                 directionalSun.shadows = LightShadows.Soft;
-                directionalSun.shadowStrength = 0.35f;
+                directionalSun.shadowStrength = state.shadowStrength;
             }
 
             RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.22f, 0.34f, 0.56f, 1f);
-            RenderSettings.ambientEquatorColor = new Color(0.18f, 0.28f, 0.48f, 1f);
-            RenderSettings.ambientGroundColor = new Color(0.14f, 0.20f, 0.36f, 1f);
-            RenderSettings.ambientIntensity = 1.35f;
-            RenderSettings.fog = true;
+            RenderSettings.ambientSkyColor = state.ambientSky;
+            RenderSettings.ambientEquatorColor = state.ambientEquator;
+            RenderSettings.ambientGroundColor = state.ambientGround;
+            RenderSettings.ambientIntensity = state.ambientIntensity;
+            RenderSettings.fog = state.fogEnabled;
             RenderSettings.fogMode = FogMode.Linear;
-            RenderSettings.fogColor = new Color(0.065f, 0.082f, 0.140f, 1f);
-            RenderSettings.fogStartDistance = 24f;
-            RenderSettings.fogEndDistance = 60f;
+            RenderSettings.fogColor = state.fogColor;
+            RenderSettings.fogStartDistance = state.fogStart;
+            RenderSettings.fogEndDistance = state.fogEnd;
 
             if (targetCamera != null)
             {
-                targetCamera.backgroundColor = new Color(0.045f, 0.058f, 0.110f, 1f);
+                targetCamera.backgroundColor = state.cameraBg;
             }
 
             ApplyVolumeOverrides(
-                tonemappingMode: TonemappingMode.ACES,
-                postExposure: 0.04f,
-                contrast: 14f,
-                saturation: 8f,
-                splitHighlights: new Color(1.0f, 0.88f, 0.72f, 1f),
-                splitShadows: new Color(0.68f, 0.76f, 0.96f, 1f),
-                splitBalance: -15f,
-                bloomThreshold: 1.35f,
-                bloomIntensity: 0.32f,
-                bloomScatter: 0.62f,
-                vignetteIntensity: 0.26f,
-                vignetteSmoothness: 0.48f);
+                tonemappingMode: state.tonemapping,
+                postExposure: state.postExposure,
+                contrast: state.contrast,
+                saturation: state.saturation,
+                splitHighlights: state.splitHighlights,
+                splitShadows: state.splitShadows,
+                splitBalance: state.splitBalance,
+                bloomThreshold: state.bloomThreshold,
+                bloomIntensity: state.bloomIntensity,
+                bloomScatter: state.bloomScatter,
+                vignetteIntensity: state.vignetteIntensity,
+                vignetteSmoothness: state.vignetteSmoothness);
 
-            if (sunMoteParticles != null)
+            if (state.playSunMotes)
+            {
+                EnsureSunMoteParticles();
+                if (sunMoteParticles != null)
+                {
+                    ParticleSystem.EmissionModule emission = sunMoteParticles.emission;
+                    emission.enabled = true;
+                    if (!sunMoteParticles.isPlaying)
+                    {
+                        sunMoteParticles.Play();
+                    }
+                }
+            }
+            else if (sunMoteParticles != null)
             {
                 ParticleSystem.EmissionModule emission = sunMoteParticles.emission;
                 emission.enabled = false;

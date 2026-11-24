@@ -377,6 +377,89 @@ namespace Realmz.PlayModeTests
             }
         }
 
+        [UnityTest]
+        public IEnumerator PlayMode_EncounterDirector_NightTorch_ScoutingModal_AndScrollLock()
+        {
+            var errors = new List<string>();
+            void LogHandler(string condition, string stackTrace, LogType type)
+            {
+                if (type == LogType.Error || type == LogType.Exception || type == LogType.Assert || type == LogType.Warning)
+                {
+                    if (!condition.Contains("Curl error") && !condition.Contains("LicenseClient"))
+                    {
+                        errors.Add($"[{type}] {condition}");
+                    }
+                }
+            }
+
+            Application.logMessageReceived += LogHandler;
+            try
+            {
+                AsyncOperation loadOp = SceneManager.LoadSceneAsync("M1_Bywater_Slice", LoadSceneMode.Single);
+                while (loadOp != null && !loadOp.isDone)
+                {
+                    yield return null;
+                }
+                yield return null;
+                yield return null;
+
+                BywaterGameController ctrl = Object.FindFirstObjectByType<BywaterGameController>();
+                Assert.That(ctrl, Is.Not.Null);
+                bool captureProofs = string.Equals(Environment.GetEnvironmentVariable("REALMZ_CAPTURE_PROOFS"), "1", StringComparison.Ordinal);
+
+                // 1. Night exploration + lit warm Aldric torchlight on East Riverbank
+                ctrl.StageNightTorchExploreShowcaseForCapture(new GridCoord(53, 62), worldClockTurns: 58, torchTurnsRemaining: 36);
+                yield return null;
+                yield return null;
+
+                Assert.That(ctrl.ExploreSession.CurrentWorldClock.Phase, Is.EqualTo(WorldTimePhase.Night));
+                Assert.That(ctrl.worldRenderer.IsPartyLanternEnabled, Is.True, "Warm Aldric torchlight must enable at Night.");
+                Assert.That(ctrl.worldRenderer.PartyLanternIntensity, Is.GreaterThan(8.0f));
+                Assert.That(ctrl.biomeAtmosphere.CurrentTimePhase, Is.EqualTo(WorldTimePhase.Night));
+
+                if (captureProofs)
+                {
+                    CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
+                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_Night_Torch_Proof.png", 1600, 900);
+                }
+
+                // 2. Encounter Intercept Modal on East Riverbank (Giant Frog + Goblin ecology pack) + Bug #7 Scroll Lock
+                ctrl.StageScoutInterceptShowcaseForCapture(new GridCoord(53, 62), worldClockTurns: 24, torchTurnsRemaining: 24);
+                yield return null;
+                yield return null;
+
+                Assert.That(ctrl.hudController.IsEncounterInterceptOpen, Is.True);
+                Assert.That(ctrl.hudController.IsModalOpen, Is.True);
+                Assert.That(ctrl.ExploreSession.GetCurrentGeography().LocationLabel, Is.EqualTo("Bywater East Riverbank"));
+                Assert.That(ctrl.cameraRig.ApplyScrollZoomDelta(240f), Is.EqualTo(0f), "Bug #7 zoom lock must block while Intercept open.");
+                Assert.That(ctrl.cameraRig.ApplyKeyboardPanInput(Vector2.right, false, 0.2f), Is.EqualTo(Vector3.zero));
+
+                if (captureProofs)
+                {
+                    CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
+                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_Scout_Intercept_Proof.png", 1600, 900);
+                }
+
+                // Engage -> launches TacticalCombat with riverbank water tiles
+                UnityEngine.UI.Button engageBtn = GameObject.Find("InterceptEngageBtn")?.GetComponent<UnityEngine.UI.Button>();
+                Assert.That(engageBtn, Is.Not.Null);
+                engageBtn.onClick.Invoke();
+                yield return null;
+                yield return null;
+
+                Assert.That(ctrl.IsInCombat, Is.True);
+                Assert.That(ctrl.hudController.AreExploreButtonsHiddenInCombat, Is.True);
+                Assert.That(ctrl.CombatSession.GetActiveSurfaceCells().Count, Is.GreaterThan(0),
+                    "Riverbank combat arena should seed water/mud surface tiles.");
+
+                Assert.That(errors, Is.Empty, "PlayMode EncounterDirector errors:\n" + string.Join("\n", errors));
+            }
+            finally
+            {
+                Application.logMessageReceived -= LogHandler;
+            }
+        }
+
         private static void CaptureCameraToPng(Camera cam, BywaterHudController hud, string outPngPath, int width, int height)
         {
             if (cam == null) return;

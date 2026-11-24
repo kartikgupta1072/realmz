@@ -19,6 +19,13 @@ namespace RealmzCore.Combat
         Defeat = 2
     }
 
+    public enum CombatInitiativeSurpriseMode
+    {
+        None = 0,
+        PartyAmbush = 1,
+        EnemySurprisedParty = 2
+    }
+
     public enum LosKind
     {
         Clear = 0,

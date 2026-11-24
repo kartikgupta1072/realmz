@@ -2760,5 +2760,219 @@ namespace Realmz.EditorTests
                 }
             }
         }
+
+        [Test]
+        public void EncounterDirector_SaveV3PersistsClockGraceAndCooldowns_AndHandlesLegacySaves()
+        {
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(Path.Combine(Application.streamingAssetsPath, "bywater_m1"));
+            PartyState party = PartyState.FromBundle(bundle);
+            ExplorationSession session = new ExplorationSession(
+                bundle.Maps,
+                "land_0",
+                party,
+                new DeterministicDiceRoller(42UL),
+                startPosition: new GridCoord(41, 54),
+                initialWorldClockTurns: 58);
+
+            // Trigger wilderness cooldown and post-combat grace steps
+            IReadOnlyList<EncounterZoneData> zonesAtBank = session.CurrentMap.GetZonesAt(41, 54);
+            Assert.That(zonesAtBank.Count, Is.GreaterThan(0));
+            session.CompleteEncounterZone(zonesAtBank[0], graceSteps: 10);
+            Assert.That(session.PostCombatGraceStepsRemaining, Is.EqualTo(10));
+            Assert.That(session.ZoneCooldownUntilTurns.Count, Is.EqualTo(1));
+
+            string tempSave = Path.Combine(Path.GetTempPath(), "realmz_encounter_v3_test.json");
+            try
+            {
+                BywaterSaveData snap = BywaterSaveService.CaptureSnapshot(session);
+                Assert.That(snap.hasWorldClock, Is.True);
+                Assert.That(snap.worldTimeTurns, Is.EqualTo(58));
+                Assert.That(snap.postCombatGraceSteps, Is.EqualTo(10));
+                Assert.That(snap.zoneCooldowns.Length, Is.EqualTo(1));
+                Assert.That(BywaterSaveService.TryWriteSave(tempSave, snap), Is.True);
+
+                Assert.That(BywaterSaveService.TryLoadSave(tempSave, out BywaterSaveData loaded, out string _), Is.True);
+                ExplorationSession restored = new ExplorationSession(bundle.Maps, "land_0", PartyState.FromBundle(bundle));
+                BywaterSaveService.ApplySnapshot(loaded, restored, bundle.Items, out ulong _);
+
+                Assert.That(restored.WorldClockTurns, Is.EqualTo(58));
+                Assert.That(restored.CurrentWorldClock.Phase, Is.EqualTo(WorldTimePhase.Night));
+                Assert.That(restored.PostCombatGraceStepsRemaining, Is.EqualTo(10));
+                Assert.That(restored.IsEncounterZoneOnCooldown("land_0", zonesAtBank[0]), Is.True);
+
+                // Backward compatibility with legacy saves missing world clock fields (worldTimeTurns = -1, hasWorldClock = false)
+                BywaterSaveData legacyData = new BywaterSaveData
+                {
+                    version = 2,
+                    mapId = "land_0",
+                    x = 10,
+                    y = 9,
+                    turnCount = 7,
+                    hasWorldClock = false,
+                    worldTimeTurns = -1
+                };
+                Assert.That(BywaterSaveService.ResolveRestoredWorldClockTurns(legacyData),
+                    Is.EqualTo(WorldClock.DefaultStartTurns + 7));
+            }
+            finally
+            {
+                if (File.Exists(tempSave)) File.Delete(tempSave);
+            }
+        }
+
+        [Test]
+        public void EncounterDirector_AtmospherePhasesAndAldricTorchlight_ToggleOnNightAndDark()
+        {
+            AmbientMode prevMode = RenderSettings.ambientMode;
+            Color prevSky = RenderSettings.ambientSkyColor;
+            Color prevEquator = RenderSettings.ambientEquatorColor;
+            Color prevGround = RenderSettings.ambientGroundColor;
+
+            GameObject camGo = new GameObject("EdCam", typeof(Camera));
+            GameObject sunGo = new GameObject("EdSun", typeof(Light));
+            GameObject volGo = new GameObject("EdVol", typeof(Volume));
+            GameObject atmoGo = new GameObject("EdAtmo");
+            GameObject worldGo = new GameObject("EdWorld");
+            VolumeProfile profile = ScriptableObject.CreateInstance<VolumeProfile>();
+
+            try
+            {
+                camGo.tag = "MainCamera";
+                Light sun = sunGo.GetComponent<Light>();
+                sun.type = LightType.Directional;
+                Volume vol = volGo.GetComponent<Volume>();
+                vol.isGlobal = true;
+                vol.sharedProfile = profile;
+
+                BywaterBiomeAtmosphere atmo = atmoGo.AddComponent<BywaterBiomeAtmosphere>();
+                atmo.targetCamera = camGo.GetComponent<Camera>();
+                atmo.directionalSun = sun;
+                atmo.globalVolume = vol;
+
+                atmo.ApplyBiome(false, WorldTimePhase.Dawn, 0.5f, false, immediate: true);
+                float dawnIntensity = sun.intensity;
+                atmo.ApplyBiome(false, WorldTimePhase.Day, 0.5f, false, immediate: true);
+                float dayIntensity = sun.intensity;
+                atmo.ApplyBiome(false, WorldTimePhase.Dusk, 0.5f, false, immediate: true);
+                float duskIntensity = sun.intensity;
+                atmo.ApplyBiome(false, WorldTimePhase.Night, 0.5f, true, immediate: true);
+                float nightIntensity = sun.intensity;
+
+                Assert.That(dayIntensity, Is.GreaterThan(dawnIntensity));
+                Assert.That(dawnIntensity, Is.GreaterThan(duskIntensity));
+                Assert.That(nightIntensity, Is.LessThan(duskIntensity));
+                Assert.That(RenderSettings.ambientSkyColor.b, Is.GreaterThan(RenderSettings.ambientSkyColor.r));
+
+                BywaterWorldRenderer renderer = worldGo.AddComponent<BywaterWorldRenderer>();
+                BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+                renderer.Initialize(catalog);
+
+                // Day: party lantern remains off even if carrying torches
+                renderer.SetPartyTorchPosition(Vector3.zero, isDungeon: false, isNightOrDark: false, hasLitTorch: true);
+                Assert.That(renderer.IsPartyLanternEnabled, Is.False);
+
+                // Night without lit torch: party lantern off
+                renderer.SetPartyTorchPosition(Vector3.zero, isDungeon: false, isNightOrDark: true, hasLitTorch: false);
+                Assert.That(renderer.IsPartyLanternEnabled, Is.False);
+
+                // Night with lit torch: warm Aldric torchlight enabled (> 8.0 intensity)
+                renderer.SetPartyTorchPosition(Vector3.zero, isDungeon: false, isNightOrDark: true, hasLitTorch: true);
+                Assert.That(renderer.IsPartyLanternEnabled, Is.True);
+                Assert.That(renderer.PartyLanternIntensity, Is.GreaterThan(8.0f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(worldGo);
+                Object.DestroyImmediate(atmoGo);
+                Object.DestroyImmediate(volGo);
+                Object.DestroyImmediate(sunGo);
+                Object.DestroyImmediate(camGo);
+                Object.DestroyImmediate(profile);
+                RenderSettings.ambientMode = prevMode;
+                RenderSettings.ambientSkyColor = prevSky;
+                RenderSettings.ambientEquatorColor = prevEquator;
+                RenderSettings.ambientGroundColor = prevGround;
+            }
+        }
+
+        [Test]
+        public void EncounterDirector_HudClockThreatPills_InterceptModalAndBug7ScrollLock()
+        {
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(Path.Combine(Application.streamingAssetsPath, "bywater_m1"));
+            PartyState party = PartyState.FromBundle(bundle);
+            ExplorationSession session = new ExplorationSession(
+                bundle.Maps,
+                "land_0",
+                party,
+                new DeterministicDiceRoller(9UL),
+                startPosition: new GridCoord(41, 54),
+                initialWorldClockTurns: 58); // Night
+
+            GameObject hudGo = new GameObject("TempInterceptHud");
+            GameObject camGo = new GameObject("TempInterceptCam", typeof(Camera));
+            bool hadEs = Object.FindFirstObjectByType<EventSystem>() != null;
+            try
+            {
+                BywaterHudController hud = hudGo.AddComponent<BywaterHudController>();
+                hud.BuildUi(catalog);
+                Canvas canvas = hud.GetComponentInChildren<Canvas>(true);
+                BywaterCameraRig rig = camGo.AddComponent<BywaterCameraRig>();
+                rig.SetHudController(hud);
+
+                // Night with unlit torch shows DARK DANGER! threat pill & Night clock pill
+                party.TorchTurnsRemaining = 0;
+                hud.RefreshExploreHud(session, bundle, null, null, 0, string.Empty, false);
+                TextMeshProUGUI clockTxt = FindDescendantByName(canvas.transform, "ClockText").GetComponent<TextMeshProUGUI>();
+                TextMeshProUGUI threatTxt = FindDescendantByName(canvas.transform, "ThreatText").GetComponent<TextMeshProUGUI>();
+                Assert.That(clockTxt.text, Is.EqualTo("Day 1 - Night"));
+                Assert.That(threatTxt.text, Is.EqualTo("DARK DANGER!"));
+
+                // Lighting torch resolves DARK DANGER! -> HIGH / MODERATE
+                party.TorchTurnsRemaining = 24;
+                hud.RefreshExploreHud(session, bundle, null, null, 0, string.Empty, false);
+                Assert.That(threatTxt.text, Is.Not.EqualTo("DARK DANGER!"));
+
+                // Show Encounter Intercept Modal -> Bug #7 scroll lock engaged + correct buttons
+                EncounterZoneData zone = session.CurrentMap.GetZonesAt(41, 54)[0];
+                EncounterGeographyInfo geo = session.GetCurrentGeography();
+                List<MonsterDefinition> pack = EncounterDirector.BuildEcologyMonsterPack(
+                    session.CurrentMap, session.Position, zone, geo, session.CurrentWorldClock, bundle.Monsters, session.Roller);
+                EncounterScoutingReport report = session.CreateScoutingReport(zone, pack);
+
+                hud.ShowEncounterInterceptModal(report, canQuickResolve: false);
+                Assert.That(hud.IsEncounterInterceptOpen, Is.True);
+                Assert.That(hud.IsModalOpen, Is.True);
+                Assert.That(rig.ApplyScrollZoomDelta(180f), Is.EqualTo(0f), "Bug #7: zoom must lock while Encounter Intercept is open.");
+                Assert.That(rig.ApplyKeyboardPanInput(Vector2.up, false, 0.2f), Is.EqualTo(Vector3.zero), "Bug #7: pan must lock while Intercept open.");
+
+                // Dark Ambush disables Evade and labels primary action Defend Yourself
+                party.TorchTurnsRemaining = 0;
+                EncounterScoutingReport darkReport = session.CreateScoutingReport(zone, pack);
+                Assert.That(darkReport.IsAmbushedInDark, Is.True);
+                hud.ShowEncounterInterceptModal(darkReport, canQuickResolve: true, quickResolveRatioText: "3.0x");
+                UnityEngine.UI.Button evadeBtn = FindDescendantByName(canvas.transform, "InterceptEvadeBtn").GetComponent<UnityEngine.UI.Button>();
+                UnityEngine.UI.Button engageBtn = FindDescendantByName(canvas.transform, "InterceptEngageBtn").GetComponent<UnityEngine.UI.Button>();
+                Assert.That(evadeBtn.interactable, Is.False);
+                Assert.That(engageBtn.GetComponentInChildren<TextMeshProUGUI>(true).text, Is.EqualTo("Defend Yourself"));
+                Assert.That(FindDescendantByName(canvas.transform, "InterceptQuickResolveBtn").gameObject.activeSelf, Is.False);
+
+                bool engaged = false;
+                hud.OnEncounterEngageRequested += () => engaged = true;
+                engageBtn.onClick.Invoke();
+                Assert.That(engaged, Is.True);
+                Assert.That(hud.IsEncounterInterceptOpen, Is.False);
+            }
+            finally
+            {
+                Object.DestroyImmediate(camGo);
+                Object.DestroyImmediate(hudGo);
+                if (!hadEs)
+                {
+                    EventSystem created = Object.FindFirstObjectByType<EventSystem>();
+                    if (created != null) Object.DestroyImmediate(created.gameObject);
+                }
+            }
+        }
     }
 }

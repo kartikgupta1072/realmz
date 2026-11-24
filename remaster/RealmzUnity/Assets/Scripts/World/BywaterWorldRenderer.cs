@@ -3,6 +3,7 @@ using Realmz.Cartography;
 using Realmz.Data;
 using Realmz.Rendering;
 using RealmzCore.Data;
+using RealmzCore.Exploration;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.UI;
@@ -143,6 +144,8 @@ namespace Realmz.World
         private readonly List<Vector3> _arenaPointScratch = new List<Vector3>(64);
 
         private Light _partyLantern;
+        private BywaterTorchFlicker _partyLanternFlicker;
+        private WorldTimePhase _activeTimePhase = WorldTimePhase.Day;
         private CampfireEntry _campfireEntry;
         private LineRenderer _arenaBorderLine;
 
@@ -173,6 +176,8 @@ namespace Realmz.World
         public Collider TerrainCollider => _elevationBuilder != null ? _elevationBuilder.terrainMeshCollider : null;
         public Transform PropsRoot => _propsContainer;
         public bool AreTownNpcsHiddenForCombat => _townNpcsHiddenForCombat;
+        public bool IsPartyLanternEnabled => _partyLantern != null && _partyLantern.enabled;
+        public float PartyLanternIntensity => _partyLantern != null ? _partyLantern.intensity : 0f;
 
         public int VisibleTownNpcCount
         {
@@ -285,6 +290,11 @@ namespace Realmz.World
 
         public void SetPartyTorchPosition(Vector3 worldPos, bool isDungeon)
         {
+            SetPartyTorchPosition(worldPos, isDungeon, isDungeon, isDungeon);
+        }
+
+        public void SetPartyTorchPosition(Vector3 worldPos, bool isDungeon, bool isNightOrDark, bool hasLitTorch)
+        {
             UpdateHeroWorldPosition(worldPos);
             EnsurePartyLantern();
             if (_partyLantern == null)
@@ -292,15 +302,29 @@ namespace Realmz.World
                 return;
             }
 
-            _partyLantern.transform.position = new Vector3(worldPos.x, worldPos.y + 1.65f, worldPos.z - 0.85f);
-            if (isDungeon)
+            _partyLantern.transform.position = new Vector3(worldPos.x, worldPos.y + 1.35f, worldPos.z - 0.65f);
+            bool enableTorch = (isDungeon || isNightOrDark) && hasLitTorch;
+            if (enableTorch)
             {
+                float targetIntensity = isDungeon ? 8.5f : 12.0f;
+                float targetRange = isDungeon ? 14.0f : 16.5f;
                 _partyLantern.enabled = true;
-                _partyLantern.intensity = 2.8f;
-                _partyLantern.range = 11.0f;
+                _partyLantern.intensity = targetIntensity;
+                _partyLantern.range = targetRange;
+                if (_partyLanternFlicker != null)
+                {
+                    _partyLanternFlicker.baseIntensity = targetIntensity;
+                    _partyLanternFlicker.flickerAmplitude = 0.55f;
+                    _partyLanternFlicker.enabled = true;
+                }
             }
             else
             {
+                if (_partyLanternFlicker != null)
+                {
+                    _partyLanternFlicker.enabled = false;
+                }
+
                 _partyLantern.intensity = 0f;
                 _partyLantern.enabled = false;
             }
@@ -1296,9 +1320,33 @@ namespace Realmz.World
                 }
             }
 
-            float targetIntensity = isDungeon ? 3.1f : 0.95f;
-            float targetRange = isDungeon ? 9.0f : 4.2f;
-            float targetFlickerAmp = isDungeon ? 0.38f : 0.14f;
+            float targetIntensity;
+            float targetRange;
+            float targetFlickerAmp;
+            if (isDungeon)
+            {
+                targetIntensity = 3.1f;
+                targetRange = 9.0f;
+                targetFlickerAmp = 0.38f;
+            }
+            else if (_activeTimePhase == WorldTimePhase.Night)
+            {
+                targetIntensity = 2.4f;
+                targetRange = 7.5f;
+                targetFlickerAmp = 0.28f;
+            }
+            else if (_activeTimePhase == WorldTimePhase.Dusk)
+            {
+                targetIntensity = 1.6f;
+                targetRange = 5.5f;
+                targetFlickerAmp = 0.20f;
+            }
+            else
+            {
+                targetIntensity = 0.95f;
+                targetRange = 4.2f;
+                targetFlickerAmp = 0.14f;
+            }
 
             for (int i = 0; i < _selectedLightPositions.Count; i++)
             {
@@ -1359,14 +1407,62 @@ namespace Realmz.World
             }
             else
             {
-                if (_runtimeTerrainMat.HasProperty(GroundValueScaleId)) _runtimeTerrainMat.SetFloat(GroundValueScaleId, 0.76f);
+                if (_runtimeTerrainMat.HasProperty(GroundValueScaleId)) _runtimeTerrainMat.SetFloat(GroundValueScaleId, 0.78f);
                 if (_runtimeTerrainMat.HasProperty(RoadValueBoostId)) _runtimeTerrainMat.SetFloat(RoadValueBoostId, 0.86f);
-                if (_runtimeTerrainMat.HasProperty(HorizonHazeColorId)) _runtimeTerrainMat.SetColor(HorizonHazeColorId, new Color(0.91f, 0.83f, 0.70f, 1f));
-                if (_runtimeTerrainMat.HasProperty(HorizonHazeStrengthId)) _runtimeTerrainMat.SetFloat(HorizonHazeStrengthId, 0.09f);
-                if (_runtimeTerrainMat.HasProperty(LanternPoolIntensityId)) _runtimeTerrainMat.SetFloat(LanternPoolIntensityId, 1.35f);
+                ApplyTimeOfDayShaderProperties(_runtimeTerrainMat, _activeTimePhase, true);
             }
 
             return _runtimeTerrainMat;
+        }
+
+        public void ApplyTimeOfDayLighting(WorldTimePhase phase, bool isDungeon, bool hasLitTorch)
+        {
+            _activeTimePhase = phase;
+            UpdateWindowTorches(_focusCenter, isDungeon);
+
+            if (_runtimeTerrainMat != null && !isDungeon)
+            {
+                ApplyTimeOfDayShaderProperties(_runtimeTerrainMat, phase, hasLitTorch);
+            }
+        }
+
+        private static void ApplyTimeOfDayShaderProperties(Material mat, WorldTimePhase phase, bool hasLitTorch)
+        {
+            if (mat == null)
+            {
+                return;
+            }
+
+            Color hazeColor;
+            float hazeStrength;
+            float lanternPool;
+            switch (phase)
+            {
+                case WorldTimePhase.Dawn:
+                    hazeColor = new Color(0.88f, 0.72f, 0.56f, 1f);
+                    hazeStrength = 0.045f;
+                    lanternPool = 1.45f;
+                    break;
+                case WorldTimePhase.Dusk:
+                    hazeColor = new Color(0.88f, 0.56f, 0.34f, 1f);
+                    hazeStrength = 0.060f;
+                    lanternPool = 1.65f;
+                    break;
+                case WorldTimePhase.Night:
+                    hazeColor = new Color(0.08f, 0.12f, 0.25f, 1f);
+                    hazeStrength = 0.040f;
+                    lanternPool = hasLitTorch ? 2.15f : 1.50f;
+                    break;
+                default:
+                    hazeColor = new Color(0.84f, 0.86f, 0.88f, 1f);
+                    hazeStrength = 0.030f;
+                    lanternPool = 1.20f;
+                    break;
+            }
+
+            if (mat.HasProperty(HorizonHazeColorId)) mat.SetColor(HorizonHazeColorId, hazeColor);
+            if (mat.HasProperty(HorizonHazeStrengthId)) mat.SetFloat(HorizonHazeStrengthId, hazeStrength);
+            if (mat.HasProperty(LanternPoolIntensityId)) mat.SetFloat(LanternPoolIntensityId, lanternPool);
         }
 
         private Material ResolveRuntimeWaterMaterial(bool isDungeon)
@@ -1807,6 +1903,10 @@ namespace Realmz.World
         {
             if (_partyLantern != null)
             {
+                if (_partyLanternFlicker == null)
+                {
+                    _partyLanternFlicker = _partyLantern.GetComponent<BywaterTorchFlicker>() ?? _partyLantern.gameObject.AddComponent<BywaterTorchFlicker>();
+                }
                 return;
             }
 
@@ -1816,6 +1916,7 @@ namespace Realmz.World
                 _partyLantern = existing.GetComponent<Light>();
                 if (_partyLantern != null)
                 {
+                    _partyLanternFlicker = _partyLantern.GetComponent<BywaterTorchFlicker>() ?? _partyLantern.gameObject.AddComponent<BywaterTorchFlicker>();
                     return;
                 }
             }
@@ -1829,6 +1930,12 @@ namespace Realmz.World
             _partyLantern.range = 11.0f;
             _partyLantern.shadows = LightShadows.Soft;
             _partyLantern.shadowStrength = 0.65f;
+
+            _partyLanternFlicker = go.AddComponent<BywaterTorchFlicker>();
+            _partyLanternFlicker.baseIntensity = 2.8f;
+            _partyLanternFlicker.flickerAmplitude = 0.42f;
+            _partyLanternFlicker.flickerSpeed = 6.2f;
+            _partyLanternFlicker.enabled = false;
         }
 
         private void EnsureSharedMeshes()

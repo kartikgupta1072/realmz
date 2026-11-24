@@ -41,12 +41,12 @@ namespace Realmz.EditorTools
 
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
-            // 1. Sunlit golden-hour trilight ambient for City of Bywater
+            // 1. Crisp sunlit trilight ambient with rich forest-indigo shadows for City of Bywater
             RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.42f, 0.56f, 0.78f, 1f);
-            RenderSettings.ambientEquatorColor = new Color(0.36f, 0.38f, 0.35f, 1f);
-            RenderSettings.ambientGroundColor = new Color(0.22f, 0.21f, 0.18f, 1f);
-            RenderSettings.ambientIntensity = 0.90f;
+            RenderSettings.ambientSkyColor = new Color(0.24f, 0.36f, 0.72f, 1f);
+            RenderSettings.ambientEquatorColor = new Color(0.16f, 0.21f, 0.32f, 1f);
+            RenderSettings.ambientGroundColor = new Color(0.08f, 0.10f, 0.16f, 1f);
+            RenderSettings.ambientIntensity = 0.72f;
             RenderSettings.fog = false;
 
             // 2. Perspective HD-2D Camera Rig with URP Post-Processing & HDR
@@ -54,7 +54,7 @@ namespace Realmz.EditorTools
             camGo.tag = "MainCamera";
             Camera cam = camGo.AddComponent<Camera>();
             cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = new Color(0.34f, 0.50f, 0.72f, 1f);
+            cam.backgroundColor = new Color(0.26f, 0.42f, 0.66f, 1f);
             cam.fieldOfView = 34f;
             cam.nearClipPlane = 0.3f;
             cam.farClipPlane = 140f;
@@ -76,10 +76,10 @@ namespace Realmz.EditorTools
             GameObject sunGo = new GameObject("Directional Sun");
             Light sun = sunGo.AddComponent<Light>();
             sun.type = LightType.Directional;
-            sun.color = new Color(1.0f, 0.941f, 0.831f, 1f);
-            sun.intensity = 1.85f;
+            sun.color = new Color(1.0f, 0.920f, 0.780f, 1f);
+            sun.intensity = 1.82f;
             sun.shadows = LightShadows.Soft;
-            sun.shadowStrength = 0.65f;
+            sun.shadowStrength = 0.78f;
             sunGo.transform.rotation = Quaternion.Euler(44f, -36f, 0f);
 
             // 4. Global URP Volume: Neutral Tonemapping + ColorAdjustments + SplitToning + Bloom + Vignette
@@ -115,11 +115,11 @@ namespace Realmz.EditorTools
                 AssetDatabase.AddObjectToAsset(colorAdjustments, profile);
             }
             colorAdjustments.postExposure.overrideState = true;
-            colorAdjustments.postExposure.value = -0.18f;
+            colorAdjustments.postExposure.value = -0.32f;
             colorAdjustments.contrast.overrideState = true;
-            colorAdjustments.contrast.value = 15f;
+            colorAdjustments.contrast.value = 20f;
             colorAdjustments.saturation.overrideState = true;
-            colorAdjustments.saturation.value = 14f;
+            colorAdjustments.saturation.value = 11f;
 
             if (!profile.TryGet<SplitToning>(out var splitToning))
             {
@@ -130,11 +130,11 @@ namespace Realmz.EditorTools
                 AssetDatabase.AddObjectToAsset(splitToning, profile);
             }
             splitToning.highlights.overrideState = true;
-            splitToning.highlights.value = new Color(1.0f, 0.95f, 0.84f, 1f);
+            splitToning.highlights.value = new Color(1.0f, 0.94f, 0.80f, 1f);
             splitToning.shadows.overrideState = true;
-            splitToning.shadows.value = new Color(0.84f, 0.90f, 1.0f, 1f);
+            splitToning.shadows.value = new Color(0.52f, 0.64f, 0.92f, 1f);
             splitToning.balance.overrideState = true;
-            splitToning.balance.value = 10f;
+            splitToning.balance.value = -8f;
 
             if (!profile.TryGet<Bloom>(out var bloom))
             {
@@ -145,11 +145,11 @@ namespace Realmz.EditorTools
                 AssetDatabase.AddObjectToAsset(bloom, profile);
             }
             bloom.threshold.overrideState = true;
-            bloom.threshold.value = 1.40f;
+            bloom.threshold.value = 1.45f;
             bloom.intensity.overrideState = true;
-            bloom.intensity.value = 0.26f;
+            bloom.intensity.value = 0.18f;
             bloom.scatter.overrideState = true;
-            bloom.scatter.value = 0.58f;
+            bloom.scatter.value = 0.50f;
 
             if (!profile.TryGet<Vignette>(out var vignette))
             {
@@ -160,9 +160,9 @@ namespace Realmz.EditorTools
                 AssetDatabase.AddObjectToAsset(vignette, profile);
             }
             vignette.intensity.overrideState = true;
-            vignette.intensity.value = 0.12f;
+            vignette.intensity.value = 0.15f;
             vignette.smoothness.overrideState = true;
-            vignette.smoothness.value = 0.55f;
+            vignette.smoothness.value = 0.52f;
 
             EditorUtility.SetDirty(profile);
 

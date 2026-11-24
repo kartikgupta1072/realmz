@@ -89,10 +89,15 @@ namespace RealmzCore.Exploration
 
     public sealed class ExplorationSession
     {
+        public const int DefaultPostCombatGraceSteps = 10;
+        public const int DefaultStealthEvadeTurns = 3;
+        public const int DefaultStealthEvadeGraceSteps = 6;
+
         private readonly Dictionary<string, TileMapData> _maps;
         private readonly IDiceRoller _roller;
         private readonly AStarPathfinder _pathfinder;
         private readonly HashSet<string> _clearedEncounterIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, int> _zoneCooldownUntilTurn = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         public ExplorationSession(
             IReadOnlyDictionary<string, TileMapData> maps,
@@ -102,7 +107,10 @@ namespace RealmzCore.Exploration
             GridCoord? startPosition = null,
             string? initialFacing = null,
             int initialTurnCount = 0,
-            IEnumerable<string>? clearedEncounterIds = null)
+            IEnumerable<string>? clearedEncounterIds = null,
+            int initialWorldClockTurns = -1,
+            int initialPostCombatGraceSteps = 0,
+            IEnumerable<KeyValuePair<string, int>>? initialZoneCooldowns = null)
         {
             if (maps == null)
             {
@@ -129,6 +137,10 @@ namespace RealmzCore.Exploration
             Position = startPosition ?? initialMap.StartSpawn;
             Facing = string.IsNullOrWhiteSpace(initialFacing) ? "South" : initialFacing!;
             TurnCount = Math.Max(0, initialTurnCount);
+            WorldClockTurns = initialWorldClockTurns >= 0
+                ? initialWorldClockTurns
+                : WorldClock.DefaultStartTurns + TurnCount;
+            PostCombatGraceStepsRemaining = Math.Max(0, initialPostCombatGraceSteps);
             if (clearedEncounterIds != null)
             {
                 foreach (string id in clearedEncounterIds)
@@ -136,6 +148,17 @@ namespace RealmzCore.Exploration
                     if (!string.IsNullOrWhiteSpace(id))
                     {
                         _clearedEncounterIds.Add(id);
+                    }
+                }
+            }
+
+            if (initialZoneCooldowns != null)
+            {
+                foreach (KeyValuePair<string, int> kvp in initialZoneCooldowns)
+                {
+                    if (!string.IsNullOrWhiteSpace(kvp.Key) && kvp.Value > WorldClockTurns)
+                    {
+                        _zoneCooldownUntilTurn[kvp.Key] = kvp.Value;
                     }
                 }
             }
@@ -147,8 +170,12 @@ namespace RealmzCore.Exploration
         public GridCoord Position { get; private set; }
         public string Facing { get; private set; }
         public int TurnCount { get; private set; }
+        public int WorldClockTurns { get; private set; }
+        public WorldClock CurrentWorldClock => WorldClock.FromTurns(WorldClockTurns);
+        public int PostCombatGraceStepsRemaining { get; private set; }
         public IDiceRoller Roller => _roller;
         public IReadOnlyCollection<string> ClearedEncounterIds => _clearedEncounterIds;
+        public IReadOnlyDictionary<string, int> ZoneCooldownUntilTurns => _zoneCooldownUntilTurn;
 
         public static string GetEncounterZoneKey(string mapId, EncounterZoneData zone)
         {
@@ -173,9 +200,77 @@ namespace RealmzCore.Exploration
             return !string.IsNullOrWhiteSpace(encounterId) && _clearedEncounterIds.Contains(encounterId);
         }
 
-        public void RestorePersistenceState(int turnCount, IEnumerable<string>? clearedEncounterIds)
+        public bool IsEncounterZoneOnCooldown(string mapId, EncounterZoneData zone)
+        {
+            if (zone == null)
+            {
+                return false;
+            }
+
+            string key = GetEncounterZoneKey(mapId, zone);
+            return _zoneCooldownUntilTurn.TryGetValue(key, out int untilTurn) && WorldClockTurns < untilTurn;
+        }
+
+        public void CompleteEncounterZone(EncounterZoneData? zone, int graceSteps = DefaultPostCombatGraceSteps)
+        {
+            GrantPostCombatGrace(graceSteps);
+
+            if (zone == null)
+            {
+                return;
+            }
+
+            string key = GetEncounterZoneKey(CurrentMap.MapId, zone);
+            if (EncounterDirector.IsLandmarkZone(CurrentMap, zone))
+            {
+                _clearedEncounterIds.Add(key);
+                _zoneCooldownUntilTurn.Remove(key);
+            }
+            else
+            {
+                _zoneCooldownUntilTurn[key] = CurrentWorldClock.NextPhaseStartTurn;
+            }
+        }
+
+        public void GrantPostCombatGrace(int graceSteps = DefaultPostCombatGraceSteps)
+        {
+            PostCombatGraceStepsRemaining = Math.Max(PostCombatGraceStepsRemaining, Math.Max(0, graceSteps));
+        }
+
+        public void ApplyStealthEvade(
+            int turnsCost = DefaultStealthEvadeTurns,
+            int graceSteps = DefaultStealthEvadeGraceSteps)
+        {
+            int addedTurns = Math.Max(0, turnsCost);
+            TurnCount += addedTurns;
+            WorldClockTurns += addedTurns;
+            PruneExpiredCooldowns();
+            GrantPostCombatGrace(graceSteps);
+        }
+
+        public void AdvanceWorldClockTurns(int turns)
+        {
+            if (turns <= 0)
+            {
+                return;
+            }
+
+            WorldClockTurns += turns;
+            PruneExpiredCooldowns();
+        }
+
+        public void RestorePersistenceState(
+            int turnCount,
+            IEnumerable<string>? clearedEncounterIds,
+            int worldClockTurns = -1,
+            int postCombatGraceSteps = 0,
+            IEnumerable<KeyValuePair<string, int>>? zoneCooldowns = null)
         {
             TurnCount = Math.Max(0, turnCount);
+            WorldClockTurns = worldClockTurns >= 0
+                ? worldClockTurns
+                : WorldClock.DefaultStartTurns + TurnCount;
+            PostCombatGraceStepsRemaining = Math.Max(0, postCombatGraceSteps);
             _clearedEncounterIds.Clear();
             if (clearedEncounterIds != null)
             {
@@ -185,6 +280,44 @@ namespace RealmzCore.Exploration
                     {
                         _clearedEncounterIds.Add(id);
                     }
+                }
+            }
+
+            _zoneCooldownUntilTurn.Clear();
+            if (zoneCooldowns != null)
+            {
+                foreach (KeyValuePair<string, int> kvp in zoneCooldowns)
+                {
+                    if (!string.IsNullOrWhiteSpace(kvp.Key) && kvp.Value > WorldClockTurns)
+                    {
+                        _zoneCooldownUntilTurn[kvp.Key] = kvp.Value;
+                    }
+                }
+            }
+        }
+
+        private void PruneExpiredCooldowns()
+        {
+            if (_zoneCooldownUntilTurn.Count == 0)
+            {
+                return;
+            }
+
+            List<string>? expired = null;
+            foreach (KeyValuePair<string, int> kvp in _zoneCooldownUntilTurn)
+            {
+                if (WorldClockTurns >= kvp.Value)
+                {
+                    expired ??= new List<string>();
+                    expired.Add(kvp.Key);
+                }
+            }
+
+            if (expired != null)
+            {
+                for (int i = 0; i < expired.Count; i++)
+                {
+                    _zoneCooldownUntilTurn.Remove(expired[i]);
                 }
             }
         }
@@ -267,6 +400,14 @@ namespace RealmzCore.Exploration
             UpdateFacing(Position, nextTile);
             Position = nextTile;
             TurnCount++;
+            WorldClockTurns++;
+            PruneExpiredCooldowns();
+
+            bool inGraceCooldown = PostCombatGraceStepsRemaining > 0;
+            if (inGraceCooldown)
+            {
+                PostCombatGraceStepsRemaining--;
+            }
 
             bool torchExpired = false;
             if (Party.TorchTurnsRemaining > 0)
@@ -309,34 +450,57 @@ namespace RealmzCore.Exploration
                     torchExpiredThisStep: torchExpired);
             }
 
-            IReadOnlyList<EncounterZoneData> zones = CurrentMap.GetZonesAt(nextTile.X, nextTile.Y);
-            for (int z = 0; z < zones.Count; z++)
+            if (inGraceCooldown || EncounterDirector.IsZoneInBywaterTownLimits(CurrentMap, nextTile))
             {
-                EncounterZoneData zone = zones[z];
-                string encounterKey = GetEncounterZoneKey(CurrentMap.MapId, zone);
-                if (zone.Percent <= 0 || _clearedEncounterIds.Contains(encounterKey))
-                {
-                    continue;
-                }
+                return new ExplorationStepResult(
+                    moved: true,
+                    position: Position,
+                    haltReason: ExplorationHaltReason.None,
+                    torchTurnsRemaining: Party.TorchTurnsRemaining,
+                    torchExpiredThisStep: torchExpired);
+            }
 
-                int roll = _roller.NextInt(1, 101);
-                if (roll <= zone.Percent)
+            EncounterGeographyInfo geo = EncounterDirector.EvaluateGeography(CurrentMap, nextTile, IsInSafeZone());
+            if (!geo.IsTownSafeZone)
+            {
+                IReadOnlyList<EncounterZoneData> zones = CurrentMap.GetZonesAt(nextTile.X, nextTile.Y);
+                for (int z = 0; z < zones.Count; z++)
                 {
-                    int? battleId = null;
-                    if (zone.BattleIds.Count > 0)
+                    EncounterZoneData zone = zones[z];
+                    if (!IsHostileZone(zone))
                     {
-                        int pick = _roller.NextInt(0, zone.BattleIds.Count);
-                        battleId = zone.BattleIds[pick];
+                        continue;
                     }
 
-                    return new ExplorationStepResult(
-                        moved: true,
-                        position: Position,
-                        haltReason: ExplorationHaltReason.EncounterZone,
-                        triggeredZone: zone,
-                        triggeredBattleId: battleId,
-                        torchTurnsRemaining: Party.TorchTurnsRemaining,
-                        torchExpiredThisStep: torchExpired);
+                    int effectiveBasisPoints = EncounterDirector.GetEffectiveBasisPoints(
+                        zone,
+                        geo,
+                        CurrentWorldClock,
+                        CurrentMap.IsDungeon);
+                    if (effectiveBasisPoints <= 0)
+                    {
+                        continue;
+                    }
+
+                    int roll = _roller.NextInt(1, EncounterDirector.MaxBasisPoints + 1);
+                    if (roll <= effectiveBasisPoints)
+                    {
+                        int? battleId = null;
+                        if (zone.BattleIds.Count > 0)
+                        {
+                            int pick = _roller.NextInt(0, zone.BattleIds.Count);
+                            battleId = zone.BattleIds[pick];
+                        }
+
+                        return new ExplorationStepResult(
+                            moved: true,
+                            position: Position,
+                            haltReason: ExplorationHaltReason.EncounterZone,
+                            triggeredZone: zone,
+                            triggeredBattleId: battleId,
+                            torchTurnsRemaining: Party.TorchTurnsRemaining,
+                            torchExpiredThisStep: torchExpired);
+                    }
                 }
             }
 
@@ -442,15 +606,17 @@ namespace RealmzCore.Exploration
             return true;
         }
 
-        private bool IsHostileZone(EncounterZoneData zone)
+        private bool IsBaseHostileZone(EncounterZoneData zone)
         {
             if (zone == null || zone.Percent <= 0)
             {
                 return false;
             }
 
-            string key = GetEncounterZoneKey(CurrentMap.MapId, zone);
-            if (_clearedEncounterIds.Contains(key))
+            if (!CurrentMap.IsDungeon &&
+                string.Equals(CurrentMap.MapId, "land_0", StringComparison.OrdinalIgnoreCase) &&
+                CurrentMap.Width >= 90 &&
+                (zone.Slot == 0 || zone.Slot == 8))
             {
                 return false;
             }
@@ -469,6 +635,27 @@ namespace RealmzCore.Exploration
             }
 
             return false;
+        }
+
+        private bool IsHostileZone(EncounterZoneData zone)
+        {
+            if (!IsBaseHostileZone(zone))
+            {
+                return false;
+            }
+
+            string key = GetEncounterZoneKey(CurrentMap.MapId, zone);
+            if (_clearedEncounterIds.Contains(key))
+            {
+                return false;
+            }
+
+            if (IsEncounterZoneOnCooldown(CurrentMap.MapId, zone))
+            {
+                return false;
+            }
+
+            return true;
         }
 
         public EncounterZoneData? GetUnclearedHostileZoneAtCurrentTile()
@@ -496,6 +683,15 @@ namespace RealmzCore.Exploration
                 return false;
             }
 
+            IReadOnlyList<EncounterZoneData> zonesHere = CurrentMap.GetZonesAt(Position.X, Position.Y);
+            for (int i = 0; i < zonesHere.Count; i++)
+            {
+                if (IsBaseHostileZone(zonesHere[i]) && !_clearedEncounterIds.Contains(GetEncounterZoneKey(CurrentMap.MapId, zonesHere[i])))
+                {
+                    return false;
+                }
+            }
+
             if (!string.Equals(CurrentMap.MapId, "land_0", StringComparison.OrdinalIgnoreCase))
             {
                 return CurrentMap.EncounterZones.Count == 0;
@@ -503,6 +699,11 @@ namespace RealmzCore.Exploration
 
             // Bywater Town Safe Zone covers the gated town compound and town POIs (outside Zone 3 haunted quarters).
             if (Position.X <= 11 && Position.Y <= 22)
+            {
+                return true;
+            }
+
+            if (CurrentMap.EncounterZones.Count == 0)
             {
                 return true;
             }
@@ -517,6 +718,44 @@ namespace RealmzCore.Exploration
             }
 
             return false;
+        }
+
+        public EncounterGeographyInfo GetCurrentGeography()
+        {
+            return EncounterDirector.EvaluateGeography(CurrentMap, Position, IsInSafeZone());
+        }
+
+        public EncounterThreatAssessment GetCurrentThreatAssessment()
+        {
+            IReadOnlyList<EncounterZoneData> zones = CurrentMap.GetZonesAt(Position.X, Position.Y);
+            return EncounterDirector.ComputeThreatAssessment(
+                CurrentMap,
+                Position,
+                Party,
+                CurrentWorldClock,
+                IsInSafeZone(),
+                PostCombatGraceStepsRemaining,
+                zones,
+                IsHostileZone);
+        }
+
+        public EncounterScoutingReport CreateScoutingReport(
+            EncounterZoneData? zone,
+            IReadOnlyList<MonsterDefinition> monsters)
+        {
+            string zoneKey = zone != null ? GetEncounterZoneKey(CurrentMap.MapId, zone) : string.Empty;
+            bool isLandmark = EncounterDirector.IsLandmarkZone(CurrentMap, zone);
+            return EncounterDirector.EvaluateScouting(
+                CurrentMap,
+                Position,
+                Party,
+                CurrentWorldClock,
+                zone,
+                zoneKey,
+                isLandmark,
+                monsters,
+                _roller,
+                IsInSafeZone());
         }
 
         public RestResult TryCampRest(
@@ -535,6 +774,8 @@ namespace RealmzCore.Exploration
             if (result.TurnsElapsed > 0)
             {
                 TurnCount += result.TurnsElapsed;
+                WorldClockTurns += result.TurnsElapsed;
+                PruneExpiredCooldowns();
             }
 
             if (result.Ambushed && hostileZone != null)
@@ -559,6 +800,8 @@ namespace RealmzCore.Exploration
             {
                 throw new ArgumentNullException(nameof(combat));
             }
+
+            GrantPostCombatGrace();
 
             for (int i = 0; i < Party.Members.Count; i++)
             {

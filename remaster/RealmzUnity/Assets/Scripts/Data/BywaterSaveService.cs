@@ -67,6 +67,13 @@ namespace Realmz.Data
     }
 
     [Serializable]
+    public sealed class SavedZoneCooldownEntry
+    {
+        public string zoneKey = string.Empty;
+        public int untilTurn;
+    }
+
+    [Serializable]
     public sealed class BywaterSaveData
     {
         public int version = BywaterSaveService.CurrentSaveVersion;
@@ -79,9 +86,13 @@ namespace Realmz.Data
         public int torchTurnsRemaining;
         public int quickBandageCharges = PartyState.MaxQuickBandageCharges;
         public int turnCount;
+        public int worldTimeTurns = -1;
+        public bool hasWorldClock;
+        public int postCombatGraceSteps;
         public ulong prngState;
         public string prngStateText = "0";
         public string[] clearedEncounterIds = Array.Empty<string>();
+        public SavedZoneCooldownEntry[] zoneCooldowns = Array.Empty<SavedZoneCooldownEntry>();
         public SavedMemberState[] members = Array.Empty<SavedMemberState>();
         public SavedStashEntry[] stash = Array.Empty<SavedStashEntry>();
         public string[] combatLogLines = Array.Empty<string>();
@@ -211,6 +222,20 @@ namespace Realmz.Data
                 }
             }
 
+            List<SavedZoneCooldownEntry> cooldownEntries = new List<SavedZoneCooldownEntry>(session.ZoneCooldownUntilTurns.Count);
+            foreach (KeyValuePair<string, int> kvp in session.ZoneCooldownUntilTurns)
+            {
+                if (!string.IsNullOrWhiteSpace(kvp.Key) && kvp.Value > session.WorldClockTurns)
+                {
+                    cooldownEntries.Add(new SavedZoneCooldownEntry
+                    {
+                        zoneKey = kvp.Key,
+                        untilTurn = kvp.Value
+                    });
+                }
+            }
+            cooldownEntries.Sort((a, b) => string.Compare(a.zoneKey, b.zoneKey, StringComparison.OrdinalIgnoreCase));
+
             return new BywaterSaveData
             {
                 version = CurrentSaveVersion,
@@ -223,9 +248,13 @@ namespace Realmz.Data
                 torchTurnsRemaining = session.Party.TorchTurnsRemaining,
                 quickBandageCharges = session.Party.QuickBandageCharges,
                 turnCount = session.TurnCount,
+                worldTimeTurns = session.WorldClockTurns,
+                hasWorldClock = true,
+                postCombatGraceSteps = session.PostCombatGraceStepsRemaining,
                 prngState = seedState,
                 prngStateText = seedState.ToString(CultureInfo.InvariantCulture),
                 clearedEncounterIds = clearedIds.ToArray(),
+                zoneCooldowns = cooldownEntries.ToArray(),
                 members = memberStates,
                 stash = stashEntries,
                 combatLogLines = logCopy
@@ -249,7 +278,14 @@ namespace Realmz.Data
             }
 
             restoredSeed = ResolveRestoredSeed(data);
-            session.RestorePersistenceState(data.turnCount, data.clearedEncounterIds);
+            int restoredClockTurns = ResolveRestoredWorldClockTurns(data);
+            List<KeyValuePair<string, int>> cooldowns = ExtractZoneCooldowns(data);
+            session.RestorePersistenceState(
+                data.turnCount,
+                data.clearedEncounterIds,
+                restoredClockTurns,
+                Math.Max(0, data.postCombatGraceSteps),
+                cooldowns);
 
             PartyState party = session.Party;
             party.Gold = Math.Max(0, data.gold);
@@ -606,6 +642,8 @@ namespace Realmz.Data
                 : targetMap.StartSpawn;
 
             ulong restoredSeed = ResolveRestoredSeed(data);
+            int restoredClockTurns = ResolveRestoredWorldClockTurns(data);
+            List<KeyValuePair<string, int>> cooldowns = ExtractZoneCooldowns(data);
             PartyState party = PartyState.FromBundle(bundle);
             session = new ExplorationSession(
                 bundle.Maps,
@@ -615,7 +653,10 @@ namespace Realmz.Data
                 startPosition: startPos,
                 initialFacing: data.facing,
                 initialTurnCount: data.turnCount,
-                clearedEncounterIds: data.clearedEncounterIds);
+                clearedEncounterIds: data.clearedEncounterIds,
+                initialWorldClockTurns: restoredClockTurns,
+                initialPostCombatGraceSteps: Math.Max(0, data.postCombatGraceSteps),
+                initialZoneCooldowns: cooldowns);
 
             ApplySnapshot(data, session, bundle.Items, out _);
 
@@ -740,6 +781,7 @@ namespace Realmz.Data
         {
             data.facing = string.IsNullOrWhiteSpace(data.facing) ? "South" : data.facing;
             data.clearedEncounterIds ??= Array.Empty<string>();
+            data.zoneCooldowns ??= Array.Empty<SavedZoneCooldownEntry>();
             data.members ??= Array.Empty<SavedMemberState>();
             data.stash ??= Array.Empty<SavedStashEntry>();
             data.combatLogLines ??= Array.Empty<string>();
@@ -752,6 +794,41 @@ namespace Realmz.Data
             {
                 data.prngState = parsed;
             }
+        }
+
+        public static int ResolveRestoredWorldClockTurns(BywaterSaveData data)
+        {
+            if (data == null)
+            {
+                return WorldClock.DefaultStartTurns;
+            }
+
+            if (data.hasWorldClock || data.worldTimeTurns >= 0)
+            {
+                return Math.Max(0, data.worldTimeTurns);
+            }
+
+            return WorldClock.DefaultStartTurns + Math.Max(0, data.turnCount);
+        }
+
+        public static List<KeyValuePair<string, int>> ExtractZoneCooldowns(BywaterSaveData data)
+        {
+            List<KeyValuePair<string, int>> list = new List<KeyValuePair<string, int>>();
+            if (data?.zoneCooldowns == null)
+            {
+                return list;
+            }
+
+            for (int i = 0; i < data.zoneCooldowns.Length; i++)
+            {
+                SavedZoneCooldownEntry entry = data.zoneCooldowns[i];
+                if (entry != null && !string.IsNullOrWhiteSpace(entry.zoneKey) && entry.untilTurn > 0)
+                {
+                    list.Add(new KeyValuePair<string, int>(entry.zoneKey, entry.untilTurn));
+                }
+            }
+
+            return list;
         }
 
         private static ulong ResolveRestoredSeed(BywaterSaveData data)
