@@ -76,5 +76,17 @@ namespace Realmz.EditorTools
             int count = ctrl.CombatSession?.Combatants.Count ?? 0;
             return $"Combat showcase ready: actor={actorName}, turn={turn}, round={round}, logs={logCount}, combatants={count}";
         }
+
+        public static string StageDungeonShowcase()
+        {
+            BywaterGameController ctrl = UnityEngine.Object.FindFirstObjectByType<BywaterGameController>();
+            if (ctrl == null)
+            {
+                throw new Exception("BywaterGameController not found in active PlayMode scene.");
+            }
+
+            ctrl.WarpToDungeonShowcase();
+            return $"Dungeon showcase ready at {ctrl.ExploreSession.Position} on {ctrl.ExploreSession.CurrentMap.MapId}";
+        }
     }
 }

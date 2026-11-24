@@ -279,6 +279,20 @@ Shader "Realmz/CartographyBillboard"
                 rootWS,
                 facingNormalWS);
         }
+
+        static const half kBayer4x4[16] =
+        {
+             1.0h / 16.0h,  9.0h / 16.0h,  3.0h / 16.0h, 11.0h / 16.0h,
+            13.0h / 16.0h,  5.0h / 16.0h, 15.0h / 16.0h,  7.0h / 16.0h,
+             4.0h / 16.0h, 12.0h / 16.0h,  2.0h / 16.0h, 10.0h / 16.0h,
+            16.0h / 16.0h,  8.0h / 16.0h, 14.0h / 16.0h,  6.0h / 16.0h
+        };
+
+        half ComputeBayer4x4Threshold(float2 positionCSxy)
+        {
+            int2 p = int2(floor(positionCSxy)) & 3;
+            return kBayer4x4[(p.y << 2) | p.x];
+        }
         ENDHLSL
 
         Pass
@@ -371,9 +385,16 @@ Shader "Realmz/CartographyBillboard"
                 UNITY_SETUP_INSTANCE_ID(input);
 
                 half4 baseSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv);
+                clip(baseSample.a - _Cutoff);
+
                 half4 instTint = (half4)CARTO_INST_PROP(_TintColor);
-                half4 albedoAlpha = baseSample * instTint;
-                clip(albedoAlpha.a - _Cutoff);
+                if (instTint.a < 0.995h)
+                {
+                    half threshold = ComputeBayer4x4Threshold(input.positionCS.xy);
+                    clip(instTint.a - threshold);
+                }
+
+                half4 albedoAlpha = half4(baseSample.rgb * instTint.rgb, baseSample.a);
 
                 half tipFactor = saturate((half)input.rootInfo.y);
                 half3 rootAO = lerp(_RootTint.rgb, half3(1.0h, 1.0h, 1.0h), tipFactor);
@@ -543,7 +564,7 @@ Shader "Realmz/CartographyBillboard"
             half4 ShadowFrag(ShadowVaryings input) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(input);
-                half alpha = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv).a * (half)CARTO_INST_PROP(_TintColor).a;
+                half alpha = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv).a;
                 clip(alpha - _Cutoff);
                 return 0;
             }
@@ -604,8 +625,16 @@ Shader "Realmz/CartographyBillboard"
             half DepthFrag(DepthVaryings input) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(input);
-                half alpha = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv).a * (half)CARTO_INST_PROP(_TintColor).a;
-                clip(alpha - _Cutoff);
+                half baseAlpha = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv).a;
+                clip(baseAlpha - _Cutoff);
+
+                half tintAlpha = (half)CARTO_INST_PROP(_TintColor).a;
+                if (tintAlpha < 0.995h)
+                {
+                    half threshold = ComputeBayer4x4Threshold(input.positionCS.xy);
+                    clip(tintAlpha - threshold);
+                }
+
                 return input.positionCS.z;
             }
             ENDHLSL

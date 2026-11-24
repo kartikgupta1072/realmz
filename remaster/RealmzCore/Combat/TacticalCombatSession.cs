@@ -1742,6 +1742,179 @@ namespace RealmzCore.Combat
             return MonsterAi.ExecuteTurn(this);
         }
 
+        public CombatActionResult ExecutePartyAiTurn()
+        {
+            return PartyAi.ExecuteTurn(this);
+        }
+
+        public CombatActionResult StepAutoCombatTurn()
+        {
+            if (Outcome != CombatOutcome.InProgress)
+            {
+                return new CombatActionResult(false, "Combat has ended.");
+            }
+
+            CombatantState? actor = CurrentActor;
+            if (actor == null)
+            {
+                return new CombatActionResult(false, "No current actor.");
+            }
+
+            return actor.Side == CombatSide.Hero
+                ? PartyAi.ExecuteTurn(this)
+                : MonsterAi.ExecuteTurn(this);
+        }
+
+        public bool ShouldOfferQuickResolve()
+        {
+            return EvaluateQuickResolve().CanQuickResolve;
+        }
+
+        public QuickResolveSummary EvaluateQuickResolve()
+        {
+            if (Outcome != CombatOutcome.InProgress)
+            {
+                return new QuickResolveSummary(false, 0, 0, 0, "Combat is not in progress.");
+            }
+
+            return EvaluateQuickResolve(_combatants);
+        }
+
+        public static bool ShouldOfferQuickResolve(IReadOnlyList<CombatantState> combatants)
+        {
+            return EvaluateQuickResolve(combatants).CanQuickResolve;
+        }
+
+        public static QuickResolveSummary EvaluateQuickResolve(IReadOnlyList<CombatantState> combatants)
+        {
+            if (combatants == null || combatants.Count == 0)
+            {
+                return new QuickResolveSummary(false, 0, 0, 0, "No combatants.");
+            }
+
+            int livingHeroes = 0;
+            int livingMonsters = 0;
+            double partyPower = 0;
+            double enemyPower = 0;
+            int lowestHeroMaxHp = int.MaxValue;
+            int highestEnemyBurst = 0;
+
+            for (int i = 0; i < combatants.Count; i++)
+            {
+                CombatantState c = combatants[i];
+                if (c == null || !c.IsAlive)
+                {
+                    continue;
+                }
+
+                double score = ComputeCombatantPowerScore(c);
+                if (c.Side == CombatSide.Hero)
+                {
+                    livingHeroes++;
+                    partyPower += score;
+                    if (c.MaxHp < lowestHeroMaxHp)
+                    {
+                        lowestHeroMaxHp = c.MaxHp;
+                    }
+                }
+                else
+                {
+                    livingMonsters++;
+                    enemyPower += score;
+                    int burst = ComputeMaxBurstDamage(c);
+                    if (burst > highestEnemyBurst)
+                    {
+                        highestEnemyBurst = burst;
+                    }
+                }
+            }
+
+            if (livingHeroes == 0 || livingMonsters == 0)
+            {
+                return new QuickResolveSummary(
+                    false,
+                    Math.Round(partyPower, 2),
+                    Math.Round(enemyPower, 2),
+                    0,
+                    "Both sides must have at least one living combatant.");
+            }
+
+            double safeEnemyPower = Math.Max(1.0, enemyPower);
+            double ratio = partyPower / safeEnemyPower;
+            bool burstDanger = (highestEnemyBurst * 100L) >= (lowestHeroMaxHp * 55L);
+            bool dominant = partyPower >= (safeEnemyPower * 2.1);
+            bool overwhelming = partyPower >= (safeEnemyPower * 2.6);
+            bool canResolve = overwhelming || (dominant && !burstDanger);
+
+            string reason = canResolve
+                ? $"Party advantage {ratio:F2}x qualifies for Quick Resolve."
+                : !dominant
+                    ? $"Encounter too close for Quick Resolve ({ratio:F2}x < 2.10x)."
+                    : $"Enemy burst ({highestEnemyBurst}) is too dangerous for hero MaxHP ({lowestHeroMaxHp}) at {ratio:F2}x.";
+
+            return new QuickResolveSummary(
+                canResolve,
+                Math.Round(partyPower, 2),
+                Math.Round(enemyPower, 2),
+                Math.Round(ratio, 2),
+                reason);
+        }
+
+        public CombatOutcome QuickResolveCombat(int maxTurns = 240)
+        {
+            int limit = Math.Max(1, maxTurns);
+            for (int i = 0; i < limit && Outcome == CombatOutcome.InProgress; i++)
+            {
+                CombatActionResult step = StepAutoCombatTurn();
+                if (!step.Success && Outcome == CombatOutcome.InProgress)
+                {
+                    break;
+                }
+            }
+
+            return Outcome;
+        }
+
+        private static double ComputeCombatantPowerScore(CombatantState c)
+        {
+            double meleeAvg = DiceSpec.TryParse(c.WeaponDice, out DiceSpec weaponSpec)
+                ? Math.Max(1.0, weaponSpec.ExpectedAverage + Math.Max(0, c.DamageBonus))
+                : 2.5;
+            double meleeDpr = Math.Max(1, c.NumAttacks) * meleeAvg;
+
+            double rangedAvg = (c.RangedRange > 1 &&
+                                !string.IsNullOrWhiteSpace(c.RangedDice) &&
+                                DiceSpec.TryParse(c.RangedDice, out DiceSpec rangedSpec))
+                ? Math.Max(1.0, rangedSpec.ExpectedAverage)
+                : 0.0;
+
+            double offenseAvg = Math.Max(meleeDpr, rangedAvg);
+            int bestSkill = Math.Max(c.EffectiveToHit, c.RangedRange > 1 ? c.EffectiveMissileSkill : c.EffectiveToHit);
+            double hitFactor = Math.Clamp(0.45 + (bestSkill * 0.015), 0.35, 1.35);
+            double defenseFactor = Math.Clamp(0.75 + (c.EffectiveAc * 0.03), 0.60, 1.65);
+
+            double hpValue = c.Hp * defenseFactor;
+            double offenseValue = offenseAvg * hitFactor * 3.0;
+            double spValue = Math.Min(60, c.MaxSp) * 0.5;
+            return Math.Max(1.0, hpValue + offenseValue + spValue);
+        }
+
+        private static int ComputeMaxBurstDamage(CombatantState c)
+        {
+            int meleeSingleMax = DiceSpec.TryParse(c.WeaponDice, out DiceSpec weaponSpec)
+                ? Math.Max(1, weaponSpec.Max + Math.Max(0, c.DamageBonus))
+                : 4;
+            int meleeBurst = Math.Max(1, c.NumAttacks) * meleeSingleMax;
+
+            int rangedBurst = (c.RangedRange > 1 &&
+                               !string.IsNullOrWhiteSpace(c.RangedDice) &&
+                               DiceSpec.TryParse(c.RangedDice, out DiceSpec rangedSpec))
+                ? Math.Max(0, rangedSpec.Max)
+                : 0;
+
+            return Math.Max(meleeBurst, rangedBurst);
+        }
+
         public EnemyIntentPrediction PredictNextIntent(string? actorId = null)
         {
             return MonsterAi.PredictNextIntent(this, actorId);
@@ -2749,5 +2922,28 @@ namespace RealmzCore.Combat
 
             return cells;
         }
+    }
+
+    public sealed class QuickResolveSummary
+    {
+        public QuickResolveSummary(
+            bool canQuickResolve,
+            double partyPowerScore,
+            double enemyPowerScore,
+            double powerRatio,
+            string reason)
+        {
+            CanQuickResolve = canQuickResolve;
+            PartyPowerScore = partyPowerScore;
+            EnemyPowerScore = enemyPowerScore;
+            PowerRatio = powerRatio;
+            Reason = reason ?? string.Empty;
+        }
+
+        public bool CanQuickResolve { get; }
+        public double PartyPowerScore { get; }
+        public double EnemyPowerScore { get; }
+        public double PowerRatio { get; }
+        public string Reason { get; }
     }
 }

@@ -28,22 +28,23 @@ namespace Realmz.World
         private static readonly int ColorId = Shader.PropertyToID("_Color");
         private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap");
 
-        private static readonly Color ReachableNormalColor = new Color(0.15f, 0.78f, 0.72f, 0.34f);
-        private static readonly Color ReachableAooColor = new Color(0.95f, 0.42f, 0.12f, 0.48f);
-        private static readonly Color ThreatenedColor = new Color(0.95f, 0.25f, 0.18f, 0.28f);
+        private static readonly Color ReachableNormalColor = new Color(0.176f, 0.831f, 0.749f, 0.88f); // #2DD4BF
+        private static readonly Color ReachableAooColor = new Color(0.976f, 0.451f, 0.086f, 0.92f);    // #F97316
+        private static readonly Color ThreatenedColor = new Color(0.937f, 0.267f, 0.267f, 0.22f);
         private static readonly Color HoverPathSafeColor = new Color(1.00f, 0.95f, 0.72f, 0.76f);
         private static readonly Color HoverPathAooColor = new Color(0.98f, 0.25f, 0.18f, 0.80f);
-        private static readonly Color ExploreReachableColor = new Color(0.22f, 0.86f, 0.64f, 0.56f);
-        private static readonly Color ExploreBlockedColor = new Color(0.88f, 0.24f, 0.22f, 0.56f);
+        private static readonly Color ExploreReachableColor = new Color(0.22f, 0.86f, 0.64f, 0.78f);
+        private static readonly Color ExploreBlockedColor = new Color(0.88f, 0.24f, 0.22f, 0.78f);
         private static readonly Color LosClearColor = new Color(0.18f, 0.85f, 0.48f, 0.72f);
         private static readonly Color LosPartialColor = new Color(0.96f, 0.72f, 0.16f, 0.74f);
         private static readonly Color LosBlockedColor = new Color(0.95f, 0.22f, 0.22f, 0.78f);
-        private static readonly Color AoeBeneficialColor = new Color(0.22f, 0.74f, 0.97f, 0.48f);
-        private static readonly Color AoeHostileColor = new Color(0.96f, 0.32f, 0.18f, 0.52f);
-        private static readonly Color AoeBlockedColor = new Color(0.22f, 0.22f, 0.25f, 0.45f);
+        private static readonly Color AoeBeneficialColor = new Color(0.22f, 0.74f, 0.97f, 0.92f);
+        private static readonly Color AoeHostileColor = new Color(0.96f, 0.32f, 0.18f, 0.94f);
+        private static readonly Color AoeBlockedColor = new Color(0.22f, 0.22f, 0.25f, 0.78f);
         private static readonly Color FlankGoldColor = new Color(0.98f, 0.80f, 0.15f, 0.60f);
-        private static readonly Color AttackTargetColor = new Color(0.94f, 0.24f, 0.20f, 0.62f);
-        private static readonly Color TacticalSelectColor = new Color(0.98f, 0.84f, 0.24f, 0.78f);
+        private static readonly Color AttackTargetColor = new Color(0.937f, 0.267f, 0.267f, 0.92f);   // #EF4444
+        private static readonly Color HoveredAttackTargetColor = new Color(0.98f, 0.34f, 0.24f, 0.95f);
+        private static readonly Color TacticalSelectColor = new Color(0.98f, 0.84f, 0.24f, 0.92f);
         private static readonly Color CombatBoundsColor = new Color(0.98f, 0.78f, 0.22f, 0.52f);
 
         private static readonly Color ShoveSafeEmerald = new Color(0.06f, 0.73f, 0.51f, 0.78f);
@@ -58,6 +59,7 @@ namespace Realmz.World
         {
             public readonly Transform Container;
             public readonly List<MeshRenderer> Quads = new List<MeshRenderer>(32);
+            public readonly List<Color> BaseColors = new List<Color>(32);
             public int ActiveCount;
 
             public OverlayLayer(Transform parent, string name)
@@ -77,6 +79,7 @@ namespace Realmz.World
         private OverlayLayer _combatReachableLayer;
         private OverlayLayer _combatThreatenedLayer;
         private OverlayLayer _attackTargetLayer;
+        private OverlayLayer _hoveredAttackTargetLayer;
         private OverlayLayer _spellAoeLayer;
         private OverlayLayer _tacticalSelectLayer;
         private OverlayLayer _exploreHoverLayer;
@@ -109,8 +112,23 @@ namespace Realmz.World
         private Material _intentMeleeMaterial;
         private Material _intentSpellMaterial;
         private Texture2D _intentDashTexture;
+        private Material _bracketMaterial;
+        private Texture2D _cornerBracketTexture;
+        private Material _aoeFillMaterial;
+        private Texture2D _outlineFillTexture;
         private Material _fallbackOverlayMaterial;
         private float _intentScrollOffset;
+        private float _gridOpacity = 1.0f;
+
+        public void SetGridOpacity(float opacity)
+        {
+            _gridOpacity = Mathf.Clamp01(opacity);
+            ApplyOpacityToLayer(_combatBoundsLayer);
+            ApplyOpacityToLayer(_combatReachableLayer);
+            ApplyOpacityToLayer(_combatThreatenedLayer);
+            ApplyOpacityToLayer(_attackTargetLayer);
+            ApplyOpacityToLayer(_exploreHoverLayer);
+        }
 
         public void Initialize(BywaterAssetCatalog catalog)
         {
@@ -178,6 +196,16 @@ namespace Realmz.World
             DestroySafe(_intentDashTexture);
             _intentDashTexture = null;
 
+            DestroySafe(_bracketMaterial);
+            _bracketMaterial = null;
+            DestroySafe(_cornerBracketTexture);
+            _cornerBracketTexture = null;
+
+            DestroySafe(_aoeFillMaterial);
+            _aoeFillMaterial = null;
+            DestroySafe(_outlineFillTexture);
+            _outlineFillTexture = null;
+
             DestroySafe(_fallbackOverlayMaterial);
             _fallbackOverlayMaterial = null;
         }
@@ -190,6 +218,7 @@ namespace Realmz.World
             HideLayer(_combatReachableLayer);
             HideLayer(_combatThreatenedLayer);
             HideLayer(_attackTargetLayer);
+            HideLayer(_hoveredAttackTargetLayer);
             HideLayer(_spellAoeLayer);
             HideLayer(_tacticalSelectLayer);
             HideLayer(_exploreHoverLayer);
@@ -385,7 +414,8 @@ namespace Realmz.World
             EnsureLayers();
             _exploreHoverLayer.ActiveCount = 0;
 
-            Color color = reachable ? ExploreReachableColor : ExploreBlockedColor;
+            Color baseColor = reachable ? ExploreReachableColor : ExploreBlockedColor;
+            Color fadedColor = ScaleAlpha(baseColor, _gridOpacity);
 
             if (path != null)
             {
@@ -398,14 +428,23 @@ namespace Realmz.World
                     }
 
                     float y = GetTileElevation(step.X, step.Y) + 0.025f + 0.008f;
-                    PlaceQuad(_exploreHoverLayer, step.X + 0.5f, y, -(step.Y + 0.5f), 0.38f, 0.38f, color);
+                    PlaceQuadWithBaseColor(_exploreHoverLayer, step.X + 0.5f, y, -(step.Y + 0.5f), 0.34f, 0.34f, baseColor, fadedColor);
                 }
             }
 
             if (hoverCoord.X >= 0 && hoverCoord.Y >= 0)
             {
                 float hoverY = GetTileElevation(hoverCoord.X, hoverCoord.Y) + 0.025f + 0.009f;
-                PlaceQuad(_exploreHoverLayer, hoverCoord.X + 0.5f, hoverY, -(hoverCoord.Y + 0.5f), 0.90f, 0.90f, color);
+                Material bracketMat = GetOrCreateBracketMaterial();
+                PlaceCustomQuadWithBaseColor(
+                    _exploreHoverLayer,
+                    new Vector3(hoverCoord.X + 0.5f, hoverY, -(hoverCoord.Y + 0.5f)),
+                    0.92f,
+                    0.92f,
+                    0f,
+                    bracketMat,
+                    baseColor,
+                    fadedColor);
             }
 
             TrimLayer(_exploreHoverLayer);
@@ -418,12 +457,22 @@ namespace Realmz.World
 
             if (tiles != null)
             {
+                Material bracketMat = GetOrCreateBracketMaterial();
                 for (int i = 0; i < tiles.Count; i++)
                 {
                     ReachableTileInfo tile = tiles[i];
-                    Color color = tile.ProvokesAoO ? ReachableAooColor : ReachableNormalColor;
+                    Color baseColor = tile.ProvokesAoO ? ReachableAooColor : ReachableNormalColor;
+                    Color color = ScaleAlpha(baseColor, _gridOpacity);
                     float y = GetTileElevation(tile.Coord.X, tile.Coord.Y) + 0.025f;
-                    PlaceQuad(_combatReachableLayer, tile.Coord.X + 0.5f, y, -(tile.Coord.Y + 0.5f), 0.94f, 0.94f, color);
+                    PlaceCustomQuadWithBaseColor(
+                        _combatReachableLayer,
+                        new Vector3(tile.Coord.X + 0.5f, y, -(tile.Coord.Y + 0.5f)),
+                        0.94f,
+                        0.94f,
+                        0f,
+                        bracketMat,
+                        baseColor,
+                        color);
                 }
             }
 
@@ -437,11 +486,21 @@ namespace Realmz.World
 
             if (tiles != null)
             {
+                Material bracketMat = GetOrCreateBracketMaterial();
+                Color color = ScaleAlpha(ThreatenedColor, _gridOpacity);
                 for (int i = 0; i < tiles.Count; i++)
                 {
                     GridCoord tile = tiles[i];
                     float y = GetTileElevation(tile.X, tile.Y) + 0.025f + 0.002f;
-                    PlaceQuad(_combatThreatenedLayer, tile.X + 0.5f, y, -(tile.Y + 0.5f), 0.90f, 0.90f, ThreatenedColor);
+                    PlaceCustomQuadWithBaseColor(
+                        _combatThreatenedLayer,
+                        new Vector3(tile.X + 0.5f, y, -(tile.Y + 0.5f)),
+                        0.90f,
+                        0.90f,
+                        0f,
+                        bracketMat,
+                        ThreatenedColor,
+                        color);
                 }
             }
 
@@ -455,15 +514,52 @@ namespace Realmz.World
 
             if (tiles != null)
             {
+                Material bracketMat = GetOrCreateBracketMaterial();
+                Color color = ScaleAlpha(AttackTargetColor, _gridOpacity);
                 for (int i = 0; i < tiles.Count; i++)
                 {
                     GridCoord tile = tiles[i];
                     float y = GetTileElevation(tile.X, tile.Y) + 0.025f + 0.004f;
-                    PlaceQuad(_attackTargetLayer, tile.X + 0.5f, y, -(tile.Y + 0.5f), 0.92f, 0.92f, AttackTargetColor);
+                    PlaceCustomQuadWithBaseColor(
+                        _attackTargetLayer,
+                        new Vector3(tile.X + 0.5f, y, -(tile.Y + 0.5f)),
+                        0.92f,
+                        0.92f,
+                        0f,
+                        bracketMat,
+                        AttackTargetColor,
+                        color);
                 }
             }
 
             TrimLayer(_attackTargetLayer);
+        }
+
+        public void SetHoveredAttackTarget(GridCoord? coord)
+        {
+            EnsureLayers();
+            _hoveredAttackTargetLayer.ActiveCount = 0;
+
+            if (coord.HasValue)
+            {
+                GridCoord c = coord.Value;
+                float y = GetTileElevation(c.X, c.Y) + 0.025f + 0.005f;
+                PlaceCustomQuad(
+                    _hoveredAttackTargetLayer,
+                    new Vector3(c.X + 0.5f, y, -(c.Y + 0.5f)),
+                    0.94f,
+                    0.94f,
+                    0f,
+                    GetOrCreateAoeFillMaterial(),
+                    HoveredAttackTargetColor);
+            }
+
+            TrimLayer(_hoveredAttackTargetLayer);
+        }
+
+        public void SetHoveredCombatTarget(GridCoord? coord)
+        {
+            SetHoveredAttackTarget(coord);
         }
 
         public void SetSelectedTile(GridCoord? coord, Color? colorOverride = null)
@@ -473,7 +569,16 @@ namespace Realmz.World
 
             if (coord.HasValue)
             {
-                PlaceTileBorder(_tacticalSelectLayer, coord.Value, 0.015f, colorOverride ?? TacticalSelectColor);
+                GridCoord c = coord.Value;
+                float y = GetTileElevation(c.X, c.Y) + 0.025f + 0.015f;
+                PlaceCustomQuad(
+                    _tacticalSelectLayer,
+                    new Vector3(c.X + 0.5f, y, -(c.Y + 0.5f)),
+                    0.94f,
+                    0.94f,
+                    0f,
+                    GetOrCreateAoeFillMaterial(),
+                    colorOverride ?? TacticalSelectColor);
             }
 
             TrimLayer(_tacticalSelectLayer);
@@ -486,20 +591,21 @@ namespace Realmz.World
 
             if (active && width > 0 && height > 0)
             {
+                Color color = ScaleAlpha(CombatBoundsColor, _gridOpacity);
                 for (int x = originX; x < originX + width; x++)
                 {
                     int topY = originY;
                     int botY = originY + height - 1;
-                    PlaceQuad(_combatBoundsLayer, x + 0.5f, GetTileElevation(x, topY) + 0.025f + 0.001f, -(topY + 0.06f), 1.0f, 0.10f, CombatBoundsColor);
-                    PlaceQuad(_combatBoundsLayer, x + 0.5f, GetTileElevation(x, botY) + 0.025f + 0.001f, -(botY + 0.94f), 1.0f, 0.10f, CombatBoundsColor);
+                    PlaceQuadWithBaseColor(_combatBoundsLayer, x + 0.5f, GetTileElevation(x, topY) + 0.025f + 0.001f, -(topY + 0.06f), 1.0f, 0.10f, CombatBoundsColor, color);
+                    PlaceQuadWithBaseColor(_combatBoundsLayer, x + 0.5f, GetTileElevation(x, botY) + 0.025f + 0.001f, -(botY + 0.94f), 1.0f, 0.10f, CombatBoundsColor, color);
                 }
 
                 for (int y = originY; y < originY + height; y++)
                 {
                     int leftX = originX;
                     int rightX = originX + width - 1;
-                    PlaceQuad(_combatBoundsLayer, leftX + 0.06f, GetTileElevation(leftX, y) + 0.025f + 0.001f, -(y + 0.5f), 0.10f, 1.0f, CombatBoundsColor);
-                    PlaceQuad(_combatBoundsLayer, rightX + 0.94f, GetTileElevation(rightX, y) + 0.025f + 0.001f, -(y + 0.5f), 0.10f, 1.0f, CombatBoundsColor);
+                    PlaceQuadWithBaseColor(_combatBoundsLayer, leftX + 0.06f, GetTileElevation(leftX, y) + 0.025f + 0.001f, -(y + 0.5f), 0.10f, 1.0f, CombatBoundsColor, color);
+                    PlaceQuadWithBaseColor(_combatBoundsLayer, rightX + 0.94f, GetTileElevation(rightX, y) + 0.025f + 0.001f, -(y + 0.5f), 0.10f, 1.0f, CombatBoundsColor, color);
                 }
             }
 
@@ -574,6 +680,7 @@ namespace Realmz.World
 
             if (footprint != null)
             {
+                Material aoeMat = GetOrCreateAoeFillMaterial();
                 IReadOnlyList<GridCoord> affected = footprint.AffectedTiles;
                 if (affected != null)
                 {
@@ -595,7 +702,7 @@ namespace Realmz.World
                         }
 
                         float y = GetTileElevation(tile.X, tile.Y) + 0.025f + 0.006f;
-                        PlaceQuad(_spellAoeLayer, tile.X + 0.5f, y, -(tile.Y + 0.5f), 0.92f, 0.92f, color);
+                        PlaceCustomQuad(_spellAoeLayer, new Vector3(tile.X + 0.5f, y, -(tile.Y + 0.5f)), 0.92f, 0.92f, 0f, aoeMat, color);
                     }
                 }
 
@@ -606,7 +713,7 @@ namespace Realmz.World
                     {
                         GridCoord tile = blocked[i];
                         float y = GetTileElevation(tile.X, tile.Y) + 0.025f + 0.007f;
-                        PlaceQuad(_spellAoeLayer, tile.X + 0.5f, y, -(tile.Y + 0.5f), 0.90f, 0.90f, AoeBlockedColor);
+                        PlaceCustomQuad(_spellAoeLayer, new Vector3(tile.X + 0.5f, y, -(tile.Y + 0.5f)), 0.90f, 0.90f, 0f, aoeMat, AoeBlockedColor);
                     }
                 }
             }
@@ -652,27 +759,31 @@ namespace Realmz.World
 
         private void PlaceQuad(OverlayLayer layer, float x, float y, float z, float scaleX, float scaleZ, Color color)
         {
-            int idx = layer.ActiveCount++;
-            MeshRenderer quad = GetOrCreateQuad(layer, idx);
+            PlaceQuadWithBaseColor(layer, x, y, z, scaleX, scaleZ, color, color);
+        }
 
-            quad.transform.position = new Vector3(x, y, z);
-            quad.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-            quad.transform.localScale = new Vector3(scaleX, scaleZ, 1f);
-
+        private void PlaceQuadWithBaseColor(
+            OverlayLayer layer,
+            float x,
+            float y,
+            float z,
+            float scaleX,
+            float scaleZ,
+            Color baseColor,
+            Color displayColor)
+        {
             Material mat = _catalog != null && _catalog.overlayBaseMaterial != null
                 ? _catalog.overlayBaseMaterial
                 : GetOrCreateFallbackOverlayMaterial();
-            if (mat != null)
-            {
-                quad.sharedMaterial = mat;
-            }
-
-            _propBlock ??= new MaterialPropertyBlock();
-            _propBlock.Clear();
-            _propBlock.SetColor(BaseColorId, color);
-            _propBlock.SetColor(ColorId, color);
-            quad.SetPropertyBlock(_propBlock);
-            quad.gameObject.SetActive(true);
+            PlaceCustomQuadWithBaseColor(
+                layer,
+                new Vector3(x, y, z),
+                scaleX,
+                scaleZ,
+                0f,
+                mat,
+                baseColor,
+                displayColor);
         }
 
         private void PlaceCustomQuad(
@@ -684,8 +795,26 @@ namespace Realmz.World
             Material material,
             Color color)
         {
+            PlaceCustomQuadWithBaseColor(layer, worldPos, scaleX, scaleZ, yawDeg, material, color, color);
+        }
+
+        private void PlaceCustomQuadWithBaseColor(
+            OverlayLayer layer,
+            Vector3 worldPos,
+            float scaleX,
+            float scaleZ,
+            float yawDeg,
+            Material material,
+            Color baseColor,
+            Color displayColor)
+        {
             int idx = layer.ActiveCount++;
             MeshRenderer quad = GetOrCreateQuad(layer, idx);
+            while (layer.BaseColors.Count <= idx)
+            {
+                layer.BaseColors.Add(Color.white);
+            }
+            layer.BaseColors[idx] = baseColor;
 
             quad.transform.position = worldPos;
             quad.transform.rotation = Quaternion.Euler(90f, yawDeg, 0f);
@@ -697,10 +826,41 @@ namespace Realmz.World
 
             _propBlock ??= new MaterialPropertyBlock();
             _propBlock.Clear();
-            _propBlock.SetColor(BaseColorId, color);
-            _propBlock.SetColor(ColorId, color);
+            _propBlock.SetColor(BaseColorId, displayColor);
+            _propBlock.SetColor(ColorId, displayColor);
             quad.SetPropertyBlock(_propBlock);
             quad.gameObject.SetActive(true);
+        }
+
+        private void ApplyOpacityToLayer(OverlayLayer layer)
+        {
+            if (layer == null)
+            {
+                return;
+            }
+
+            _propBlock ??= new MaterialPropertyBlock();
+            int limit = Mathf.Min(layer.ActiveCount, layer.Quads.Count, layer.BaseColors.Count);
+            for (int i = 0; i < limit; i++)
+            {
+                MeshRenderer quad = layer.Quads[i];
+                if (quad == null)
+                {
+                    continue;
+                }
+
+                Color col = ScaleAlpha(layer.BaseColors[i], _gridOpacity);
+                _propBlock.Clear();
+                _propBlock.SetColor(BaseColorId, col);
+                _propBlock.SetColor(ColorId, col);
+                quad.SetPropertyBlock(_propBlock);
+            }
+        }
+
+        private static Color ScaleAlpha(Color col, float opacity)
+        {
+            col.a *= Mathf.Clamp01(opacity);
+            return col;
         }
 
         private static MeshRenderer GetOrCreateQuad(OverlayLayer layer, int index)
@@ -861,6 +1021,30 @@ namespace Realmz.World
                 _intentMeleeMaterial = CreateTransparentOverlayMaterial("IntentArcMelee", _intentDashTexture, IntentMeleeColor);
             }
             return _intentMeleeMaterial;
+        }
+
+        private Material GetOrCreateBracketMaterial()
+        {
+            if (_bracketMaterial != null)
+            {
+                return _bracketMaterial;
+            }
+
+            _cornerBracketTexture = BuildCornerBracketTexture();
+            _bracketMaterial = CreateTransparentOverlayMaterial("GridCornerBracket", _cornerBracketTexture, Color.white);
+            return _bracketMaterial;
+        }
+
+        private Material GetOrCreateAoeFillMaterial()
+        {
+            if (_aoeFillMaterial != null)
+            {
+                return _aoeFillMaterial;
+            }
+
+            _outlineFillTexture = BuildOutlineFillTexture();
+            _aoeFillMaterial = CreateTransparentOverlayMaterial("GridOutlineFill", _outlineFillTexture, Color.white);
+            return _aoeFillMaterial;
         }
 
         private Material GetOrCreateFallbackOverlayMaterial()
@@ -1089,6 +1273,88 @@ namespace Realmz.World
             return tex;
         }
 
+        private static Texture2D BuildCornerBracketTexture()
+        {
+            const int size = SurfaceTextureSize;
+            Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                name = "GridCornerBracketTex",
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave
+            };
+
+            Color32[] pixels = new Color32[size * size];
+            Color32 clear = new Color32(0, 0, 0, 0);
+            Color32 bracket = new Color32(255, 255, 255, 255);
+            Color32 hairline = new Color32(255, 255, 255, 115);
+
+            const int armLen = 14;
+            const int armThick = 3;
+
+            for (int y = 0; y < size; y++)
+            {
+                bool inCornerY = y < armLen || y >= size - armLen;
+                bool inEdgeBandY = y < armThick || y >= size - armThick;
+                bool onHairlineY = y == 0 || y == size - 1;
+
+                for (int x = 0; x < size; x++)
+                {
+                    bool inCornerX = x < armLen || x >= size - armLen;
+                    bool inEdgeBandX = x < armThick || x >= size - armThick;
+                    bool onHairlineX = x == 0 || x == size - 1;
+
+                    bool isBracket = (inCornerX && inEdgeBandY) || (inCornerY && inEdgeBandX);
+                    if (isBracket)
+                    {
+                        pixels[y * size + x] = bracket;
+                    }
+                    else if (onHairlineX || onHairlineY)
+                    {
+                        pixels[y * size + x] = hairline;
+                    }
+                    else
+                    {
+                        pixels[y * size + x] = clear;
+                    }
+                }
+            }
+
+            tex.SetPixels32(pixels);
+            tex.Apply(false, false);
+            return tex;
+        }
+
+        private static Texture2D BuildOutlineFillTexture()
+        {
+            const int size = SurfaceTextureSize;
+            Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                name = "GridOutlineFillTex",
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave
+            };
+
+            Color32[] pixels = new Color32[size * size];
+            Color32 border = new Color32(255, 255, 255, 245);
+            Color32 innerFill = new Color32(255, 255, 255, 56); // ~0.22 translucent interior fill
+
+            for (int y = 0; y < size; y++)
+            {
+                bool isBorderY = y < 2 || y >= size - 2;
+                for (int x = 0; x < size; x++)
+                {
+                    bool isBorderX = x < 2 || x >= size - 2;
+                    pixels[y * size + x] = (isBorderX || isBorderY) ? border : innerFill;
+                }
+            }
+
+            tex.SetPixels32(pixels);
+            tex.Apply(false, false);
+            return tex;
+        }
+
         private static Texture2D BuildDashedLineTexture()
         {
             const int w = 32;
@@ -1176,6 +1442,7 @@ namespace Realmz.World
             if (_combatReachableLayer == null) _combatReachableLayer = new OverlayLayer(transform, "CombatReachable");
             if (_combatThreatenedLayer == null) _combatThreatenedLayer = new OverlayLayer(transform, "CombatThreatened");
             if (_attackTargetLayer == null) _attackTargetLayer = new OverlayLayer(transform, "AttackTargets");
+            if (_hoveredAttackTargetLayer == null) _hoveredAttackTargetLayer = new OverlayLayer(transform, "HoveredAttackTarget");
             if (_spellAoeLayer == null) _spellAoeLayer = new OverlayLayer(transform, "SpellAoeFootprint");
             if (_tacticalSelectLayer == null) _tacticalSelectLayer = new OverlayLayer(transform, "TacticalSelection");
             if (_exploreHoverLayer == null) _exploreHoverLayer = new OverlayLayer(transform, "ExplorationHoverPath");

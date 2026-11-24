@@ -18,6 +18,8 @@ namespace Realmz.EditorTools.Cartography
         public const string CartographyArtRoot = "Assets/Art/Cartography";
         public const string TilesDir = CartographyArtRoot + "/tiles";
         public const string FoliageDir = CartographyArtRoot + "/foliage";
+        public const string UnitsDir = CartographyArtRoot + "/units";
+        public const string IconsDir = CartographyArtRoot + "/Icons";
         public const string MaterialsDir = CartographyArtRoot + "/Materials";
         public const string AlbedoArrayAssetPath = TilesDir + "/CartographyTerrainAlbedoArray.asset";
         public const string NormalArrayAssetPath = TilesDir + "/CartographyTerrainNormalArray.asset";
@@ -26,6 +28,50 @@ namespace Realmz.EditorTools.Cartography
         public const string WaterMaterialPath = MaterialsDir + "/Cartography_ShallowWater.mat";
 
         public const int TileLayerSize = 128;
+        public const int UnitFrameSize = 128;
+        public const int UnitFrameCount = 4;
+
+        public static readonly string[] UnifiedUnitIds =
+        {
+            "hero_knight",
+            "hero_cleric",
+            "hero_ranger",
+            "hero_mage",
+            "hero_paladin",
+            "hero_rogue",
+            "monster_giant_frog",
+            "monster_goblin_raider",
+            "monster_goblin_archer",
+            "monster_orc_warrior",
+            "monster_giant_rat",
+            "monster_skeleton_warrior",
+            "monster_bandit_cutthroat"
+        };
+
+        public static readonly string[] HotbarIconKeys =
+        {
+            "sword",
+            "bow",
+            "dagger",
+            "staff",
+            "fireball",
+            "flame_hands",
+            "magic_darts",
+            "heal",
+            "buff",
+            "daze",
+            "shove",
+            "potion",
+            "guard",
+            "undo",
+            "end_turn",
+            "auto_combat",
+            "speed",
+            "audio",
+            "grid",
+            "settings",
+            "flee"
+        };
 
         private static readonly string[] TerrainLayerNames =
         {
@@ -43,6 +89,8 @@ namespace Realmz.EditorTools.Cartography
             EnsureFolder(CartographyArtRoot);
             EnsureFolder(TilesDir);
             EnsureFolder(FoliageDir);
+            EnsureFolder(UnitsDir);
+            EnsureFolder(IconsDir);
             EnsureFolder(MaterialsDir);
 
             AssetDatabase.Refresh();
@@ -53,6 +101,7 @@ namespace Realmz.EditorTools.Cartography
             CreateOrUpdateTerrainMaterial(albedoArray, normalArray);
             CreateOrUpdateFoliageMaterial();
             CreateOrUpdateWaterMaterial();
+            CreateOrUpdateAllUnitMaterials();
             foreach (CartographyPropKind kind in Enum.GetValues(typeof(CartographyPropKind)))
             {
                 if (kind != CartographyPropKind.None)
@@ -93,6 +142,10 @@ namespace Realmz.EditorTools.Cartography
             bool isNormal = assetPath.EndsWith("_n.png", StringComparison.OrdinalIgnoreCase);
             bool isTile = assetPath.IndexOf("/tiles/", StringComparison.OrdinalIgnoreCase) >= 0;
             bool isFoliageAtlas = assetPath.IndexOf("/foliage/", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isIcon = !isNormal && assetPath.IndexOf("/Icons/", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isUnitSheet = !isNormal &&
+                               assetPath.IndexOf("/units/", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                               assetPath.EndsWith("_sheet.png", StringComparison.OrdinalIgnoreCase);
 
             bool dirty = false;
 
@@ -149,7 +202,7 @@ namespace Realmz.EditorTools.Cartography
                     dirty = true;
                 }
             }
-            else
+            else if (isIcon)
             {
                 if (importer.textureType != TextureImporterType.Sprite)
                 {
@@ -179,12 +232,60 @@ namespace Realmz.EditorTools.Cartography
 
                 TextureImporterSettings settings = new TextureImporterSettings();
                 importer.ReadTextureSettings(settings);
+                if (settings.spriteAlignment != (int)SpriteAlignment.Center ||
+                    (settings.spritePivot - new Vector2(0.5f, 0.5f)).sqrMagnitude > 0.0001f)
+                {
+                    settings.spriteAlignment = (int)SpriteAlignment.Center;
+                    settings.spritePivot = new Vector2(0.5f, 0.5f);
+                    importer.SetTextureSettings(settings);
+                    dirty = true;
+                }
+            }
+            else
+            {
+                if (importer.textureType != TextureImporterType.Sprite)
+                {
+                    importer.textureType = TextureImporterType.Sprite;
+                    dirty = true;
+                }
+
+                importer.GetSourceTextureWidthAndHeight(out int texW, out int texH);
+                bool sliceAs4Frames = isUnitSheet && texW >= UnitFrameSize * UnitFrameCount && texH == UnitFrameSize;
+                SpriteImportMode desiredMode = sliceAs4Frames ? SpriteImportMode.Multiple : SpriteImportMode.Single;
+                if (importer.spriteImportMode != desiredMode)
+                {
+                    importer.spriteImportMode = desiredMode;
+                    dirty = true;
+                }
+                if (!importer.sRGBTexture)
+                {
+                    importer.sRGBTexture = true;
+                    dirty = true;
+                }
+                if (!importer.alphaIsTransparency)
+                {
+                    importer.alphaIsTransparency = true;
+                    dirty = true;
+                }
+                if (importer.wrapMode != TextureWrapMode.Clamp)
+                {
+                    importer.wrapMode = TextureWrapMode.Clamp;
+                    dirty = true;
+                }
+
+                TextureImporterSettings settings = new TextureImporterSettings();
+                importer.ReadTextureSettings(settings);
                 if (settings.spriteAlignment != (int)SpriteAlignment.BottomCenter ||
                     (settings.spritePivot - new Vector2(0.5f, 0f)).sqrMagnitude > 0.0001f)
                 {
                     settings.spriteAlignment = (int)SpriteAlignment.BottomCenter;
                     settings.spritePivot = new Vector2(0.5f, 0f);
                     importer.SetTextureSettings(settings);
+                    dirty = true;
+                }
+
+                if (sliceAs4Frames && EnsureFourFrameSpriteSheet(importer, assetPath, texW, texH))
+                {
                     dirty = true;
                 }
             }
@@ -215,6 +316,182 @@ namespace Realmz.EditorTools.Cartography
             {
                 importer.SaveAndReimport();
             }
+        }
+
+        private static bool EnsureFourFrameSpriteSheet(TextureImporter importer, string assetPath, int texW, int texH)
+        {
+            int frameW = texW / UnitFrameCount;
+            int frameH = texH;
+            string baseName = Path.GetFileNameWithoutExtension(assetPath);
+
+            SerializedObject so = new SerializedObject(importer);
+            SerializedProperty spritesProp = so.FindProperty("m_SpriteSheet.m_Sprites");
+            if (spritesProp == null || !spritesProp.isArray)
+            {
+                return false;
+            }
+
+            bool needsUpdate = spritesProp.arraySize != UnitFrameCount;
+            if (!needsUpdate)
+            {
+                for (int i = 0; i < UnitFrameCount; i++)
+                {
+                    SerializedProperty elem = spritesProp.GetArrayElementAtIndex(i);
+                    string expectedName = $"{baseName}_{i}";
+                    Rect curRect = elem.FindPropertyRelative("m_Rect").rectValue;
+                    Vector2 curPivot = elem.FindPropertyRelative("m_Pivot").vector2Value;
+                    int curAlign = elem.FindPropertyRelative("m_Alignment").intValue;
+                    string curName = elem.FindPropertyRelative("m_Name").stringValue;
+                    if (!string.Equals(curName, expectedName, StringComparison.Ordinal) ||
+                        Mathf.Abs(curRect.x - i * frameW) > 0.1f ||
+                        Mathf.Abs(curRect.y) > 0.1f ||
+                        Mathf.Abs(curRect.width - frameW) > 0.1f ||
+                        Mathf.Abs(curRect.height - frameH) > 0.1f ||
+                        curAlign != (int)SpriteAlignment.BottomCenter ||
+                        (curPivot - new Vector2(0.5f, 0f)).sqrMagnitude > 0.0001f)
+                    {
+                        needsUpdate = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!needsUpdate)
+            {
+                return false;
+            }
+
+            spritesProp.arraySize = UnitFrameCount;
+            for (int i = 0; i < UnitFrameCount; i++)
+            {
+                SerializedProperty elem = spritesProp.GetArrayElementAtIndex(i);
+                elem.FindPropertyRelative("m_Name").stringValue = $"{baseName}_{i}";
+                elem.FindPropertyRelative("m_Rect").rectValue = new Rect(i * frameW, 0f, frameW, frameH);
+                elem.FindPropertyRelative("m_Alignment").intValue = (int)SpriteAlignment.BottomCenter;
+                elem.FindPropertyRelative("m_Pivot").vector2Value = new Vector2(0.5f, 0f);
+                SerializedProperty borderProp = elem.FindPropertyRelative("m_Border");
+                if (borderProp != null)
+                {
+                    borderProp.vector4Value = Vector4.zero;
+                }
+                SerializedProperty spriteIdProp = elem.FindPropertyRelative("m_SpriteID");
+                if (spriteIdProp != null && string.IsNullOrEmpty(spriteIdProp.stringValue))
+                {
+                    spriteIdProp.stringValue = ComputeDeterministicSpriteGuidHex(assetPath, i);
+                }
+            }
+
+            so.ApplyModifiedPropertiesWithoutUndo();
+            return true;
+        }
+
+        private static string ComputeDeterministicSpriteGuidHex(string assetPath, int frameIndex)
+        {
+            using (System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create())
+            {
+                byte[] input = System.Text.Encoding.UTF8.GetBytes($"{assetPath}#{frameIndex}");
+                byte[] hash = md5.ComputeHash(input);
+                System.Text.StringBuilder sb = new System.Text.StringBuilder(32);
+                for (int i = 0; i < hash.Length; i++)
+                {
+                    sb.Append(hash[i].ToString("x2"));
+                }
+                return sb.ToString();
+            }
+        }
+
+        public static void CreateOrUpdateAllUnitMaterials()
+        {
+            for (int i = 0; i < UnifiedUnitIds.Length; i++)
+            {
+                CreateOrUpdateUnitMaterial(UnifiedUnitIds[i]);
+            }
+        }
+
+        public static Material CreateOrUpdateUnitMaterial(string unitId)
+        {
+            if (string.IsNullOrWhiteSpace(unitId))
+            {
+                return null;
+            }
+
+            string normalized = unitId.Trim().ToLowerInvariant();
+            string albedoPath = $"{UnitsDir}/{normalized}_sheet.png";
+            string normalPath = $"{UnitsDir}/{normalized}_sheet_n.png";
+            string matPath = $"{MaterialsDir}/Cartography_Unit_{normalized}.mat";
+
+            Texture2D albedo = AssetDatabase.LoadAssetAtPath<Texture2D>(albedoPath);
+            Texture2D normal = AssetDatabase.LoadAssetAtPath<Texture2D>(normalPath);
+            Shader shader = Shader.Find("Realmz/CartographyBillboard") ?? Shader.Find("Universal Render Pipeline/Lit");
+
+            Material mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
+            if (mat == null)
+            {
+                mat = new Material(shader);
+                AssetDatabase.CreateAsset(mat, matPath);
+            }
+            else if (shader != null && mat.shader != shader)
+            {
+                mat.shader = shader;
+            }
+
+            mat.enableInstancing = false;
+            if (albedo != null)
+            {
+                mat.mainTexture = albedo;
+                if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", albedo);
+            }
+            if (normal != null && mat.HasProperty("_BumpMap"))
+            {
+                mat.SetTexture("_BumpMap", normal);
+            }
+            if (mat.HasProperty("_BumpScale")) mat.SetFloat("_BumpScale", 0.70f);
+            if (mat.HasProperty("_IsTwoBankAtlas")) mat.SetFloat("_IsTwoBankAtlas", 0f);
+            if (mat.HasProperty("_Cols")) mat.SetFloat("_Cols", UnitFrameCount);
+            if (mat.HasProperty("_Rows")) mat.SetFloat("_Rows", 1f);
+            if (mat.HasProperty("_VariantIndex")) mat.SetFloat("_VariantIndex", 0f);
+            if (mat.HasProperty("_FrameCount")) mat.SetFloat("_FrameCount", UnitFrameCount);
+            if (mat.HasProperty("_AnimFps")) mat.SetFloat("_AnimFps", 5.5f);
+            if (mat.HasProperty("_BillboardMode")) mat.SetFloat("_BillboardMode", 0f);
+            if (mat.HasProperty("_CameraPitchTiltDeg")) mat.SetFloat("_CameraPitchTiltDeg", 0f);
+            if (mat.HasProperty("_WindTipSway")) mat.SetFloat("_WindTipSway", 0f);
+            if (mat.HasProperty("_TrampleStrength")) mat.SetFloat("_TrampleStrength", 0f);
+            if (mat.HasProperty("_WindGustInfluence")) mat.SetFloat("_WindGustInfluence", 0.08f);
+            if (mat.HasProperty("_NormalUpBias")) mat.SetFloat("_NormalUpBias", 0.55f);
+            if (mat.HasProperty("_RootTint")) mat.SetColor("_RootTint", Color.white);
+            if (mat.HasProperty("_TintColor")) mat.SetColor("_TintColor", Color.white);
+            if (mat.HasProperty("_Cutoff")) mat.SetFloat("_Cutoff", 0.45f);
+            if (mat.HasProperty("_ReceiveRootShadowOnly")) mat.SetFloat("_ReceiveRootShadowOnly", 0f);
+            if (mat.HasProperty("_HorizonHazeStrength")) mat.SetFloat("_HorizonHazeStrength", 0.08f);
+            if (mat.HasProperty("_EmissionColor")) mat.SetColor("_EmissionColor", Color.black);
+
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        public static Sprite LoadFirstSpriteFrame(string assetPath)
+        {
+            if (string.IsNullOrWhiteSpace(assetPath))
+            {
+                return null;
+            }
+
+            UnityEngine.Object[] subAssets = AssetDatabase.LoadAllAssetsAtPath(assetPath);
+            Sprite first = null;
+            float bestX = float.MaxValue;
+            if (subAssets != null)
+            {
+                for (int i = 0; i < subAssets.Length; i++)
+                {
+                    if (subAssets[i] is Sprite s && s.rect.x < bestX)
+                    {
+                        bestX = s.rect.x;
+                        first = s;
+                    }
+                }
+            }
+
+            return first != null ? first : AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
         }
 
         public static void BuildTerrainTextureArrays(out Texture2DArray albedoArray, out Texture2DArray normalArray)
@@ -579,14 +856,16 @@ namespace Realmz.EditorTools.Cartography
                 case CartographyPropKind.Knight:
                     return new[]
                     {
-                        CartographyArtRoot + "/units/knight.png",
+                        UnitsDir + "/hero_knight_sheet.png",
+                        UnitsDir + "/knight.png",
                         CartographyArtRoot + "/props/knight.png",
                         "Assets/Art/M1/Heroes/knight.png"
                     };
                 case CartographyPropKind.GiantFrog:
                     return new[]
                     {
-                        CartographyArtRoot + "/units/giant_frog.png",
+                        UnitsDir + "/monster_giant_frog_sheet.png",
+                        UnitsDir + "/giant_frog.png",
                         CartographyArtRoot + "/props/giant_frog.png",
                         "Assets/Art/M1/Monsters/giant_frog.png"
                     };

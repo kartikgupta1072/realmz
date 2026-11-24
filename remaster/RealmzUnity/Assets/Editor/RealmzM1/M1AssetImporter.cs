@@ -41,6 +41,7 @@ namespace Realmz.EditorTools
         private struct MonsterSpec
         {
             public string Key;
+            public string LegacyM1Key;
             public string DisplayName;
         }
 
@@ -56,12 +57,23 @@ namespace Realmz.EditorTools
 
         private static readonly MonsterSpec[] MonsterSpecs =
         {
-            new MonsterSpec { Key = "giant_frog", DisplayName = "Giant Frog" },
-            new MonsterSpec { Key = "goblin_raider", DisplayName = "Goblin Raider" },
-            new MonsterSpec { Key = "kobold_spearman", DisplayName = "Kobold Spearman" },
-            new MonsterSpec { Key = "giant_sewer_rat", DisplayName = "Giant Sewer Rat" },
-            new MonsterSpec { Key = "skeleton_warrior", DisplayName = "Skeleton Warrior" },
-            new MonsterSpec { Key = "bandit_cutthroat", DisplayName = "Bandit Cutthroat" }
+            new MonsterSpec { Key = "monster_giant_frog", LegacyM1Key = "giant_frog", DisplayName = "Giant Frog" },
+            new MonsterSpec { Key = "monster_goblin_raider", LegacyM1Key = "goblin_raider", DisplayName = "Goblin Raider" },
+            new MonsterSpec { Key = "monster_goblin_archer", LegacyM1Key = "goblin_archer", DisplayName = "Goblin Archer" },
+            new MonsterSpec { Key = "monster_orc_warrior", LegacyM1Key = "orc_warrior", DisplayName = "Orc Warrior" },
+            new MonsterSpec { Key = "monster_giant_rat", LegacyM1Key = "giant_sewer_rat", DisplayName = "Giant Rat" },
+            new MonsterSpec { Key = "monster_skeleton_warrior", LegacyM1Key = "skeleton_warrior", DisplayName = "Skeleton Warrior" },
+            new MonsterSpec { Key = "monster_bandit_cutthroat", LegacyM1Key = "bandit_cutthroat", DisplayName = "Bandit Cutthroat" }
+        };
+
+        private static readonly string[] LegacyM1MonsterTextureKeys =
+        {
+            "giant_frog",
+            "goblin_raider",
+            "kobold_spearman",
+            "giant_sewer_rat",
+            "skeleton_warrior",
+            "bandit_cutthroat"
         };
 
         private static readonly string[] TileKeys =
@@ -116,54 +128,96 @@ namespace Realmz.EditorTools
                 AssetDatabase.CreateAsset(catalog, CatalogAssetPath);
             }
 
-            // 1. Heroes (albedo, normal, portrait, billboard material)
+            // 1. Heroes (unified 64 px/m 512x128 sheet + normals + 256x256 portraits)
+            Realmz.EditorTools.Cartography.CartographyAssetImporter.ImportAll();
+
             catalog.heroes = new List<BywaterAssetCatalog.HeroArtEntry>(HeroSpecs.Length);
+            catalog.cartographyUnitSheets = new List<BywaterAssetCatalog.CartographyUnitSheetEntry>(
+                HeroSpecs.Length + MonsterSpecs.Length);
             for (int i = 0; i < HeroSpecs.Length; i++)
             {
                 HeroSpec spec = HeroSpecs[i];
-                string albedoPath = HeroesDir + "/" + spec.Key + ".png";
-                string normalPath = HeroesDir + "/" + spec.Key + "_n.png";
+                string sheetAlbedoPath = $"{Realmz.EditorTools.Cartography.CartographyAssetImporter.UnitsDir}/{spec.Id}_sheet.png";
                 string portraitPath = PortraitsDir + "/" + spec.Key + "_portrait.png";
-                string matPath = MaterialsDir + "/M1_Hero_" + spec.Key + ".mat";
+                string legacyAlbedoPath = HeroesDir + "/" + spec.Key + ".png";
+                string legacyNormalPath = HeroesDir + "/" + spec.Key + "_n.png";
+                string legacyMatPath = MaterialsDir + "/M1_Hero_" + spec.Key + ".mat";
 
-                Texture2D albedo = AssetDatabase.LoadAssetAtPath<Texture2D>(albedoPath);
-                Texture2D normal = AssetDatabase.LoadAssetAtPath<Texture2D>(normalPath);
-                Sprite sprite = AssetDatabase.LoadAssetAtPath<Sprite>(albedoPath);
+                Texture2D legacyAlbedo = AssetDatabase.LoadAssetAtPath<Texture2D>(legacyAlbedoPath);
+                Texture2D legacyNormal = AssetDatabase.LoadAssetAtPath<Texture2D>(legacyNormalPath);
+                CreateOrUpdateBillboardMaterial(legacyMatPath, legacyAlbedo, legacyNormal, 0.18f, subtleTorchEmission: false);
+
+                Material unitSheetMat = Realmz.EditorTools.Cartography.CartographyAssetImporter.CreateOrUpdateUnitMaterial(spec.Id);
+                Sprite frameZeroSprite = Realmz.EditorTools.Cartography.CartographyAssetImporter.LoadFirstSpriteFrame(sheetAlbedoPath)
+                    ?? AssetDatabase.LoadAssetAtPath<Sprite>(legacyAlbedoPath);
                 Sprite portrait = AssetDatabase.LoadAssetAtPath<Sprite>(portraitPath);
 
-                Material mat = CreateOrUpdateBillboardMaterial(matPath, albedo, normal, 0.18f, subtleTorchEmission: false);
                 catalog.heroes.Add(new BywaterAssetCatalog.HeroArtEntry
                 {
                     id = spec.Id,
                     archetype = spec.Archetype,
                     iconId = spec.IconId,
                     portraitId = spec.PortraitId,
-                    billboardMaterial = mat,
-                    sprite = sprite,
+                    billboardMaterial = unitSheetMat,
+                    unitSheetMaterial = unitSheetMat,
+                    sprite = frameZeroSprite,
                     portrait = portrait
+                });
+                catalog.cartographyUnitSheets.Add(new BywaterAssetCatalog.CartographyUnitSheetEntry
+                {
+                    unitKey = spec.Id,
+                    unitSheetMaterial = unitSheetMat
                 });
             }
 
-            // 2. Monsters (albedo, normal, billboard material)
+            // 2. Monsters (all 7 unified 64 px/m 512x128 sheets + normals)
             catalog.monsters = new List<BywaterAssetCatalog.MonsterArtEntry>(MonsterSpecs.Length);
             for (int i = 0; i < MonsterSpecs.Length; i++)
             {
                 MonsterSpec spec = MonsterSpecs[i];
-                string albedoPath = MonstersDir + "/" + spec.Key + ".png";
-                string normalPath = MonstersDir + "/" + spec.Key + "_n.png";
-                string matPath = MaterialsDir + "/M1_Monster_" + spec.Key + ".mat";
+                string sheetAlbedoPath = $"{Realmz.EditorTools.Cartography.CartographyAssetImporter.UnitsDir}/{spec.Key}_sheet.png";
+                Material unitSheetMat = Realmz.EditorTools.Cartography.CartographyAssetImporter.CreateOrUpdateUnitMaterial(spec.Key);
+                Sprite frameZeroSprite = Realmz.EditorTools.Cartography.CartographyAssetImporter.LoadFirstSpriteFrame(sheetAlbedoPath);
+                if (frameZeroSprite == null && !string.IsNullOrEmpty(spec.LegacyM1Key))
+                {
+                    frameZeroSprite = AssetDatabase.LoadAssetAtPath<Sprite>(MonstersDir + "/" + spec.LegacyM1Key + ".png");
+                }
 
-                Texture2D albedo = AssetDatabase.LoadAssetAtPath<Texture2D>(albedoPath);
-                Texture2D normal = AssetDatabase.LoadAssetAtPath<Texture2D>(normalPath);
-                Sprite sprite = AssetDatabase.LoadAssetAtPath<Sprite>(albedoPath);
-
-                Material mat = CreateOrUpdateBillboardMaterial(matPath, albedo, normal, 0.18f, subtleTorchEmission: false);
                 catalog.monsters.Add(new BywaterAssetCatalog.MonsterArtEntry
                 {
                     key = spec.Key,
                     displayName = spec.DisplayName,
-                    billboardMaterial = mat,
-                    sprite = sprite
+                    billboardMaterial = unitSheetMat,
+                    unitSheetMaterial = unitSheetMat,
+                    sprite = frameZeroSprite
+                });
+                catalog.cartographyUnitSheets.Add(new BywaterAssetCatalog.CartographyUnitSheetEntry
+                {
+                    unitKey = spec.Key,
+                    unitSheetMaterial = unitSheetMat
+                });
+            }
+
+            for (int i = 0; i < LegacyM1MonsterTextureKeys.Length; i++)
+            {
+                string legacyKey = LegacyM1MonsterTextureKeys[i];
+                Texture2D legacyAlb = AssetDatabase.LoadAssetAtPath<Texture2D>(MonstersDir + "/" + legacyKey + ".png");
+                Texture2D legacyNorm = AssetDatabase.LoadAssetAtPath<Texture2D>(MonstersDir + "/" + legacyKey + "_n.png");
+                CreateOrUpdateBillboardMaterial(MaterialsDir + "/M1_Monster_" + legacyKey + ".mat", legacyAlb, legacyNorm, 0.18f, subtleTorchEmission: false);
+            }
+
+            // 2b. All 21 32x32 combat hotbar & utility icons
+            string[] iconKeys = Realmz.EditorTools.Cartography.CartographyAssetImporter.HotbarIconKeys;
+            catalog.hotbarIcons = new List<BywaterAssetCatalog.HotbarIconEntry>(iconKeys.Length);
+            for (int i = 0; i < iconKeys.Length; i++)
+            {
+                string iconKey = iconKeys[i];
+                string iconPath = $"{Realmz.EditorTools.Cartography.CartographyAssetImporter.IconsDir}/icon_{iconKey}.png";
+                Sprite iconSprite = AssetDatabase.LoadAssetAtPath<Sprite>(iconPath);
+                catalog.hotbarIcons.Add(new BywaterAssetCatalog.HotbarIconEntry
+                {
+                    key = iconKey,
+                    sprite = iconSprite
                 });
             }
 
@@ -350,8 +404,7 @@ namespace Realmz.EditorTools
             catalog.overlayBaseMaterial = CreateOrUpdateOverlayBaseMaterial(
                 MaterialsDir + "/M1_Overlay_Base.mat");
 
-            // 5b. Wave B Cartography Terrain, Water, Foliage, and Prop Materials
-            Realmz.EditorTools.Cartography.CartographyAssetImporter.ImportAll();
+            // 5b. Wave B Cartography Terrain, Water, Foliage, and Prop Materials (already imported in Step 1)
             catalog.cartographyTerrainMaterial = AssetDatabase.LoadAssetAtPath<Material>(
                 Realmz.EditorTools.Cartography.CartographyAssetImporter.TerrainMaterialPath);
             catalog.cartographyWaterMaterial = AssetDatabase.LoadAssetAtPath<Material>(
@@ -397,9 +450,9 @@ namespace Realmz.EditorTools
                 ConfigurePortraitSprite(PortraitsDir + "/" + key + "_portrait.png", UnifiedCharacterPpu);
             }
 
-            for (int i = 0; i < MonsterSpecs.Length; i++)
+            for (int i = 0; i < LegacyM1MonsterTextureKeys.Length; i++)
             {
-                string key = MonsterSpecs[i].Key;
+                string key = LegacyM1MonsterTextureKeys[i];
                 ConfigureBillboardSprite(MonstersDir + "/" + key + ".png", UnifiedCharacterPpu);
                 ConfigureNormalMap(MonstersDir + "/" + key + "_n.png", TextureWrapMode.Clamp);
             }

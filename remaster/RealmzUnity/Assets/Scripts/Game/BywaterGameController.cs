@@ -26,12 +26,14 @@ namespace Realmz.Game
     {
         private static readonly Color HeroRingColor = new Color(0.220f, 0.741f, 0.973f, 0.92f);
         private static readonly Color MonsterRingColor = new Color(0.937f, 0.267f, 0.267f, 0.92f);
-        private static readonly float[] SpeedDelays = { 0.45f, 0.22f, 0.08f, 0.0f };
-        private static readonly string[] SpeedLabels = { "1x", "2x", "4x", "Instant" };
+        private static readonly float[] SpeedDelays = { 0.42f, 0.18f, 0.0f };
+        private static readonly string[] SpeedLabels = { "1x", "2x", "Instant" };
         private const float ExploreStepDurationSeconds = 0.11f;
         private const float CampSemicircleRadius = 1.15f;
         private const int MaxTrailingPartyViews = 6;
         private const int MaxSavedLogLines = 40;
+        private const float EnemyIntentFlashSeconds = 0.30f;
+        private const float RightClickMaxDragPixelsSq = 36f;
 
         [Header("Scene References")]
         public BywaterAssetCatalog assetCatalog;
@@ -75,7 +77,7 @@ namespace Realmz.Game
         private int _arenaOriginY;
         private int _arenaWidth = 12;
         private int _arenaHeight = 10;
-        private CombatActionMode _activeCombatMode = CombatActionMode.Move;
+        private CombatActionMode _activeCombatMode = CombatActionMode.Smart;
         private int _selectedSpellId = -1;
         private GridCoord _lastCombatHover = new GridCoord(-1, -1);
         private bool _combatHoverDirty = true;
@@ -89,7 +91,32 @@ namespace Realmz.Game
         private Vector2 _showcaseMouseAnchor;
         private string _activeEncounterZoneKey = string.Empty;
 
+        private bool _autoCombatEnabled;
+        private bool _autoEndTurn;
+        private float _masterVolume = 1.0f;
+        private float _musicVolume = 0.55f;
+        private float _sfxVolume = 0.85f;
+        private bool _isMuted;
+        private float _gridOpacity = 1.0f;
+        private bool _nameplatesAlwaysOn;
+        private bool _devToolsVisible;
+        private bool _showAllEnemyIntentArcs;
+        private bool _isHoveringHotbarUi;
+        private string _hoveredCombatUnitId;
+        private bool _lastAltHeld;
+        private string _lastContextPoiLabel = string.Empty;
+        private GridCoord _preCombatExplorePos = new GridCoord(-1, -1);
+        private bool _hasPreCombatExplorePos;
+        private List<MonsterDefinition> _pendingQuickResolveMonsters;
+        private string _pendingQuickResolveTitle = string.Empty;
+        private string _pendingQuickResolveZoneKey = string.Empty;
+        private bool _rightMouseDownPendingClick;
+        private Vector2 _rightMouseDownPos;
+        private readonly List<Vector3> _treeFadePositionsScratch = new List<Vector3>(16);
+        private readonly List<BywaterUnitView> _nameplateStaggerViewsScratch = new List<BywaterUnitView>(16);
+
         public bool IsInCombat => _isInCombat;
+        public bool ShowAllEnemyIntentArcs => _showAllEnemyIntentArcs;
         public ExplorationSession ExploreSession { get; private set; }
         public TacticalCombatSession CombatSession { get; private set; }
         public BywaterM1Bundle Bundle { get; private set; }
@@ -122,15 +149,20 @@ namespace Realmz.Game
             {
                 gridOverlays.Initialize(assetCatalog);
                 gridOverlays.SetElevationResolver(worldRenderer != null ? (Func<int, int, float>)worldRenderer.GetTileElevation : null);
+                gridOverlays.SetGridOpacity(_gridOpacity);
             }
+
+            audioDirector?.EnsureInitialized();
+            ApplyAudioSettings();
 
             if (hudController != null)
             {
                 hudController.BuildUi(assetCatalog);
                 WireHudEvents();
+                hudController.SetDevToolsVisible(_devToolsVisible);
+                SyncHudSettings();
             }
 
-            audioDirector?.EnsureInitialized();
             ResetPartyTrailHistory(ExploreSession.Position, ExploreSession.CurrentMap, ExploreSession.Facing);
 
             EnterExplorationView(immediateCamera: true);
@@ -160,18 +192,37 @@ namespace Realmz.Game
             SyncExternalModalCloses();
             HandleKeyboardShortcuts();
 
+            Mouse mouse = Mouse.current;
             if (hudController != null && (hudController.IsModalOpen || hudController.IsPointerOverUi()))
             {
+                if (hudController.IsModalOpen || !hudController.IsPointerOverUi())
+                {
+                    _isHoveringHotbarUi = false;
+                }
+
+                if (!hudController.IsModalOpen && hudController.IsCursorTooltipActive && mouse != null)
+                {
+                    hudController.UpdateCursorTooltipPosition(mouse.position.ReadValue());
+                }
+                else if (hudController.IsModalOpen)
+                {
+                    hudController.ClearCombatHoverPreview();
+                }
+
+                _rightMouseDownPendingClick = false;
                 return;
             }
 
-            Mouse mouse = Mouse.current;
+            _isHoveringHotbarUi = false;
+
             if (mouse == null || cameraRig == null)
             {
                 return;
             }
 
             Vector2 mousePos = mouse.position.ReadValue();
+            HandleCombatRightClickCancel(mouse, mousePos);
+
             bool leftClick = mouse.leftButton.wasPressedThisFrame;
             if (_freezeHoverForShowcase)
             {
@@ -187,6 +238,10 @@ namespace Realmz.Game
 
             if (!cameraRig.ScreenPointToGridCoord(mousePos, out GridCoord worldCoord))
             {
+                if (_isInCombat && !_isHoveringHotbarUi)
+                {
+                    ClearCombatTransientHoverVisuals();
+                }
                 return;
             }
 
@@ -197,6 +252,27 @@ namespace Realmz.Game
             else
             {
                 UpdateExplorationInput(worldCoord, leftClick);
+            }
+        }
+
+        private void LateUpdate()
+        {
+            if (ExploreSession == null || Bundle == null)
+            {
+                return;
+            }
+
+            UpdateActiveTreeOcclusionFade();
+
+            if (_isInCombat && CombatSession != null)
+            {
+                Keyboard kb = Keyboard.current;
+                bool altHeld = kb != null && (kb.leftAltKey.isPressed || kb.rightAltKey.isPressed);
+                if (altHeld || altHeld != _lastAltHeld)
+                {
+                    _lastAltHeld = altHeld;
+                    RefreshUnitNameplates();
+                }
             }
         }
 
@@ -247,6 +323,16 @@ namespace Realmz.Game
                 return;
             }
 
+            if (_isInCombat)
+            {
+                ExitCombatToExploration(syncPartyFromCombat: false);
+            }
+
+            if (ExploreSession.CurrentMap.IsDungeon)
+            {
+                WarpToOverworldTownShowcase();
+            }
+
             TriggerDemoSkirmish();
 
             if (CombatSession == null)
@@ -269,7 +355,6 @@ namespace Realmz.Game
                 if (actor.Side == CombatSide.Monster)
                 {
                     CombatSession.ExecuteMonsterAiTurn();
-                    CombatSession.EndTurn();
                     continue;
                 }
 
@@ -325,50 +410,29 @@ namespace Realmz.Game
                 return;
             }
 
-            int showcaseSpellId = -1;
-            if (ContainsInt(current.SpellIds, 1306))
-            {
-                showcaseSpellId = 1306;
-            }
-            else if (ContainsInt(current.SpellIds, 1104))
-            {
-                showcaseSpellId = 1104;
-            }
-            else if (current.SpellIds.Count > 0)
-            {
-                showcaseSpellId = current.SpellIds[0];
-            }
-
-            _activeCombatMode = showcaseSpellId >= 0 ? CombatActionMode.Spell : CombatActionMode.Melee;
-            _selectedSpellId = showcaseSpellId;
-
-            GridCoord bestTarget = current.Position;
-            if (showcaseSpellId >= 0)
-            {
-                int bestEnemyHits = -1;
-                for (int y = 0; y < CombatSession.Grid.Height; y++)
-                {
-                    for (int x = 0; x < CombatSession.Grid.Width; x++)
-                    {
-                        GridCoord candidate = new GridCoord(x, y);
-                        TacticalSpellPreview preview = CombatSession.PreviewSpell(current.Id, showcaseSpellId.ToString(), candidate);
-                        if (preview.AoeFootprint.InRange && preview.AoeFootprint.AffectedEnemyIds.Count > bestEnemyHits)
-                        {
-                            bestEnemyHits = preview.AoeFootprint.AffectedEnemyIds.Count;
-                            bestTarget = candidate;
-                        }
-                    }
-                }
-            }
+            _activeCombatMode = CombatActionMode.Smart;
+            _selectedSpellId = current.SpellIds.Count > 0 ? current.SpellIds[0] : -1;
+            _hoveredCombatUnitId = null;
 
             RefreshCombatStaticOverlays(current);
-            UpdateCombatHoverVisuals(bestTarget);
+            gridOverlays?.ClearEnemyIntentArcs();
 
+            CollectActiveUnitWorldPositions(_treeFadePositionsScratch);
             if (cameraRig != null)
             {
-                GridCoord mid = new GridCoord(_arenaOriginX + _arenaWidth / 2, _arenaOriginY + _arenaHeight / 2);
-                cameraRig.SetFollowTarget(GridToWorldAtElevation(mid) + new Vector3(1.1f, 0f, -0.1f), immediate: true);
+                cameraRig.FrameCombatantsInSafeViewport(_treeFadePositionsScratch, immediate: true);
             }
+            worldRenderer?.UpdateTreeOcclusionFade(_treeFadePositionsScratch, fadeCenterBuildingsInCombat: true);
+
+            GridCoord bestHoverTile = FindBestShowcaseHoverTile(current);
+            if (CombatSession.Grid.InBounds(bestHoverTile))
+            {
+                UpdateCombatHoverVisuals(bestHoverTile);
+            }
+
+            gridOverlays?.ClearEnemyIntentArcs();
+            hudController?.ClearCombatHoverPreview();
+            RefreshUnitNameplates();
 
             _showcaseMouseAnchor = Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero;
             _freezeHoverForShowcase = true;
@@ -420,6 +484,39 @@ namespace Realmz.Game
             _lastExploreHoverCoord = new GridCoord(-1, -1);
             _exploreHoverDirty = true;
             UpdateExplorationHoverVisuals(previewTarget);
+
+            _showcaseMouseAnchor = Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero;
+            _freezeHoverForShowcase = true;
+        }
+
+        public void WarpToDungeonShowcase()
+        {
+            if (ExploreSession == null || Bundle == null)
+            {
+                return;
+            }
+
+            if (_isInCombat)
+            {
+                ExitCombatToExploration(syncPartyFromCombat: false);
+            }
+
+            hudController?.CloseShopModal();
+            hudController?.TogglePartyPanel(false);
+            hudController?.CloseSettingsModal();
+            hudController?.HideQuickResolveModal();
+            hudController?.HideOutcomeModal();
+            hudController?.HideToast();
+
+            ExploreSession = new ExplorationSession(
+                Bundle.Maps,
+                "dungeon_0",
+                ExploreSession.Party,
+                _roller,
+                new GridCoord(33, 72));
+
+            ResetPartyTrailHistory(ExploreSession.Position, ExploreSession.CurrentMap, ExploreSession.Facing);
+            EnterExplorationView(immediateCamera: true);
 
             _showcaseMouseAnchor = Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero;
             _freezeHoverForShowcase = true;
@@ -488,6 +585,7 @@ namespace Realmz.Game
             hudController.OnCampButtonRequested += EnterCampMode;
             hudController.OnShrineRequested += HandleQuickShrine;
             hudController.OnWarpPortalRequested += HandleQuickWarpPortal;
+            hudController.OnContextPoiRequested += HandleContextPoiRequested;
             hudController.OnSaveRequested += HandleSaveGame;
             hudController.OnLoadRequested += HandleLoadGame;
 
@@ -526,6 +624,72 @@ namespace Realmz.Game
             hudController.OnEndTurnRequested += HandleEndTurn;
             hudController.OnCycleSpeedRequested += HandleCycleSpeed;
             hudController.OnSpellSelected += HandleSpellSelected;
+            hudController.OnCombatPartyAllyClicked += HandleCombatPartyAllyClicked;
+            hudController.OnHotbarSlotHovered += (actionId, title, body) =>
+            {
+                _isHoveringHotbarUi = true;
+            };
+            hudController.OnHotbarSlotHoverExited += () =>
+            {
+                _isHoveringHotbarUi = false;
+            };
+
+            hudController.OnAutoCombatToggled += enabled => SetAutoCombatEnabled(enabled);
+            hudController.OnAutoEndTurnToggled += enabled =>
+            {
+                _autoEndTurn = enabled;
+                SyncHudSettings();
+            };
+            hudController.OnBattleSpeedSelected += idx =>
+            {
+                audioDirector?.PlayUiClick();
+                _speedIndex = Mathf.Clamp(idx, 0, SpeedDelays.Length - 1);
+                RefreshCombatHudState();
+                SyncHudSettings();
+            };
+            hudController.OnMasterVolumeChanged += val =>
+            {
+                _masterVolume = Mathf.Clamp01(val);
+                ApplyAudioSettings();
+            };
+            hudController.OnMusicVolumeChanged += val =>
+            {
+                _musicVolume = Mathf.Clamp01(val);
+                ApplyAudioSettings();
+            };
+            hudController.OnSfxVolumeChanged += val =>
+            {
+                _sfxVolume = Mathf.Clamp01(val);
+                ApplyAudioSettings();
+            };
+            hudController.OnMuteToggled += muted =>
+            {
+                _isMuted = muted;
+                ApplyAudioSettings();
+                SyncHudSettings();
+            };
+            hudController.OnGridOpacityChanged += val =>
+            {
+                _gridOpacity = Mathf.Clamp01(val);
+                gridOverlays?.SetGridOpacity(_gridOpacity);
+            };
+            hudController.OnCombatGridToggleRequested += HandleCombatGridToggle;
+            hudController.OnNameplatesAlwaysOnChanged += alwaysOn =>
+            {
+                _nameplatesAlwaysOn = alwaysOn;
+                RefreshUnitNameplates();
+                SyncHudSettings();
+            };
+            hudController.OnDevToolsToggled += visible =>
+            {
+                _devToolsVisible = visible;
+                hudController?.SetDevToolsVisible(visible);
+                SyncHudSettings();
+            };
+            hudController.OnFleeCombatRequested += HandleFleeCombat;
+
+            hudController.OnQuickResolveFightRequested += HandleQuickResolveFight;
+            hudController.OnQuickResolveAutoWinRequested += HandleQuickResolveAutoWin;
 
             hudController.OnContinueAfterVictoryRequested += () =>
             {
@@ -564,9 +728,27 @@ namespace Realmz.Game
                 return;
             }
 
+            if (kb.f12Key.wasPressedThisFrame)
+            {
+                audioDirector?.PlayUiClick();
+                _devToolsVisible = !_devToolsVisible;
+                hudController?.SetDevToolsVisible(_devToolsVisible);
+                SyncHudSettings();
+                return;
+            }
+
             if (kb.escapeKey.wasPressedThisFrame)
             {
-                if (hudController != null && hudController.IsShopOpen)
+                if (hudController != null && hudController.IsQuickResolveOpen)
+                {
+                    hudController.HideQuickResolveModal();
+                    ClearPendingQuickResolve();
+                }
+                else if (hudController != null && hudController.IsSettingsOpen)
+                {
+                    hudController.CloseSettingsModal();
+                }
+                else if (hudController != null && hudController.IsShopOpen)
                 {
                     hudController.CloseShopModal();
                     if (!_isInCombat)
@@ -582,20 +764,97 @@ namespace Realmz.Game
                         ExitCampMode();
                     }
                 }
-                else if (_isInCombat && _activeCombatMode != CombatActionMode.Move)
+                else if (_isInCombat && _autoCombatEnabled)
                 {
-                    HandleCombatModeSelected(CombatActionMode.Move);
+                    SetAutoCombatEnabled(false);
+                }
+                else if (_isInCombat && _activeCombatMode != CombatActionMode.Smart)
+                {
+                    HandleCombatModeSelected(CombatActionMode.Smart);
+                }
+                else if (hudController != null && !hudController.IsOutcomeOpen)
+                {
+                    SyncHudSettings();
+                    hudController.ToggleSettingsModal(true);
                 }
                 return;
             }
 
             if (_isInCombat)
             {
-                if (kb.vKey.wasPressedThisFrame &&
+                if (kb.lKey.wasPressedThisFrame)
+                {
+                    audioDirector?.PlayUiClick();
+                    hudController?.ToggleCombatLogDrawer();
+                    return;
+                }
+
+                if (kb.aKey.wasPressedThisFrame &&
                     CombatSession != null &&
                     CombatSession.Outcome == CombatOutcome.InProgress)
                 {
-                    HandleCombatModeSelected(CombatActionMode.Shove);
+                    SetAutoCombatEnabled(!_autoCombatEnabled);
+                    return;
+                }
+
+                if (hudController != null && hudController.IsModalOpen)
+                {
+                    return;
+                }
+
+                if (CombatSession != null && CombatSession.Outcome == CombatOutcome.InProgress)
+                {
+                    if (kb.digit1Key.wasPressedThisFrame)
+                    {
+                        hudController?.TriggerHotbarSlot(1);
+                        return;
+                    }
+                    if (kb.digit2Key.wasPressedThisFrame)
+                    {
+                        hudController?.TriggerHotbarSlot(2);
+                        return;
+                    }
+                    if (kb.digit3Key.wasPressedThisFrame)
+                    {
+                        hudController?.TriggerHotbarSlot(3);
+                        return;
+                    }
+                    if (kb.digit4Key.wasPressedThisFrame)
+                    {
+                        hudController?.TriggerHotbarSlot(4);
+                        return;
+                    }
+                    if (kb.digit5Key.wasPressedThisFrame)
+                    {
+                        hudController?.TriggerHotbarSlot(5);
+                        return;
+                    }
+                    if (kb.digit6Key.wasPressedThisFrame)
+                    {
+                        hudController?.TriggerHotbarSlot(6);
+                        return;
+                    }
+
+                    if (kb.vKey.wasPressedThisFrame)
+                    {
+                        HandleCombatModeSelected(CombatActionMode.Shove);
+                        return;
+                    }
+
+                    if (kb.gKey.wasPressedThisFrame)
+                    {
+                        HandleGuard();
+                        return;
+                    }
+
+                    if (kb.spaceKey.wasPressedThisFrame &&
+                        CombatSession.CurrentActor != null &&
+                        CombatSession.CurrentActor.Side == CombatSide.Hero &&
+                        !_autoCombatEnabled)
+                    {
+                        HandleEndTurn();
+                        return;
+                    }
                 }
                 return;
             }
@@ -731,7 +990,10 @@ namespace Realmz.Game
             _exploreHoverDirty = true;
             _lastExploreHoverCoord = new GridCoord(-1, -1);
             hudController?.HideOutcomeModal();
-            hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false);
+            hudController?.HideQuickResolveModal();
+            RefreshContextualExplorePoi();
+            hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false, _lastContextPoiLabel);
+            UpdateActiveTreeOcclusionFade();
         }
 
         private void PlayExploreMapMusic()
@@ -796,16 +1058,22 @@ namespace Realmz.Game
                 BywaterAssetCatalog.HeroArtEntry art = assetCatalog != null
                     ? assetCatalog.GetHeroArt(member.Id, member.PortraitId, member.Archetype)
                     : null;
+                Material heroMat = art != null ? art.billboardMaterial : null;
+                if (assetCatalog != null)
+                {
+                    heroMat = assetCatalog.ResolveCartographyUnitMaterial(member.Id, heroMat);
+                }
 
                 view.gameObject.SetActive(true);
                 view.Configure(
                     member.Id,
                     member.Name,
-                    art != null ? art.billboardMaterial : null,
+                    heroMat,
                     HeroRingColor,
                     font,
-                    spriteSize: 1.42f,
-                    showHud: false);
+                    spriteSize: 2.0f,
+                    showHud: false,
+                    isAllyOverride: true);
                 view.UpdateStats(member.Hp, member.MaxHp, member.Sp, member.MaxSp, string.Empty, livingViewIdx == 0, true);
                 _exploreHeroViews.Add(view);
                 livingViewIdx++;
@@ -1124,6 +1392,7 @@ namespace Realmz.Game
             }
 
             _exploreHoverDirty = true;
+            RefreshContextualExplorePoi();
             hudController?.RefreshExploreHud(
                 ExploreSession,
                 Bundle,
@@ -1131,7 +1400,8 @@ namespace Realmz.Game
                 BywaterTileClassifier.Classify(map, stepRes.Position.X, stepRes.Position.Y),
                 0,
                 string.Empty,
-                true);
+                true,
+                _lastContextPoiLabel);
 
             return stepRes.ShouldHalt;
         }
@@ -1211,6 +1481,7 @@ namespace Realmz.Game
                 }
             }
 
+            RefreshContextualExplorePoi();
             hudController?.RefreshExploreHud(
                 ExploreSession,
                 Bundle,
@@ -1218,7 +1489,8 @@ namespace Realmz.Game
                 kind,
                 _lastExploreHoverStepsCount,
                 poiHint,
-                reachable);
+                reachable,
+                _lastContextPoiLabel);
         }
 
         private void HandleExplorationStepHalt(ExplorationStepResult res)
@@ -1248,10 +1520,22 @@ namespace Realmz.Game
                     break;
 
                 case ExplorationHaltReason.EncounterZone:
-                    _activeEncounterZoneKey = (res.TriggeredZone != null && ExploreSession.CurrentMap != null)
+                    string zoneKey = (res.TriggeredZone != null && ExploreSession.CurrentMap != null)
                         ? ExplorationSession.GetEncounterZoneKey(ExploreSession.CurrentMap.MapId, res.TriggeredZone)
                         : string.Empty;
                     List<MonsterDefinition> zoneMonsters = SelectMonstersFromEncounterZone(res.TriggeredZone);
+                    if (!Application.isBatchMode &&
+                        hudController != null &&
+                        CanOfferQuickResolveForEncounter(zoneMonsters, out QuickResolveSummary qrSummary))
+                    {
+                        _pendingQuickResolveMonsters = zoneMonsters;
+                        _pendingQuickResolveTitle = "Encounter Ahead";
+                        _pendingQuickResolveZoneKey = zoneKey;
+                        hudController.ShowQuickResolveModal(_pendingQuickResolveTitle, BuildQuickResolveSummaryText(zoneMonsters, qrSummary));
+                        break;
+                    }
+
+                    _activeEncounterZoneKey = zoneKey;
                     hudController?.ShowToast("Ambush! Tactical encounter triggered!", 2.5f);
                     StartTacticalCombat(zoneMonsters, "Encounter Zone Battle");
                     break;
@@ -1732,10 +2016,13 @@ namespace Realmz.Game
 
             TileMapData map = ExploreSession.CurrentMap;
             GridCoord partyPos = ExploreSession.Position;
+            _preCombatExplorePos = partyPos;
+            _hasPreCombatExplorePos = true;
             _arenaWidth = 12;
             _arenaHeight = 10;
-            _arenaOriginX = Mathf.Clamp(partyPos.X - _arenaWidth / 2, 0, Math.Max(0, map.Width - _arenaWidth));
-            _arenaOriginY = Mathf.Clamp(partyPos.Y - _arenaHeight / 2, 0, Math.Max(0, map.Height - _arenaHeight));
+            GridCoord arenaOrigin = FindCleanArenaOrigin(map, partyPos, _arenaWidth, _arenaHeight);
+            _arenaOriginX = arenaOrigin.X;
+            _arenaOriginY = arenaOrigin.Y;
 
             CombatGrid grid = CombatGrid.FromTileMapSlice(
                 map,
@@ -1835,8 +2122,10 @@ namespace Realmz.Game
 
             _isInCombat = true;
             _outcomeShown = false;
-            _activeCombatMode = CombatActionMode.Move;
+            _activeCombatMode = CombatActionMode.Smart;
             _selectedSpellId = -1;
+            _hoveredCombatUnitId = null;
+            _isHoveringHotbarUi = false;
             _combatHoverDirty = true;
             _lastCombatHover = new GridCoord(-1, -1);
 
@@ -1857,6 +2146,7 @@ namespace Realmz.Game
             if (gridOverlays != null)
             {
                 gridOverlays.SetElevationResolver(worldRenderer != null ? (Func<int, int, float>)worldRenderer.GetTileElevation : null);
+                gridOverlays.SetGridOpacity(_gridOpacity);
             }
 
             biomeAtmosphere?.ApplyBiome(map.IsDungeon, immediate: true);
@@ -1867,12 +2157,20 @@ namespace Realmz.Game
                 cameraRig.SetTerrainCollider(worldRenderer != null ? worldRenderer.TerrainCollider : null);
                 cameraRig.SetWorldBounds(map.Width, map.Height);
                 cameraRig.SetCombatMode(true);
-                cameraRig.SetFollowTarget(midWorld + new Vector3(1.1f, 0f, -0.1f), immediate: true);
             }
 
             SpawnCombatUnitViews();
+            CollectActiveUnitWorldPositions(_treeFadePositionsScratch);
+            if (cameraRig != null)
+            {
+                cameraRig.FrameCombatantsInSafeViewport(_treeFadePositionsScratch, immediate: true);
+            }
+            worldRenderer?.UpdateTreeOcclusionFade(_treeFadePositionsScratch, fadeCenterBuildingsInCombat: true);
+            RefreshUnitNameplates();
+
             hudController?.CloseShopModal();
             hudController?.TogglePartyPanel(false);
+            hudController?.HideQuickResolveModal();
             hudController?.HideOutcomeModal();
             hudController?.ShowToast($"{title} started!", 2.4f);
 
@@ -1921,15 +2219,26 @@ namespace Realmz.Game
                     {
                         BywaterAssetCatalog.HeroArtEntry heroArt = assetCatalog.GetHeroArt(c.Id, c.PortraitId, string.Empty);
                         mat = heroArt != null ? heroArt.billboardMaterial : null;
+                        mat = assetCatalog.ResolveCartographyUnitMaterial(c.Id, mat);
                     }
                     else
                     {
                         BywaterAssetCatalog.MonsterArtEntry monArt = assetCatalog.GetMonsterArt(c.Id, c.IconId);
                         mat = monArt != null ? monArt.billboardMaterial : null;
+                        string monSheetKey = monArt != null && !string.IsNullOrEmpty(monArt.key) ? monArt.key : c.Id;
+                        mat = assetCatalog.ResolveCartographyUnitMaterial(monSheetKey, mat);
                     }
                 }
 
-                view.Configure(c.Id, c.Name, mat, ringColor, font, spriteSize: 1.42f, showHud: true);
+                view.Configure(
+                    c.Id,
+                    c.Name,
+                    mat,
+                    ringColor,
+                    font,
+                    spriteSize: 2.0f,
+                    showHud: true,
+                    isAllyOverride: c.Side == CombatSide.Hero);
                 view.SetWorldPosition(GridToWorldAtElevation(LocalToWorld(c.Position)));
                 _combatUnitViews[c.Id] = view;
             }
@@ -1994,16 +2303,27 @@ namespace Realmz.Game
             }
 
             SyncAllCombatUnitViews();
+            RefreshUnitNameplates();
             Vector3 actorWorld = GridToWorldAtElevation(LocalToWorld(actor.Position));
-            cameraRig?.SetFollowTarget(actorWorld, immediate: false);
+            if (cameraRig != null && !cameraRig.IsWorldPointInSafeViewport(actorWorld))
+            {
+                cameraRig.EnsureWorldPointVisible(actorWorld);
+            }
             worldRenderer?.UpdateHeroWorldPosition(actorWorld);
 
             if (actor.Side == CombatSide.Monster)
             {
                 gridOverlays?.ClearAll();
                 gridOverlays?.SetSurfaceCells(OffsetSurfaceCells(CombatSession.GetActiveSurfaceCells()));
-                RefreshEnemyIntentArcs();
-                hudController?.SetCombatTooltip($"{actor.Name}'s Turn", "Enemy AI acting...");
+                if (_showAllEnemyIntentArcs)
+                {
+                    RefreshEnemyIntentArcs();
+                }
+                else
+                {
+                    gridOverlays?.ClearEnemyIntentArcs();
+                }
+                hudController?.ClearCombatHoverPreview();
                 RefreshCombatHudState();
                 StopAiCoroutine();
                 _aiCoroutine = StartCoroutine(RunMonsterTurnsRoutine());
@@ -2018,9 +2338,26 @@ namespace Realmz.Game
                 return;
             }
 
-            _activeCombatMode = actor.Economy.MoveRemaining > 0
-                ? CombatActionMode.Move
-                : CombatActionMode.Melee;
+            if (_autoCombatEnabled)
+            {
+                gridOverlays?.ClearAll();
+                gridOverlays?.SetSurfaceCells(OffsetSurfaceCells(CombatSession.GetActiveSurfaceCells()));
+                if (_showAllEnemyIntentArcs)
+                {
+                    RefreshEnemyIntentArcs();
+                }
+                else
+                {
+                    gridOverlays?.ClearEnemyIntentArcs();
+                }
+                hudController?.ClearCombatHoverPreview();
+                RefreshCombatHudState();
+                StopAiCoroutine();
+                _aiCoroutine = StartCoroutine(RunAutoCombatHeroTurnRoutine());
+                return;
+            }
+
+            _activeCombatMode = CombatActionMode.Smart;
 
             if (actor.SpellIds.Count > 0 && !ContainsInt(actor.SpellIds, _selectedSpellId))
             {
@@ -2032,7 +2369,7 @@ namespace Realmz.Game
             }
 
             RefreshCombatStaticOverlays(actor);
-            hudController?.SetCombatTooltip("Tactical Preview", GetIdleModeInstructions(_activeCombatMode));
+            hudController?.ClearCombatHoverPreview();
             RefreshCombatHudState();
         }
 
@@ -2043,10 +2380,33 @@ namespace Realmz.Game
                    CombatSession.CurrentActor != null &&
                    CombatSession.CurrentActor.Side == CombatSide.Monster)
             {
+                CombatantState monster = CombatSession.CurrentActor;
                 float delay = SpeedDelays[_speedIndex];
                 if (delay > 0.001f)
                 {
-                    yield return new WaitForSeconds(delay);
+                    float flashDuration = Mathf.Min(EnemyIntentFlashSeconds, delay);
+                    float leadIn = Mathf.Max(0f, delay - flashDuration);
+                    if (leadIn > 0.001f)
+                    {
+                        yield return new WaitForSeconds(leadIn);
+                    }
+
+                    if (CombatSession == null || CombatSession.Outcome != CombatOutcome.InProgress)
+                    {
+                        break;
+                    }
+
+                    monster = CombatSession.CurrentActor;
+                    if (monster == null || monster.Side != CombatSide.Monster)
+                    {
+                        break;
+                    }
+
+                    if (!_showAllEnemyIntentArcs)
+                    {
+                        ShowSingleEnemyIntentArc(monster);
+                    }
+                    yield return new WaitForSeconds(flashDuration);
                 }
                 else
                 {
@@ -2058,10 +2418,15 @@ namespace Realmz.Game
                     break;
                 }
 
-                CombatantState monster = CombatSession.CurrentActor;
+                monster = CombatSession.CurrentActor;
                 if (monster == null || monster.Side != CombatSide.Monster)
                 {
                     break;
+                }
+
+                if (!_showAllEnemyIntentArcs)
+                {
+                    gridOverlays?.ClearEnemyIntentArcs();
                 }
 
                 if (IsGiantFrog(monster.Id, monster.IconId))
@@ -2091,19 +2456,89 @@ namespace Realmz.Game
                 ApplyMonsterActionJuice(monster, res, oldHps);
                 ShowHpDeltaFloatingText(oldHps);
                 SyncAllCombatUnitViews();
+                RefreshUnitNameplates();
                 gridOverlays?.SetSurfaceCells(OffsetSurfaceCells(CombatSession.GetActiveSurfaceCells()));
-                RefreshEnemyIntentArcs();
+                if (_showAllEnemyIntentArcs)
+                {
+                    RefreshEnemyIntentArcs();
+                }
                 RefreshCombatHudState();
 
                 if (CombatSession.Outcome != CombatOutcome.InProgress)
                 {
                     break;
                 }
+            }
 
-                CombatSession.EndTurn();
+            _aiCoroutine = null;
+            BeginCurrentCombatTurn();
+        }
+
+        private IEnumerator RunAutoCombatHeroTurnRoutine()
+        {
+            while (_autoCombatEnabled &&
+                   CombatSession != null &&
+                   CombatSession.Outcome == CombatOutcome.InProgress &&
+                   CombatSession.CurrentActor != null &&
+                   CombatSession.CurrentActor.Side == CombatSide.Hero)
+            {
+                float delay = SpeedDelays[_speedIndex];
+                if (delay > 0.001f)
+                {
+                    yield return new WaitForSeconds(delay);
+                }
+                else
+                {
+                    yield return null;
+                }
+
+                if (!_autoCombatEnabled || CombatSession == null || CombatSession.Outcome != CombatOutcome.InProgress)
+                {
+                    break;
+                }
+
+                CombatantState hero = CombatSession.CurrentActor;
+                if (hero == null || hero.Side != CombatSide.Hero)
+                {
+                    break;
+                }
+
+                GridCoord oldPos = hero.Position;
+                Dictionary<string, int> oldHps = CaptureCombatantHps();
+
+                CombatActionResult res = CombatSession.ExecutePartyAiTurn();
+
+                if (hero.Position != oldPos && _combatUnitViews.TryGetValue(hero.Id, out BywaterUnitView hView) && hView != null)
+                {
+                    Vector3 targetWorld = GridToWorldAtElevation(LocalToWorld(hero.Position));
+                    if (delay <= 0.001f)
+                    {
+                        hView.SetWorldPosition(targetWorld);
+                    }
+                    else
+                    {
+                        _singleStepWorldScratch[0] = targetWorld;
+                        hView.MoveAlongWorldPath(_singleStepWorldScratch, Mathf.Min(0.12f, delay * 0.5f));
+                    }
+
+                    TileMapData map = ExploreSession.CurrentMap;
+                    GridCoord worldStep = LocalToWorld(hero.Position);
+                    TileRule rule = map.GetTileRule(map.GetTile(worldStep.X, worldStep.Y));
+                    audioDirector?.PlayFootstep(rule.SoundId, map.IsDungeon);
+                    worldRenderer?.UpdateHeroWorldPosition(targetWorld);
+                }
+
+                ApplyHeroAutoActionJuice(hero, res, oldHps);
+                ShowHpDeltaFloatingText(oldHps);
                 SyncAllCombatUnitViews();
-                RefreshEnemyIntentArcs();
+                RefreshUnitNameplates();
+                gridOverlays?.SetSurfaceCells(OffsetSurfaceCells(CombatSession.GetActiveSurfaceCells()));
                 RefreshCombatHudState();
+
+                if (CombatSession.Outcome != CombatOutcome.InProgress)
+                {
+                    break;
+                }
             }
 
             _aiCoroutine = null;
@@ -2163,7 +2598,7 @@ namespace Realmz.Game
             }
 
             CombatantState actor = CombatSession.CurrentActor;
-            if (actor == null || actor.Side != CombatSide.Hero)
+            if (actor == null || actor.Side != CombatSide.Hero || _autoCombatEnabled)
             {
                 return;
             }
@@ -2171,6 +2606,10 @@ namespace Realmz.Game
             GridCoord localCoord = WorldToLocal(worldCoord);
             if (!CombatSession.Grid.InBounds(localCoord))
             {
+                if (!_isHoveringHotbarUi)
+                {
+                    ClearCombatTransientHoverVisuals();
+                }
                 return;
             }
 
@@ -2220,7 +2659,14 @@ namespace Realmz.Game
             }
 
             gridOverlays.SetCombatThreatened(new List<GridCoord>(threatenedWorld));
-            RefreshEnemyIntentArcs();
+            if (_showAllEnemyIntentArcs)
+            {
+                RefreshEnemyIntentArcs();
+            }
+            else
+            {
+                gridOverlays.ClearEnemyIntentArcs();
+            }
         }
 
         private void RefreshEnemyIntentArcs()
@@ -2235,46 +2681,102 @@ namespace Realmz.Game
             for (int i = 0; i < CombatSession.Combatants.Count; i++)
             {
                 CombatantState c = CombatSession.Combatants[i];
-                if (!c.IsAlive || !c.IsConscious || c.Side != CombatSide.Monster)
+                if (TryBuildEnemyIntentArc(c, out EnemyIntentArcData arc))
                 {
-                    continue;
+                    arcs.Add(arc);
                 }
-
-                EnemyIntentPrediction intent = CombatSession.PredictNextIntent(c.Id);
-                if (intent == null ||
-                    intent.ActionKind == CombatIntentActionType.Hold ||
-                    intent.ActionKind == CombatIntentActionType.Guard ||
-                    intent.ActionKind == CombatIntentActionType.Flee)
-                {
-                    continue;
-                }
-
-                GridCoord dest = intent.TargetCoord;
-                if (!string.IsNullOrEmpty(intent.TargetId))
-                {
-                    CombatantState targetUnit = CombatSession.GetCombatant(intent.TargetId);
-                    if (targetUnit != null && targetUnit.IsAlive)
-                    {
-                        dest = targetUnit.Position;
-                    }
-                }
-
-                if (dest == c.Position)
-                {
-                    continue;
-                }
-
-                bool isSpell = intent.ActionKind == CombatIntentActionType.CastSpell ||
-                               intent.ActionKind == CombatIntentActionType.MoveAndCast;
-                arcs.Add(new EnemyIntentArcData
-                {
-                    From = LocalToWorld(c.Position),
-                    To = LocalToWorld(dest),
-                    IsSpell = isSpell
-                });
             }
 
             gridOverlays.ShowEnemyIntentArcs(arcs);
+        }
+
+        private bool TryBuildEnemyIntentArc(CombatantState enemy, out EnemyIntentArcData arc)
+        {
+            arc = default;
+            if (CombatSession == null || enemy == null || !enemy.IsAlive || !enemy.IsConscious || enemy.Side != CombatSide.Monster)
+            {
+                return false;
+            }
+
+            EnemyIntentPrediction intent = CombatSession.PredictNextIntent(enemy.Id);
+            if (intent == null ||
+                intent.ActionKind == CombatIntentActionType.Hold ||
+                intent.ActionKind == CombatIntentActionType.Guard ||
+                intent.ActionKind == CombatIntentActionType.Flee)
+            {
+                return false;
+            }
+
+            GridCoord dest = intent.TargetCoord;
+            if (!string.IsNullOrEmpty(intent.TargetId))
+            {
+                CombatantState targetUnit = CombatSession.GetCombatant(intent.TargetId);
+                if (targetUnit != null && targetUnit.IsAlive)
+                {
+                    dest = targetUnit.Position;
+                }
+            }
+
+            if (dest == enemy.Position)
+            {
+                return false;
+            }
+
+            bool isSpell = intent.ActionKind == CombatIntentActionType.CastSpell ||
+                           intent.ActionKind == CombatIntentActionType.MoveAndCast;
+            arc = new EnemyIntentArcData
+            {
+                From = LocalToWorld(enemy.Position),
+                To = LocalToWorld(dest),
+                IsSpell = isSpell
+            };
+            return true;
+        }
+
+        private void ShowSingleEnemyIntentArc(CombatantState enemy)
+        {
+            if (gridOverlays == null)
+            {
+                return;
+            }
+
+            if (TryBuildEnemyIntentArc(enemy, out EnemyIntentArcData arc))
+            {
+                gridOverlays.ShowEnemyIntentArcs(new[] { arc });
+            }
+            else if (!_showAllEnemyIntentArcs)
+            {
+                gridOverlays.ClearEnemyIntentArcs();
+            }
+        }
+
+        private void ShowAoOThreatArcs(IReadOnlyList<string> threateningEnemyIds, GridCoord aooTileLocal)
+        {
+            if (gridOverlays == null || CombatSession == null || threateningEnemyIds == null || threateningEnemyIds.Count == 0)
+            {
+                return;
+            }
+
+            List<EnemyIntentArcData> arcs = new List<EnemyIntentArcData>(threateningEnemyIds.Count);
+            GridCoord worldDest = LocalToWorld(aooTileLocal);
+            for (int i = 0; i < threateningEnemyIds.Count; i++)
+            {
+                CombatantState enemy = CombatSession.GetCombatant(threateningEnemyIds[i]);
+                if (enemy != null && enemy.IsAlive && enemy.IsConscious && enemy.Position != aooTileLocal)
+                {
+                    arcs.Add(new EnemyIntentArcData
+                    {
+                        From = LocalToWorld(enemy.Position),
+                        To = worldDest,
+                        IsSpell = false
+                    });
+                }
+            }
+
+            if (arcs.Count > 0)
+            {
+                gridOverlays.ShowEnemyIntentArcs(arcs);
+            }
         }
 
         private void UpdateCombatHoverVisuals(GridCoord localCoord)
@@ -2293,27 +2795,110 @@ namespace Realmz.Game
                 return;
             }
 
-            gridOverlays?.SetCombatHoverPath(null, false);
-            gridOverlays?.SetLosPreview(null, default, default);
-            gridOverlays?.SetSpellAoeFootprint(null, null, null, false);
-            gridOverlays?.SetFlankIndicator(null, null);
-            gridOverlays?.ClearShovePreview();
+            if (!_isHoveringHotbarUi)
+            {
+                gridOverlays?.SetCombatHoverPath(null, false);
+                gridOverlays?.SetLosPreview(null, default, default);
+                gridOverlays?.SetSpellAoeFootprint(null, null, null, false);
+                gridOverlays?.SetFlankIndicator(null, null);
+                gridOverlays?.ClearShovePreview();
+                gridOverlays?.SetHoveredAttackTarget(null);
+                if (!_showAllEnemyIntentArcs)
+                {
+                    gridOverlays?.ClearEnemyIntentArcs();
+                }
+            }
 
             CombatantState hoveredUnit = GetLivingUnitAt(localCoord);
+            _hoveredCombatUnitId = hoveredUnit != null ? hoveredUnit.Id : null;
+            RefreshUnitNameplates();
+
+            if (hoveredUnit != null &&
+                hoveredUnit.Side == CombatSide.Monster &&
+                (_activeCombatMode == CombatActionMode.Smart ||
+                 _activeCombatMode == CombatActionMode.Melee ||
+                 _activeCombatMode == CombatActionMode.Ranged ||
+                 _activeCombatMode == CombatActionMode.Shove))
+            {
+                gridOverlays?.SetHoveredAttackTarget(LocalToWorld(hoveredUnit.Position));
+                if (!_showAllEnemyIntentArcs && !_isHoveringHotbarUi)
+                {
+                    ShowSingleEnemyIntentArc(hoveredUnit);
+                }
+            }
 
             switch (_activeCombatMode)
             {
-                case CombatActionMode.Move:
+                case CombatActionMode.Smart:
                 {
                     if (hoveredUnit != null && hoveredUnit.Side == CombatSide.Monster)
                     {
+                        bool hasStd = actor.Economy.HasStandardAction;
+                        bool isAdjacent = actor.Position.ChebyshevDistance(hoveredUnit.Position) <= 1;
+                        bool hasRanged = actor.RangedRange > 1 && !string.IsNullOrWhiteSpace(actor.RangedDice);
                         TacticalAttackPreview meleePreview = CombatSession.PreviewMeleeAttack(actor.Id, hoveredUnit.Id);
-                        if (meleePreview.CanExecute)
+                        TacticalAttackPreview rangedPreview = hasRanged ? CombatSession.PreviewRangedAttack(actor.Id, hoveredUnit.Id) : null;
+                        ReachableTileInfo approachTile = null;
+                        TacticalAttackPreview approachMelee = null;
+                        bool canApproachMelee = hasStd &&
+                                                actor.Economy.MoveRemaining > 0 &&
+                                                FindBestSmartApproachTile(actor, hoveredUnit, out approachTile, out approachMelee);
+
+                        if (isAdjacent && hasStd)
                         {
-                            ShowAttackTooltip($"Quick Melee: {hoveredUnit.Name}", meleePreview, isRanged: false);
+                            ShowAttackTooltip($"Sword: Melee vs {hoveredUnit.Name}", meleePreview, isRanged: false);
                             UpdateFlankOverlay(actor, hoveredUnit, meleePreview.IsFlanking);
-                            break;
                         }
+                        else if (hasRanged && rangedPreview != null && rangedPreview.CanExecute && (!canApproachMelee || actor.PrefersRanged))
+                        {
+                            ShowAttackTooltip($"Bow: Ranged vs {hoveredUnit.Name}", rangedPreview, isRanged: true);
+                            if (rangedPreview.LosResult != null)
+                            {
+                                gridOverlays?.SetLosPreview(
+                                    OffsetLosResult(rangedPreview.LosResult),
+                                    LocalToWorld(actor.Position),
+                                    LocalToWorld(hoveredUnit.Position));
+                            }
+                        }
+                        else if (canApproachMelee && approachTile != null && approachMelee != null)
+                        {
+                            List<GridCoord> worldPath = new List<GridCoord>(approachTile.Path.Count);
+                            for (int i = 0; i < approachTile.Path.Count; i++)
+                            {
+                                worldPath.Add(LocalToWorld(approachTile.Path[i]));
+                            }
+                            gridOverlays?.SetCombatHoverPath(worldPath, approachTile.ProvokesAoO);
+                            ShowAttackTooltip(
+                                $"Approach & Melee: {hoveredUnit.Name}",
+                                approachMelee,
+                                isRanged: false,
+                                prefixLine: $"Move Cost {approachTile.PathCost} + Melee\n");
+                            UpdateFlankOverlayFrom(approachTile.Coord, actor, hoveredUnit, approachMelee.IsFlanking);
+                        }
+                        else if (hasRanged && rangedPreview != null)
+                        {
+                            ShowAttackTooltip($"Bow: Ranged vs {hoveredUnit.Name}", rangedPreview, isRanged: true);
+                            if (rangedPreview.LosResult != null)
+                            {
+                                gridOverlays?.SetLosPreview(
+                                    OffsetLosResult(rangedPreview.LosResult),
+                                    LocalToWorld(actor.Position),
+                                    LocalToWorld(hoveredUnit.Position));
+                            }
+                        }
+                        else
+                        {
+                            ShowAttackTooltip($"Sword: Melee vs {hoveredUnit.Name}", meleePreview, isRanged: false);
+                        }
+                        break;
+                    }
+
+                    if (hoveredUnit != null && hoveredUnit.Side == CombatSide.Hero)
+                    {
+                        hudController?.SetCombatHoverPreview(
+                            $"{hoveredUnit.Name} (Ally)",
+                            $"HP {hoveredUnit.Hp}/{hoveredUnit.MaxHp} | SP {hoveredUnit.Sp}/{hoveredUnit.MaxSp} | AC {hoveredUnit.EffectiveAc}");
+                        break;
                     }
 
                     IReadOnlyList<ReachableTileInfo> reach = CombatSession.GetReachableTiles(actor.Id);
@@ -2336,16 +2921,21 @@ namespace Realmz.Game
                         }
 
                         gridOverlays?.SetCombatHoverPath(worldPath, match.ProvokesAoO);
+                        if (match.ProvokesAoO && !_showAllEnemyIntentArcs && !_isHoveringHotbarUi)
+                        {
+                            ShowAoOThreatArcs(match.ThreateningEnemyIds, localCoord);
+                        }
+
                         string aooNote = match.ProvokesAoO
                             ? "WARNING: Path provokes Attack of Opportunity (AoO)!"
                             : "Safe path (no AoO provoked).";
-                        hudController?.SetCombatTooltip(
+                        hudController?.SetCombatHoverPreview(
                             $"Move to ({localCoord.X}, {localCoord.Y})",
                             $"Move Cost: {match.PathCost} / {actor.Economy.MoveRemaining} remaining\n{aooNote}\n\nClick to step.");
                     }
-                    else
+                    else if (!_isHoveringHotbarUi)
                     {
-                        hudController?.SetCombatTooltip("Move Mode", GetIdleModeInstructions(CombatActionMode.Move));
+                        hudController?.ClearCombatHoverPreview();
                     }
                     break;
                 }
@@ -2358,7 +2948,7 @@ namespace Realmz.Game
                         ShowAttackTooltip($"Melee vs {hoveredUnit.Name}", preview, isRanged: false);
                         UpdateFlankOverlay(actor, hoveredUnit, preview.IsFlanking);
                     }
-                    else
+                    else if (!_isHoveringHotbarUi)
                     {
                         hudController?.SetCombatTooltip("Melee Mode", GetIdleModeInstructions(CombatActionMode.Melee));
                     }
@@ -2379,7 +2969,7 @@ namespace Realmz.Game
                                 LocalToWorld(hoveredUnit.Position));
                         }
                     }
-                    else
+                    else if (!_isHoveringHotbarUi)
                     {
                         hudController?.SetCombatTooltip("Ranged Mode", GetIdleModeInstructions(CombatActionMode.Ranged));
                     }
@@ -2390,7 +2980,10 @@ namespace Realmz.Game
                 {
                     if (_selectedSpellId < 0 || !Bundle.Spells.TryGetValue(_selectedSpellId, out SpellDefinition spell))
                     {
-                        hudController?.SetCombatTooltip("Spell Mode", "Select a spell from the picker bar above the action bar.");
+                        if (!_isHoveringHotbarUi)
+                        {
+                            hudController?.SetCombatTooltip("Spell Mode", "Select a spell from the hotbar.");
+                        }
                         break;
                     }
 
@@ -2440,7 +3033,7 @@ namespace Realmz.Game
                             $"Swift Potion: {potionDef.Name}",
                             $"Heal Dice: {potionDef.HealDice}\nCost: 1 Swift Action\n\n{targetText}");
                     }
-                    else
+                    else if (!_isHoveringHotbarUi)
                     {
                         hudController?.SetCombatTooltip("Swift Potion", "No healing potions left in party stash.");
                     }
@@ -2481,7 +3074,7 @@ namespace Realmz.Game
                             $"{chanceLine}{hazardLine}{surfaceLine}\n\n{statusLine}",
                             badge);
                     }
-                    else
+                    else if (!_isHoveringHotbarUi)
                     {
                         hudController?.SetCombatHoverPreview(
                             "Shove [V] Mode",
@@ -2500,12 +3093,12 @@ namespace Realmz.Game
 
             switch (_activeCombatMode)
             {
-                case CombatActionMode.Move:
+                case CombatActionMode.Smart:
                 {
                     if (clickedUnit != null && clickedUnit.Side == CombatSide.Monster)
                     {
-                        TacticalAttackPreview melee = CombatSession.PreviewMeleeAttack(actor.Id, clickedUnit.Id);
-                        if (melee.CanExecute)
+                        bool isAdjacent = actor.Position.ChebyshevDistance(clickedUnit.Position) <= 1;
+                        if (isAdjacent)
                         {
                             CombatActionResult atkRes = CombatSession.ExecuteMeleeAttack(clickedUnit.Id);
                             if (atkRes.Success)
@@ -2519,49 +3112,101 @@ namespace Realmz.Game
                             }
                             return;
                         }
+
+                        bool hasRanged = actor.RangedRange > 1 && !string.IsNullOrWhiteSpace(actor.RangedDice);
+                        TacticalAttackPreview rangedPreview = hasRanged
+                            ? CombatSession.PreviewRangedAttack(actor.Id, clickedUnit.Id)
+                            : null;
+                        ReachableTileInfo bestTile = null;
+                        bool canApproachMelee = actor.Economy.HasStandardAction &&
+                                                actor.Economy.MoveRemaining > 0 &&
+                                                FindBestSmartApproachTile(actor, clickedUnit, out bestTile, out _);
+
+                        if (hasRanged && rangedPreview != null && rangedPreview.CanExecute && (!canApproachMelee || actor.PrefersRanged))
+                        {
+                            CombatActionResult rangedRes = CombatSession.ExecuteRangedAttack(clickedUnit.Id);
+                            if (rangedRes.Success)
+                            {
+                                PlayAttackMicroJuice(actor, clickedUnit, rangedRes, isRanged: true, oldHps, out string critId);
+                                FinishPlayerCombatAction(rangedRes, oldHps, critId);
+                            }
+                            else
+                            {
+                                hudController?.ShowToast(rangedRes.Message, 2.0f);
+                            }
+                            return;
+                        }
+
+                        if (canApproachMelee && bestTile != null)
+                        {
+                            CombatActionResult stepRes = ExecuteCombatMoveStep(actor, bestTile.Coord);
+                            if (!stepRes.Success)
+                            {
+                                hudController?.ShowToast(stepRes.Message, 1.8f);
+                                return;
+                            }
+
+                            if (CombatSession.Outcome != CombatOutcome.InProgress)
+                            {
+                                HandleCombatOutcome();
+                                return;
+                            }
+
+                            if (actor.IsConscious &&
+                                actor.Position.ChebyshevDistance(clickedUnit.Position) <= 1 &&
+                                actor.Economy.HasStandardAction &&
+                                clickedUnit.IsAlive)
+                            {
+                                Dictionary<string, int> postMoveHps = CaptureCombatantHps();
+                                CombatActionResult atkRes = CombatSession.ExecuteMeleeAttack(clickedUnit.Id);
+                                if (atkRes.Success)
+                                {
+                                    PlayAttackMicroJuice(actor, clickedUnit, atkRes, isRanged: false, postMoveHps, out string critId);
+                                    FinishPlayerCombatAction(atkRes, postMoveHps, critId);
+                                    return;
+                                }
+                                else
+                                {
+                                    hudController?.ShowToast(atkRes.Message, 2.0f);
+                                }
+                            }
+
+                            TryAutoEndTurnIfExhausted(actor);
+                            return;
+                        }
+
+                        if (hasRanged && rangedPreview != null)
+                        {
+                            hudController?.ShowToast(!string.IsNullOrEmpty(rangedPreview.Reason) ? rangedPreview.Reason : "Target out of range.", 1.8f);
+                        }
+                        else
+                        {
+                            TacticalAttackPreview melee = CombatSession.PreviewMeleeAttack(actor.Id, clickedUnit.Id);
+                            hudController?.ShowToast(!string.IsNullOrEmpty(melee.Reason) ? melee.Reason : "Target out of reach.", 1.8f);
+                        }
+                        return;
                     }
 
-                    GridCoord oldPos = actor.Position;
-                    CombatActionResult moveRes = CombatSession.TryMoveTo(localCoord);
-                    if (moveRes.Success)
+                    if (clickedUnit != null && clickedUnit.Side == CombatSide.Hero)
                     {
-                        Vector3 destWorld = GridToWorldAtElevation(LocalToWorld(actor.Position));
-                        if (actor.Position != oldPos && _combatUnitViews.TryGetValue(actor.Id, out BywaterUnitView view) && view != null)
-                        {
-                            _singleStepWorldScratch[0] = destWorld;
-                            view.MoveAlongWorldPath(_singleStepWorldScratch, 0.09f);
-                        }
+                        hudController?.SetCombatHoverPreview(
+                            $"{clickedUnit.Name} (Ally)",
+                            $"HP {clickedUnit.Hp}/{clickedUnit.MaxHp} | SP {clickedUnit.Sp}/{clickedUnit.MaxSp} | AC {clickedUnit.EffectiveAc}");
+                        return;
+                    }
 
-                        TileMapData map = ExploreSession.CurrentMap;
-                        GridCoord worldStep = LocalToWorld(actor.Position);
-                        TileRule rule = map.GetTileRule(map.GetTile(worldStep.X, worldStep.Y));
-                        audioDirector?.PlayFootstep(rule.SoundId, map.IsDungeon);
-                        worldRenderer?.UpdateHeroWorldPosition(destWorld);
-
-                        if (moveRes.AoOTriggered && _combatUnitViews.TryGetValue(actor.Id, out BywaterUnitView hitView) && hitView != null)
-                        {
-                            hitView.PlayHitFlash(0.055f);
-                            hitView.ShowArcingFloatingText($"AoO -{moveRes.DamageDealt}!", BywaterUiHelpers.DangerRed, isCrit: false);
-                            cameraRig?.PlayImpactImpulse(0.12f, 0.14f);
-                        }
-
-                        if (actor.IsProne && _combatUnitViews.TryGetValue(actor.Id, out BywaterUnitView proneView) && proneView != null)
-                        {
-                            proneView.ShowArcingFloatingText("PRONE", BywaterUiHelpers.BrassHighlight, isCrit: false);
-                        }
-
-                        RefreshCombatStaticOverlays(actor);
-                        _combatHoverDirty = true;
-                        SyncAllCombatUnitViews();
-                        RefreshCombatHudState();
-                        if (CombatSession.Outcome != CombatOutcome.InProgress)
-                        {
-                            HandleCombatOutcome();
-                        }
+                    CombatActionResult moveRes = ExecuteCombatMoveStep(actor, localCoord);
+                    if (!moveRes.Success)
+                    {
+                        hudController?.ShowToast(moveRes.Message, 1.8f);
+                    }
+                    else if (CombatSession.Outcome != CombatOutcome.InProgress)
+                    {
+                        HandleCombatOutcome();
                     }
                     else
                     {
-                        hudController?.ShowToast(moveRes.Message, 1.8f);
+                        TryAutoEndTurnIfExhausted(actor);
                     }
                     break;
                 }
@@ -2819,15 +3464,27 @@ namespace Realmz.Game
             if (actor != null)
             {
                 if (!actor.Economy.HasStandardAction &&
-                    _activeCombatMode != CombatActionMode.Shove &&
-                    _activeCombatMode != CombatActionMode.Potion &&
-                    actor.Economy.MoveRemaining > 0)
+                    (_activeCombatMode == CombatActionMode.Melee ||
+                     _activeCombatMode == CombatActionMode.Ranged ||
+                     _activeCombatMode == CombatActionMode.Spell))
                 {
-                    _activeCombatMode = CombatActionMode.Move;
+                    _activeCombatMode = CombatActionMode.Smart;
                 }
-                else if (_activeCombatMode == CombatActionMode.Shove && !actor.Economy.HasSwiftAction)
+                else if ((_activeCombatMode == CombatActionMode.Shove || _activeCombatMode == CombatActionMode.Potion) &&
+                         !actor.Economy.HasSwiftAction)
                 {
-                    _activeCombatMode = actor.Economy.MoveRemaining > 0 ? CombatActionMode.Move : CombatActionMode.Melee;
+                    _activeCombatMode = CombatActionMode.Smart;
+                }
+
+                if (_autoEndTurn &&
+                    !_autoCombatEnabled &&
+                    CombatSession.Outcome == CombatOutcome.InProgress &&
+                    !actor.Economy.HasStandardAction &&
+                    !actor.Economy.HasSwiftAction &&
+                    actor.Economy.MoveRemaining == 0)
+                {
+                    HandleEndTurn();
+                    return;
                 }
 
                 RefreshCombatStaticOverlays(actor);
@@ -2854,7 +3511,14 @@ namespace Realmz.Game
 
             RefreshCombatStaticOverlays(actor);
             _combatHoverDirty = true;
-            hudController?.SetCombatTooltip(mode.ToString() + " Mode", GetIdleModeInstructions(mode));
+            if (mode == CombatActionMode.Smart)
+            {
+                hudController?.ClearCombatHoverPreview();
+            }
+            else
+            {
+                hudController?.SetCombatTooltip(mode.ToString() + " Mode", GetIdleModeInstructions(mode));
+            }
             RefreshCombatHudState();
         }
 
@@ -2894,15 +3558,20 @@ namespace Realmz.Game
 
         private void HandleGuard()
         {
-            if (!_isInCombat || CombatSession == null)
+            if (!_isInCombat || CombatSession == null || CombatSession.Outcome != CombatOutcome.InProgress)
+            {
+                return;
+            }
+
+            CombatantState actor = CombatSession.CurrentActor;
+            if (actor == null || actor.Side != CombatSide.Hero || _autoCombatEnabled)
             {
                 return;
             }
 
             audioDirector?.PlayUiClick();
-            CombatantState actor = CombatSession.CurrentActor;
             CombatActionResult res = CombatSession.GuardOverwatch();
-            if (res.Success && actor != null)
+            if (res.Success)
             {
                 if (_combatUnitViews.TryGetValue(actor.Id, out BywaterUnitView view) && view != null)
                 {
@@ -2910,7 +3579,18 @@ namespace Realmz.Game
                 }
 
                 SyncAllCombatUnitViews();
-                RefreshCombatHudState();
+                if (_activeCombatMode == CombatActionMode.Melee ||
+                    _activeCombatMode == CombatActionMode.Ranged ||
+                    _activeCombatMode == CombatActionMode.Spell)
+                {
+                    _activeCombatMode = CombatActionMode.Smart;
+                }
+
+                if (!TryAutoEndTurnIfExhausted(actor))
+                {
+                    RefreshCombatStaticOverlays(actor);
+                    RefreshCombatHudState();
+                }
             }
             else
             {
@@ -2941,6 +3621,7 @@ namespace Realmz.Game
             audioDirector?.PlayUiClick();
             _speedIndex = (_speedIndex + 1) % SpeedDelays.Length;
             RefreshCombatHudState();
+            SyncHudSettings();
         }
 
         private void HandleCombatOutcome()
@@ -3025,6 +3706,9 @@ namespace Realmz.Game
             ClearCombatUnitViews();
             CombatSession = null;
             _activeEncounterZoneKey = string.Empty;
+            _hoveredCombatUnitId = null;
+            _isHoveringHotbarUi = false;
+            _hasPreCombatExplorePos = false;
             EnterExplorationView(immediateCamera: true);
         }
 
@@ -3074,7 +3758,7 @@ namespace Realmz.Game
             hudController?.ShowToast("Revived at Bywater Shrine with full health and spell points.", 3.0f);
         }
 
-        private void ShowAttackTooltip(string title, TacticalAttackPreview preview, bool isRanged)
+        private void ShowAttackTooltip(string title, TacticalAttackPreview preview, bool isRanged, string prefixLine = null)
         {
             string tags = preview.ConditionTags.Count > 0 ? string.Join(", ", preview.ConditionTags) : "None";
             string losLine = isRanged && preview.LosResult != null
@@ -3096,6 +3780,7 @@ namespace Realmz.Game
 
             hudController?.SetCombatHoverPreview(
                 title,
+                (prefixLine ?? string.Empty) +
                 $"Hit%: {preview.HitChancePct}% (Uncapped {preview.UncappedHitScore}%)\n" +
                 $"Dmg: {preview.MinDamage} - {preview.MaxDamage}   |   Defender AC: {preview.DefenderAc}\n" +
                 $"Crit%: {preview.CritChancePct}%   |   Graze%: {preview.GrazeChancePct}%\n" +
@@ -3131,14 +3816,19 @@ namespace Realmz.Game
 
         private void UpdateFlankOverlay(CombatantState actor, CombatantState target, bool isFlanking)
         {
-            if (gridOverlays == null || !isFlanking)
+            UpdateFlankOverlayFrom(actor.Position, actor, target, isFlanking);
+        }
+
+        private void UpdateFlankOverlayFrom(GridCoord attackerPos, CombatantState actor, CombatantState target, bool isFlanking)
+        {
+            if (gridOverlays == null || !isFlanking || CombatSession == null || actor == null || target == null)
             {
                 return;
             }
 
             List<GridCoord> flankingAllies = new List<GridCoord>();
-            int attDx = actor.Position.X - target.Position.X;
-            int attDy = actor.Position.Y - target.Position.Y;
+            int attDx = attackerPos.X - target.Position.X;
+            int attDy = attackerPos.Y - target.Position.Y;
 
             for (int i = 0; i < CombatSession.Combatants.Count; i++)
             {
@@ -3694,14 +4384,14 @@ namespace Realmz.Game
         {
             switch (mode)
             {
-                case CombatActionMode.Move:
-                    return "Hover highlighted tiles to preview movement & AoO risk. Click to step (or click an adjacent enemy to quick-melee).";
+                case CombatActionMode.Smart:
+                    return "Hover highlighted tiles to step, or hover/click enemies to Melee, Ranged, or Approach & Melee.";
                 case CombatActionMode.Melee:
                     return "Hover an adjacent enemy to inspect Hit%, Crit%, Graze%, Damage, High Ground, and Flanking bonus. Click to strike.";
                 case CombatActionMode.Ranged:
                     return "Hover a distant enemy to inspect Line-of-Sight ray, Cover penalty, High Ground, and Hit%. Click to shoot.";
                 case CombatActionMode.Spell:
-                    return "Pick a spell above the action bar, hover the arena to preview AoE footprint & Save%, then click to cast.";
+                    return "Pick a spell from the hotbar, hover the arena to preview AoE footprint & Save%, then click to cast.";
                 case CombatActionMode.Potion:
                     return "Click any ally (or yourself) to drink a Swift healing potion.";
                 case CombatActionMode.Shove:
@@ -3709,6 +4399,931 @@ namespace Realmz.Game
                 default:
                     return string.Empty;
             }
+        }
+
+        private void ApplyAudioSettings()
+        {
+            if (audioDirector == null)
+            {
+                return;
+            }
+
+            float master = _isMuted ? 0f : Mathf.Clamp01(_masterVolume);
+            audioDirector.MusicVolume = Mathf.Clamp01(master * _musicVolume);
+            audioDirector.SfxVolume = Mathf.Clamp01(master * _sfxVolume);
+        }
+
+        private void SyncHudSettings()
+        {
+            hudController?.SyncSettingsState(
+                _autoCombatEnabled,
+                _autoEndTurn,
+                _speedIndex,
+                _masterVolume,
+                _musicVolume,
+                _sfxVolume,
+                _isMuted,
+                _gridOpacity,
+                _nameplatesAlwaysOn,
+                _devToolsVisible);
+        }
+
+        private void SetAutoCombatEnabled(bool enabled)
+        {
+            _autoCombatEnabled = enabled;
+            hudController?.SetAutoCombatVisual(enabled);
+            SyncHudSettings();
+
+            if (!_isInCombat || CombatSession == null || CombatSession.Outcome != CombatOutcome.InProgress)
+            {
+                return;
+            }
+
+            CombatantState actor = CombatSession.CurrentActor;
+            if (actor == null || actor.Side != CombatSide.Hero)
+            {
+                return;
+            }
+
+            if (enabled)
+            {
+                if (_aiCoroutine == null)
+                {
+                    gridOverlays?.ClearAll();
+                    gridOverlays?.SetSurfaceCells(OffsetSurfaceCells(CombatSession.GetActiveSurfaceCells()));
+                    if (_showAllEnemyIntentArcs)
+                    {
+                        RefreshEnemyIntentArcs();
+                    }
+                    hudController?.ClearCombatHoverPreview();
+                    RefreshCombatHudState();
+                    _aiCoroutine = StartCoroutine(RunAutoCombatHeroTurnRoutine());
+                }
+                hudController?.ShowToast("Auto-Combat ON ([A] or [Esc] to stop).", 1.8f);
+            }
+            else
+            {
+                StopAiCoroutine();
+                RefreshCombatStaticOverlays(actor);
+                _combatHoverDirty = true;
+                RefreshCombatHudState();
+                hudController?.ShowToast("Auto-Combat OFF.", 1.6f);
+            }
+        }
+
+        private void HandleCombatGridToggle()
+        {
+            audioDirector?.PlayUiClick();
+            if (_gridOpacity > 0.75f)
+            {
+                _gridOpacity = 0.5f;
+            }
+            else if (_gridOpacity > 0.25f)
+            {
+                _gridOpacity = 0.0f;
+            }
+            else
+            {
+                _gridOpacity = 1.0f;
+            }
+
+            gridOverlays?.SetGridOpacity(_gridOpacity);
+            SyncHudSettings();
+            hudController?.ShowToast($"Tactical Grid: {Mathf.RoundToInt(_gridOpacity * 100f)}%", 1.4f);
+        }
+
+        private void HandleFleeCombat()
+        {
+            if (!_isInCombat)
+            {
+                return;
+            }
+
+            audioDirector?.PlayUiClick();
+            GridCoord returnPos = _preCombatExplorePos;
+            bool hasReturnPos = _hasPreCombatExplorePos;
+            ExitCombatToExploration(syncPartyFromCombat: true);
+
+            if (hasReturnPos &&
+                ExploreSession != null &&
+                ExploreSession.CurrentMap != null &&
+                ExploreSession.CurrentMap.InBounds(returnPos) &&
+                ExploreSession.CurrentMap.IsPassable(returnPos.X, returnPos.Y, ExploreSession.Party.HasBoat) &&
+                ExploreSession.Position != returnPos)
+            {
+                ExploreSession.MoveAlongPath(returnPos, autoHaltOnEvents: false);
+                ResetPartyTrailHistory(ExploreSession.Position, ExploreSession.CurrentMap, ExploreSession.Facing);
+                EnterExplorationView(immediateCamera: true);
+            }
+
+            hudController?.ShowToast("Retreated from tactical combat.", 2.2f);
+        }
+
+        private void HandleCombatRightClickCancel(Mouse mouse, Vector2 mousePos)
+        {
+            if (mouse.rightButton.wasPressedThisFrame)
+            {
+                _rightMouseDownPendingClick = true;
+                _rightMouseDownPos = mousePos;
+            }
+
+            if (_rightMouseDownPendingClick && mouse.rightButton.isPressed)
+            {
+                if ((mousePos - _rightMouseDownPos).sqrMagnitude >= RightClickMaxDragPixelsSq)
+                {
+                    _rightMouseDownPendingClick = false;
+                }
+            }
+
+            if (mouse.rightButton.wasReleasedThisFrame)
+            {
+                bool wasShortClick = _rightMouseDownPendingClick &&
+                                     (mousePos - _rightMouseDownPos).sqrMagnitude < RightClickMaxDragPixelsSq;
+                _rightMouseDownPendingClick = false;
+
+                if (wasShortClick &&
+                    _isInCombat &&
+                    _activeCombatMode != CombatActionMode.Smart &&
+                    CombatSession != null &&
+                    CombatSession.Outcome == CombatOutcome.InProgress)
+                {
+                    HandleCombatModeSelected(CombatActionMode.Smart);
+                }
+            }
+        }
+
+        private void ClearCombatTransientHoverVisuals()
+        {
+            if (gridOverlays != null)
+            {
+                gridOverlays.SetCombatHoverPath(null, false);
+                gridOverlays.SetLosPreview(null, default, default);
+                gridOverlays.SetSpellAoeFootprint(null, null, null, false);
+                gridOverlays.SetFlankIndicator(null, null);
+                gridOverlays.ClearShovePreview();
+                gridOverlays.SetHoveredAttackTarget(null);
+                if (!_showAllEnemyIntentArcs)
+                {
+                    gridOverlays.ClearEnemyIntentArcs();
+                }
+            }
+
+            if (!string.IsNullOrEmpty(_hoveredCombatUnitId))
+            {
+                _hoveredCombatUnitId = null;
+                RefreshUnitNameplates();
+            }
+
+            _lastCombatHover = new GridCoord(-1, -1);
+            _combatHoverDirty = true;
+            hudController?.ClearCombatHoverPreview();
+        }
+
+        private void RefreshContextualExplorePoi()
+        {
+            if (ExploreSession == null || ExploreSession.CurrentMap == null)
+            {
+                _lastContextPoiLabel = string.Empty;
+                hudController?.SetContextualExplorePoi(null, null);
+                return;
+            }
+
+            FindContextualExplorePoi(out string label, out Action action);
+            _lastContextPoiLabel = label ?? string.Empty;
+            hudController?.SetContextualExplorePoi(string.IsNullOrEmpty(label) ? null : label, action);
+        }
+
+        private void HandleContextPoiRequested()
+        {
+            FindContextualExplorePoi(out _, out Action action);
+            action?.Invoke();
+        }
+
+        private void FindContextualExplorePoi(out string label, out Action action)
+        {
+            label = string.Empty;
+            action = null;
+            if (ExploreSession == null || ExploreSession.CurrentMap == null)
+            {
+                return;
+            }
+
+            TileMapData map = ExploreSession.CurrentMap;
+            GridCoord pos = ExploreSession.Position;
+
+            for (int maxDist = 0; maxDist <= 1; maxDist++)
+            {
+                for (int i = 0; i < map.Portals.Count; i++)
+                {
+                    MapPortal portal = map.Portals[i];
+                    if (portal.Coord.ChebyshevDistance(pos) == maxDist)
+                    {
+                        MapPortal capturedPortal = portal;
+                        label = map.IsDungeon ? "Exit Cavern" : "Enter Cavern";
+                        action = () => TriggerContextualPortal(capturedPortal);
+                        return;
+                    }
+                }
+
+                for (int i = 0; i < map.PointsOfInterest.Count; i++)
+                {
+                    MapPointOfInterest poi = map.PointsOfInterest[i];
+                    if (poi.Coord.ChebyshevDistance(pos) != maxDist)
+                    {
+                        continue;
+                    }
+
+                    string kind = (poi.Kind ?? string.Empty).Trim().ToLowerInvariant();
+                    MapPointOfInterest capturedPoi = poi;
+                    if (kind == "shop")
+                    {
+                        label = "Enter Shop";
+                        action = () =>
+                        {
+                            audioDirector?.PlayUiClick();
+                            HandlePoiArrival(capturedPoi);
+                        };
+                        return;
+                    }
+                    if (kind == "temple")
+                    {
+                        label = "Visit Shrine";
+                        action = () =>
+                        {
+                            audioDirector?.PlayUiClick();
+                            HandlePoiArrival(capturedPoi);
+                        };
+                        return;
+                    }
+                    if (kind == "tavern")
+                    {
+                        label = "Rest at Tavern";
+                        action = () =>
+                        {
+                            audioDirector?.PlayUiClick();
+                            HandlePoiArrival(capturedPoi);
+                        };
+                        return;
+                    }
+                }
+            }
+        }
+
+        private void TriggerContextualPortal(MapPortal portal)
+        {
+            if (_isInCombat || ExploreSession == null || portal == null)
+            {
+                return;
+            }
+
+            audioDirector?.PlayUiClick();
+            if (_isCampActive)
+            {
+                ExitCampMode();
+            }
+            StopExploreWalkCoroutine();
+
+            if (ExploreSession.Position != portal.Coord)
+            {
+                ExploreSession.MoveAlongPath(portal.Coord, autoHaltOnEvents: false);
+            }
+
+            if (ExploreSession.UsePortalAtCurrentTile())
+            {
+                ResetPartyTrailHistory(ExploreSession.Position, ExploreSession.CurrentMap, ExploreSession.Facing);
+                EnterExplorationView(immediateCamera: true);
+                string destName = ExploreSession.CurrentMap.IsDungeon ? "Bywater Cavern" : "City of Bywater";
+                hudController?.ShowToast($"Entered {destName} ({ExploreSession.Position.X}, {ExploreSession.Position.Y})", 2.8f);
+            }
+        }
+
+        private GridCoord FindCleanArenaOrigin(TileMapData map, GridCoord partyPos, int width, int height)
+        {
+            int maxOx = Math.Max(0, map.Width - width);
+            int maxOy = Math.Max(0, map.Height - height);
+            int baseOx = Mathf.Clamp(partyPos.X - width / 2, 0, maxOx);
+            int baseOy = Mathf.Clamp(partyPos.Y - height / 2, 0, maxOy);
+            bool hasBoat = ExploreSession != null && ExploreSession.Party.HasBoat;
+
+            int bestScore = int.MaxValue;
+            GridCoord bestOrigin = new GridCoord(baseOx, baseOy);
+
+            for (int dy = -3; dy <= 3; dy++)
+            {
+                for (int dx = -3; dx <= 3; dx++)
+                {
+                    int ox = Mathf.Clamp(baseOx + dx, 0, maxOx);
+                    int oy = Mathf.Clamp(baseOy + dy, 0, maxOy);
+
+                    bool partyInsideSafeMargin =
+                        partyPos.X >= ox + 1 &&
+                        partyPos.X <= ox + width - 2 &&
+                        partyPos.Y >= oy + 1 &&
+                        partyPos.Y <= oy + height - 2;
+
+                    if (!partyInsideSafeMargin)
+                    {
+                        bool partyOnWalkableEdge =
+                            map.InBounds(partyPos) &&
+                            map.IsPassable(partyPos.X, partyPos.Y, hasBoat) &&
+                            partyPos.X >= ox && partyPos.X < ox + width &&
+                            partyPos.Y >= oy && partyPos.Y < oy + height;
+                        if (!partyOnWalkableEdge)
+                        {
+                            continue;
+                        }
+                    }
+
+                    int score = partyInsideSafeMargin ? 0 : 250;
+                    for (int ly = 2; ly <= height - 3; ly++)
+                    {
+                        for (int lx = 2; lx <= width - 3; lx++)
+                        {
+                            int wx = ox + lx;
+                            int wy = oy + ly;
+                            if (!map.InBounds(wx, wy))
+                            {
+                                score += 120;
+                                continue;
+                            }
+
+                            BywaterTileKind kind = BywaterTileClassifier.Classify(map, wx, wy);
+                            if (kind == BywaterTileKind.TownBuildingSolid ||
+                                kind == BywaterTileKind.WallBlock ||
+                                kind == BywaterTileKind.DungeonWall)
+                            {
+                                score += 100;
+                            }
+                            else if (kind == BywaterTileKind.TownBuildingDoor ||
+                                     kind == BywaterTileKind.DungeonDoor ||
+                                     !map.IsPassable(wx, wy, hasBoat))
+                            {
+                                score += 45;
+                            }
+                        }
+                    }
+
+                    score += Math.Abs(ox - baseOx) + Math.Abs(oy - baseOy);
+                    if (score < bestScore)
+                    {
+                        bestScore = score;
+                        bestOrigin = new GridCoord(ox, oy);
+                    }
+                }
+            }
+
+            return bestOrigin;
+        }
+
+        private bool FindBestSmartApproachTile(
+            CombatantState actor,
+            CombatantState target,
+            out ReachableTileInfo bestTile,
+            out TacticalAttackPreview projectedMelee)
+        {
+            bestTile = null;
+            projectedMelee = null;
+            if (CombatSession == null || actor == null || target == null)
+            {
+                return false;
+            }
+
+            IReadOnlyList<ReachableTileInfo> reach = CombatSession.GetReachableTiles(actor.Id);
+            int bestScore = int.MinValue;
+
+            for (int i = 0; i < reach.Count; i++)
+            {
+                ReachableTileInfo candidate = reach[i];
+                if (candidate.Coord == actor.Position || candidate.Coord.ChebyshevDistance(target.Position) != 1)
+                {
+                    continue;
+                }
+
+                TacticalAttackPreview preview = CombatSession.PreviewMeleeAttack(actor.Id, target.Id, candidate.Coord);
+                if (!preview.CanExecute)
+                {
+                    continue;
+                }
+
+                int score = 0;
+                if (!candidate.ProvokesAoO)
+                {
+                    score += 100;
+                }
+
+                SurfaceType surf = CombatSession.Grid.GetSurface(candidate.Coord);
+                bool hazardous = surf == SurfaceType.Fire ||
+                                 surf == SurfaceType.ElectrifiedWater ||
+                                 surf == SurfaceType.Poison;
+                if (hazardous && target.Hp > preview.MaxDamage)
+                {
+                    score -= 200;
+                }
+
+                if (preview.IsFlanking)
+                {
+                    score += 50;
+                }
+
+                if (preview.ElevationModifierPct > 0)
+                {
+                    score += 25;
+                }
+
+                score -= candidate.PathCost * 2;
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestTile = candidate;
+                    projectedMelee = preview;
+                }
+            }
+
+            return bestTile != null;
+        }
+
+        private CombatActionResult ExecuteCombatMoveStep(CombatantState actor, GridCoord targetLocalCoord)
+        {
+            GridCoord oldPos = actor.Position;
+            CombatActionResult moveRes = CombatSession.TryMoveTo(targetLocalCoord);
+            if (!moveRes.Success)
+            {
+                return moveRes;
+            }
+
+            Vector3 destWorld = GridToWorldAtElevation(LocalToWorld(actor.Position));
+            if (actor.Position != oldPos && _combatUnitViews.TryGetValue(actor.Id, out BywaterUnitView view) && view != null)
+            {
+                _singleStepWorldScratch[0] = destWorld;
+                view.MoveAlongWorldPath(_singleStepWorldScratch, 0.09f);
+            }
+
+            TileMapData map = ExploreSession.CurrentMap;
+            GridCoord worldStep = LocalToWorld(actor.Position);
+            TileRule rule = map.GetTileRule(map.GetTile(worldStep.X, worldStep.Y));
+            audioDirector?.PlayFootstep(rule.SoundId, map.IsDungeon);
+            worldRenderer?.UpdateHeroWorldPosition(destWorld);
+
+            if (moveRes.AoOTriggered && _combatUnitViews.TryGetValue(actor.Id, out BywaterUnitView hitView) && hitView != null)
+            {
+                hitView.PlayHitFlash(0.055f);
+                hitView.ShowArcingFloatingText($"AoO -{moveRes.DamageDealt}!", BywaterUiHelpers.DangerRed, isCrit: false);
+                cameraRig?.PlayImpactImpulse(0.12f, 0.14f);
+            }
+
+            if (actor.IsProne && _combatUnitViews.TryGetValue(actor.Id, out BywaterUnitView proneView) && proneView != null)
+            {
+                proneView.ShowArcingFloatingText("PRONE", BywaterUiHelpers.BrassHighlight, isCrit: false);
+            }
+
+            RefreshCombatStaticOverlays(actor);
+            _combatHoverDirty = true;
+            SyncAllCombatUnitViews();
+            RefreshUnitNameplates();
+            RefreshCombatHudState();
+            return moveRes;
+        }
+
+        private bool TryAutoEndTurnIfExhausted(CombatantState actor)
+        {
+            if (_autoEndTurn &&
+                !_autoCombatEnabled &&
+                CombatSession != null &&
+                CombatSession.Outcome == CombatOutcome.InProgress &&
+                CombatSession.CurrentActor == actor &&
+                actor != null &&
+                !actor.Economy.HasStandardAction &&
+                !actor.Economy.HasSwiftAction &&
+                actor.Economy.MoveRemaining == 0)
+            {
+                HandleEndTurn();
+                return true;
+            }
+
+            return false;
+        }
+
+        private void HandleCombatPartyAllyClicked(string allyId)
+        {
+            if (!_isInCombat || CombatSession == null || CombatSession.Outcome != CombatOutcome.InProgress || string.IsNullOrEmpty(allyId))
+            {
+                return;
+            }
+
+            CombatantState actor = CombatSession.CurrentActor;
+            CombatantState ally = CombatSession.GetCombatant(allyId);
+            if (actor == null || actor.Side != CombatSide.Hero || ally == null || ally.Side != CombatSide.Hero || _autoCombatEnabled)
+            {
+                return;
+            }
+
+            if (_activeCombatMode == CombatActionMode.Potion)
+            {
+                Dictionary<string, int> oldHps = CaptureCombatantHps();
+                if (!TryFindCombatHealPotion(out ItemDefinition potionDef))
+                {
+                    hudController?.ShowToast("No healing potions remaining.", 1.8f);
+                    return;
+                }
+
+                CombatActionResult res = CombatSession.UseSwiftPotion(potionDef.Id, ally.Id);
+                if (res.Success)
+                {
+                    audioDirector?.PlaySpell("heal");
+                }
+                FinishPlayerCombatAction(res, oldHps);
+                return;
+            }
+
+            if (_activeCombatMode == CombatActionMode.Spell &&
+                _selectedSpellId >= 0 &&
+                Bundle != null &&
+                Bundle.Spells.TryGetValue(_selectedSpellId, out SpellDefinition spell) &&
+                (string.Equals(spell.EffectKind, "Heal", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(spell.EffectKind, "Buff", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(spell.EffectKind, "Cure", StringComparison.OrdinalIgnoreCase)))
+            {
+                ExecuteCombatClick(actor, ally.Position);
+                return;
+            }
+
+            if (_activeCombatMode == CombatActionMode.Shove && ally.Id != actor.Id)
+            {
+                ExecuteCombatClick(actor, ally.Position);
+                return;
+            }
+
+            Vector3 allyWorld = GridToWorldAtElevation(LocalToWorld(ally.Position));
+            cameraRig?.EnsureWorldPointVisible(allyWorld);
+            hudController?.SetCombatHoverPreview(
+                $"{ally.Name} (Ally)",
+                $"HP {ally.Hp}/{ally.MaxHp} | SP {ally.Sp}/{ally.MaxSp} | AC {ally.EffectiveAc}");
+        }
+
+        private void ApplyHeroAutoActionJuice(CombatantState hero, CombatActionResult res, Dictionary<string, int> oldHps)
+        {
+            if (hero == null || res == null || CombatSession == null)
+            {
+                return;
+            }
+
+            CombatantState hitEnemy = null;
+            bool anyHealed = false;
+            for (int i = 0; i < CombatSession.Combatants.Count; i++)
+            {
+                CombatantState c = CombatSession.Combatants[i];
+                if (!oldHps.TryGetValue(c.Id, out int before))
+                {
+                    continue;
+                }
+
+                if (c.Side == CombatSide.Monster && c.Hp < before)
+                {
+                    if (hitEnemy == null)
+                    {
+                        hitEnemy = c;
+                    }
+                    if (_combatUnitViews.TryGetValue(c.Id, out BywaterUnitView eView) && eView != null)
+                    {
+                        eView.PlayHitFlash(0.055f);
+                    }
+                }
+                else if (c.Side == CombatSide.Hero && c.Hp > before)
+                {
+                    anyHealed = true;
+                }
+            }
+
+            if (hitEnemy != null)
+            {
+                if (_combatUnitViews.TryGetValue(hero.Id, out BywaterUnitView hView) && hView != null)
+                {
+                    hView.PlayAttackLunge(GridToWorldAtElevation(LocalToWorld(hitEnemy.Position)), 0.28f, 0.07f);
+                }
+
+                bool isCrit = false;
+                for (int i = 0; i < res.AttackOutcomes.Count; i++)
+                {
+                    if (res.AttackOutcomes[i].Kind == AttackOutcomeKind.CriticalHit)
+                    {
+                        isCrit = true;
+                        break;
+                    }
+                }
+
+                bool isRanged = hero.PrefersRanged && hero.Position.ChebyshevDistance(hitEnemy.Position) > 1;
+                audioDirector?.PlayAttack(isRanged, isCrit);
+                cameraRig?.PlayImpactImpulse(isCrit ? 0.18f : 0.12f, 0.14f);
+                TriggerHitStop(isCrit ? 0.060f : 0.045f);
+            }
+            else if (anyHealed)
+            {
+                audioDirector?.PlaySpell("heal");
+            }
+        }
+
+        private bool CanOfferQuickResolveForEncounter(List<MonsterDefinition> monsters, out QuickResolveSummary summary)
+        {
+            summary = null;
+            if (ExploreSession == null || Bundle == null || monsters == null || monsters.Count == 0)
+            {
+                return false;
+            }
+
+            List<CombatantState> previewCombatants = new List<CombatantState>(ExploreSession.Party.Members.Count + monsters.Count);
+            for (int i = 0; i < ExploreSession.Party.Members.Count; i++)
+            {
+                PartyMemberState m = ExploreSession.Party.Members[i];
+                if (m != null && m.Hp > 0)
+                {
+                    previewCombatants.Add(CombatantState.FromHero(m, new GridCoord(2, i % 6), Bundle.Items));
+                }
+            }
+
+            for (int i = 0; i < monsters.Count; i++)
+            {
+                MonsterDefinition def = monsters[i];
+                if (def != null)
+                {
+                    previewCombatants.Add(CombatantState.FromMonster(def, $"qr_{i}_{def.Id}", new GridCoord(8, i % 6), _roller));
+                }
+            }
+
+            if (!TacticalCombatSession.ShouldOfferQuickResolve(previewCombatants))
+            {
+                return false;
+            }
+
+            summary = TacticalCombatSession.EvaluateQuickResolve(previewCombatants);
+            return summary.CanQuickResolve;
+        }
+
+        private static string BuildQuickResolveSummaryText(List<MonsterDefinition> monsters, QuickResolveSummary summary)
+        {
+            int count = monsters != null ? monsters.Count : 0;
+            string ratioText = summary != null ? $"{summary.PowerRatio:F1}x" : "Dominant";
+            return $"Your vanguard holds a decisive advantage ({ratioText} power over {count} hostile(s)).\n\nCommand the battle tactically or Quick Resolve for instant victory & loot.";
+        }
+
+        private void ClearPendingQuickResolve()
+        {
+            _pendingQuickResolveMonsters = null;
+            _pendingQuickResolveTitle = string.Empty;
+            _pendingQuickResolveZoneKey = string.Empty;
+        }
+
+        private void HandleQuickResolveFight()
+        {
+            audioDirector?.PlayUiClick();
+            List<MonsterDefinition> monsters = _pendingQuickResolveMonsters;
+            string title = string.IsNullOrWhiteSpace(_pendingQuickResolveTitle) ? "Encounter Zone Battle" : _pendingQuickResolveTitle;
+            string zoneKey = _pendingQuickResolveZoneKey;
+            ClearPendingQuickResolve();
+
+            _activeEncounterZoneKey = zoneKey;
+            StartTacticalCombat(monsters, title);
+        }
+
+        private void HandleQuickResolveAutoWin()
+        {
+            audioDirector?.PlayUiClick();
+            List<MonsterDefinition> monsters = _pendingQuickResolveMonsters;
+            string zoneKey = _pendingQuickResolveZoneKey;
+            ClearPendingQuickResolve();
+
+            if (ExploreSession == null || Bundle == null || monsters == null || monsters.Count == 0)
+            {
+                return;
+            }
+
+            TileMapData map = ExploreSession.CurrentMap;
+            GridCoord partyPos = ExploreSession.Position;
+            int width = 12;
+            int height = 10;
+            GridCoord origin = FindCleanArenaOrigin(map, partyPos, width, height);
+            CombatGrid grid = CombatGrid.FromTileMapSlice(
+                map,
+                origin.X,
+                origin.Y,
+                width,
+                height,
+                ExploreSession.Party.HasBoat,
+                elevationResolver: (wx, wy) => ElevationMetersToTier(worldRenderer != null ? worldRenderer.GetTileElevation(wx, wy) : 0f),
+                surfaceResolver: (wx, wy) => ResolveInitialCombatSurface(map, wx, wy));
+
+            GridCoord localCenter = new GridCoord(
+                Mathf.Clamp(partyPos.X - origin.X, 0, width - 1),
+                Mathf.Clamp(partyPos.Y - origin.Y, 0, height - 1));
+            List<GridCoord> connectedWalkable = CollectConnectedWalkableTiles(grid, localCenter);
+            if (connectedWalkable.Count == 0)
+            {
+                connectedWalkable.Add(localCenter);
+            }
+
+            HashSet<GridCoord> occupied = new HashSet<GridCoord>();
+            List<CombatantState> combatants = new List<CombatantState>();
+            GridCoord[] heroSlots =
+            {
+                new GridCoord(3, 2), new GridCoord(2, 4), new GridCoord(3, 6),
+                new GridCoord(1, 3), new GridCoord(3, 4), new GridCoord(2, 7)
+            };
+            for (int i = 0; i < ExploreSession.Party.Members.Count; i++)
+            {
+                PartyMemberState m = ExploreSession.Party.Members[i];
+                if (m.Hp <= 0) m.Hp = 1;
+                GridCoord spot = PickNearestFreeWalkable(connectedWalkable, occupied, heroSlots[i % heroSlots.Length]);
+                occupied.Add(spot);
+                combatants.Add(CombatantState.FromHero(m, spot, Bundle.Items));
+            }
+
+            GridCoord[] monsterSlots =
+            {
+                new GridCoord(7, 2), new GridCoord(8, 4), new GridCoord(7, 6),
+                new GridCoord(9, 3), new GridCoord(8, 6), new GridCoord(9, 5)
+            };
+            for (int i = 0; i < monsters.Count; i++)
+            {
+                MonsterDefinition def = monsters[i];
+                GridCoord spot = PickNearestFreeWalkable(connectedWalkable, occupied, monsterSlots[i % monsterSlots.Length]);
+                occupied.Add(spot);
+                combatants.Add(CombatantState.FromMonster(def, $"mon_{i}_{def.Id}", spot, _roller));
+            }
+
+            TacticalCombatSession qrSession = new TacticalCombatSession(
+                grid,
+                combatants,
+                Bundle.Spells,
+                Bundle.Items,
+                _roller,
+                RulesetMode.ModernBalanced,
+                ExploreSession.Party);
+
+            CombatOutcome outcome = qrSession.QuickResolveCombat();
+            if (outcome == CombatOutcome.Victory)
+            {
+                if (!string.IsNullOrEmpty(zoneKey))
+                {
+                    ExploreSession.MarkEncounterCleared(zoneKey);
+                }
+
+                ExploreSession.SyncAfterCombat(qrSession, floorDeadToOne: true);
+
+                List<string> lootNames = new List<string>(qrSession.CollectedLootItemIds.Count);
+                for (int i = 0; i < qrSession.CollectedLootItemIds.Count; i++)
+                {
+                    int itemId = qrSession.CollectedLootItemIds[i];
+                    if (Bundle.Items != null && Bundle.Items.TryGetValue(itemId, out ItemDefinition def))
+                    {
+                        lootNames.Add(def.Name);
+                    }
+                    else
+                    {
+                        lootNames.Add($"Item #{itemId}");
+                    }
+                }
+
+                EnsureExploreHeroViews();
+                RefreshContextualExplorePoi();
+                hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false, _lastContextPoiLabel);
+                audioDirector?.PlayMusic("treasure", 0.7f);
+                audioDirector?.PlayCoin();
+                hudController?.ShowOutcomeModal(
+                    CombatOutcome.Victory,
+                    qrSession.TotalXpEarned,
+                    qrSession.VictoryLevelsGained,
+                    qrSession.TotalGoldLoot,
+                    lootNames);
+            }
+            else if (outcome == CombatOutcome.Defeat)
+            {
+                ExploreSession.SyncAfterCombat(qrSession, floorDeadToOne: true);
+                hudController?.ShowOutcomeModal(CombatOutcome.Defeat, 0, 0, 0, null);
+            }
+            else
+            {
+                _activeEncounterZoneKey = zoneKey;
+                StartTacticalCombat(monsters, "Encounter Zone Battle");
+            }
+        }
+
+        private void CollectActiveUnitWorldPositions(List<Vector3> results)
+        {
+            results.Clear();
+            if (_isInCombat && CombatSession != null)
+            {
+                for (int i = 0; i < CombatSession.Combatants.Count; i++)
+                {
+                    CombatantState c = CombatSession.Combatants[i];
+                    if (c == null || !c.IsAlive)
+                    {
+                        continue;
+                    }
+
+                    if (_combatUnitViews.TryGetValue(c.Id, out BywaterUnitView view) && view != null)
+                    {
+                        results.Add(view.transform.position);
+                    }
+                    else
+                    {
+                        results.Add(GridToWorldAtElevation(LocalToWorld(c.Position)));
+                    }
+                }
+            }
+            else
+            {
+                for (int i = 0; i < _exploreHeroViews.Count; i++)
+                {
+                    BywaterUnitView view = _exploreHeroViews[i];
+                    if (view != null && view.gameObject.activeSelf)
+                    {
+                        results.Add(view.transform.position);
+                    }
+                }
+            }
+        }
+
+        private void UpdateActiveTreeOcclusionFade()
+        {
+            if (worldRenderer == null)
+            {
+                return;
+            }
+
+            CollectActiveUnitWorldPositions(_treeFadePositionsScratch);
+            worldRenderer.UpdateTreeOcclusionFade(_treeFadePositionsScratch, fadeCenterBuildingsInCombat: _isInCombat);
+        }
+
+        private void RefreshUnitNameplates()
+        {
+            if (!_isInCombat || CombatSession == null)
+            {
+                return;
+            }
+
+            Keyboard kb = Keyboard.current;
+            bool altHeld = kb != null && (kb.leftAltKey.isPressed || kb.rightAltKey.isPressed);
+            bool showAll = _nameplatesAlwaysOn || altHeld;
+
+            _nameplateStaggerViewsScratch.Clear();
+            for (int i = 0; i < CombatSession.Combatants.Count; i++)
+            {
+                CombatantState c = CombatSession.Combatants[i];
+                if (c == null || !_combatUnitViews.TryGetValue(c.Id, out BywaterUnitView view) || view == null)
+                {
+                    continue;
+                }
+
+                bool visible = c.IsAlive && (showAll || string.Equals(c.Id, _hoveredCombatUnitId, StringComparison.Ordinal));
+                if (visible)
+                {
+                    string detail = c.MaxSp > 0
+                        ? $"HP {c.Hp}/{c.MaxHp} | SP {c.Sp}/{c.MaxSp}"
+                        : $"HP {c.Hp}/{c.MaxHp} | AC {c.EffectiveAc}";
+                    view.SetNameplateVisible(true, detail);
+                    _nameplateStaggerViewsScratch.Add(view);
+                }
+                else
+                {
+                    view.SetNameplateVisible(false);
+                }
+            }
+
+            if (_nameplateStaggerViewsScratch.Count > 1)
+            {
+                BywaterUnitView.ResolveNameplateStagger(_nameplateStaggerViewsScratch, Camera.main);
+            }
+        }
+
+        private GridCoord FindBestShowcaseHoverTile(CombatantState actor)
+        {
+            if (CombatSession == null || actor == null)
+            {
+                return new GridCoord(-1, -1);
+            }
+
+            IReadOnlyList<ReachableTileInfo> reach = CombatSession.GetReachableTiles(actor.Id);
+            GridCoord best = new GridCoord(-1, -1);
+            int bestScore = int.MinValue;
+
+            for (int i = 0; i < reach.Count; i++)
+            {
+                ReachableTileInfo tile = reach[i];
+                if (tile.Coord == actor.Position || tile.ProvokesAoO || GetLivingUnitAt(tile.Coord) != null)
+                {
+                    continue;
+                }
+
+                int elev = CombatSession.Grid.GetElevation(tile.Coord);
+                int score = (elev * 100) + tile.PathCost;
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    best = tile.Coord;
+                }
+            }
+
+            return best;
         }
 
         private static GridCoord PickNearestFreeWalkable(

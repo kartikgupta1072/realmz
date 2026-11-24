@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Realmz.Cartography;
 using RealmzCore.Data;
 using TMPro;
@@ -9,11 +10,14 @@ namespace Realmz.World
 {
     /// <summary>
     /// Perspective HD-2D tactical/exploration camera rig with scroll zoom, right-drag / WASD panning,
-    /// C-key recenter, canonical terrain collider raycasting, world bounds clamping, and impact shake
-    /// via UnityEngine.InputSystem.
+    /// C-key recenter, canonical terrain collider raycasting, world bounds clamping, safe-viewport
+    /// combat auto-framing, and impact shake via UnityEngine.InputSystem.
     /// </summary>
     public sealed class BywaterCameraRig : MonoBehaviour
     {
+        public static readonly Rect DefaultSafeViewportRect = new Rect(0.11f, 0.16f, 0.85f, 0.69f);
+        private const float UnitHeadHeightMeters = 1.55f;
+
         [Header("Framing")]
         [SerializeField] private float fieldOfView = 34f;
         [SerializeField] private float pitchDegrees = 48f;
@@ -22,6 +26,9 @@ namespace Realmz.World
         [SerializeField] private float combatDistance = 12.5f;
         [SerializeField] private float minDistance = 6.0f;
         [SerializeField] private float maxDistance = 19.0f;
+        [SerializeField] private float combatMaxDistance = 24.0f;
+
+        public float MaxCombatDistance => Mathf.Max(maxDistance, combatMaxDistance);
 
         [Header("Smoothing & Controls")]
         [SerializeField] private float followSmoothTime = 0.14f;
@@ -169,7 +176,297 @@ namespace Realmz.World
 
             _isCombatMode = isCombat;
             float desired = isCombat ? combatDistance : exploreDistance;
-            _targetDistance = Mathf.Clamp(desired, minDistance, maxDistance);
+            float activeMax = isCombat ? MaxCombatDistance : maxDistance;
+            _targetDistance = Mathf.Clamp(desired, minDistance, activeMax);
+        }
+
+        public static void ComputeCombatFraming(
+            IReadOnlyList<Vector3> worldPositions,
+            float fieldOfViewDeg,
+            float pitchDeg,
+            float aspectRatio,
+            Rect safeViewportNorm,
+            float minDist,
+            float maxDist,
+            out Vector3 pivotWorld,
+            out float targetDistance)
+        {
+            float clampedMin = Mathf.Max(1.0f, minDist);
+            float clampedMax = Mathf.Max(clampedMin, maxDist);
+
+            if (worldPositions == null || worldPositions.Count == 0)
+            {
+                pivotWorld = Vector3.zero;
+                targetDistance = Mathf.Clamp(12.5f, clampedMin, clampedMax);
+                return;
+            }
+
+            float safePitch = Mathf.Clamp(pitchDeg, 5f, 89f);
+            float safeFov = Mathf.Clamp(fieldOfViewDeg, 10f, 120f);
+            float safeAspect = Mathf.Max(0.25f, aspectRatio);
+
+            float padX = Mathf.Min(0.004f, safeViewportNorm.width * 0.05f);
+            float padY = Mathf.Min(0.004f, safeViewportNorm.height * 0.05f);
+            float xMin = Mathf.Clamp(safeViewportNorm.xMin + padX, 0.01f, 0.98f);
+            float xMax = Mathf.Clamp(safeViewportNorm.xMax - padX, xMin + 0.01f, 0.99f);
+            float yMin = Mathf.Clamp(safeViewportNorm.yMin + padY, 0.01f, 0.98f);
+            float yMax = Mathf.Clamp(safeViewportNorm.yMax - padY, yMin + 0.01f, 0.99f);
+
+            float nxMin = 2f * xMin - 1f;
+            float nxMax = 2f * xMax - 1f;
+            float nyMin = 2f * yMin - 1f;
+            float nyMax = 2f * yMax - 1f;
+
+            float tanV = Mathf.Tan(safeFov * 0.5f * Mathf.Deg2Rad);
+            float tanH = tanV * safeAspect;
+            float pitchRad = safePitch * Mathf.Deg2Rad;
+            float sinP = Mathf.Sin(pitchRad);
+            float cosP = Mathf.Cos(pitchRad);
+
+            bool SolveForDistance(float d, out float outPx, out float outPz)
+            {
+                float lowZ = float.NegativeInfinity;
+                float highZ = float.PositiveInfinity;
+
+                float denLow = sinP - nyMin * tanV * cosP;
+                float denHigh = sinP - nyMax * tanV * cosP;
+
+                for (int i = 0; i < worldPositions.Count; i++)
+                {
+                    Vector3 foot = worldPositions[i];
+                    for (int h = 0; h < 2; h++)
+                    {
+                        float py = h == 0 ? foot.y : foot.y + UnitHeadHeightMeters;
+                        float pzVal = foot.z;
+                        float a = py * cosP + pzVal * sinP;
+                        float b = -py * sinP + pzVal * cosP;
+
+                        float rhsLow = a - nyMin * tanV * (b + d);
+                        if (denLow > 1e-4f)
+                        {
+                            highZ = Mathf.Min(highZ, rhsLow / denLow);
+                        }
+                        else if (denLow < -1e-4f)
+                        {
+                            lowZ = Mathf.Max(lowZ, rhsLow / denLow);
+                        }
+
+                        float rhsHigh = a - nyMax * tanV * (b + d);
+                        if (denHigh > 1e-4f)
+                        {
+                            lowZ = Mathf.Max(lowZ, rhsHigh / denHigh);
+                        }
+                        else if (denHigh < -1e-4f)
+                        {
+                            highZ = Mathf.Min(highZ, rhsHigh / denHigh);
+                        }
+                    }
+                }
+
+                outPz = 0.5f * (lowZ + highZ);
+                if (float.IsInfinity(outPz) || float.IsNaN(outPz))
+                {
+                    outPz = worldPositions[0].z;
+                }
+
+                float lowX = float.NegativeInfinity;
+                float highX = float.PositiveInfinity;
+                float minDepth = float.PositiveInfinity;
+
+                for (int i = 0; i < worldPositions.Count; i++)
+                {
+                    Vector3 foot = worldPositions[i];
+                    for (int h = 0; h < 2; h++)
+                    {
+                        float py = h == 0 ? foot.y : foot.y + UnitHeadHeightMeters;
+                        float b = -py * sinP + foot.z * cosP;
+                        float depth = b - outPz * cosP + d;
+                        if (depth < minDepth)
+                        {
+                            minDepth = depth;
+                        }
+
+                        float safeDepth = Mathf.Max(0.25f, depth);
+                        lowX = Mathf.Max(lowX, foot.x - nxMax * tanH * safeDepth);
+                        highX = Mathf.Min(highX, foot.x - nxMin * tanH * safeDepth);
+                    }
+                }
+
+                outPx = 0.5f * (lowX + highX);
+                if (float.IsInfinity(outPx) || float.IsNaN(outPx))
+                {
+                    outPx = worldPositions[0].x;
+                }
+
+                return minDepth > 0.25f && lowZ <= highZ && lowX <= highX;
+            }
+
+            if (SolveForDistance(clampedMin, out float minPx, out float minPz))
+            {
+                pivotWorld = new Vector3(minPx, 0f, minPz);
+                targetDistance = clampedMin;
+                return;
+            }
+
+            if (!SolveForDistance(clampedMax, out float maxPx, out float maxPz))
+            {
+                pivotWorld = new Vector3(maxPx, 0f, maxPz);
+                targetDistance = clampedMax;
+                return;
+            }
+
+            float lo = clampedMin;
+            float hi = clampedMax;
+            float bestPx = maxPx;
+            float bestPz = maxPz;
+            for (int iter = 0; iter < 24; iter++)
+            {
+                float mid = 0.5f * (lo + hi);
+                if (SolveForDistance(mid, out float midPx, out float midPz))
+                {
+                    hi = mid;
+                    bestPx = midPx;
+                    bestPz = midPz;
+                }
+                else
+                {
+                    lo = mid;
+                }
+            }
+
+            pivotWorld = new Vector3(bestPx, 0f, bestPz);
+            targetDistance = hi;
+        }
+
+        public void FrameCombatantsInSafeViewport(IReadOnlyList<Vector3> worldPositions, bool immediate = false)
+        {
+            FrameCombatantsInSafeViewport(worldPositions, DefaultSafeViewportRect, immediate);
+        }
+
+        public void FrameCombatantsInSafeViewport(IReadOnlyList<Vector3> worldPositions, Rect safeViewportNorm, bool immediate = false)
+        {
+            Camera cam = ResolveCamera();
+            float aspect = cam != null && cam.aspect > 0.1f ? cam.aspect : (16f / 9f);
+            float fov = cam != null && cam.fieldOfView > 5f ? cam.fieldOfView : fieldOfView;
+            float activeMin = Mathf.Clamp(combatDistance * 0.85f, minDistance, MaxCombatDistance);
+
+            ComputeCombatFraming(
+                worldPositions,
+                fov,
+                pitchDegrees,
+                aspect,
+                safeViewportNorm,
+                activeMin,
+                MaxCombatDistance,
+                out Vector3 pivotWorld,
+                out float solvedDistance);
+
+            _isCombatMode = true;
+            _targetDistance = Mathf.Clamp(solvedDistance, minDistance, MaxCombatDistance);
+            _followTarget = new Vector3(pivotWorld.x, 0f, pivotWorld.z);
+            if (_hasWorldBounds)
+            {
+                _followTarget.x = Mathf.Clamp(_followTarget.x, 0f, _worldWidth);
+                _followTarget.z = Mathf.Clamp(_followTarget.z, -_worldHeight, 0f);
+            }
+
+            if (immediate || !_hasTarget)
+            {
+                _hasTarget = true;
+                _currentFollowPos = _followTarget;
+                _followVelocity = Vector3.zero;
+                _currentDistance = _targetDistance;
+                _manualOffsetResetImmediate();
+                ApplyCameraTransform();
+            }
+            else
+            {
+                ClampPanTarget();
+            }
+        }
+
+        public bool IsWorldPointInSafeViewport(Vector3 worldPos)
+        {
+            return IsWorldPointInSafeViewport(worldPos, DefaultSafeViewportRect);
+        }
+
+        public bool IsWorldPointInSafeViewport(Vector3 worldPos, Rect safeViewportNorm)
+        {
+            Camera cam = ResolveCamera();
+            if (cam != null)
+            {
+                Vector3 vp = cam.WorldToViewportPoint(worldPos);
+                return vp.z > 0f &&
+                       vp.x >= safeViewportNorm.xMin &&
+                       vp.x <= safeViewportNorm.xMax &&
+                       vp.y >= safeViewportNorm.yMin &&
+                       vp.y <= safeViewportNorm.yMax;
+            }
+
+            Vector3 pivot = _currentFollowPos + _currentManualOffset;
+            Quaternion rot = Quaternion.Euler(pitchDegrees, 0f, 0f);
+            Vector3 camPos = pivot - (rot * Vector3.forward) * _currentDistance;
+            Vector3 camLocal = Quaternion.Inverse(rot) * (worldPos - camPos);
+            if (camLocal.z <= 0.05f)
+            {
+                return false;
+            }
+
+            float tanV = Mathf.Tan(fieldOfView * 0.5f * Mathf.Deg2Rad);
+            float tanH = tanV * (16f / 9f);
+            float vx = 0.5f + 0.5f * (camLocal.x / (camLocal.z * tanH));
+            float vy = 0.5f + 0.5f * (camLocal.y / (camLocal.z * tanV));
+            return vx >= safeViewportNorm.xMin &&
+                   vx <= safeViewportNorm.xMax &&
+                   vy >= safeViewportNorm.yMin &&
+                   vy <= safeViewportNorm.yMax;
+        }
+
+        public void EnsureWorldPointVisible(Vector3 worldPos)
+        {
+            EnsureWorldPointVisible(worldPos, DefaultSafeViewportRect);
+        }
+
+        public void EnsureWorldPointVisible(Vector3 worldPos, Rect safeViewportNorm)
+        {
+            Vector3 headPos = worldPos + new Vector3(0f, UnitHeadHeightMeters, 0f);
+            if (IsWorldPointInSafeViewport(worldPos, safeViewportNorm) &&
+                IsWorldPointInSafeViewport(headPos, safeViewportNorm))
+            {
+                return;
+            }
+
+            Camera cam = ResolveCamera();
+            float aspect = cam != null && cam.aspect > 0.1f ? cam.aspect : (16f / 9f);
+            float fov = cam != null && cam.fieldOfView > 5f ? cam.fieldOfView : fieldOfView;
+
+            Rect padded = new Rect(
+                Mathf.Min(safeViewportNorm.xMin + 0.04f, safeViewportNorm.center.x),
+                Mathf.Min(safeViewportNorm.yMin + 0.04f, safeViewportNorm.center.y),
+                Mathf.Max(0.05f, safeViewportNorm.width - 0.08f),
+                Mathf.Max(0.05f, safeViewportNorm.height - 0.08f));
+
+            Vector3[] pts = { worldPos };
+            ComputeCombatFraming(
+                pts,
+                fov,
+                pitchDegrees,
+                aspect,
+                padded,
+                _targetDistance,
+                _targetDistance,
+                out Vector3 targetPivot,
+                out _);
+
+            if (_targetManualOffset.sqrMagnitude > 0.001f)
+            {
+                _targetManualOffset = new Vector3(targetPivot.x - _followTarget.x, 0f, targetPivot.z - _followTarget.z);
+                ClampPanTarget();
+            }
+            else
+            {
+                SetFollowTarget(targetPivot, immediate: false);
+            }
         }
 
         public void PlayImpactImpulse(float strength = 0.14f, float duration = 0.16f)
@@ -240,7 +537,8 @@ namespace Realmz.World
             if (Mathf.Abs(scrollY) > 0.01f)
             {
                 float normalized = Mathf.Abs(scrollY) >= 10f ? scrollY / 120f : scrollY;
-                _targetDistance = Mathf.Clamp(_targetDistance - normalized * scrollZoomStep, minDistance, maxDistance);
+                float activeMax = _isCombatMode ? MaxCombatDistance : maxDistance;
+                _targetDistance = Mathf.Clamp(_targetDistance - normalized * scrollZoomStep, minDistance, activeMax);
             }
         }
 

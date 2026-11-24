@@ -16,19 +16,36 @@ namespace Realmz.World
     {
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int ColorId = Shader.PropertyToID("_Color");
+        private static readonly int TintColorId = Shader.PropertyToID("_TintColor");
+        private static readonly int WindPhaseId = Shader.PropertyToID("_WindPhase");
         private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
         private static readonly Color CurrentTurnGold = new Color(0.980f, 0.800f, 0.082f, 0.95f); // #FACC15
         private static readonly Color HitFlashGoldWhite = new Color(1.0f, 0.953f, 0.690f, 1.0f); // #FFF3B0
         private static readonly Color DeadSpriteTint = new Color(0.45f, 0.45f, 0.50f, 0.55f);
+        private static readonly Color AllyHpBlue = new Color(0.220f, 0.741f, 0.973f, 1f);      // #38BDF8
+        private static readonly Color EnemyHpRed = new Color(0.937f, 0.267f, 0.267f, 1f);      // #EF4444
+        private static readonly Color ContactShadowColor = new Color(0.05f, 0.06f, 0.10f, 0.55f);
 
         private static Material _sharedRingMaterial;
         private static Texture2D _sharedRingTexture;
+        private static Material _sharedShadowMaterial;
+        private static Texture2D _sharedShadowTexture;
+        private static Material _sharedChevronMaterial;
+        private static Texture2D _sharedChevronTexture;
+        private static Mesh _sharedUnitQuadMesh;
 
         private MeshRenderer _spriteRenderer;
         private Transform _spriteBillboardTransform;
         private MeshRenderer _underRingRenderer;
+        private MeshRenderer _contactShadowRenderer;
+        private Transform _turnChevronTransform;
+        private MeshRenderer _turnChevronRenderer;
+
+        private Canvas _microHudCanvas;
         private Canvas _worldHudCanvas;
+        private GameObject _expandedNameplateRoot;
         private TextMeshProUGUI _nameLabel;
+        private TextMeshProUGUI _detailLabel;
         private Image _hpFill;
         private Image _spBarRoot;
         private Image _spFill;
@@ -39,16 +56,43 @@ namespace Realmz.World
 
         private TMP_FontAsset _font;
         private Color _baseRingColor = Color.white;
-        private float _spriteSize = 1.42f;
+        private float _spriteSize = 2.0f;
         private bool _showHud = true;
         private bool _isAlive = true;
+        private bool _isAlly = true;
+        private bool _isCurrentTurn;
+        private bool _nameplateVisible;
+        private string _lastDetailLine;
+        private float _verticalStaggerWorld;
         private bool _isHitFlashing;
         private float _idlePhase;
+        private float _windPhaseNorm;
         private Coroutine _moveCoroutine;
         private Coroutine _lungeCoroutine;
         private Coroutine _hitFlashCoroutine;
 
+        private struct StaggerEntry
+        {
+            public BywaterUnitView View;
+            public Vector3 ScreenPos;
+            public Vector3 HeadWorldPos;
+        }
+
+        private static readonly List<StaggerEntry> _staggerScratch = new List<StaggerEntry>(16);
+        private static readonly List<Vector2> _placedNameplatesScratch = new List<Vector2>(16);
+
         public string UnitId { get; private set; }
+        public bool IsNameplateVisible => _nameplateVisible && _showHud && _isAlive;
+
+        private float GetVisualHeadHeight()
+        {
+            return _spriteSize >= 1.75f ? 1.48f : _spriteSize;
+        }
+
+        public Vector3 GetHeadWorldPosition()
+        {
+            return transform.position + new Vector3(0f, GetVisualHeadHeight() + 0.16f, 0f);
+        }
 
         public void Configure(
             string unitId,
@@ -56,17 +100,24 @@ namespace Realmz.World
             Material billboardMat,
             Color ringColor,
             TMP_FontAsset font,
-            float spriteSize = 1.42f,
-            bool showHud = true)
+            float spriteSize = 2.0f,
+            bool showHud = true,
+            bool? isAllyOverride = null)
         {
             UnitId = unitId ?? string.Empty;
             _baseRingColor = ringColor;
+            _isAlly = isAllyOverride ?? (ringColor.b >= ringColor.r);
             _font = font;
             _spriteSize = Mathf.Max(0.4f, spriteSize);
             _showHud = showHud;
             _isAlive = true;
+            _isCurrentTurn = false;
+            _nameplateVisible = false;
+            _lastDetailLine = null;
+            _verticalStaggerWorld = 0f;
             _isHitFlashing = false;
             _idlePhase = ComputeDeterministicPhase(UnitId);
+            _windPhaseNorm = _idlePhase / (Mathf.PI * 2f);
 
             StopLungeCoroutine();
             StopHitFlashCoroutine();
@@ -81,23 +132,178 @@ namespace Realmz.World
             _spriteRenderer.sharedMaterial = billboardMat;
             ApplySpriteTint(Color.white);
 
-            ApplyRingColor(_baseRingColor);
+            if (_contactShadowRenderer != null)
+            {
+                _contactShadowRenderer.gameObject.SetActive(true);
+            }
 
-            _worldHudCanvas.transform.localPosition = new Vector3(0f, _spriteSize + 0.18f, 0f);
-            _worldHudCanvas.gameObject.SetActive(showHud);
+            if (_underRingRenderer != null)
+            {
+                _underRingRenderer.gameObject.SetActive(false);
+            }
+
+            float headHeight = GetVisualHeadHeight();
+            if (_turnChevronTransform != null)
+            {
+                _turnChevronTransform.localPosition = new Vector3(0f, headHeight + 0.10f, 0f);
+                _turnChevronTransform.gameObject.SetActive(false);
+            }
+
+            if (_microHudCanvas != null)
+            {
+                _microHudCanvas.transform.localPosition = new Vector3(0f, 0.04f, 0f);
+                _microHudCanvas.gameObject.SetActive(showHud);
+            }
+
+            ApplyTeamHpColor();
+
+            _worldHudCanvas.transform.localPosition = new Vector3(0f, headHeight + 0.16f, 0f);
+            _expandedNameplateRoot.SetActive(false);
+            _worldHudCanvas.gameObject.SetActive(false);
 
             if (_font != null)
             {
                 _nameLabel.font = _font;
+                _detailLabel.font = _font;
                 _statusBadgeLabel.font = _font;
             }
 
             _nameLabel.text = displayName ?? string.Empty;
+            _detailLabel.text = string.Empty;
+            _detailLabel.gameObject.SetActive(false);
             _statusBadgeLabel.gameObject.SetActive(false);
+        }
+
+        public void SetTeamColor(bool isAlly)
+        {
+            _isAlly = isAlly;
+            EnsureHierarchy();
+            ApplyTeamHpColor();
+        }
+
+        public void SetNameplateVisible(bool visible, string detailLine = null, float verticalStaggerWorld = 0f)
+        {
+            EnsureHierarchy();
+            _nameplateVisible = visible;
+            _lastDetailLine = detailLine;
+            _verticalStaggerWorld = Mathf.Max(0f, verticalStaggerWorld);
+
+            _worldHudCanvas.transform.localPosition = new Vector3(0f, GetVisualHeadHeight() + 0.16f + _verticalStaggerWorld, 0f);
+
+            bool hasDetail = !string.IsNullOrEmpty(detailLine);
+            _detailLabel.text = hasDetail ? detailLine : string.Empty;
+            _detailLabel.gameObject.SetActive(hasDetail);
+
+            bool shouldShow = _showHud && _isAlive && _nameplateVisible;
+            _expandedNameplateRoot.SetActive(shouldShow);
+            _worldHudCanvas.gameObject.SetActive(shouldShow);
+        }
+
+        public static void ResolveNameplateStagger(IReadOnlyList<BywaterUnitView> views, Camera cam)
+        {
+            if (views == null || views.Count == 0)
+            {
+                return;
+            }
+
+            Camera activeCam = cam != null ? cam : Camera.main;
+            _staggerScratch.Clear();
+            _placedNameplatesScratch.Clear();
+
+            for (int i = 0; i < views.Count; i++)
+            {
+                BywaterUnitView v = views[i];
+                if (v == null || !v.IsNameplateVisible)
+                {
+                    continue;
+                }
+
+                Vector3 headWorld = v.GetHeadWorldPosition();
+                if (activeCam == null)
+                {
+                    v.SetNameplateVisible(true, v._lastDetailLine, 0f);
+                    continue;
+                }
+
+                Vector3 sp = activeCam.WorldToScreenPoint(headWorld);
+                if (sp.z <= 0.05f)
+                {
+                    v.SetNameplateVisible(true, v._lastDetailLine, 0f);
+                    continue;
+                }
+
+                _staggerScratch.Add(new StaggerEntry
+                {
+                    View = v,
+                    ScreenPos = sp,
+                    HeadWorldPos = headWorld
+                });
+            }
+
+            if (_staggerScratch.Count == 0)
+            {
+                return;
+            }
+
+            if (_staggerScratch.Count == 1)
+            {
+                _staggerScratch[0].View.SetNameplateVisible(true, _staggerScratch[0].View._lastDetailLine, 0f);
+                return;
+            }
+
+            _staggerScratch.Sort((a, b) => a.ScreenPos.y.CompareTo(b.ScreenPos.y));
+
+            const float minOverlapX = 128f;
+            const float minOverlapY = 40f;
+
+            for (int i = 0; i < _staggerScratch.Count; i++)
+            {
+                StaggerEntry entry = _staggerScratch[i];
+                float targetX = entry.ScreenPos.x;
+                float targetY = entry.ScreenPos.y;
+
+                for (int bump = 0; bump < 5; bump++)
+                {
+                    bool overlaps = false;
+                    for (int p = 0; p < _placedNameplatesScratch.Count; p++)
+                    {
+                        Vector2 placed = _placedNameplatesScratch[p];
+                        if (Mathf.Abs(targetX - placed.x) < minOverlapX && Mathf.Abs(targetY - placed.y) < minOverlapY)
+                        {
+                            targetY = placed.y + minOverlapY;
+                            overlaps = true;
+                            break;
+                        }
+                    }
+
+                    if (!overlaps)
+                    {
+                        break;
+                    }
+                }
+
+                _placedNameplatesScratch.Add(new Vector2(targetX, targetY));
+
+                float screenDeltaY = targetY - entry.ScreenPos.y;
+                float worldStagger = 0f;
+                if (screenDeltaY > 0.5f && activeCam != null)
+                {
+                    Vector3 bumpedWorld = activeCam.ScreenToWorldPoint(new Vector3(targetX, targetY, entry.ScreenPos.z));
+                    worldStagger = Mathf.Max(0f, bumpedWorld.y - entry.HeadWorldPos.y);
+                }
+
+                entry.View.SetNameplateVisible(true, entry.View._lastDetailLine, worldStagger);
+            }
         }
 
         private void Update()
         {
+            if (_turnChevronTransform != null && _isCurrentTurn && _isAlive)
+            {
+                float bob = Mathf.Sin(Time.time * 4.2f + _idlePhase) * 0.055f;
+                _turnChevronTransform.localPosition = new Vector3(0f, GetVisualHeadHeight() + 0.10f + bob, 0f);
+            }
+
             if (_spriteRenderer == null)
             {
                 return;
@@ -159,9 +365,15 @@ namespace Realmz.World
             float safeMaxHp = Mathf.Max(1, maxHp);
             float hpRatio = Mathf.Clamp01(hp / safeMaxHp);
             _hpFill.rectTransform.anchorMax = new Vector2(hpRatio, 1f);
-            _hpFill.color = hpRatio > 0.35f
-                ? new Color(0.20f, 0.82f, 0.36f, 1f)
-                : new Color(0.92f, 0.24f, 0.20f, 1f);
+            ApplyTeamHpColor();
+        }
+
+        private void ApplyTeamHpColor()
+        {
+            if (_hpFill != null)
+            {
+                _hpFill.color = _isAlly ? AllyHpBlue : EnemyHpRed;
+            }
         }
 
         public void SetSp(int sp, int maxSp)
@@ -179,20 +391,38 @@ namespace Realmz.World
         public void SetTurnHighlight(bool isCurrentTurn)
         {
             EnsureHierarchy();
+            _isCurrentTurn = isCurrentTurn;
             if (!_isAlive)
             {
                 _underRingRenderer.gameObject.SetActive(false);
+                if (_turnChevronTransform != null)
+                {
+                    _turnChevronTransform.gameObject.SetActive(false);
+                }
                 return;
             }
 
-            _underRingRenderer.gameObject.SetActive(true);
-            ApplyRingColor(isCurrentTurn ? CurrentTurnGold : _baseRingColor);
+            _underRingRenderer.gameObject.SetActive(isCurrentTurn);
+            if (isCurrentTurn)
+            {
+                ApplyRingColor(CurrentTurnGold);
+            }
+
+            if (_turnChevronTransform != null)
+            {
+                _turnChevronTransform.gameObject.SetActive(isCurrentTurn);
+                if (isCurrentTurn)
+                {
+                    _turnChevronTransform.localPosition = new Vector3(0f, GetVisualHeadHeight() + 0.10f, 0f);
+                }
+            }
         }
 
         public void UpdateStats(int hp, int maxHp, int sp, int maxSp, string statusBadge, bool isCurrentTurn, bool isAlive)
         {
             EnsureHierarchy();
 
+            _isCurrentTurn = isCurrentTurn;
             SetHp(hp, maxHp);
             SetSp(sp, maxSp);
 
@@ -206,23 +436,54 @@ namespace Realmz.World
             if (isAlive)
             {
                 _isAlive = true;
-                _underRingRenderer.gameObject.SetActive(true);
-                ApplyRingColor(isCurrentTurn ? CurrentTurnGold : _baseRingColor);
+                if (_contactShadowRenderer != null)
+                {
+                    _contactShadowRenderer.gameObject.SetActive(true);
+                }
+                _underRingRenderer.gameObject.SetActive(isCurrentTurn);
+                if (isCurrentTurn)
+                {
+                    ApplyRingColor(CurrentTurnGold);
+                }
+                if (_turnChevronTransform != null)
+                {
+                    _turnChevronTransform.gameObject.SetActive(isCurrentTurn);
+                }
                 if (!_isHitFlashing)
                 {
                     ApplySpriteTint(Color.white);
                 }
-                _worldHudCanvas.gameObject.SetActive(_showHud);
+                if (_microHudCanvas != null)
+                {
+                    _microHudCanvas.gameObject.SetActive(_showHud);
+                }
+
+                bool showExpanded = _showHud && _nameplateVisible;
+                _expandedNameplateRoot.SetActive(showExpanded);
+                _worldHudCanvas.gameObject.SetActive(showExpanded);
             }
             else
             {
                 _isAlive = false;
                 ResetSpriteIdlePose();
+                if (_contactShadowRenderer != null)
+                {
+                    _contactShadowRenderer.gameObject.SetActive(false);
+                }
                 _underRingRenderer.gameObject.SetActive(false);
+                if (_turnChevronTransform != null)
+                {
+                    _turnChevronTransform.gameObject.SetActive(false);
+                }
                 if (!_isHitFlashing)
                 {
                     ApplySpriteTint(DeadSpriteTint);
                 }
+                if (_microHudCanvas != null)
+                {
+                    _microHudCanvas.gameObject.SetActive(false);
+                }
+                _expandedNameplateRoot.SetActive(false);
                 _worldHudCanvas.gameObject.SetActive(false);
             }
         }
@@ -281,7 +542,7 @@ namespace Realmz.World
             }
 
             GameObject floatGo = new GameObject("FloatingText");
-            floatGo.transform.position = transform.position + new Vector3(0f, _spriteSize + 0.34f, 0f);
+            floatGo.transform.position = transform.position + new Vector3(0f, GetVisualHeadHeight() + 0.34f, 0f);
             float baseScale = 0.01f;
             floatGo.transform.localScale = Vector3.one * baseScale;
 
@@ -561,6 +822,8 @@ namespace Realmz.World
             _spritePropBlock.Clear();
             _spritePropBlock.SetColor(BaseColorId, color);
             _spritePropBlock.SetColor(ColorId, color);
+            _spritePropBlock.SetColor(TintColorId, color);
+            _spritePropBlock.SetFloat(WindPhaseId, _windPhaseNorm);
             _spriteRenderer.SetPropertyBlock(_spritePropBlock);
         }
 
@@ -575,6 +838,8 @@ namespace Realmz.World
             _spritePropBlock.Clear();
             _spritePropBlock.SetColor(BaseColorId, HitFlashGoldWhite);
             _spritePropBlock.SetColor(ColorId, HitFlashGoldWhite);
+            _spritePropBlock.SetColor(TintColorId, HitFlashGoldWhite * 1.45f);
+            _spritePropBlock.SetFloat(WindPhaseId, _windPhaseNorm);
 
             Material mat = _spriteRenderer.sharedMaterial;
             if (mat != null && mat.HasProperty(EmissionColorId))
@@ -599,17 +864,29 @@ namespace Realmz.World
             billboardGo.AddComponent<PixelBillboard>();
             _spriteBillboardTransform = billboardGo.transform;
 
-            GameObject spriteGo = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            spriteGo.name = "SpriteQuad";
+            GameObject spriteGo = new GameObject("SpriteQuad", typeof(MeshFilter), typeof(MeshRenderer));
             spriteGo.transform.SetParent(_spriteBillboardTransform, false);
             spriteGo.transform.localPosition = new Vector3(0f, _spriteSize * 0.5f, 0f);
             spriteGo.transform.localScale = new Vector3(_spriteSize, _spriteSize, 1f);
-            DestroyCollider(spriteGo);
+            spriteGo.GetComponent<MeshFilter>().sharedMesh = GetOrCreateSharedUnitQuadMesh();
             _spriteRenderer = spriteGo.GetComponent<MeshRenderer>();
             _spriteRenderer.shadowCastingMode = ShadowCastingMode.On;
             _spriteRenderer.receiveShadows = true;
 
-            // 2. UnderRing
+            // 2. ContactShadow (soft dark oval beneath living unit)
+            GameObject shadowGo = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            shadowGo.name = "ContactShadow";
+            shadowGo.transform.SetParent(transform, false);
+            shadowGo.transform.localPosition = new Vector3(0f, 0.012f, 0f);
+            shadowGo.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            shadowGo.transform.localScale = new Vector3(0.92f, 0.56f, 1f);
+            DestroyCollider(shadowGo);
+            _contactShadowRenderer = shadowGo.GetComponent<MeshRenderer>();
+            _contactShadowRenderer.shadowCastingMode = ShadowCastingMode.Off;
+            _contactShadowRenderer.receiveShadows = false;
+            _contactShadowRenderer.sharedMaterial = GetOrCreateSharedShadowMaterial();
+
+            // 3. UnderRing (thin gold ring shown ONLY on active turn)
             GameObject ringGo = GameObject.CreatePrimitive(PrimitiveType.Quad);
             ringGo.name = "UnderRing";
             ringGo.transform.SetParent(transform, false);
@@ -621,27 +898,67 @@ namespace Realmz.World
             _underRingRenderer.shadowCastingMode = ShadowCastingMode.Off;
             _underRingRenderer.receiveShadows = false;
             _underRingRenderer.sharedMaterial = GetOrCreateSharedRingMaterial();
+            ringGo.SetActive(false);
 
-            // 3. WorldHud
+            float headHeight = GetVisualHeadHeight();
+
+            // 4. TurnChevron (glowing gold diamond/chevron above active unit)
+            GameObject chevronGo = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            chevronGo.name = "TurnChevron";
+            chevronGo.transform.SetParent(transform, false);
+            chevronGo.transform.localPosition = new Vector3(0f, headHeight + 0.10f, 0f);
+            chevronGo.transform.localScale = new Vector3(0.24f, 0.24f, 1f);
+            DestroyCollider(chevronGo);
+            chevronGo.AddComponent<PixelBillboard>();
+            _turnChevronTransform = chevronGo.transform;
+            _turnChevronRenderer = chevronGo.GetComponent<MeshRenderer>();
+            _turnChevronRenderer.shadowCastingMode = ShadowCastingMode.Off;
+            _turnChevronRenderer.receiveShadows = false;
+            _turnChevronRenderer.sharedMaterial = GetOrCreateSharedChevronMaterial();
+            chevronGo.SetActive(false);
+
+            // 5. MicroHud (foot-anchored ultra-slim HP bar)
+            GameObject microHudGo = new GameObject("MicroHud");
+            microHudGo.transform.SetParent(transform, false);
+            microHudGo.transform.localPosition = new Vector3(0f, 0.04f, 0f);
+            microHudGo.transform.localScale = Vector3.one * 0.0068f;
+            _microHudCanvas = microHudGo.AddComponent<Canvas>();
+            _microHudCanvas.renderMode = RenderMode.WorldSpace;
+            _microHudCanvas.sortingOrder = 16;
+            RectTransform microRt = microHudGo.GetComponent<RectTransform>();
+            microRt.sizeDelta = new Vector2(110f, 10f);
+            microHudGo.AddComponent<PixelBillboard>();
+
+            _hpFill = CreateSlimBar(microHudGo.transform, "HpBar", Vector2.zero, new Vector2(92f, 5f), AllyHpBlue);
+
+            // 6. WorldHud (hover/Alt expanded nameplate, hidden by default)
             GameObject hudGo = new GameObject("WorldHud");
             hudGo.transform.SetParent(transform, false);
-            hudGo.transform.localPosition = new Vector3(0f, _spriteSize + 0.18f, 0f);
+            hudGo.transform.localPosition = new Vector3(0f, headHeight + 0.16f, 0f);
             hudGo.transform.localScale = Vector3.one * 0.0074f;
             _worldHudCanvas = hudGo.AddComponent<Canvas>();
             _worldHudCanvas.renderMode = RenderMode.WorldSpace;
-            _worldHudCanvas.sortingOrder = 15;
+            _worldHudCanvas.sortingOrder = 17;
             RectTransform hudRt = hudGo.GetComponent<RectTransform>();
-            hudRt.sizeDelta = new Vector2(180f, 56f);
+            hudRt.sizeDelta = new Vector2(210f, 74f);
             hudGo.AddComponent<PixelBillboard>();
+
+            _expandedNameplateRoot = new GameObject("ExpandedNameplate");
+            _expandedNameplateRoot.transform.SetParent(hudGo.transform, false);
+            RectTransform expRt = _expandedNameplateRoot.AddComponent<RectTransform>();
+            expRt.anchorMin = Vector2.zero;
+            expRt.anchorMax = Vector2.one;
+            expRt.offsetMin = Vector2.zero;
+            expRt.offsetMax = Vector2.zero;
 
             // Dark slate nameplate pill with subtle bronze accent edge for crisp readability
             GameObject pillEdgeGo = new GameObject("NamePillEdge");
-            pillEdgeGo.transform.SetParent(hudGo.transform, false);
+            pillEdgeGo.transform.SetParent(_expandedNameplateRoot.transform, false);
             RectTransform pillEdgeRt = pillEdgeGo.AddComponent<RectTransform>();
             pillEdgeRt.anchorMin = new Vector2(0.5f, 0.5f);
             pillEdgeRt.anchorMax = new Vector2(0.5f, 0.5f);
-            pillEdgeRt.anchoredPosition = new Vector2(0f, 15f);
-            pillEdgeRt.sizeDelta = new Vector2(144f, 26f);
+            pillEdgeRt.anchoredPosition = new Vector2(0f, 10f);
+            pillEdgeRt.sizeDelta = new Vector2(172f, 38f);
             Image pillEdgeImg = pillEdgeGo.AddComponent<Image>();
             pillEdgeImg.color = new Color(0.76f, 0.58f, 0.28f, 0.85f);
 
@@ -653,22 +970,57 @@ namespace Realmz.World
             pillRt.offsetMin = new Vector2(1.5f, 1.5f);
             pillRt.offsetMax = new Vector2(-1.5f, -1.5f);
             Image pillImg = pillGo.AddComponent<Image>();
-            pillImg.color = new Color(0.06f, 0.08f, 0.14f, 0.90f);
+            pillImg.color = new Color(0.06f, 0.08f, 0.14f, 0.92f);
 
             // Nameplate
-            _nameLabel = CreateTmpLabel(hudGo.transform, "NameLabel", new Vector2(0f, 15f), new Vector2(166f, 24f), 19f, Color.white);
+            _nameLabel = CreateTmpLabel(_expandedNameplateRoot.transform, "NameLabel", new Vector2(0f, 18f), new Vector2(188f, 22f), 18f, Color.white);
             _nameLabel.fontStyle = FontStyles.Bold;
 
-            // HP bar
-            _hpFill = CreateBar(hudGo.transform, "HpBar", new Vector2(0f, -1f), new Vector2(108f, 9f), new Color(0.20f, 0.82f, 0.36f, 1f), out _);
+            // Optional detail line (HP / AC / COND)
+            _detailLabel = CreateTmpLabel(_expandedNameplateRoot.transform, "DetailText", new Vector2(0f, 1f), new Vector2(196f, 16f), 13f, new Color(0.84f, 0.90f, 0.96f, 1f));
+            _detailLabel.gameObject.SetActive(false);
 
             // SP bar
-            _spFill = CreateBar(hudGo.transform, "SpBar", new Vector2(0f, -10f), new Vector2(108f, 6f), new Color(0.18f, 0.78f, 0.96f, 1f), out _spBarRoot);
+            _spFill = CreateBar(_expandedNameplateRoot.transform, "SpBar", new Vector2(0f, -14f), new Vector2(116f, 6f), new Color(0.18f, 0.78f, 0.96f, 1f), out _spBarRoot);
 
             // Condition badge
-            _statusBadgeLabel = CreateTmpLabel(hudGo.transform, "ConditionBadge", new Vector2(0f, 34f), new Vector2(176f, 20f), 15f, new Color(0.98f, 0.84f, 0.22f, 1f));
+            _statusBadgeLabel = CreateTmpLabel(_expandedNameplateRoot.transform, "ConditionBadge", new Vector2(0f, 36f), new Vector2(176f, 20f), 14f, new Color(0.98f, 0.84f, 0.22f, 1f));
             _statusBadgeLabel.fontStyle = FontStyles.Bold;
             _statusBadgeLabel.gameObject.SetActive(false);
+
+            _expandedNameplateRoot.SetActive(false);
+            hudGo.SetActive(false);
+        }
+
+        private static Image CreateSlimBar(
+            Transform parent,
+            string barName,
+            Vector2 anchoredPos,
+            Vector2 size,
+            Color fillColor)
+        {
+            GameObject bgGo = new GameObject(barName);
+            bgGo.transform.SetParent(parent, false);
+            RectTransform bgRt = bgGo.AddComponent<RectTransform>();
+            bgRt.anchorMin = new Vector2(0.5f, 0.5f);
+            bgRt.anchorMax = new Vector2(0.5f, 0.5f);
+            bgRt.anchoredPosition = anchoredPos;
+            bgRt.sizeDelta = size;
+
+            Image background = bgGo.AddComponent<Image>();
+            background.color = new Color(0.03f, 0.04f, 0.07f, 0.72f);
+
+            GameObject fillGo = new GameObject("Fill");
+            fillGo.transform.SetParent(bgGo.transform, false);
+            RectTransform fillRt = fillGo.AddComponent<RectTransform>();
+            fillRt.anchorMin = Vector2.zero;
+            fillRt.anchorMax = Vector2.one;
+            fillRt.offsetMin = new Vector2(0.5f, 0.5f);
+            fillRt.offsetMax = new Vector2(-0.5f, -0.5f);
+
+            Image fill = fillGo.AddComponent<Image>();
+            fill.color = fillColor;
+            return fill;
         }
 
         private static TextMeshProUGUI CreateTmpLabel(
@@ -727,18 +1079,44 @@ namespace Realmz.World
             return fill;
         }
 
-        private static Material GetOrCreateSharedRingMaterial()
+        private static Mesh GetOrCreateSharedUnitQuadMesh()
         {
-            if (_sharedRingMaterial != null)
+            if (_sharedUnitQuadMesh != null)
             {
-                return _sharedRingMaterial;
+                return _sharedUnitQuadMesh;
             }
 
-            if (_sharedRingTexture == null)
+            _sharedUnitQuadMesh = new Mesh
             {
-                _sharedRingTexture = CreateRingTexture(64);
-            }
+                name = "SharedUnitBillboardQuad"
+            };
+            _sharedUnitQuadMesh.SetVertices(new[]
+            {
+                new Vector3(-0.5f, -0.5f, 0f),
+                new Vector3( 0.5f, -0.5f, 0f),
+                new Vector3( 0.5f,  0.5f, 0f),
+                new Vector3(-0.5f,  0.5f, 0f)
+            });
+            _sharedUnitQuadMesh.SetNormals(new[]
+            {
+                Vector3.back, Vector3.back, Vector3.back, Vector3.back
+            });
+            Vector2[] uvs =
+            {
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(1f, 1f),
+                new Vector2(0f, 1f)
+            };
+            _sharedUnitQuadMesh.SetUVs(0, uvs);
+            _sharedUnitQuadMesh.SetUVs(1, uvs);
+            _sharedUnitQuadMesh.SetTriangles(new[] { 0, 2, 1, 0, 3, 2 }, 0);
+            _sharedUnitQuadMesh.RecalculateBounds();
+            return _sharedUnitQuadMesh;
+        }
 
+        private static Material CreateSharedTransparentMaterial(string matName, Texture2D tex, Color baseColor)
+        {
             Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
             if (shader == null)
             {
@@ -750,11 +1128,19 @@ namespace Realmz.World
             }
 
             Material mat = new Material(shader);
-            mat.name = "SharedUnitUnderRing";
-            mat.mainTexture = _sharedRingTexture;
+            mat.name = matName;
+            mat.mainTexture = tex;
             if (mat.HasProperty("_BaseMap"))
             {
-                mat.SetTexture("_BaseMap", _sharedRingTexture);
+                mat.SetTexture("_BaseMap", tex);
+            }
+            if (mat.HasProperty(BaseColorId))
+            {
+                mat.SetColor(BaseColorId, baseColor);
+            }
+            if (mat.HasProperty(ColorId))
+            {
+                mat.SetColor(ColorId, baseColor);
             }
             if (mat.HasProperty("_Surface"))
             {
@@ -768,8 +1154,55 @@ namespace Realmz.World
                 mat.renderQueue = (int)RenderQueue.Transparent;
             }
 
-            _sharedRingMaterial = mat;
+            return mat;
+        }
+
+        private static Material GetOrCreateSharedRingMaterial()
+        {
+            if (_sharedRingMaterial != null)
+            {
+                return _sharedRingMaterial;
+            }
+
+            if (_sharedRingTexture == null)
+            {
+                _sharedRingTexture = CreateRingTexture(64);
+            }
+
+            _sharedRingMaterial = CreateSharedTransparentMaterial("SharedUnitUnderRing", _sharedRingTexture, Color.white);
             return _sharedRingMaterial;
+        }
+
+        private static Material GetOrCreateSharedShadowMaterial()
+        {
+            if (_sharedShadowMaterial != null)
+            {
+                return _sharedShadowMaterial;
+            }
+
+            if (_sharedShadowTexture == null)
+            {
+                _sharedShadowTexture = CreateContactShadowTexture(64);
+            }
+
+            _sharedShadowMaterial = CreateSharedTransparentMaterial("SharedUnitContactShadow", _sharedShadowTexture, ContactShadowColor);
+            return _sharedShadowMaterial;
+        }
+
+        private static Material GetOrCreateSharedChevronMaterial()
+        {
+            if (_sharedChevronMaterial != null)
+            {
+                return _sharedChevronMaterial;
+            }
+
+            if (_sharedChevronTexture == null)
+            {
+                _sharedChevronTexture = CreateTurnChevronTexture(32);
+            }
+
+            _sharedChevronMaterial = CreateSharedTransparentMaterial("SharedUnitTurnChevron", _sharedChevronTexture, Color.white);
+            return _sharedChevronMaterial;
         }
 
         private static Texture2D CreateRingTexture(int size)
@@ -780,7 +1213,7 @@ namespace Realmz.World
 
             float half = (size - 1) * 0.5f;
             float outer = half * 0.94f;
-            float inner = half * 0.72f;
+            float inner = half * 0.82f;
 
             Color[] pixels = new Color[size * size];
             for (int y = 0; y < size; y++)
@@ -799,6 +1232,73 @@ namespace Realmz.World
                     }
 
                     pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
+                }
+            }
+
+            tex.SetPixels(pixels);
+            tex.Apply(false, true);
+            return tex;
+        }
+
+        private static Texture2D CreateContactShadowTexture(int size)
+        {
+            Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            tex.filterMode = FilterMode.Bilinear;
+            tex.wrapMode = TextureWrapMode.Clamp;
+
+            float half = (size - 1) * 0.5f;
+            Color[] pixels = new Color[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                float ny = (y - half) / half;
+                for (int x = 0; x < size; x++)
+                {
+                    float nx = (x - half) / half;
+                    float dist = Mathf.Sqrt(nx * nx + ny * ny);
+                    float alpha = Mathf.Clamp01(1f - dist);
+                    alpha = alpha * alpha;
+                    pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
+                }
+            }
+
+            tex.SetPixels(pixels);
+            tex.Apply(false, true);
+            return tex;
+        }
+
+        private static Texture2D CreateTurnChevronTexture(int size)
+        {
+            Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            tex.filterMode = FilterMode.Point;
+            tex.wrapMode = TextureWrapMode.Clamp;
+
+            Color[] pixels = new Color[size * size];
+            Color clear = new Color(0f, 0f, 0f, 0f);
+            Color outline = new Color(0.14f, 0.10f, 0.04f, 0.95f);
+            Color goldCore = new Color(0.98f, 0.84f, 0.16f, 1.0f);
+            Color goldBright = new Color(1.00f, 0.95f, 0.55f, 1.0f);
+
+            float half = (size - 1) * 0.5f;
+            for (int y = 0; y < size; y++)
+            {
+                float ny = (y - half) / half; // -1 bottom, +1 top
+                for (int x = 0; x < size; x++)
+                {
+                    float nx = Mathf.Abs((x - half) / half);
+                    // Crisp downward-pointing diamond/chevron
+                    float diamondDist = nx * 1.18f + Mathf.Abs(ny - 0.05f) * 1.05f;
+                    if (diamondDist <= 0.62f)
+                    {
+                        pixels[y * size + x] = diamondDist <= 0.30f ? goldBright : goldCore;
+                    }
+                    else if (diamondDist <= 0.78f)
+                    {
+                        pixels[y * size + x] = outline;
+                    }
+                    else
+                    {
+                        pixels[y * size + x] = clear;
+                    }
                 }
             }
 

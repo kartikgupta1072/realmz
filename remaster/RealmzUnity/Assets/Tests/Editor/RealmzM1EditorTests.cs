@@ -102,7 +102,9 @@ namespace Realmz.EditorTests
             BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
             Assert.That(catalog, Is.Not.Null, "BywaterAssetCatalog asset missing from Assets/Resources.");
             Assert.That(catalog.heroes.Count, Is.EqualTo(6));
-            Assert.That(catalog.monsters.Count, Is.EqualTo(6));
+            Assert.That(catalog.monsters.Count, Is.EqualTo(7));
+            Assert.That(catalog.hotbarIcons.Count, Is.EqualTo(21));
+            Assert.That(catalog.cartographyUnitSheets.Count, Is.EqualTo(13));
             Assert.That(catalog.grassMaterial, Is.Not.Null);
             Assert.That(catalog.cobblestoneMaterial, Is.Not.Null);
             Assert.That(catalog.dirtPathMaterial, Is.Not.Null);
@@ -778,6 +780,659 @@ namespace Realmz.EditorTests
             {
                 Object.DestroyImmediate(overlaysGo);
                 Object.DestroyImmediate(camGo);
+            }
+        }
+
+        [Test]
+        public void CombatHud_HidesExplorationAndRightSidebar_AndUsesContextualHotbarAndPips()
+        {
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
+
+            PartyState party = PartyState.FromBundle(bundle);
+            ExplorationSession explore = new ExplorationSession(bundle.Maps, "land_0", party, new DeterministicDiceRoller(42UL));
+
+            PartyMemberState aldricPreset = party.Members[0];
+            PartyMemberState theronPreset = party.Members[3];
+            PartyMemberState vexPreset = party.Members[5];
+            Assert.That(aldricPreset.MaxSp, Is.EqualTo(0));
+            Assert.That(aldricPreset.KnownSpellIds.Count, Is.EqualTo(0));
+            Assert.That(vexPreset.MaxSp, Is.EqualTo(0));
+            Assert.That(vexPreset.KnownSpellIds.Count, Is.EqualTo(0));
+            Assert.That(theronPreset.MaxSp, Is.GreaterThan(0));
+            Assert.That(theronPreset.KnownSpellIds.Count, Is.GreaterThan(0));
+
+            CombatGrid grid = new CombatGrid(8, 8);
+            CombatantState vex = CombatantState.FromHero(vexPreset, new GridCoord(1, 2), bundle.Items);
+            CombatantState aldric = CombatantState.FromHero(aldricPreset, new GridCoord(2, 2), bundle.Items);
+            CombatantState theron = CombatantState.FromHero(theronPreset, new GridCoord(1, 4), bundle.Items);
+            CombatantState monster = CombatantState.FromMonster(bundle.Monsters[0], "mon_0_hud", new GridCoord(6, 6), new DeterministicDiceRoller(101UL));
+
+            TacticalCombatSession combat = new TacticalCombatSession(
+                grid,
+                new[] { vex, aldric, theron, monster },
+                bundle.Spells,
+                bundle.Items,
+                new DeterministicDiceRoller(101UL),
+                RulesetMode.ModernBalanced,
+                party);
+
+            bool hadEventSystem = Object.FindFirstObjectByType<EventSystem>() != null;
+            GameObject tempGo = new GameObject("TempTrack2CombatHudTest");
+
+            try
+            {
+                BywaterHudController hud = tempGo.AddComponent<BywaterHudController>();
+                hud.BuildUi(catalog);
+                Canvas canvas = tempGo.GetComponentInChildren<Canvas>(true);
+                Assert.That(canvas, Is.Not.Null);
+
+                // Verify RefreshExploreHud hides SkirmishBtn and WarpBtn until SetDevToolsVisible(true)
+                hud.RefreshExploreHud(explore, bundle, null, null, 0, null, isReachable: true);
+                Transform skirmishBtn = FindDescendantByName(canvas.transform, "SkirmishBtn");
+                Transform warpBtn = FindDescendantByName(canvas.transform, "WarpBtn");
+                Assert.That(skirmishBtn, Is.Not.Null);
+                Assert.That(warpBtn, Is.Not.Null);
+                Assert.That(skirmishBtn.gameObject.activeSelf, Is.False, "SkirmishBtn should be hidden by default.");
+                Assert.That(warpBtn.gameObject.activeSelf, Is.False, "WarpBtn should be hidden by default.");
+
+                hud.SetDevToolsVisible(true);
+                Assert.That(skirmishBtn.gameObject.activeSelf, Is.True, "SkirmishBtn should show after SetDevToolsVisible(true).");
+                Assert.That(warpBtn.gameObject.activeSelf, Is.True, "WarpBtn should show after SetDevToolsVisible(true).");
+
+                // 1. Rogue / Knight without spells (Vex / Aldric)
+                AdvanceCombatTurnToActor(combat, vex.Id);
+                Assert.That(combat.CurrentActor, Is.Not.Null);
+                Assert.That(combat.CurrentActor.Id, Is.EqualTo(vex.Id));
+                Assert.That(combat.CurrentActor.MaxSp, Is.EqualTo(0));
+                Assert.That(combat.CurrentActor.SpellIds.Count, Is.EqualTo(0));
+                Assert.That(combat.CanUndoMove, Is.False);
+
+                hud.RefreshCombatHud(combat, bundle, CombatActionMode.Smart, -1, "1x");
+
+                Assert.That(hud.AreExploreButtonsHiddenInCombat, Is.True);
+                string[] hiddenExploreNames =
+                {
+                    "SkirmishBtn", "PartyBtn", "ShopBtn", "CampBtn", "ShrineBtn",
+                    "WarpBtn", "ContextPoiBtn", "SaveBtn", "LoadBtn", "GoldText", "TorchText"
+                };
+                for (int i = 0; i < hiddenExploreNames.Length; i++)
+                {
+                    Transform tf = FindDescendantByName(canvas.transform, hiddenExploreNames[i]);
+                    Assert.That(tf, Is.Not.Null, hiddenExploreNames[i] + " missing from HUD.");
+                    Assert.That(tf.gameObject.activeSelf, Is.False, hiddenExploreNames[i] + " should be inactive in combat.");
+                }
+
+                Assert.That(hud.IsRightSidebarRemoved, Is.True);
+                Assert.That(FindDescendantByName(canvas.transform, "CombatTooltipCard"), Is.Null);
+                Assert.That(FindDescendantByName(canvas.transform, "CombatLogPanel"), Is.Null);
+                Assert.That(FindDescendantByName(canvas.transform, "MoveBtn"), Is.Null);
+
+                Transform undoMoveBtn = FindDescendantByName(canvas.transform, "UndoMoveBtn");
+                Assert.That(undoMoveBtn, Is.Not.Null);
+                Assert.That(undoMoveBtn.gameObject.activeSelf, Is.False, "UndoMoveBtn should be inactive when !combat.CanUndoMove.");
+
+                IReadOnlyList<string> nonCasterActions = hud.GetVisibleHotbarActionIds();
+                for (int i = 0; i < nonCasterActions.Count; i++)
+                {
+                    Assert.That(nonCasterActions[i], Does.Not.StartWith("spell:"), "Non-caster hotbar should not expose spell slots.");
+                }
+                Assert.That(FindDescendantByName(canvas.transform, "SpellBtn"), Is.Null);
+                Transform actionBar = FindDescendantByName(canvas.transform, "TacticalActionBar");
+                Assert.That(actionBar, Is.Not.Null);
+                UnityEngine.UI.Button[] actionButtons = actionBar.GetComponentsInChildren<UnityEngine.UI.Button>(true);
+                for (int i = 0; i < actionButtons.Length; i++)
+                {
+                    TextMeshProUGUI btnLbl = actionButtons[i].GetComponentInChildren<TextMeshProUGUI>(true);
+                    if (btnLbl != null)
+                    {
+                        Assert.That(btnLbl.text, Is.Not.EqualTo("Spell"), "Legacy Spell submenu button should not exist.");
+                    }
+                }
+
+                Assert.That(FindDescendantByName(canvas.transform, "MoveSegments"), Is.Not.Null);
+                Assert.That(FindDescendantByName(canvas.transform, "StdPipIcon"), Is.Not.Null);
+                Assert.That(FindDescendantByName(canvas.transform, "SwiftPipIcon"), Is.Not.Null);
+                Assert.That(FindDescendantByName(canvas.transform, "CombatPartyStrip"), Is.Not.Null);
+                Assert.That(FindDescendantByName(canvas.transform, "CombatTickerPanel"), Is.Not.Null);
+
+                // Verify Knight (Aldric) also hides spell slots
+                AdvanceCombatTurnToActor(combat, aldric.Id);
+                Assert.That(combat.CurrentActor.Id, Is.EqualTo(aldric.Id));
+                hud.RefreshCombatHud(combat, bundle, CombatActionMode.Smart, -1, "1x");
+                IReadOnlyList<string> knightActions = hud.GetVisibleHotbarActionIds();
+                for (int i = 0; i < knightActions.Count; i++)
+                {
+                    Assert.That(knightActions[i], Does.Not.StartWith("spell:"));
+                }
+
+                TextMeshProUGUI[] allLabels = canvas.GetComponentsInChildren<TextMeshProUGUI>(true);
+                Assert.That(allLabels.Length, Is.GreaterThan(0));
+                for (int i = 0; i < allLabels.Length; i++)
+                {
+                    Assert.That(allLabels[i].fontSize, Is.GreaterThanOrEqualTo(15f), $"Label '{allLabels[i].gameObject.name}' has fontSize < 15f.");
+                }
+
+                // 2. Mage (Theron): spell items directly on main hotbar + PooledLogRowCount == 40 + zero churn
+                AdvanceCombatTurnToActor(combat, theron.Id);
+                Assert.That(combat.CurrentActor.Id, Is.EqualTo(theron.Id));
+                int firstSpellId = theron.SpellIds[0];
+                hud.RefreshCombatHud(combat, bundle, CombatActionMode.Spell, firstSpellId, "1x");
+
+                IReadOnlyList<string> mageActions = hud.GetVisibleHotbarActionIds();
+                bool hasSpellSlot = false;
+                for (int i = 0; i < mageActions.Count; i++)
+                {
+                    if (mageActions[i].StartsWith("spell:"))
+                    {
+                        hasSpellSlot = true;
+                        break;
+                    }
+                }
+                Assert.That(hasSpellSlot, Is.True, "Mage hotbar should expose spell: items directly.");
+                Assert.That(hud.PooledLogRowCount, Is.EqualTo(40));
+
+                Transform logContent = FindDescendantByPathSuffix(canvas.transform, "CombatLogScroll/Viewport/Content");
+                Transform partyStrip = FindDescendantByName(canvas.transform, "CombatPartyStrip");
+                int logChildrenBefore = logContent.childCount;
+                int barChildrenBefore = actionBar.childCount;
+                int stripChildrenBefore = partyStrip.childCount;
+
+                hud.RefreshCombatHud(combat, bundle, CombatActionMode.Spell, firstSpellId, "1x");
+                Assert.That(hud.PooledLogRowCount, Is.EqualTo(40));
+                Assert.That(logContent.childCount, Is.EqualTo(logChildrenBefore));
+                Assert.That(actionBar.childCount, Is.EqualTo(barChildrenBefore));
+                Assert.That(partyStrip.childCount, Is.EqualTo(stripChildrenBefore));
+            }
+            finally
+            {
+                Object.DestroyImmediate(tempGo);
+                if (!hadEventSystem)
+                {
+                    EventSystem createdEs = Object.FindFirstObjectByType<EventSystem>();
+                    if (createdEs != null)
+                    {
+                        Object.DestroyImmediate(createdEs.gameObject);
+                    }
+                }
+            }
+        }
+
+        [Test]
+        public void CombatUx_HoverOnlyIntentArcsDefaultFalse_SettingsAndAutoCombatToggle()
+        {
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            bool hadEventSystem = Object.FindFirstObjectByType<EventSystem>() != null;
+            GameObject gameControllerGo = new GameObject("TempGameControllerIntentTest");
+            GameObject overlaysGo = new GameObject("TempGridOverlaysIntentTest");
+            GameObject hudGo = new GameObject("TempHudSettingsTest");
+
+            try
+            {
+                BywaterGameController controller = gameControllerGo.AddComponent<BywaterGameController>();
+                Assert.That(controller.ShowAllEnemyIntentArcs, Is.False, "ShowAllEnemyIntentArcs should default to false (hover-only).");
+
+                BywaterGridOverlays overlays = overlaysGo.AddComponent<BywaterGridOverlays>();
+                overlays.Initialize(catalog);
+                overlays.ClearAll();
+
+                Transform intentLayer = FindDescendantByName(overlays.transform, "EnemyIntentArcs");
+                Assert.That(intentLayer, Is.Not.Null);
+                Assert.That(intentLayer.GetComponentsInChildren<LineRenderer>(false).Length, Is.EqualTo(0), "No active LineRenderers expected before hover.");
+
+                overlays.ShowEnemyIntentArcs(new[]
+                {
+                    new EnemyIntentArcData { From = new GridCoord(7, 5), To = new GridCoord(5, 5), IsSpell = false }
+                });
+                LineRenderer[] activeArcs = intentLayer.GetComponentsInChildren<LineRenderer>(false);
+                Assert.That(activeArcs.Length, Is.EqualTo(1));
+                Assert.That(activeArcs[0].positionCount, Is.GreaterThan(0));
+
+                overlays.ClearAll();
+                Assert.That(intentLayer.GetComponentsInChildren<LineRenderer>(false).Length, Is.EqualTo(0), "ClearAll should hide intent LineRenderers.");
+
+                BywaterHudController hud = hudGo.AddComponent<BywaterHudController>();
+                hud.BuildUi(catalog);
+                Canvas canvas = hudGo.GetComponentInChildren<Canvas>(true);
+                Assert.That(canvas, Is.Not.Null);
+
+                Assert.That(hud.IsSettingsOpen, Is.False);
+                hud.ToggleSettingsModal(true);
+                Assert.That(hud.IsSettingsOpen, Is.True);
+                hud.CloseSettingsModal();
+                Assert.That(hud.IsSettingsOpen, Is.False);
+
+                hud.ToggleSettingsModal(true);
+                Assert.That(hud.IsSettingsOpen, Is.True);
+
+                bool? autoCombatState = null;
+                bool? autoEndTurnState = null;
+                float? gridOpacityValue = null;
+                bool? nameplatesAlwaysOnState = null;
+
+                hud.OnAutoCombatToggled += v => autoCombatState = v;
+                hud.OnAutoEndTurnToggled += v => autoEndTurnState = v;
+                hud.OnGridOpacityChanged += v => gridOpacityValue = v;
+                hud.OnNameplatesAlwaysOnChanged += v => nameplatesAlwaysOnState = v;
+
+                Transform autoCombatBtnTf = FindDescendantByPathSuffix(canvas.transform, "SettingsModal/AutoCombatRow/ToggleBtn");
+                Transform autoEndTurnBtnTf = FindDescendantByPathSuffix(canvas.transform, "SettingsModal/AutoEndTurnRow/ToggleBtn");
+                Transform gridOpacitySliderTf = FindDescendantByPathSuffix(canvas.transform, "SettingsModal/GridOpacityRow/Slider");
+                Transform nameplatesBtnTf = FindDescendantByPathSuffix(canvas.transform, "SettingsModal/NameplatesRow/ToggleBtn");
+
+                Assert.That(autoCombatBtnTf, Is.Not.Null);
+                Assert.That(autoEndTurnBtnTf, Is.Not.Null);
+                Assert.That(gridOpacitySliderTf, Is.Not.Null);
+                Assert.That(nameplatesBtnTf, Is.Not.Null);
+
+                autoCombatBtnTf.GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                Assert.That(autoCombatState, Is.EqualTo(true));
+                Assert.That(hud.IsAutoCombatVisualOn, Is.True);
+
+                autoEndTurnBtnTf.GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                Assert.That(autoEndTurnState, Is.EqualTo(true));
+
+                gridOpacitySliderTf.GetComponent<UnityEngine.UI.Slider>().value = 0.35f;
+                Assert.That(gridOpacityValue.HasValue, Is.True);
+                Assert.That(gridOpacityValue.Value, Is.EqualTo(0.35f).Within(0.001f));
+
+                nameplatesBtnTf.GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                Assert.That(nameplatesAlwaysOnState, Is.EqualTo(true));
+
+                Assert.That(hud.IsQuickResolveOpen, Is.False);
+                hud.ShowQuickResolveModal("Goblin Ambush", "Goblins ahead.");
+                Assert.That(hud.IsQuickResolveOpen, Is.True);
+                hud.HideQuickResolveModal();
+                Assert.That(hud.IsQuickResolveOpen, Is.False);
+            }
+            finally
+            {
+                Object.DestroyImmediate(gameControllerGo);
+                Object.DestroyImmediate(overlaysGo);
+                Object.DestroyImmediate(hudGo);
+                if (!hadEventSystem)
+                {
+                    EventSystem createdEs = Object.FindFirstObjectByType<EventSystem>();
+                    if (createdEs != null)
+                    {
+                        Object.DestroyImmediate(createdEs.gameObject);
+                    }
+                }
+            }
+        }
+
+        [Test]
+        public void CombatCameraRig_AutoFramesAllCombatantsIncludingEdgeSpawnsWithinSafeViewport()
+        {
+            GameObject camGo = new GameObject("TempCombatFramingCamera", typeof(Camera));
+            try
+            {
+                Camera cam = camGo.GetComponent<Camera>();
+                cam.aspect = 16f / 9f;
+                cam.fieldOfView = 34f;
+
+                BywaterCameraRig rig = camGo.AddComponent<BywaterCameraRig>();
+
+                Vector3[] combatantPositions =
+                {
+                    new Vector3(0.5f, 0f, -1.5f),   // Far-left edge Vex
+                    new Vector3(1.5f, 0f, -9.5f),   // Far-bottom-left hero
+                    new Vector3(2.5f, 0f, -3.5f),
+                    new Vector3(3.5f, 0f, -5.5f),
+                    new Vector3(4.5f, 0f, -2.5f),
+                    new Vector3(5.5f, 0f, -7.5f),
+                    new Vector3(7.5f, 0f, -4.5f),
+                    new Vector3(9.5f, 0f, -6.5f),
+                    new Vector3(11.5f, 0f, -2.5f),  // Far-right edge Orc Warrior
+                    new Vector3(11.5f, 0f, -8.5f)   // Far-right edge Orc Archer
+                };
+
+                rig.FrameCombatantsInSafeViewport(combatantPositions, immediate: true);
+
+                Rect safe = BywaterCameraRig.DefaultSafeViewportRect;
+                Assert.That(safe.xMin, Is.EqualTo(0.11f).Within(0.001f));
+                Assert.That(safe.xMax, Is.EqualTo(0.96f).Within(0.001f));
+                Assert.That(safe.yMin, Is.EqualTo(0.16f).Within(0.001f));
+                Assert.That(safe.yMax, Is.EqualTo(0.85f).Within(0.001f));
+
+                for (int i = 0; i < combatantPositions.Length; i++)
+                {
+                    Vector3 foot = combatantPositions[i];
+                    Vector3 head = foot + Vector3.up * 1.55f;
+
+                    Vector3 footVp = cam.WorldToViewportPoint(foot);
+                    Vector3 headVp = cam.WorldToViewportPoint(head);
+
+                    Assert.That(footVp.z, Is.GreaterThan(0f), $"Foot[{i}] behind camera.");
+                    Assert.That(footVp.x, Is.InRange(safe.xMin, safe.xMax), $"Foot[{i}] x={footVp.x} outside safe viewport.");
+                    Assert.That(footVp.y, Is.InRange(safe.yMin, safe.yMax), $"Foot[{i}] y={footVp.y} outside safe viewport.");
+
+                    Assert.That(headVp.z, Is.GreaterThan(0f), $"Head[{i}] behind camera.");
+                    Assert.That(headVp.x, Is.InRange(safe.xMin, safe.xMax), $"Head[{i}] x={headVp.x} outside safe viewport.");
+                    Assert.That(headVp.y, Is.InRange(safe.yMin, safe.yMax), $"Head[{i}] y={headVp.y} outside safe viewport.");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(camGo);
+            }
+        }
+
+        [Test]
+        public void UnitViewsAndWorldRenderer_SupportMicroHpBarsHoverNameplatesAndTexturedPortal()
+        {
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
+
+            GameObject unitGo1 = new GameObject("TempUnitView1");
+            GameObject unitGo2 = new GameObject("TempUnitView2");
+            GameObject camGo = new GameObject("TempUnitViewCamera", typeof(Camera));
+            GameObject worldGo = new GameObject("TempWorldRendererPortalTest");
+
+            try
+            {
+                Camera cam = camGo.GetComponent<Camera>();
+                cam.aspect = 16f / 9f;
+                cam.fieldOfView = 34f;
+                cam.transform.position = new Vector3(5.5f, 8.5f, -12.5f);
+                cam.transform.rotation = Quaternion.Euler(48f, 0f, 0f);
+
+                BywaterUnitView view1 = unitGo1.AddComponent<BywaterUnitView>();
+                view1.transform.position = new Vector3(5.5f, 0f, -5.5f);
+                view1.Configure("hero_rogue", "Vex", null, Color.cyan, catalog.uiFont, isAllyOverride: true);
+
+                Transform microHud = FindDescendantByName(view1.transform, "MicroHud");
+                Transform contactShadow = FindDescendantByName(view1.transform, "ContactShadow");
+                Transform underRing = FindDescendantByName(view1.transform, "UnderRing");
+                Transform turnChevron = FindDescendantByName(view1.transform, "TurnChevron");
+
+                Assert.That(microHud, Is.Not.Null);
+                Assert.That(microHud.gameObject.activeSelf, Is.True);
+                Assert.That(view1.IsNameplateVisible, Is.False);
+                Assert.That(contactShadow, Is.Not.Null);
+                Assert.That(contactShadow.gameObject.activeSelf, Is.True);
+                Assert.That(underRing, Is.Not.Null);
+                Assert.That(underRing.gameObject.activeSelf, Is.False);
+                Assert.That(turnChevron, Is.Not.Null);
+                Assert.That(turnChevron.gameObject.activeSelf, Is.False);
+
+                view1.SetTurnHighlight(true);
+                Assert.That(underRing.gameObject.activeSelf, Is.True);
+                Assert.That(turnChevron.gameObject.activeSelf, Is.True);
+
+                view1.SetNameplateVisible(true, "HP 14/14 | AC 14");
+                Assert.That(view1.IsNameplateVisible, Is.True);
+                Transform worldHud1 = FindDescendantByName(view1.transform, "WorldHud");
+                Transform detailText1 = FindDescendantByName(view1.transform, "DetailText");
+                Assert.That(worldHud1, Is.Not.Null);
+                Assert.That(worldHud1.gameObject.activeSelf, Is.True);
+                Assert.That(detailText1, Is.Not.Null);
+                Assert.That(detailText1.GetComponent<TextMeshProUGUI>().text, Is.EqualTo("HP 14/14 | AC 14"));
+
+                BywaterUnitView view2 = unitGo2.AddComponent<BywaterUnitView>();
+                view2.transform.position = new Vector3(5.6f, 0f, -5.5f);
+                view2.Configure("hero_knight", "Aldric", null, Color.cyan, catalog.uiFont, isAllyOverride: true);
+                view2.SetNameplateVisible(true, "HP 17/17 | AC 11");
+                Transform worldHud2 = FindDescendantByName(view2.transform, "WorldHud");
+                Assert.That(worldHud2, Is.Not.Null);
+
+                BywaterUnitView.ResolveNameplateStagger(new[] { view1, view2 }, cam);
+                float maxY = Mathf.Max(worldHud1.localPosition.y, worldHud2.localPosition.y);
+                float minY = Mathf.Min(worldHud1.localPosition.y, worldHud2.localPosition.y);
+                Assert.That(maxY - minY, Is.GreaterThan(0.02f), "ResolveNameplateStagger should vertically separate overlapping nameplates.");
+
+                BywaterWorldRenderer renderer = worldGo.AddComponent<BywaterWorldRenderer>();
+                renderer.Initialize(catalog);
+                TileMapData dungeon = bundle.Maps["dungeon_0"];
+                renderer.RenderMap(dungeon, new GridCoord(33, 72), forceRebuild: true);
+
+                Transform runeFloor = FindDescendantByPathSuffix(renderer.transform, "PortalRune_0/RuneFloor");
+                Assert.That(runeFloor, Is.Not.Null, "PortalRune_0/RuneFloor missing on dungeon_0.");
+                MeshRenderer runeMr = runeFloor.GetComponent<MeshRenderer>();
+                Assert.That(runeMr, Is.Not.Null);
+                Assert.That(runeMr.sharedMaterial, Is.Not.Null);
+                Assert.That(runeMr.sharedMaterial.mainTexture, Is.Not.Null, "PortalRune_0/RuneFloor must have a textured material.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(unitGo1);
+                Object.DestroyImmediate(unitGo2);
+                Object.DestroyImmediate(camGo);
+                Object.DestroyImmediate(worldGo);
+            }
+        }
+
+        [Test]
+        public void UnifiedRosterAndIcons_ResolveAll6Heroes7Enemies21IconsAndGoblinArcher()
+        {
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            Assert.That(catalog, Is.Not.Null, "BywaterAssetCatalog missing.");
+
+            string[] heroIds =
+            {
+                "hero_knight", "hero_cleric", "hero_ranger",
+                "hero_mage", "hero_paladin", "hero_rogue"
+            };
+            for (int i = 0; i < heroIds.Length; i++)
+            {
+                string id = heroIds[i];
+                AssertUnifiedUnitSheet(id, isHero: true);
+
+                BywaterAssetCatalog.HeroArtEntry entry = catalog.GetHeroArt(id, 0, string.Empty);
+                Assert.That(entry, Is.Not.Null, "Missing HeroArtEntry for " + id);
+                Assert.That(entry.id, Is.EqualTo(id));
+                Assert.That(entry.sprite, Is.Not.Null, "Hero sprite null: " + id);
+                Assert.That(entry.sprite.rect.size, Is.EqualTo(new Vector2(128f, 128f)), "Hero sprite frame must be 128x128: " + id);
+                Assert.That(entry.portrait, Is.Not.Null, "Hero portrait null: " + id);
+                Assert.That(entry.unitSheetMaterial, Is.Not.Null, "Hero unitSheetMaterial null: " + id);
+
+                Material resolved = catalog.ResolveCartographyUnitMaterial(id, null);
+                Assert.That(resolved, Is.Not.Null, "Resolved unit material null for " + id);
+                Assert.That(resolved.shader.name, Is.EqualTo("Realmz/CartographyBillboard"));
+                Assert.That(resolved.GetFloat("_Cols"), Is.EqualTo(4f));
+                Assert.That(resolved.GetFloat("_FrameCount"), Is.EqualTo(4f));
+                Assert.That(resolved.GetFloat("_IsTwoBankAtlas"), Is.EqualTo(0f));
+                Assert.That(resolved.GetTexture("_BaseMap").name, Is.EqualTo($"{id}_sheet"));
+                Assert.That(resolved.GetTexture("_BumpMap"), Is.Not.Null, "Normal map missing on material for " + id);
+            }
+
+            string[] monsterIds =
+            {
+                "monster_giant_frog", "monster_goblin_raider", "monster_goblin_archer",
+                "monster_orc_warrior", "monster_giant_rat", "monster_skeleton_warrior",
+                "monster_bandit_cutthroat"
+            };
+            for (int i = 0; i < monsterIds.Length; i++)
+            {
+                string id = monsterIds[i];
+                AssertUnifiedUnitSheet(id, isHero: false);
+
+                BywaterAssetCatalog.MonsterArtEntry entry = catalog.GetMonsterArt(id, 0);
+                Assert.That(entry, Is.Not.Null, "Missing MonsterArtEntry for " + id);
+                Assert.That(entry.key, Is.EqualTo(id));
+                Assert.That(entry.sprite, Is.Not.Null, "Monster sprite null: " + id);
+                Assert.That(entry.sprite.rect.size, Is.EqualTo(new Vector2(128f, 128f)), "Monster sprite frame must be 128x128: " + id);
+                Assert.That(entry.unitSheetMaterial, Is.Not.Null, "Monster unitSheetMaterial null: " + id);
+
+                Material resolved = catalog.ResolveCartographyUnitMaterial(id, null);
+                Assert.That(resolved, Is.Not.Null, "Resolved unit material null for " + id);
+                Assert.That(resolved.shader.name, Is.EqualTo("Realmz/CartographyBillboard"));
+                Assert.That(resolved.GetFloat("_Cols"), Is.EqualTo(4f));
+                Assert.That(resolved.GetFloat("_FrameCount"), Is.EqualTo(4f));
+                Assert.That(resolved.GetFloat("_IsTwoBankAtlas"), Is.EqualTo(0f));
+                Assert.That(resolved.GetTexture("_BaseMap").name, Is.EqualTo($"{id}_sheet"));
+                Assert.That(resolved.GetTexture("_BumpMap"), Is.Not.Null, "Normal map missing on material for " + id);
+            }
+
+            // Explicit Goblin Archer convergence guard (must NEVER resolve to legacy kobold_spearman lizard)
+            BywaterAssetCatalog.MonsterArtEntry goblinArcher = catalog.GetMonsterArt("goblin_archer", 388);
+            Assert.That(goblinArcher, Is.Not.Null);
+            Assert.That(goblinArcher.key, Is.EqualTo("monster_goblin_archer"));
+            Assert.That(goblinArcher.sprite, Is.Not.Null);
+            Assert.That(goblinArcher.sprite.rect.size, Is.EqualTo(new Vector2(128f, 128f)));
+
+            BywaterAssetCatalog.MonsterArtEntry combatGoblinArcher = catalog.GetMonsterArt("mon_2_goblin_archer", 388);
+            Assert.That(combatGoblinArcher, Is.Not.Null);
+            Assert.That(combatGoblinArcher.key, Is.EqualTo("monster_goblin_archer"));
+
+            Material goblinArcherMat = catalog.ResolveCartographyUnitMaterial("goblin_archer", null);
+            Assert.That(goblinArcherMat, Is.Not.Null);
+            Assert.That(goblinArcherMat.GetTexture("_BaseMap").name, Is.EqualTo("monster_goblin_archer_sheet"));
+
+            BywaterAssetCatalog.MonsterArtEntry orcWarrior = catalog.GetMonsterArt("mon_3_orc_warrior", 515);
+            Assert.That(orcWarrior, Is.Not.Null);
+            Assert.That(orcWarrior.key, Is.EqualTo("monster_orc_warrior"));
+
+            // Verify all 21 32x32 pixel hotbar & utility icons
+            string[] expectedIconKeys =
+            {
+                "sword", "bow", "dagger", "staff", "fireball", "flame_hands", "magic_darts",
+                "heal", "buff", "daze", "shove", "potion", "guard", "undo", "end_turn",
+                "auto_combat", "speed", "audio", "grid", "settings", "flee"
+            };
+            Assert.That(expectedIconKeys.Length, Is.EqualTo(21));
+
+            for (int i = 0; i < expectedIconKeys.Length; i++)
+            {
+                string key = expectedIconKeys[i];
+                string iconPath = $"Assets/Art/Cartography/Icons/icon_{key}.png";
+                TextureImporter importer = AssetImporter.GetAtPath(iconPath) as TextureImporter;
+                Assert.That(importer, Is.Not.Null, "Missing icon importer: " + iconPath);
+                Assert.That(importer.textureType, Is.EqualTo(TextureImporterType.Sprite));
+                Assert.That(importer.filterMode, Is.EqualTo(FilterMode.Point));
+                Assert.That(importer.textureCompression, Is.EqualTo(TextureImporterCompression.Uncompressed));
+                Assert.That(importer.mipmapEnabled, Is.False);
+
+                Sprite sprite = catalog.GetHotbarIcon(key);
+                Assert.That(sprite, Is.Not.Null, "Catalog GetHotbarIcon null for " + key);
+                Assert.That(sprite.texture.width, Is.EqualTo(32), "Icon width != 32 for " + key);
+                Assert.That(sprite.texture.height, Is.EqualTo(32), "Icon height != 32 for " + key);
+                Assert.That(sprite.texture.filterMode, Is.EqualTo(FilterMode.Point));
+                Assert.That(catalog.GetHotbarIcon("icon_" + key), Is.SameAs(sprite));
+            }
+
+            // Verify HUD binds real 32x32 pixel icons on both hotbar slots and utility/skill buttons with >= 15pt text
+            string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
+            PartyState party = PartyState.FromBundle(bundle);
+            CombatGrid grid = new CombatGrid(8, 8);
+            CombatantState theron = CombatantState.FromHero(party.Members[3], new GridCoord(1, 3), bundle.Items);
+            CombatantState goblin = CombatantState.FromMonster(bundle.Monsters[4], "mon_0_goblin_archer", new GridCoord(5, 3), new DeterministicDiceRoller(55UL));
+            TacticalCombatSession combat = new TacticalCombatSession(
+                grid,
+                new[] { theron, goblin },
+                bundle.Spells,
+                bundle.Items,
+                new DeterministicDiceRoller(55UL),
+                RulesetMode.ModernBalanced,
+                party);
+
+            bool hadEventSystem = Object.FindFirstObjectByType<EventSystem>() != null;
+            GameObject tempGo = new GameObject("TempConvergenceHudIconTest");
+            try
+            {
+                BywaterHudController hud = tempGo.AddComponent<BywaterHudController>();
+                hud.BuildUi(catalog);
+                AdvanceCombatTurnToActor(combat, theron.Id);
+                hud.RefreshCombatHud(combat, bundle, CombatActionMode.Spell, theron.SpellIds[0], "1x");
+
+                Canvas canvas = tempGo.GetComponentInChildren<Canvas>(true);
+                Assert.That(canvas, Is.Not.Null);
+
+                string[] iconButtons =
+                {
+                    "HotbarSlot_0", "HotbarSlot_1", "HotbarSlot_2", "HotbarSlot_3",
+                    "UndoMoveBtn", "PotionBtn", "ShoveBtn", "GuardBtn", "EndTurnBtn",
+                    "AutoCombatBtn", "SpeedBtn", "CombatAudioBtn", "CombatGridBtn", "CombatMenuBtn",
+                    "SettingsFleeBtn"
+                };
+                for (int i = 0; i < iconButtons.Length; i++)
+                {
+                    Transform btnTf = FindDescendantByName(canvas.transform, iconButtons[i]);
+                    Assert.That(btnTf, Is.Not.Null, "Missing HUD button: " + iconButtons[i]);
+                    Transform iconTf = FindDescendantByName(btnTf, "Icon");
+                    Assert.That(iconTf, Is.Not.Null, "Missing Icon child on " + iconButtons[i]);
+                    UnityEngine.UI.Image img = iconTf.GetComponent<UnityEngine.UI.Image>();
+                    Assert.That(img, Is.Not.Null);
+                    Assert.That(img.preserveAspect, Is.True, "preserveAspect must be true on " + iconButtons[i]);
+                    Assert.That(img.sprite, Is.Not.Null, "Sprite null on " + iconButtons[i]);
+                    Assert.That(img.sprite.name, Does.Not.StartWith("proc_icon_"), "Procedural fallback leaked onto " + iconButtons[i]);
+                    Assert.That(img.sprite.texture.width, Is.EqualTo(32));
+                    Assert.That(img.sprite.texture.height, Is.EqualTo(32));
+                }
+
+                TextMeshProUGUI[] labels = canvas.GetComponentsInChildren<TextMeshProUGUI>(true);
+                for (int i = 0; i < labels.Length; i++)
+                {
+                    Assert.That(labels[i].fontSize, Is.GreaterThanOrEqualTo(15f), $"Label '{labels[i].gameObject.name}' below 15pt.");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(tempGo);
+                if (!hadEventSystem)
+                {
+                    EventSystem createdEs = Object.FindFirstObjectByType<EventSystem>();
+                    if (createdEs != null)
+                    {
+                        Object.DestroyImmediate(createdEs.gameObject);
+                    }
+                }
+            }
+        }
+
+        private static void AssertUnifiedUnitSheet(string unitId, bool isHero)
+        {
+            string sheetPath = $"Assets/Art/Cartography/units/{unitId}_sheet.png";
+            string normalPath = $"Assets/Art/Cartography/units/{unitId}_sheet_n.png";
+
+            TextureImporter sheetImp = AssetImporter.GetAtPath(sheetPath) as TextureImporter;
+            Assert.That(sheetImp, Is.Not.Null, "Missing unit sheet importer: " + sheetPath);
+            Assert.That(sheetImp.textureType, Is.EqualTo(TextureImporterType.Sprite));
+            Assert.That(sheetImp.spriteImportMode, Is.EqualTo(SpriteImportMode.Multiple), "Expected Multiple 4-frame slice on " + sheetPath);
+            Assert.That(sheetImp.filterMode, Is.EqualTo(FilterMode.Point));
+            Assert.That(sheetImp.textureCompression, Is.EqualTo(TextureImporterCompression.Uncompressed));
+            Assert.That(sheetImp.mipmapEnabled, Is.False);
+            Assert.That(sheetImp.spritePixelsPerUnit, Is.EqualTo(64f));
+
+            Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>(sheetPath);
+            Assert.That(tex, Is.Not.Null);
+            Assert.That(tex.width, Is.EqualTo(512), "Expected 512 width on " + sheetPath);
+            Assert.That(tex.height, Is.EqualTo(128), "Expected 128 height on " + sheetPath);
+
+            Object[] subAssets = AssetDatabase.LoadAllAssetsAtPath(sheetPath);
+            int spriteCount = 0;
+            for (int i = 0; i < subAssets.Length; i++)
+            {
+                if (subAssets[i] is Sprite s)
+                {
+                    spriteCount++;
+                    Assert.That(s.rect.size, Is.EqualTo(new Vector2(128f, 128f)), "Expected 128x128 frame rect on " + sheetPath);
+                }
+            }
+            Assert.That(spriteCount, Is.EqualTo(4), $"Expected 4 sliced frames on {(isHero ? "hero" : "enemy")} {sheetPath}");
+
+            TextureImporter normImp = AssetImporter.GetAtPath(normalPath) as TextureImporter;
+            Assert.That(normImp, Is.Not.Null, "Missing unit normal importer: " + normalPath);
+            Assert.That(normImp.textureType, Is.EqualTo(TextureImporterType.NormalMap));
+            Assert.That(normImp.sRGBTexture, Is.False);
+            Assert.That(normImp.filterMode, Is.EqualTo(FilterMode.Point));
+            Assert.That(normImp.textureCompression, Is.EqualTo(TextureImporterCompression.Uncompressed));
+            Assert.That(normImp.mipmapEnabled, Is.False);
+        }
+
+        private static void AdvanceCombatTurnToActor(TacticalCombatSession combat, string actorId)
+        {
+            int safety = 0;
+            while (combat.Outcome == CombatOutcome.InProgress &&
+                   combat.CurrentActor != null &&
+                   !string.Equals(combat.CurrentActor.Id, actorId, System.StringComparison.Ordinal) &&
+                   safety < 24)
+            {
+                safety++;
+                combat.EndTurn();
             }
         }
 

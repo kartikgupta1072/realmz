@@ -482,5 +482,460 @@ namespace Realmz.Game
                 es.gameObject.AddComponent<InputSystemUIInputModule>();
             }
         }
+
+        public static void SetRaycastTargetRecursive(Transform root, bool raycastTarget)
+        {
+            if (root == null)
+            {
+                return;
+            }
+
+            Graphic[] graphics = root.GetComponentsInChildren<Graphic>(true);
+            for (int i = 0; i < graphics.Length; i++)
+            {
+                graphics[i].raycastTarget = raycastTarget;
+            }
+        }
+
+        public static Slider CreateSlider(
+            Transform parent,
+            string name,
+            float minValue,
+            float maxValue,
+            float initialValue,
+            UnityAction<float> onValueChanged = null)
+        {
+            GameObject root = new GameObject(name, typeof(RectTransform), typeof(Slider));
+            root.transform.SetParent(parent, false);
+
+            GameObject bgGo = new GameObject("Background", typeof(RectTransform), typeof(Image));
+            bgGo.transform.SetParent(root.transform, false);
+            RectTransform bgRt = bgGo.GetComponent<RectTransform>();
+            bgRt.anchorMin = new Vector2(0f, 0.28f);
+            bgRt.anchorMax = new Vector2(1f, 0.72f);
+            bgRt.offsetMin = Vector2.zero;
+            bgRt.offsetMax = Vector2.zero;
+            Image bgImg = bgGo.GetComponent<Image>();
+            bgImg.color = BarTrackColor;
+            AddBrassBorder(bgRt, new Color(BrassAccent.r, BrassAccent.g, BrassAccent.b, 0.55f), 1f);
+
+            GameObject fillArea = new GameObject("Fill Area", typeof(RectTransform));
+            fillArea.transform.SetParent(root.transform, false);
+            RectTransform fillAreaRt = fillArea.GetComponent<RectTransform>();
+            fillAreaRt.anchorMin = new Vector2(0f, 0.28f);
+            fillAreaRt.anchorMax = new Vector2(1f, 0.72f);
+            fillAreaRt.offsetMin = new Vector2(2f, 2f);
+            fillAreaRt.offsetMax = new Vector2(-2f, -2f);
+
+            GameObject fillGo = new GameObject("Fill", typeof(RectTransform), typeof(Image));
+            fillGo.transform.SetParent(fillArea.transform, false);
+            RectTransform fillRt = fillGo.GetComponent<RectTransform>();
+            fillRt.anchorMin = Vector2.zero;
+            fillRt.anchorMax = Vector2.one;
+            fillRt.offsetMin = Vector2.zero;
+            fillRt.offsetMax = Vector2.zero;
+            Image fillImg = fillGo.GetComponent<Image>();
+            fillImg.color = BrassAccent;
+
+            GameObject handleArea = new GameObject("Handle Slide Area", typeof(RectTransform));
+            handleArea.transform.SetParent(root.transform, false);
+            RectTransform handleAreaRt = handleArea.GetComponent<RectTransform>();
+            handleAreaRt.anchorMin = Vector2.zero;
+            handleAreaRt.anchorMax = Vector2.one;
+            handleAreaRt.offsetMin = new Vector2(8f, 0f);
+            handleAreaRt.offsetMax = new Vector2(-8f, 0f);
+
+            GameObject handleGo = new GameObject("Handle", typeof(RectTransform), typeof(Image));
+            handleGo.transform.SetParent(handleArea.transform, false);
+            RectTransform handleRt = handleGo.GetComponent<RectTransform>();
+            handleRt.sizeDelta = new Vector2(18f, 24f);
+            Image handleImg = handleGo.GetComponent<Image>();
+            handleImg.color = BrassHighlight;
+            AddBrassBorder(handleRt, PanelDarkBg, 1f);
+
+            Slider slider = root.GetComponent<Slider>();
+            slider.fillRect = fillRt;
+            slider.handleRect = handleRt;
+            slider.targetGraphic = handleImg;
+            slider.direction = Slider.Direction.LeftToRight;
+            slider.minValue = minValue;
+            slider.maxValue = maxValue;
+            slider.value = Mathf.Clamp(initialValue, minValue, maxValue);
+            if (onValueChanged != null)
+            {
+                slider.onValueChanged.AddListener(onValueChanged);
+            }
+
+            return slider;
+        }
+
+        private static readonly System.Collections.Generic.Dictionary<string, Sprite> ProceduralIconCache =
+            new System.Collections.Generic.Dictionary<string, Sprite>(System.StringComparer.OrdinalIgnoreCase);
+
+        public static Sprite GetProceduralIconSprite(string key)
+        {
+            string normalized = string.IsNullOrWhiteSpace(key) ? "sword" : key.Trim().ToLowerInvariant();
+            if (ProceduralIconCache.TryGetValue(normalized, out Sprite cached) && cached != null)
+            {
+                return cached;
+            }
+
+            Sprite created = BuildProceduralIconSprite(normalized);
+            ProceduralIconCache[normalized] = created;
+            return created;
+        }
+
+        private static Sprite BuildProceduralIconSprite(string key)
+        {
+            const int size = 16;
+            Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            tex.filterMode = FilterMode.Point;
+            tex.wrapMode = TextureWrapMode.Clamp;
+
+            Color[] pixels = new Color[size * size];
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                pixels[i] = Color.clear;
+            }
+
+            switch (key)
+            {
+                case "circle":
+                    DrawCircle(pixels, size, Color.white);
+                    break;
+                case "diamond":
+                    DrawDiamond(pixels, size, Color.white);
+                    break;
+                case "bow":
+                case "ranged":
+                    DrawBow(pixels, size);
+                    break;
+                case "dagger":
+                    DrawDagger(pixels, size);
+                    break;
+                case "mace":
+                    DrawMace(pixels, size);
+                    break;
+                case "staff":
+                    DrawStaff(pixels, size);
+                    break;
+                case "fire":
+                    DrawFlame(pixels, size);
+                    break;
+                case "bolt":
+                case "dart":
+                    DrawBolt(pixels, size);
+                    break;
+                case "heal":
+                    DrawCross(pixels, size, new Color(0.32f, 0.92f, 0.48f, 1f));
+                    break;
+                case "shield":
+                case "guard":
+                    DrawShield(pixels, size);
+                    break;
+                case "shove":
+                    DrawShove(pixels, size);
+                    break;
+                case "potion":
+                    DrawPotion(pixels, size);
+                    break;
+                case "endturn":
+                    DrawHourglass(pixels, size);
+                    break;
+                case "undo":
+                    DrawUndoArrow(pixels, size);
+                    break;
+                case "spell":
+                    DrawStar(pixels, size, new Color(0.42f, 0.86f, 1f, 1f));
+                    break;
+                default:
+                    DrawSword(pixels, size);
+                    break;
+            }
+
+            tex.SetPixels(pixels);
+            tex.Apply(false, false);
+            Sprite sprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 16f);
+            sprite.name = $"proc_icon_{key}";
+            return sprite;
+        }
+
+        private static void SetPx(Color[] pixels, int size, int x, int y, Color col)
+        {
+            if (x >= 0 && x < size && y >= 0 && y < size)
+            {
+                pixels[y * size + x] = col;
+            }
+        }
+
+        private static void DrawCircle(Color[] px, int s, Color col)
+        {
+            float c = (s - 1) * 0.5f;
+            float rSq = 6.2f * 6.2f;
+            for (int y = 0; y < s; y++)
+            {
+                for (int x = 0; x < s; x++)
+                {
+                    float dx = x - c;
+                    float dy = y - c;
+                    if (dx * dx + dy * dy <= rSq)
+                    {
+                        SetPx(px, s, x, y, col);
+                    }
+                }
+            }
+        }
+
+        private static void DrawDiamond(Color[] px, int s, Color col)
+        {
+            int c = s / 2;
+            for (int y = 0; y < s; y++)
+            {
+                for (int x = 0; x < s; x++)
+                {
+                    int dist = Mathf.Abs(x - c) + Mathf.Abs(y - c);
+                    if (dist <= 6)
+                    {
+                        SetPx(px, s, x, y, col);
+                    }
+                }
+            }
+        }
+
+        private static void DrawSword(Color[] px, int s)
+        {
+            Color blade = new Color(0.86f, 0.90f, 0.96f, 1f);
+            Color edge = new Color(0.62f, 0.68f, 0.78f, 1f);
+            Color hilt = new Color(0.88f, 0.68f, 0.25f, 1f);
+            for (int i = 4; i < 14; i++)
+            {
+                SetPx(px, s, i, i, blade);
+                SetPx(px, s, i - 1, i, edge);
+            }
+            SetPx(px, s, 13, 14, blade);
+            SetPx(px, s, 14, 13, blade);
+            SetPx(px, s, 14, 14, blade);
+            SetPx(px, s, 3, 5, hilt);
+            SetPx(px, s, 4, 4, hilt);
+            SetPx(px, s, 5, 3, hilt);
+            SetPx(px, s, 2, 2, hilt);
+            SetPx(px, s, 3, 3, hilt);
+        }
+
+        private static void DrawDagger(Color[] px, int s)
+        {
+            Color blade = new Color(0.86f, 0.90f, 0.96f, 1f);
+            Color hilt = new Color(0.76f, 0.56f, 0.24f, 1f);
+            for (int i = 5; i < 12; i++)
+            {
+                SetPx(px, s, i, i, blade);
+            }
+            SetPx(px, s, 4, 6, hilt);
+            SetPx(px, s, 6, 4, hilt);
+            SetPx(px, s, 4, 4, hilt);
+            SetPx(px, s, 3, 3, hilt);
+        }
+
+        private static void DrawMace(Color[] px, int s)
+        {
+            Color iron = new Color(0.78f, 0.82f, 0.88f, 1f);
+            Color wood = new Color(0.62f, 0.42f, 0.22f, 1f);
+            for (int i = 2; i < 9; i++)
+            {
+                SetPx(px, s, i, i, wood);
+            }
+            for (int y = 9; y <= 13; y++)
+            {
+                for (int x = 9; x <= 13; x++)
+                {
+                    SetPx(px, s, x, y, iron);
+                }
+            }
+            SetPx(px, s, 11, 14, Color.white);
+            SetPx(px, s, 14, 11, Color.white);
+            SetPx(px, s, 8, 11, Color.white);
+        }
+
+        private static void DrawStaff(Color[] px, int s)
+        {
+            Color wood = new Color(0.66f, 0.44f, 0.22f, 1f);
+            Color gem = new Color(0.35f, 0.85f, 1f, 1f);
+            for (int i = 2; i < 12; i++)
+            {
+                SetPx(px, s, i, i, wood);
+            }
+            SetPx(px, s, 12, 12, gem);
+            SetPx(px, s, 12, 13, gem);
+            SetPx(px, s, 13, 12, gem);
+            SetPx(px, s, 13, 13, Color.white);
+        }
+
+        private static void DrawBow(Color[] px, int s)
+        {
+            Color wood = new Color(0.80f, 0.56f, 0.26f, 1f);
+            Color str = new Color(0.88f, 0.88f, 0.92f, 1f);
+            Color tip = new Color(0.95f, 0.80f, 0.35f, 1f);
+            for (int y = 2; y <= 13; y++)
+            {
+                SetPx(px, s, 4, y, str);
+            }
+            for (int y = 2; y <= 13; y++)
+            {
+                int offset = y <= 7 ? (y - 2) : (13 - y);
+                int x = Mathf.Clamp(5 + offset, 5, 11);
+                SetPx(px, s, x, y, wood);
+            }
+            for (int x = 3; x <= 13; x++)
+            {
+                SetPx(px, s, x, 8, str);
+            }
+            SetPx(px, s, 13, 8, tip);
+            SetPx(px, s, 12, 7, tip);
+            SetPx(px, s, 12, 9, tip);
+        }
+
+        private static void DrawFlame(Color[] px, int s)
+        {
+            Color outer = new Color(0.96f, 0.40f, 0.14f, 1f);
+            Color inner = new Color(1.0f, 0.82f, 0.24f, 1f);
+            for (int y = 2; y <= 13; y++)
+            {
+                int halfW = y < 6 ? (y - 1) : Mathf.Max(1, (14 - y) / 2 + 1);
+                for (int x = 8 - halfW; x <= 8 + halfW; x++)
+                {
+                    SetPx(px, s, x, y, y < 8 && Mathf.Abs(x - 8) <= 1 ? inner : outer);
+                }
+            }
+            SetPx(px, s, 8, 14, outer);
+        }
+
+        private static void DrawBolt(Color[] px, int s)
+        {
+            Color col = new Color(0.45f, 0.88f, 1.0f, 1f);
+            int[] xs = { 9, 8, 7, 6, 7, 8, 9, 10, 9, 8, 7 };
+            for (int i = 0; i < xs.Length; i++)
+            {
+                SetPx(px, s, xs[i], 13 - i, col);
+                SetPx(px, s, xs[i] + 1, 13 - i, Color.white);
+            }
+        }
+
+        private static void DrawCross(Color[] px, int s, Color col)
+        {
+            for (int i = 3; i <= 12; i++)
+            {
+                SetPx(px, s, 7, i, col);
+                SetPx(px, s, 8, i, col);
+                SetPx(px, s, i, 7, col);
+                SetPx(px, s, i, 8, col);
+            }
+        }
+
+        private static void DrawShield(Color[] px, int s)
+        {
+            Color rim = new Color(0.85f, 0.68f, 0.28f, 1f);
+            Color body = new Color(0.24f, 0.44f, 0.72f, 1f);
+            for (int y = 3; y <= 12; y++)
+            {
+                int halfW = y >= 7 ? 5 : Mathf.Max(1, y - 2);
+                for (int x = 8 - halfW; x <= 8 + halfW; x++)
+                {
+                    bool isBorder = y == 12 || x == 8 - halfW || x == 8 + halfW || y == 3;
+                    SetPx(px, s, x, y, isBorder ? rim : body);
+                }
+            }
+        }
+
+        private static void DrawShove(Color[] px, int s)
+        {
+            Color col = new Color(0.96f, 0.76f, 0.26f, 1f);
+            for (int x = 2; x <= 11; x++)
+            {
+                SetPx(px, s, x, 7, col);
+                SetPx(px, s, x, 8, col);
+            }
+            for (int d = 0; d <= 4; d++)
+            {
+                SetPx(px, s, 13 - d, 8 + d, col);
+                SetPx(px, s, 13 - d, 7 - d, col);
+            }
+        }
+
+        private static void DrawPotion(Color[] px, int s)
+        {
+            Color cork = new Color(0.76f, 0.56f, 0.28f, 1f);
+            Color glass = new Color(0.75f, 0.85f, 0.96f, 1f);
+            Color liquid = new Color(0.88f, 0.20f, 0.24f, 1f);
+            SetPx(px, s, 7, 13, cork);
+            SetPx(px, s, 8, 13, cork);
+            SetPx(px, s, 7, 12, glass);
+            SetPx(px, s, 8, 12, glass);
+            for (int y = 3; y <= 10; y++)
+            {
+                int halfW = y >= 9 ? 2 : 4;
+                for (int x = 8 - halfW; x <= 8 + halfW; x++)
+                {
+                    bool border = y == 3 || x == 8 - halfW || x == 8 + halfW;
+                    SetPx(px, s, x, y, border ? glass : (y <= 7 ? liquid : glass));
+                }
+            }
+        }
+
+        private static void DrawHourglass(Color[] px, int s)
+        {
+            Color frame = new Color(0.88f, 0.72f, 0.30f, 1f);
+            Color sand = new Color(0.95f, 0.88f, 0.64f, 1f);
+            for (int x = 4; x <= 11; x++)
+            {
+                SetPx(px, s, x, 2, frame);
+                SetPx(px, s, x, 13, frame);
+            }
+            for (int y = 3; y <= 12; y++)
+            {
+                int halfW = Mathf.Abs(y - 7);
+                if (halfW < 1) halfW = 1;
+                SetPx(px, s, 8 - halfW, y, frame);
+                SetPx(px, s, 8 + halfW, y, frame);
+                if (y <= 5 || (y >= 9 && y <= 11))
+                {
+                    for (int x = 8 - halfW + 1; x <= 8 + halfW - 1; x++)
+                    {
+                        SetPx(px, s, x, y, sand);
+                    }
+                }
+            }
+        }
+
+        private static void DrawUndoArrow(Color[] px, int s)
+        {
+            Color col = new Color(0.55f, 0.85f, 0.98f, 1f);
+            for (int x = 5; x <= 11; x++)
+            {
+                SetPx(px, s, x, 10, col);
+                SetPx(px, s, x, 5, col);
+            }
+            for (int y = 5; y <= 10; y++)
+            {
+                SetPx(px, s, 11, y, col);
+            }
+            SetPx(px, s, 4, 9, col);
+            SetPx(px, s, 4, 11, col);
+            SetPx(px, s, 3, 10, col);
+        }
+
+        private static void DrawStar(Color[] px, int s, Color col)
+        {
+            for (int i = 3; i <= 12; i++)
+            {
+                SetPx(px, s, 8, i, col);
+                SetPx(px, s, i, 8, col);
+            }
+            for (int d = -3; d <= 3; d++)
+            {
+                SetPx(px, s, 8 + d, 8 + d, col);
+                SetPx(px, s, 8 + d, 8 - d, col);
+            }
+            SetPx(px, s, 8, 8, Color.white);
+        }
     }
 }

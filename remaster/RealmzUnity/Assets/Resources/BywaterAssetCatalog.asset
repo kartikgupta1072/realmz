@@ -118,71 +118,158 @@ MonoBehaviour:
     material: {fileID: 2100000, guid: 984f3864e54c74c4ab279d5ed319aa68, type: 2}
   - kind: 13
     material: {fileID: 2100000, guid: f5d3c13ac2fbe444e8f20cd26e18a0a4, type: 2}
+  hotbarIcons:
+  - key: sword
+    sprite: {fileID: 21300000, guid: 71ec1dd8bf9850e42a4dec5e3d69d155, type: 3}
+  - key: bow
+    sprite: {fileID: 21300000, guid: c808fa3fdbf3a3d41aa61583c36e723d, type: 3}
+  - key: dagger
+    sprite: {fileID: 21300000, guid: daa6e6bbb4df6234ca7c86cf7062329d, type: 3}
+  - key: staff
+    sprite: {fileID: 21300000, guid: 45276d0d3b1d56c47a295a965ff72d04, type: 3}
+  - key: fireball
+    sprite: {fileID: 21300000, guid: 0ee8d1fe3ed53fb4f8bcc28e95f3969e, type: 3}
+  - key: flame_hands
+    sprite: {fileID: 21300000, guid: 4e5418795250e49458b73ed59bec27af, type: 3}
+  - key: magic_darts
+    sprite: {fileID: 21300000, guid: 42fedd05c7a67ae42b62ca371a190dd9, type: 3}
+  - key: heal
+    sprite: {fileID: 21300000, guid: 79bed2992143b094494a10026ba411ea, type: 3}
+  - key: buff
+    sprite: {fileID: 21300000, guid: f57aa728e67f13c4dbe56b421e00dbff, type: 3}
+  - key: daze
+    sprite: {fileID: 21300000, guid: 2c630f1e3f2dcdb49bfe7ef6de152f2f, type: 3}
+  - key: shove
+    sprite: {fileID: 21300000, guid: 4cd9d7d4f0d309d44889fee463386adc, type: 3}
+  - key: potion
+    sprite: {fileID: 21300000, guid: 751281a1283f7f448be6b0d885f7c983, type: 3}
+  - key: guard
+    sprite: {fileID: 21300000, guid: 5ee2c56de0fd0514ca565b9c0916e2b4, type: 3}
+  - key: undo
+    sprite: {fileID: 21300000, guid: 41b26103de11bb04cb863cdc900bbcb0, type: 3}
+  - key: end_turn
+    sprite: {fileID: 21300000, guid: e414efa103e5a1b4ba6e601cbc1dd54a, type: 3}
+  - key: auto_combat
+    sprite: {fileID: 21300000, guid: bc2667ac9e53d2f459ab723b5148dcc3, type: 3}
+  - key: speed
+    sprite: {fileID: 21300000, guid: 05fbbd5f09649934fbf76f90ecbf2fc0, type: 3}
+  - key: audio
+    sprite: {fileID: 21300000, guid: 1432cef3ffd9c164dac5d0e6efcdda37, type: 3}
+  - key: grid
+    sprite: {fileID: 21300000, guid: b1db7da5875a1f24e81fcc7e36fd0f9b, type: 3}
+  - key: settings
+    sprite: {fileID: 21300000, guid: d31c44603ba0ae34084e22304f921a17, type: 3}
+  - key: flee
+    sprite: {fileID: 21300000, guid: 1857407e9e307aa41b48d80a00bf7f94, type: 3}
+  cartographyUnitSheets:
+  - unitKey: hero_knight
+    unitSheetMaterial: {fileID: 2100000, guid: ee720a9db0940ac41a3bbef61f187a05, type: 2}
+  - unitKey: hero_cleric
+    unitSheetMaterial: {fileID: 2100000, guid: 561e660dd67fe8745b959c5ff6425e93, type: 2}
+  - unitKey: hero_ranger
+    unitSheetMaterial: {fileID: 2100000, guid: eaba74c95ea5e30439910c615b20eca2, type: 2}
+  - unitKey: hero_mage
+    unitSheetMaterial: {fileID: 2100000, guid: 84ed66dec8232e64e97fb31cb0a43d4b, type: 2}
+  - unitKey: hero_paladin
+    unitSheetMaterial: {fileID: 2100000, guid: 4e05b11445e441b4dbed25250a6cafdb, type: 2}
+  - unitKey: hero_rogue
+    unitSheetMaterial: {fileID: 2100000, guid: 54aa26f282a371c49abfebac5dc8a097, type: 2}
+  - unitKey: monster_giant_frog
+    unitSheetMaterial: {fileID: 2100000, guid: d399d93badd43a249977e43b09fa9c38, type: 2}
+  - unitKey: monster_goblin_raider
+    unitSheetMaterial: {fileID: 2100000, guid: 3d19e413858a62e479bdd8ba26dec931, type: 2}
+  - unitKey: monster_goblin_archer
+    unitSheetMaterial: {fileID: 2100000, guid: 2be12826b4fd8f94cbedfa6fcb03ba03, type: 2}
+  - unitKey: monster_orc_warrior
+    unitSheetMaterial: {fileID: 2100000, guid: 4c09501a196dcba46afe3a74190639d2, type: 2}
+  - unitKey: monster_giant_rat
+    unitSheetMaterial: {fileID: 2100000, guid: d8e4c930813b079429b1c6626e25ce54, type: 2}
+  - unitKey: monster_skeleton_warrior
+    unitSheetMaterial: {fileID: 2100000, guid: 14c5298476660d347a84e30d8663c9d3, type: 2}
+  - unitKey: monster_bandit_cutthroat
+    unitSheetMaterial: {fileID: 2100000, guid: c8ec63096eb3a3e48a969785c831d317, type: 2}
   heroes:
   - id: hero_knight
     archetype: Knight
     iconId: 9018
     portraitId: 275
-    billboardMaterial: {fileID: 2100000, guid: f54ebc3e93ec28d4b830bc4a136568b9, type: 2}
-    sprite: {fileID: 21300000, guid: ebe26189f4d6cb940b34ce8ec5f795f4, type: 3}
+    billboardMaterial: {fileID: 2100000, guid: ee720a9db0940ac41a3bbef61f187a05, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: ee720a9db0940ac41a3bbef61f187a05, type: 2}
+    sprite: {fileID: 6155189297643300040, guid: 4e99ff8f4abd9b84e9db9e4043e88f7b, type: 3}
     portrait: {fileID: 21300000, guid: 39f36b74c1cd5be4ab227ae0d2f6a701, type: 3}
   - id: hero_cleric
     archetype: Cleric
     iconId: 9072
     portraitId: 329
-    billboardMaterial: {fileID: 2100000, guid: 844a46a43c538bd4b96406f4bf223c6b, type: 2}
-    sprite: {fileID: 21300000, guid: 76b47e7e45d45cc4a8919ca5f3d39a7b, type: 3}
+    billboardMaterial: {fileID: 2100000, guid: 561e660dd67fe8745b959c5ff6425e93, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 561e660dd67fe8745b959c5ff6425e93, type: 2}
+    sprite: {fileID: -2544846493698475345, guid: d676b223d1e189143bf90a39fa6d9416, type: 3}
     portrait: {fileID: 21300000, guid: d4af185f2bd45004bb44c68d6e3f61c6, type: 3}
   - id: hero_ranger
     archetype: Ranger
     iconId: 9047
     portraitId: 304
-    billboardMaterial: {fileID: 2100000, guid: 5ef9d683242117c42bbc2a83d66ef8d7, type: 2}
-    sprite: {fileID: 21300000, guid: 57c6f26ac06e0e2458d930f4449bc6b0, type: 3}
+    billboardMaterial: {fileID: 2100000, guid: eaba74c95ea5e30439910c615b20eca2, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: eaba74c95ea5e30439910c615b20eca2, type: 2}
+    sprite: {fileID: -7868594803492491795, guid: f4de9dc345e76fb41a162e178be08092, type: 3}
     portrait: {fileID: 21300000, guid: 3573c8a37ca123d4fa23014fb41e5862, type: 3}
   - id: hero_mage
     archetype: Mage
     iconId: 9084
     portraitId: 341
-    billboardMaterial: {fileID: 2100000, guid: 0b17bc5e79a2ef74a9f81a47187c4845, type: 2}
-    sprite: {fileID: 21300000, guid: 12ad9fb8d647ed04abb1de1f1adb972b, type: 3}
+    billboardMaterial: {fileID: 2100000, guid: 84ed66dec8232e64e97fb31cb0a43d4b, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 84ed66dec8232e64e97fb31cb0a43d4b, type: 2}
+    sprite: {fileID: 410388864010854235, guid: e09de461fbb75bb4a859ebf4d353fe9c, type: 3}
     portrait: {fileID: 21300000, guid: be5fc5596490e6a49a6ef2f5aac9cc66, type: 3}
   - id: hero_paladin
     archetype: Paladin
     iconId: 9054
     portraitId: 311
-    billboardMaterial: {fileID: 2100000, guid: 79430794055c44f409dbef753ce51924, type: 2}
-    sprite: {fileID: 21300000, guid: c1c9298f96d947442b4de8c9d387bef7, type: 3}
+    billboardMaterial: {fileID: 2100000, guid: 4e05b11445e441b4dbed25250a6cafdb, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 4e05b11445e441b4dbed25250a6cafdb, type: 2}
+    sprite: {fileID: -1787679304370085976, guid: ce83e150187eb2e4aa0aac77087f178a, type: 3}
     portrait: {fileID: 21300000, guid: ee498c09d50eaad4283b9366b336a667, type: 3}
   - id: hero_rogue
     archetype: Rogue
     iconId: 9106
     portraitId: 363
-    billboardMaterial: {fileID: 2100000, guid: 138af521225c4d4479e61fe7fb2d9e6a, type: 2}
-    sprite: {fileID: 21300000, guid: 2378dca02f2c0d44daf893688f4d7a72, type: 3}
+    billboardMaterial: {fileID: 2100000, guid: 54aa26f282a371c49abfebac5dc8a097, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 54aa26f282a371c49abfebac5dc8a097, type: 2}
+    sprite: {fileID: 102566648275596218, guid: 400cb035fa86f9e4a8f8ac7023ec8933, type: 3}
     portrait: {fileID: 21300000, guid: 8a0a9ff7d3444814f994b12fb3906969, type: 3}
   monsters:
-  - key: giant_frog
+  - key: monster_giant_frog
     displayName: Giant Frog
-    billboardMaterial: {fileID: 2100000, guid: 5842464dcd24ac34387063636ec00c9e, type: 2}
-    sprite: {fileID: 21300000, guid: 984f5f535a60ea84a9b87ef734b5e89f, type: 3}
-  - key: goblin_raider
+    billboardMaterial: {fileID: 2100000, guid: d399d93badd43a249977e43b09fa9c38, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: d399d93badd43a249977e43b09fa9c38, type: 2}
+    sprite: {fileID: -7631220298004938683, guid: 133e6ab5929f79847bc4a76d21060ebc, type: 3}
+  - key: monster_goblin_raider
     displayName: Goblin Raider
-    billboardMaterial: {fileID: 2100000, guid: 096f48df2022593428ff28d934d7be62, type: 2}
-    sprite: {fileID: 21300000, guid: e87085fdd8f4eb948a01e7a2cde37f94, type: 3}
-  - key: kobold_spearman
-    displayName: Kobold Spearman
-    billboardMaterial: {fileID: 2100000, guid: b2b64e8df3b31d94abbfdf3960681815, type: 2}
-    sprite: {fileID: 21300000, guid: 7d0f7e5b78b43ba4fa32a7abb3203dcd, type: 3}
-  - key: giant_sewer_rat
-    displayName: Giant Sewer Rat
-    billboardMaterial: {fileID: 2100000, guid: f8bf26d9d8c1cf247a26ab5ad329ed69, type: 2}
-    sprite: {fileID: 21300000, guid: 6bc229dec6e6cd1448d7469b1716bbab, type: 3}
-  - key: skeleton_warrior
+    billboardMaterial: {fileID: 2100000, guid: 3d19e413858a62e479bdd8ba26dec931, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 3d19e413858a62e479bdd8ba26dec931, type: 2}
+    sprite: {fileID: -2508873913612103028, guid: 6e2f801152d60f240bff57ad1bcaaa56, type: 3}
+  - key: monster_goblin_archer
+    displayName: Goblin Archer
+    billboardMaterial: {fileID: 2100000, guid: 2be12826b4fd8f94cbedfa6fcb03ba03, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 2be12826b4fd8f94cbedfa6fcb03ba03, type: 2}
+    sprite: {fileID: 2760720447104234719, guid: 9cab83d46d58f7042af10dc03ca09a69, type: 3}
+  - key: monster_orc_warrior
+    displayName: Orc Warrior
+    billboardMaterial: {fileID: 2100000, guid: 4c09501a196dcba46afe3a74190639d2, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 4c09501a196dcba46afe3a74190639d2, type: 2}
+    sprite: {fileID: -1738930717127524091, guid: 4dd062d66d9d4c14da0556b7a9b8833f, type: 3}
+  - key: monster_giant_rat
+    displayName: Giant Rat
+    billboardMaterial: {fileID: 2100000, guid: d8e4c930813b079429b1c6626e25ce54, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: d8e4c930813b079429b1c6626e25ce54, type: 2}
+    sprite: {fileID: -3246495356005557760, guid: 03915c8b00ed84a4a9453863fe45ed35, type: 3}
+  - key: monster_skeleton_warrior
     displayName: Skeleton Warrior
-    billboardMaterial: {fileID: 2100000, guid: fb1f7673c4418874a83a84adac11515e, type: 2}
-    sprite: {fileID: 21300000, guid: 5965faf5e31455146be23c88c57faa39, type: 3}
-  - key: bandit_cutthroat
+    billboardMaterial: {fileID: 2100000, guid: 14c5298476660d347a84e30d8663c9d3, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: 14c5298476660d347a84e30d8663c9d3, type: 2}
+    sprite: {fileID: -1368396221391136136, guid: d491bc10c3cfd5e45b89877a0628a827, type: 3}
+  - key: monster_bandit_cutthroat
     displayName: Bandit Cutthroat
-    billboardMaterial: {fileID: 2100000, guid: d510cfbeabada1d4e9a39794356252e7, type: 2}
-    sprite: {fileID: 21300000, guid: 7cc8db3e821f0fa4ab19f4f96ea4b081, type: 3}
+    billboardMaterial: {fileID: 2100000, guid: c8ec63096eb3a3e48a969785c831d317, type: 2}
+    unitSheetMaterial: {fileID: 2100000, guid: c8ec63096eb3a3e48a969785c831d317, type: 2}
+    sprite: {fileID: 9146512343708235907, guid: c47fc4b9508c1e942bf1b7ed3e5fd53c, type: 3}

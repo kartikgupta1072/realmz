@@ -19,6 +19,8 @@ namespace Realmz.World
 
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int ColorId = Shader.PropertyToID("_Color");
+        private static readonly int TintColorId = Shader.PropertyToID("_TintColor");
+        private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap");
         private static readonly int GroundValueScaleId = Shader.PropertyToID("_GroundValueScale");
         private static readonly int RoadValueBoostId = Shader.PropertyToID("_RoadValueBoost");
         private static readonly int HorizonHazeColorId = Shader.PropertyToID("_HorizonHazeColor");
@@ -28,12 +30,19 @@ namespace Realmz.World
         private static readonly int DeepColorId = Shader.PropertyToID("_DeepColor");
         private static readonly int HeroWorldPosId = Shader.PropertyToID("_HeroWorldPos");
 
+        private const float OccludedPropAlpha = 0.38f;
+        private const float TreeFadeLerpSpeed = 8f;
+
         private sealed class PropBillboardEntry
         {
             public GameObject Root;
             public MeshFilter Filter;
             public MeshRenderer Renderer;
             public PixelBillboard Billboard;
+            public CartographyPropKind Kind;
+            public Vector3 WorldPosition;
+            public Vector2 SizeMeters;
+            public float CurrentAlpha = 1f;
         }
 
         private sealed class StoneBridgeEntry
@@ -113,6 +122,14 @@ namespace Realmz.World
         private Material _sourceWaterMat;
         private Material _fallbackPropMaterial;
         private Material _arenaBorderMaterial;
+        private Material _portalRuneMaterial;
+        private Texture2D _portalRuneTexture;
+        private Material _portalBeaconMaterial;
+        private Texture2D _portalBeaconTexture;
+        private MaterialPropertyBlock _propFadeBlock;
+        private MaterialPropertyBlock _portalBeaconBlock;
+        private int _activePropCount;
+        private int _activePortalCount;
         private float _terrainGridHintStrength;
 
         public CartographyWorldData CartographyData => _cartographyData;
@@ -267,6 +284,89 @@ namespace Realmz.World
         public void SetTerrainGridHint(float strength)
         {
             _terrainGridHintStrength = Mathf.Max(0f, strength);
+        }
+
+        public void UpdateTreeOcclusionFade(IReadOnlyList<Vector3> unitWorldPositions, bool fadeCenterBuildingsInCombat = false)
+        {
+            if (_activePropCount <= 0)
+            {
+                return;
+            }
+
+            float dt = Application.isPlaying ? Time.unscaledDeltaTime : 1f;
+            float lerpFactor = Application.isPlaying ? Mathf.Clamp01(TreeFadeLerpSpeed * dt) : 1f;
+            _propFadeBlock ??= new MaterialPropertyBlock();
+
+            int limit = Mathf.Min(_activePropCount, _propPool.Count);
+            for (int i = 0; i < limit; i++)
+            {
+                PropBillboardEntry entry = _propPool[i];
+                if (entry == null || entry.Renderer == null || entry.Root == null || !entry.Root.activeSelf)
+                {
+                    continue;
+                }
+
+                bool occludes = false;
+                if (IsOccludingPropKind(entry.Kind, fadeCenterBuildingsInCombat) && unitWorldPositions != null)
+                {
+                    float halfWidth = entry.SizeMeters.x * 0.55f;
+                    float maxDepth = entry.SizeMeters.y * 1.15f;
+
+                    for (int u = 0; u < unitWorldPositions.Count; u++)
+                    {
+                        Vector3 unitPos = unitWorldPositions[u];
+                        float dz = unitPos.z - entry.WorldPosition.z;
+                        if (dz >= 0f && dz <= maxDepth && Mathf.Abs(unitPos.x - entry.WorldPosition.x) <= halfWidth)
+                        {
+                            occludes = true;
+                            break;
+                        }
+                    }
+                }
+
+                float targetAlpha = occludes ? OccludedPropAlpha : 1f;
+                if (!Application.isPlaying || Mathf.Abs(entry.CurrentAlpha - targetAlpha) < 0.004f)
+                {
+                    entry.CurrentAlpha = targetAlpha;
+                }
+                else
+                {
+                    entry.CurrentAlpha = Mathf.Lerp(entry.CurrentAlpha, targetAlpha, lerpFactor);
+                }
+
+                Color tint = new Color(1f, 1f, 1f, entry.CurrentAlpha);
+                _propFadeBlock.Clear();
+                _propFadeBlock.SetColor(TintColorId, tint);
+                _propFadeBlock.SetColor(ColorId, tint);
+                entry.Renderer.SetPropertyBlock(_propFadeBlock);
+            }
+        }
+
+        private void Update()
+        {
+            if (!Application.isPlaying || _activePortalCount <= 0)
+            {
+                return;
+            }
+
+            _portalBeaconBlock ??= new MaterialPropertyBlock();
+            float t = Time.unscaledTime;
+            int limit = Mathf.Min(_activePortalCount, _portalPool.Count);
+            for (int i = 0; i < limit; i++)
+            {
+                PortalMarkerEntry entry = _portalPool[i];
+                if (entry == null || entry.BeaconQuad == null || entry.Root == null || !entry.Root.activeSelf)
+                {
+                    continue;
+                }
+
+                float pulse = 0.34f + 0.10f * Mathf.Sin(t * 2.2f + i * 1.3f);
+                Color col = new Color(0.22f, 0.74f, 0.97f, pulse);
+                _portalBeaconBlock.Clear();
+                _portalBeaconBlock.SetColor(BaseColorId, col);
+                _portalBeaconBlock.SetColor(ColorId, col);
+                entry.BeaconQuad.SetPropertyBlock(_portalBeaconBlock);
+            }
         }
 
         public void SetCombatArenaFrame(int originX, int originY, int width, int height, bool active)
@@ -430,17 +530,27 @@ namespace Realmz.World
                     }
 
                     PropBillboardEntry entry = GetPropEntry(propIdx++);
+                    float sizeX = Mathf.Max(0.25f, prop.SizeMeters.x);
+                    float sizeY = Mathf.Max(0.25f, prop.SizeMeters.y);
                     entry.Root.transform.position = prop.WorldPosition;
                     entry.Root.transform.rotation = initialYaw;
-                    entry.Root.transform.localScale = new Vector3(
-                        Mathf.Max(0.25f, prop.SizeMeters.x),
-                        Mathf.Max(0.25f, prop.SizeMeters.y),
-                        1f);
+                    entry.Root.transform.localScale = new Vector3(sizeX, sizeY, 1f);
                     entry.Renderer.sharedMaterial = ResolvePropMaterial(prop.Kind);
                     entry.Billboard.targetCamera = cam;
+                    entry.Kind = prop.Kind;
+                    entry.WorldPosition = prop.WorldPosition;
+                    entry.SizeMeters = new Vector2(sizeX, sizeY);
+                    entry.CurrentAlpha = 1f;
+                    _propFadeBlock ??= new MaterialPropertyBlock();
+                    _propFadeBlock.Clear();
+                    _propFadeBlock.SetColor(TintColorId, Color.white);
+                    _propFadeBlock.SetColor(ColorId, Color.white);
+                    entry.Renderer.SetPropertyBlock(_propFadeBlock);
                     entry.Root.SetActive(true);
                 }
             }
+
+            _activePropCount = propIdx;
 
             for (int i = propIdx; i < _propPool.Count; i++)
             {
@@ -459,8 +569,10 @@ namespace Realmz.World
             IReadOnlyList<MapPortal> portals = map.Portals;
             if (portals != null)
             {
-                Material portalMat = _catalog != null ? _catalog.portalBeaconMaterial : null;
+                Material runeMat = GetOrCreatePortalRuneMaterial();
+                Material beaconMat = GetOrCreatePortalBeaconMaterial();
                 Camera cam = ResolveActiveCamera();
+                _portalBeaconBlock ??= new MaterialPropertyBlock();
 
                 for (int i = 0; i < portals.Count; i++)
                 {
@@ -470,15 +582,27 @@ namespace Realmz.World
 
                     PortalMarkerEntry entry = GetPortalMarker(portalIdx++);
                     entry.Root.transform.position = pos;
-                    if (portalMat != null)
+                    if (runeMat != null)
                     {
-                        entry.RuneQuad.sharedMaterial = portalMat;
-                        entry.BeaconQuad.sharedMaterial = portalMat;
+                        entry.RuneQuad.sharedMaterial = runeMat;
                     }
+                    if (beaconMat != null)
+                    {
+                        entry.BeaconQuad.sharedMaterial = beaconMat;
+                    }
+
+                    Color beaconCol = new Color(0.22f, 0.74f, 0.97f, 0.40f);
+                    _portalBeaconBlock.Clear();
+                    _portalBeaconBlock.SetColor(BaseColorId, beaconCol);
+                    _portalBeaconBlock.SetColor(ColorId, beaconCol);
+                    entry.BeaconQuad.SetPropertyBlock(_portalBeaconBlock);
+
                     entry.BeaconBillboard.targetCamera = cam;
                     entry.Root.SetActive(true);
                 }
             }
+
+            _activePortalCount = portalIdx;
 
             for (int i = portalIdx; i < _portalPool.Count; i++)
             {
@@ -836,7 +960,7 @@ namespace Realmz.World
                 GameObject beaconGo = new GameObject("RuneBeacon");
                 beaconGo.transform.SetParent(root.transform, false);
                 beaconGo.transform.localPosition = new Vector3(-0.34f, 0.02f, 0.34f);
-                beaconGo.transform.localScale = new Vector3(0.18f, 0.85f, 1f);
+                beaconGo.transform.localScale = new Vector3(0.12f, 0.55f, 1f);
                 beaconGo.AddComponent<MeshFilter>().sharedMesh = _propBillboardQuadMesh;
                 MeshRenderer beaconRenderer = beaconGo.AddComponent<MeshRenderer>();
                 beaconRenderer.shadowCastingMode = ShadowCastingMode.Off;
@@ -1340,6 +1464,225 @@ namespace Realmz.World
 
             DestroyResource(_arenaBorderMaterial);
             _arenaBorderMaterial = null;
+
+            DestroyResource(_portalRuneMaterial);
+            _portalRuneMaterial = null;
+
+            DestroyResource(_portalRuneTexture);
+            _portalRuneTexture = null;
+
+            DestroyResource(_portalBeaconMaterial);
+            _portalBeaconMaterial = null;
+
+            DestroyResource(_portalBeaconTexture);
+            _portalBeaconTexture = null;
+        }
+
+        private static bool IsOccludingPropKind(CartographyPropKind kind, bool fadeCenterBuildingsInCombat)
+        {
+            switch (kind)
+            {
+                case CartographyPropKind.TreeOakA:
+                case CartographyPropKind.TreeOakB:
+                case CartographyPropKind.TreePineA:
+                case CartographyPropKind.TreePineB:
+                case CartographyPropKind.TreeWillowA:
+                    return true;
+                case CartographyPropKind.BywaterInn:
+                    return fadeCenterBuildingsInCombat;
+                default:
+                    return false;
+            }
+        }
+
+        private Material GetOrCreatePortalRuneMaterial()
+        {
+            if (_portalRuneMaterial != null)
+            {
+                return _portalRuneMaterial;
+            }
+
+            if (_portalRuneTexture == null)
+            {
+                _portalRuneTexture = BuildPortalRuneTexture();
+            }
+
+            _portalRuneMaterial = CreateTransparentUnlitMaterial("PortalRuneFloor_Mat", _portalRuneTexture, Color.white);
+            return _portalRuneMaterial;
+        }
+
+        private Material GetOrCreatePortalBeaconMaterial()
+        {
+            if (_portalBeaconMaterial != null)
+            {
+                return _portalBeaconMaterial;
+            }
+
+            if (_portalBeaconTexture == null)
+            {
+                _portalBeaconTexture = BuildPortalBeaconTexture();
+            }
+
+            _portalBeaconMaterial = CreateTransparentUnlitMaterial(
+                "PortalBeacon_Mat",
+                _portalBeaconTexture,
+                new Color(0.22f, 0.74f, 0.97f, 0.40f));
+            return _portalBeaconMaterial;
+        }
+
+        private static Material CreateTransparentUnlitMaterial(string matName, Texture2D tex, Color baseColor)
+        {
+            Shader shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default");
+            Material mat = new Material(shader)
+            {
+                name = matName,
+                hideFlags = HideFlags.HideAndDontSave
+            };
+
+            if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 1f);
+            if (mat.HasProperty("_Blend")) mat.SetFloat("_Blend", 0f);
+            if (mat.HasProperty("_ZWrite")) mat.SetFloat("_ZWrite", 0f);
+            if (mat.HasProperty("_Cull")) mat.SetFloat("_Cull", 0f);
+            if (mat.HasProperty("_SrcBlend")) mat.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+            if (mat.HasProperty("_DstBlend")) mat.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+            mat.SetOverrideTag("RenderType", "Transparent");
+            mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            mat.DisableKeyword("_ALPHATEST_ON");
+            mat.renderQueue = (int)RenderQueue.Transparent;
+
+            if (tex != null)
+            {
+                mat.mainTexture = tex;
+                if (mat.HasProperty(BaseMapId))
+                {
+                    mat.SetTexture(BaseMapId, tex);
+                }
+            }
+
+            if (mat.HasProperty(BaseColorId)) mat.SetColor(BaseColorId, baseColor);
+            if (mat.HasProperty(ColorId)) mat.SetColor(ColorId, baseColor);
+            return mat;
+        }
+
+        private static Texture2D BuildPortalRuneTexture()
+        {
+            const int size = 64;
+            Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                name = "PortalRuneSigilTex",
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave
+            };
+
+            Color32[] pixels = new Color32[size * size];
+            Color stoneRim = new Color(0.32f, 0.34f, 0.40f, 0.90f);
+            Color stoneRimDark = new Color(0.16f, 0.17f, 0.22f, 0.92f);
+            Color tealRune = new Color(0.22f, 0.74f, 0.97f, 1.0f) * 0.82f;
+            tealRune.a = 0.88f;
+
+            for (int y = 0; y < size; y++)
+            {
+                float ny = (y + 0.5f) / size - 0.5f;
+                for (int x = 0; x < size; x++)
+                {
+                    float nx = (x + 0.5f) / size - 0.5f;
+                    float r = Mathf.Sqrt(nx * nx + ny * ny);
+                    if (r > 0.48f)
+                    {
+                        pixels[y * size + x] = new Color32(0, 0, 0, 0);
+                        continue;
+                    }
+
+                    Color col;
+                    if (r > 0.45f)
+                    {
+                        float edgeAlpha = Mathf.Clamp01((0.48f - r) / 0.03f) * 0.75f;
+                        col = new Color(stoneRimDark.r, stoneRimDark.g, stoneRimDark.b, edgeAlpha);
+                    }
+                    else if (r > 0.38f)
+                    {
+                        // Outer carved stone ring with subtle top-left highlight
+                        float bevel = Mathf.Clamp01(0.5f - (nx - ny) * 0.8f);
+                        col = Color.Lerp(stoneRimDark, stoneRim, bevel);
+                    }
+                    else if (r > 0.31f)
+                    {
+                        // Concentric arcane teal rune trim with 8 glyph notches
+                        float angle = Mathf.Atan2(ny, nx);
+                        float notchWave = Mathf.Abs(Mathf.Sin(angle * 4f));
+                        bool isRunePixel = (r > 0.325f && r < 0.365f) && (notchWave > 0.35f || r < 0.345f);
+                        col = isRunePixel
+                            ? Color.Lerp(stoneRimDark, tealRune, 0.82f)
+                            : new Color(0.18f, 0.20f, 0.25f, 0.88f);
+                    }
+                    else
+                    {
+                        // Inner carved stone stairs (4 descending treads from top to bottom)
+                        float stepCoord = Mathf.Clamp01((ny + 0.31f) / 0.62f);
+                        int stepIndex = Mathf.Clamp(Mathf.FloorToInt(stepCoord * 4f), 0, 3);
+                        float stepFrac = (stepCoord * 4f) - stepIndex;
+                        bool isRiser = stepFrac < 0.18f;
+
+                        float depthT = stepIndex / 3f;
+                        Color warmAmberTop = new Color(0.76f, 0.60f, 0.38f, 0.92f);
+                        Color warmAmberDeep = new Color(0.30f, 0.23f, 0.16f, 0.90f);
+                        col = Color.Lerp(warmAmberDeep, warmAmberTop, depthT);
+
+                        if (isRiser)
+                        {
+                            col = new Color(col.r * 0.52f, col.g * 0.50f, col.b * 0.55f, 0.92f);
+                        }
+
+                        // Subtle inner teal arcane trace along side edges of the stairwell
+                        if (Mathf.Abs(nx) > 0.21f && Mathf.Abs(nx) < 0.25f && !isRiser)
+                        {
+                            col = Color.Lerp(col, tealRune, 0.55f);
+                        }
+
+                        // Soft radial vignette toward center sigil
+                        float centerGlow = Mathf.Clamp01(1f - r / 0.14f) * 0.35f;
+                        col = Color.Lerp(col, tealRune, centerGlow);
+                    }
+
+                    pixels[y * size + x] = col;
+                }
+            }
+
+            tex.SetPixels32(pixels);
+            tex.Apply(false, false);
+            return tex;
+        }
+
+        private static Texture2D BuildPortalBeaconTexture()
+        {
+            const int w = 16;
+            const int h = 32;
+            Texture2D tex = new Texture2D(w, h, TextureFormat.RGBA32, false)
+            {
+                name = "PortalBeaconTex",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave
+            };
+
+            Color32[] pixels = new Color32[w * h];
+            for (int y = 0; y < h; y++)
+            {
+                float vy = (y + 0.5f) / h;
+                float vertFade = Mathf.Sin(Mathf.Clamp01(vy) * Mathf.PI) * (1f - vy * 0.45f);
+                for (int x = 0; x < w; x++)
+                {
+                    float nx = Mathf.Abs(((x + 0.5f) / w) - 0.5f) * 2f;
+                    float horizFade = Mathf.Clamp01(1f - nx * nx);
+                    float alpha = Mathf.Clamp01(vertFade * horizFade * 0.85f);
+                    pixels[y * w + x] = new Color(1f, 1f, 1f, alpha);
+                }
+            }
+
+            tex.SetPixels32(pixels);
+            tex.Apply(false, false);
+            return tex;
         }
 
         private static void DestroyResource(Object obj)
