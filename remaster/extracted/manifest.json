@@ -152,22 +152,22 @@
     {
       "file": "bywater_m1/party_m1.json",
       "kind": "json",
-      "bytes": 5013,
-      "sha256": "d2136bd8fae620f90c9112ed672d69937679b6f2b6461ee6875725ea71931bd4",
+      "bytes": 5016,
+      "sha256": "f573160942ecec5b448582a5ffa90c1da270010f0b956c4f254943029d022c49",
       "source": "City of Bywater M1 vertical slice"
     },
     {
       "file": "bywater_m1/monsters_bywater_m1.json",
       "kind": "json",
-      "bytes": 12219,
-      "sha256": "3046c9e2b286b6129a2ab6950d8cfc7cabb55928cdc3879938a8b7cb5abe060f",
+      "bytes": 12220,
+      "sha256": "5bff7d11ac8a12df59a1c2f25acf930eb0adda26339df4649ae33a05cae0b704",
       "source": "City of Bywater M1 vertical slice"
     },
     {
       "file": "bywater_m1/spells_items_m1.json",
       "kind": "json",
-      "bytes": 79785,
-      "sha256": "ac354278d5cf2e750a8c24d1304f56c0dab148e3c56f7b9a9247f5c591edd36e",
+      "bytes": 79803,
+      "sha256": "ac36826ef309001dfa8234dd428917a2543b89b3a8dc66a0cb3ddebb5d32edb9",
       "source": "City of Bywater M1 vertical slice"
     }
   ]

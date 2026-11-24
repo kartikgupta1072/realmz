@@ -106,6 +106,7 @@ namespace RealmzCore.Combat
         public int TotalGoldLoot { get; private set; }
         public int VictoryLevelsGained { get; private set; }
         public bool VictoryRewardsGranted => _victoryRewardsGranted;
+        public CombatVictorySummary? LastVictorySummary { get; private set; }
 
         public CombatantState? CurrentActor =>
             _roundQueue.Count > 0 && _combatantsById.TryGetValue(_roundQueue[0], out CombatantState? actor)
@@ -669,7 +670,8 @@ namespace RealmzCore.Combat
                 defenderElevation: defElev,
                 weaponBonusAlreadyIncluded: attacker.WeaponBonusIncludedInToHit,
                 defenderIsProne: defender.IsProne,
-                attackerIsProne: attacker.IsProne);
+                attackerIsProne: attacker.IsProne,
+                attackerCritBonusPct: attacker.CritBonusPct);
 
             ComputeDamageRange(attacker.WeaponDice, attacker.DamageBonus, attacker.Conditions, out int minDmg, out int maxDmg);
             List<string> tags = CollectConditionTags(attacker, defender, flanking, los: null, hit.Modifiers);
@@ -756,7 +758,8 @@ namespace RealmzCore.Combat
                 defenderElevation: defElev,
                 weaponBonusAlreadyIncluded: true,
                 defenderIsProne: false,
-                attackerIsProne: attacker.IsProne);
+                attackerIsProne: attacker.IsProne,
+                attackerCritBonusPct: attacker.CritBonusPct);
 
             string diceStr = hasRanged ? attacker.RangedDice : "1d4";
             ComputeDamageRange(diceStr, 0, null, out int minDmg, out int maxDmg);
@@ -1338,11 +1341,18 @@ namespace RealmzCore.Combat
                 defenderElevation: defElev,
                 weaponBonusAlreadyIncluded: true,
                 defenderIsProne: false,
-                attackerIsProne: actor.IsProne);
+                attackerIsProne: actor.IsProne,
+                attackerCritBonusPct: actor.CritBonusPct);
 
             if (outcome.DamageDealt > 0)
             {
+                bool wasAlive = target.IsAlive;
                 target.Hp = Math.Max(0, target.Hp - outcome.DamageDealt);
+                actor.CombatDamageDealt += outcome.DamageDealt;
+                if (wasAlive && !target.IsAlive)
+                {
+                    actor.CombatKills++;
+                }
             }
 
             string msg = $"{actor.Name} fires at {target.Name}: {outcome.Kind} ({outcome.DamageDealt} dmg).";
@@ -1418,10 +1428,12 @@ namespace RealmzCore.Combat
 
                 if (isHeal)
                 {
-                    int heal = effectSpec.HasValue ? Math.Max(1, effectSpec.Value.Roll(Roller)) : 5;
+                    int heal = (effectSpec.HasValue ? Math.Max(1, effectSpec.Value.Roll(Roller)) : 5) + caster.DivineHealingBonus;
                     int before = target.Hp;
                     target.Hp = Math.Min(target.MaxHp, target.Hp + heal);
-                    totalHealing += target.Hp - before;
+                    int actualHeal = target.Hp - before;
+                    totalHealing += actualHeal;
+                    caster.CombatHealingDone += actualHeal;
                 }
                 else if (isCure)
                 {
@@ -1462,19 +1474,32 @@ namespace RealmzCore.Combat
                         continue;
                     }
 
-                    int saveChance = ComputeSpellSaveChance(target, spell);
+                    int saveChance = ComputeSpellSaveChance(target, spell, caster.SpellHitDcBonusPct);
                     bool saved = saveChance > 0 && Roller.NextInt(1, 101) <= saveChance;
 
                     if (effectSpec.HasValue)
                     {
-                        int dmg = Math.Max(1, effectSpec.Value.Roll(Roller));
+                        int dmg = Math.Max(1, effectSpec.Value.Roll(Roller) + caster.ArcaneSpellPowerBonus);
                         if (saved)
                         {
                             dmg /= 2;
                         }
 
+                        if ((string.Equals(spell.DamageType, "Heat", StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(spell.DamageType, "Fire", StringComparison.OrdinalIgnoreCase)) &&
+                            target.Conditions.Has(CharConditionId.FireProtection))
+                        {
+                            dmg = Math.Max(1, dmg / 2);
+                        }
+
+                        bool wasAlive = target.IsAlive;
                         target.Hp = Math.Max(0, target.Hp - dmg);
                         totalDamage += dmg;
+                        caster.CombatDamageDealt += dmg;
+                        if (wasAlive && !target.IsAlive)
+                        {
+                            caster.CombatKills++;
+                        }
                     }
 
                     if (!saved && spell.AppliedCondition.HasValue && target.IsAlive)
@@ -1579,22 +1604,10 @@ namespace RealmzCore.Combat
 
             if (Party != null)
             {
-                int stashIdx = -1;
-                for (int i = 0; i < Party.Stash.Count; i++)
-                {
-                    if (Party.Stash[i].ItemId == itemId && Party.Stash[i].Quantity > 0)
-                    {
-                        stashIdx = i;
-                        break;
-                    }
-                }
-
-                if (stashIdx < 0)
+                if (!Party.TryConsumeItemCharge(itemId, out _, _items))
                 {
                     return new CombatActionResult(false, $"{item.Name} is not available in party stash.");
                 }
-
-                Party.RemoveItemFromStash(stashIdx, 1);
             }
 
             actor.Economy.CommitSwiftAction();
@@ -1605,15 +1618,45 @@ namespace RealmzCore.Combat
                 : actor;
 
             int healed = 0;
-            if (!string.IsNullOrWhiteSpace(item.HealDice) && DiceSpec.TryParse(item.HealDice, out DiceSpec spec))
+            string nameLow = (item.Name ?? string.Empty).ToLowerInvariant();
+            string msg;
+            if (item.Id == 603 || nameLow.Contains("heat resist"))
             {
-                int roll = Math.Max(1, spec.Roll(Roller));
-                int before = target.Hp;
-                target.Hp = Math.Min(target.MaxHp, target.Hp + roll);
-                healed = target.Hp - before;
+                target.Conditions.Apply(CharConditionId.FireProtection, magnitude: 1, turnsRemaining: 10, baseRecoveryChancePercent: 0, canRecoverBySave: false);
+                msg = $"{actor.Name} uses {item.Name} on {target.Name} (+Fire Protection).";
+            }
+            else if (item.Id == 723 || nameLow.Contains("refresh"))
+            {
+                int spGain = Math.Min(target.MaxSp - target.Sp, 8);
+                target.Sp += Math.Max(0, spGain);
+                target.ExhaustionStacks = 0;
+                if (!string.IsNullOrWhiteSpace(item.HealDice) && DiceSpec.TryParse(item.HealDice, out DiceSpec rSpec))
+                {
+                    int before = target.Hp;
+                    target.Hp = Math.Min(target.MaxHp, target.Hp + Math.Max(1, rSpec.Roll(Roller)));
+                    healed = target.Hp - before;
+                }
+                msg = $"{actor.Name} uses {item.Name} on {target.Name} (+{healed} HP, +{spGain} SP, refreshed).";
+            }
+            else
+            {
+                if (item.Id == 602 || nameLow.Contains("poison"))
+                {
+                    target.Conditions.Remove(CharConditionId.Poisoned);
+                    target.Conditions.Remove(CharConditionId.Diseased);
+                }
+
+                if (!string.IsNullOrWhiteSpace(item.HealDice) && DiceSpec.TryParse(item.HealDice, out DiceSpec spec))
+                {
+                    int roll = Math.Max(1, spec.Roll(Roller));
+                    int before = target.Hp;
+                    target.Hp = Math.Min(target.MaxHp, target.Hp + roll);
+                    healed = target.Hp - before;
+                }
+                msg = $"{actor.Name} uses {item.Name} on {target.Name} (+{healed} HP).";
             }
 
-            string msg = $"{actor.Name} uses {item.Name} on {target.Name} (+{healed} HP).";
+            actor.CombatHealingDone += healed;
             AppendLog(actor.Id, actor.Name, "SwiftPotion", msg, new[] { target.Id }, healingDone: healed);
 
             return new CombatActionResult(true, msg, healingDone: healed);
@@ -1934,55 +1977,196 @@ namespace RealmzCore.Combat
 
             _partyRewardsApplied = true;
 
-            if (TotalGoldLoot > 0)
+            int baseGold = TotalGoldLoot;
+            int luckBonusGold = baseGold > 0
+                ? (int)Math.Round(baseGold * (party.GetGoldLootBonusPercent() / 100.0), MidpointRounding.AwayFromZero)
+                : 0;
+            int grantedGold = baseGold + luckBonusGold;
+            TotalGoldLoot = grantedGold;
+            if (grantedGold > 0)
             {
-                party.Gold += TotalGoldLoot;
+                party.Gold += grantedGold;
             }
 
+            List<LootStackSummary> lootStacks = new List<LootStackSummary>();
             for (int i = 0; i < _collectedLootItemIds.Count; i++)
             {
                 int itemId = _collectedLootItemIds[i];
-                int charges = _items.TryGetValue(itemId, out ItemDefinition? def) ? def.Charges : 0;
+                ItemDefinition? def = _items.TryGetValue(itemId, out ItemDefinition? foundDef) ? foundDef : null;
+                int charges = def != null ? def.Charges : 0;
                 party.AddItemToStash(itemId, 1, isIdentified: true, charges: charges);
+
+                int normalizedChg = Math.Max(0, charges);
+                bool stacked = false;
+                for (int s = 0; s < lootStacks.Count; s++)
+                {
+                    if (lootStacks[s].ItemId == itemId && lootStacks[s].RemainingCharges == normalizedChg)
+                    {
+                        LootStackSummary prev = lootStacks[s];
+                        lootStacks[s] = new LootStackSummary(
+                            prev.ItemId,
+                            prev.Name,
+                            prev.Category,
+                            prev.Slot,
+                            prev.Quantity + 1,
+                            prev.RemainingCharges,
+                            prev.BasePrice,
+                            prev.IsJunk);
+                        stacked = true;
+                        break;
+                    }
+                }
+
+                if (!stacked)
+                {
+                    lootStacks.Add(new LootStackSummary(
+                        itemId,
+                        def != null ? def.Name : $"Item #{itemId}",
+                        def != null ? def.Category : "Supply",
+                        def != null ? def.Slot : string.Empty,
+                        1,
+                        normalizedChg,
+                        def != null ? def.BasePrice : 1,
+                        def != null && def.IsJunk));
+                }
             }
 
-            if (TotalXpEarned > 0 && party.Members.Count > 0)
+            List<HeroVictorySummary> heroSummaries = new List<HeroVictorySummary>(party.Members.Count);
+            if (party.Members.Count > 0)
             {
-                List<PartyMemberState> recipients = new List<PartyMemberState>();
+                bool[] aliveFlags = new bool[party.Members.Count];
+                int totalWeights = 0;
+                int livingCount = 0;
                 for (int i = 0; i < party.Members.Count; i++)
                 {
                     PartyMemberState member = party.Members[i];
                     CombatantState? combatant = GetCombatant(member.Id);
                     bool alive = combatant != null ? combatant.IsAlive : member.IsAlive;
+                    aliveFlags[i] = alive;
                     if (alive)
                     {
-                        recipients.Add(member);
+                        livingCount++;
+                        totalWeights += 2;
                     }
-                }
-
-                if (recipients.Count == 0)
-                {
-                    for (int i = 0; i < party.Members.Count; i++)
+                    else
                     {
-                        recipients.Add(party.Members[i]);
+                        totalWeights += 1;
                     }
                 }
 
-                int baseShare = TotalXpEarned / recipients.Count;
-                int remainder = TotalXpEarned % recipients.Count;
+                int[] xpShares = new int[party.Members.Count];
+                if (TotalXpEarned > 0 && totalWeights > 0)
+                {
+                    if (livingCount == party.Members.Count || livingCount == 0)
+                    {
+                        int equalShare = TotalXpEarned / party.Members.Count;
+                        int equalRem = TotalXpEarned % party.Members.Count;
+                        for (int i = 0; i < party.Members.Count; i++)
+                        {
+                            xpShares[i] = equalShare + (i < equalRem ? 1 : 0);
+                        }
+                    }
+                    else
+                    {
+                        int assigned = 0;
+                        for (int i = 0; i < party.Members.Count; i++)
+                        {
+                            int w = aliveFlags[i] ? 2 : 1;
+                            xpShares[i] = (TotalXpEarned * w) / totalWeights;
+                            assigned += xpShares[i];
+                        }
+
+                        int rem = TotalXpEarned - assigned;
+                        for (int i = 0; i < party.Members.Count && rem > 0; i++)
+                        {
+                            if (aliveFlags[i])
+                            {
+                                xpShares[i]++;
+                                rem--;
+                            }
+                        }
+                        for (int i = 0; i < party.Members.Count && rem > 0; i++)
+                        {
+                            xpShares[i]++;
+                            rem--;
+                        }
+                    }
+                }
+
                 int levelsGained = 0;
-
-                for (int i = 0; i < recipients.Count; i++)
+                int mvpIdx = -1;
+                int bestMvpScore = 0;
+                for (int i = 0; i < party.Members.Count; i++)
                 {
-                    int share = baseShare + (i < remainder ? 1 : 0);
-                    if (share > 0)
+                    PartyMemberState member = party.Members[i];
+                    CombatantState? combatant = GetCombatant(member.Id);
+                    int share = xpShares[i];
+                    int levelBefore = member.Level;
+                    int xpBefore = member.Xp;
+                    bool readyToLevel;
+                    if (party.DeferLevelUp)
                     {
-                        levelsGained += recipients[i].AddXp(share);
+                        member.AwardXp(share);
+                        readyToLevel = member.HasPendingLevelUp;
                     }
+                    else
+                    {
+                        levelsGained += member.AddXp(share);
+                        readyToLevel = member.HasPendingLevelUp;
+                    }
+
+                    int kills = combatant != null ? combatant.CombatKills : 0;
+                    int dmg = combatant != null ? combatant.CombatDamageDealt : 0;
+                    int heal = combatant != null ? combatant.CombatHealingDone : 0;
+                    int mvpScore = dmg + (kills * 10) + heal;
+                    if (mvpScore > bestMvpScore)
+                    {
+                        bestMvpScore = mvpScore;
+                        mvpIdx = i;
+                    }
+
+                    int curFloor = PartyMemberState.GetXpRequiredForLevel(member.Level);
+                    int nextTarget = PartyMemberState.GetXpRequiredForLevel(Math.Min(PartyMemberState.MaxLevel, member.Level + 1));
+
+                    heroSummaries.Add(new HeroVictorySummary(
+                        member.Id,
+                        member.Name,
+                        member.Archetype,
+                        member.IconId,
+                        member.PortraitId,
+                        levelBefore,
+                        member.Level,
+                        xpBefore,
+                        member.Xp,
+                        share,
+                        curFloor,
+                        nextTarget,
+                        readyToLevel,
+                        member.PendingLevelUps,
+                        wasFallenRevived: !aliveFlags[i],
+                        kills,
+                        dmg,
+                        heal,
+                        isMvp: false));
+                }
+
+                if (mvpIdx >= 0 && mvpIdx < heroSummaries.Count)
+                {
+                    heroSummaries[mvpIdx].IsMvp = true;
                 }
 
                 VictoryLevelsGained = levelsGained;
             }
+
+            LastVictorySummary = new CombatVictorySummary(
+                TotalXpEarned,
+                baseGold,
+                luckBonusGold,
+                grantedGold,
+                party.Gold,
+                RoundNumber,
+                heroSummaries,
+                lootStacks);
         }
 
         internal void AppendLog(
@@ -2085,11 +2269,18 @@ namespace RealmzCore.Combat
                 defenderElevation: defElev,
                 weaponBonusAlreadyIncluded: attacker.WeaponBonusIncludedInToHit,
                 defenderIsProne: defender.IsProne,
-                attackerIsProne: attacker.IsProne);
+                attackerIsProne: attacker.IsProne,
+                attackerCritBonusPct: attacker.CritBonusPct);
 
             if (outcome.DamageDealt > 0)
             {
+                bool wasAlive = defender.IsAlive;
                 defender.Hp = Math.Max(0, defender.Hp - outcome.DamageDealt);
+                attacker.CombatDamageDealt += outcome.DamageDealt;
+                if (wasAlive && !defender.IsAlive)
+                {
+                    attacker.CombatKills++;
+                }
             }
 
             return outcome;
@@ -2513,7 +2704,7 @@ namespace RealmzCore.Combat
             return Math.Clamp(55 + ((actorScore - targetScore) * 5), 15, 95);
         }
 
-        private int ComputeSpellSaveChance(CombatantState target, SpellDefinition spell)
+        private int ComputeSpellSaveChance(CombatantState target, SpellDefinition spell, int casterDcBonusPct = 0)
         {
             if (string.Equals(spell.SaveKind, "None", StringComparison.OrdinalIgnoreCase))
             {
@@ -2527,7 +2718,11 @@ namespace RealmzCore.Combat
                 saveBonus = idx < target.Saves.Count ? target.Saves[idx] : target.Saves[0];
             }
 
-            int total = Math.Max(0, target.MagicResistance) + Math.Max(0, saveBonus);
+            bool isConditionOrPoisonSave = string.Equals(spell.SaveKind, "Chemical", StringComparison.OrdinalIgnoreCase) ||
+                                           string.Equals(spell.SaveKind, "Poison", StringComparison.OrdinalIgnoreCase) ||
+                                           string.Equals(spell.SaveKind, "Mental", StringComparison.OrdinalIgnoreCase);
+            int vitBonus = isConditionOrPoisonSave ? target.ConditionSaveBonusPct : 0;
+            int total = Math.Max(0, target.MagicResistance) + Math.Max(0, saveBonus) + vitBonus - casterDcBonusPct;
             return Math.Clamp(total, 0, 95);
         }
 

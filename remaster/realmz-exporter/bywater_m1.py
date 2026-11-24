@@ -61,7 +61,7 @@ STARTER_PARTY_SPECS = [
         "caste_id": 4,
         "icon_id": 9047,
         "portrait_id": 304,
-        "base_attrs": [14, 12, 12, 16, 13, 12],
+        "base_attrs": [16, 12, 12, 14, 13, 12],
         "equipped_ids": [75, 104, 209],
         "known_spell_ids": [],
     },
@@ -97,11 +97,20 @@ STARTER_PARTY_SPECS = [
         "caste_id": 5,
         "icon_id": 9106,
         "portrait_id": 363,
-        "base_attrs": [12, 13, 10, 17, 12, 15],
+        "base_attrs": [14, 12, 10, 16, 13, 15],
         "equipped_ids": [75, 209],
         "known_spell_ids": [],
     },
 ]
+
+# Normalized M1 race modifiers (avoids unaligned raw Data Race offsets on Furfoot/Dwarf/Half-Elf).
+M1_RACE_PROFILES: Dict[int, Dict[str, Any]] = {
+    1: {"att_bonus": [0, 0, 0, 0, 0, 0], "base_move": 12, "attacks_per_round": 2.0},  # Human
+    3: {"att_bonus": [0, 0, 0, 0, 0, 0], "base_move": 11, "attacks_per_round": 1.0},  # Elf
+    5: {"att_bonus": [-1, 0, 1, 0, 0, 2], "base_move": 10, "attacks_per_round": 1.5}, # Furfoot
+    7: {"att_bonus": [0, 1, 0, 0, 0, 0], "base_move": 10, "attacks_per_round": 1.0},  # Dwarf
+    8: {"att_bonus": [0, 0, 0, 1, 0, 2], "base_move": 12, "attacks_per_round": 1.0},  # Half Elf
+}
 
 CURATED_SPELL_CONFIG = {
     1108: {
@@ -325,8 +334,9 @@ def _classify_item(raw_item: Dict[str, Any]) -> Tuple[str, str, str, str]:
     """Return (category, slot, damage_dice, heal_dice) for an item record."""
     iid = raw_item["id"]
     rtype = raw_item["raw_type"]
-    vssmall = max(1, raw_item["vssmall"])
+    vssmall = max(2, raw_item["vssmall"])
     name_low = raw_item["name"].lower()
+    unid_low = raw_item.get("unidentified_name", "").lower()
 
     if rtype == 15:
         return ("Weapon", "MissileWeapon", f"1d{vssmall}", "")
@@ -334,34 +344,55 @@ def _classify_item(raw_item: Dict[str, Any]) -> Tuple[str, str, str, str]:
         return ("Weapon", "Weapon", f"1d{vssmall}", "")
     if rtype == 3 or "shield" in name_low:
         return ("Shield", "Shield", "", "")
+    if rtype == 6 or "cloak" in name_low or "cape" in name_low or "mantle" in name_low:
+        return ("Cloak", "Accessory2", "", "")
     if rtype == 4 or (200 <= iid < 400):
         return ("Armor", "Armor", "", "")
+    if rtype == 5 or "glove" in name_low or "gauntlet" in name_low:
+        return ("Gloves", "Hands", "", "")
+    if rtype == 9 or "boot" in name_low or "shoe" in name_low or "slipper" in name_low:
+        return ("Boots", "Feet", "", "")
     if rtype == 7 or (400 <= iid < 600):
         return ("Helm", "Helm", "", "")
-    if "heal small" in name_low:
-        return ("Potion", "Consumable", "", "1d8+2")
-    if "heal medium" in name_low:
-        return ("Potion", "Consumable", "", "2d8+4")
-    if "heal" in name_low or "refresh" in name_low or "potion" in name_low:
-        return ("Potion", "Consumable", "", "1d6+2")
-    if 800 <= iid < 1000:
+    if rtype == 8:
+        return ("Accessory", "Accessory1", "", "")
+    if rtype == 10 and iid < 800:
+        return ("Accessory", "Accessory2", "", "")
+    if 800 <= iid < 1000 or rtype in (22, 24):
         return ("Supply", "Utility", "", "")
+    if rtype == 21 or "heal" in name_low or "refresh" in name_low or "potion" in name_low or unid_low == "potion":
+        if "heal small" in name_low:
+            return ("Potion", "Consumable", "", "1d8+2")
+        if "heal medium" in name_low:
+            return ("Potion", "Consumable", "", "2d8+4")
+        if "heat resistance" in name_low or "heat resist" in name_low:
+            return ("Potion", "Consumable", "", "")
+        return ("Potion", "Consumable", "", "1d6+2")
     return ("Magic", "Consumable", "", "")
 
 
 def _format_item(raw_item: Dict[str, Any]) -> Dict[str, Any]:
     category, slot, dmg_dice, heal_dice = _classify_item(raw_item)
     iid = raw_item["id"]
-    is_junk = (raw_item["base_price"] <= 15) and (category in ("Supply", "Weapon", "Armor")) and (raw_item["weapon_bonus"] == 0) and (raw_item["ac_bonus"] <= 3) and iid not in (1, 803, 805)
+    name = "Sparring Quarter Staff" if iid == 102 else sanitize_text(raw_item["name"])
+    ac_bonus = max(2, raw_item["ac_bonus"]) if iid == 2 else raw_item["ac_bonus"]
+    desc = re.sub(r"\s{2,}", " ", sanitize_text(raw_item["description"])).strip()
+    is_junk = (
+        (raw_item["base_price"] <= 15)
+        and (category in ("Supply", "Weapon", "Armor"))
+        and (raw_item["weapon_bonus"] == 0)
+        and (ac_bonus <= 3)
+        and iid not in (1, 747, 748, 803, 805)
+    )
     return {
         "id": iid,
-        "name": sanitize_text(raw_item["name"]),
-        "description": sanitize_text(raw_item["description"]),
+        "name": name,
+        "description": desc,
         "category": category,
         "slot": slot,
         "damage_dice": dmg_dice,
         "weapon_bonus": raw_item["weapon_bonus"],
-        "armor_class_bonus": raw_item["ac_bonus"],
+        "armor_class_bonus": ac_bonus,
         "movement_mod": raw_item["movement_mod"],
         "range": 8 if slot == "MissileWeapon" else 1,
         "weight": raw_item["weight"],
@@ -594,7 +625,8 @@ def build_bywater_m1_payloads(realmz_base: Path) -> Dict[str, Any]:
     for spec in STARTER_PARTY_SPECS:
         race = races[spec["race_id"]]
         caste = castes[spec["caste_id"]]
-        att_bonus_r = race["att_bonus"]
+        race_prof = M1_RACE_PROFILES.get(spec["race_id"], race)
+        att_bonus_r = race_prof["att_bonus"]
         att_bonus_c = caste["att_bonus"]
         attrs = [
             max(6, min(20, spec["base_attrs"][i] + att_bonus_r[i] + att_bonus_c[i]))
@@ -620,8 +652,8 @@ def build_bywater_m1_payloads(realmz_base: Path) -> Dict[str, Any]:
         to_hit = 10 + caste["tohit_base"] + max(0, (br - 12) // 2)
         dodge = max(2, caste["dodge_base"] + max(0, (ag - 12)))
         missile = caste["missile_base"] + max(0, (ag - 12))
-        mv = max(8, race["base_move"] + caste["move_bonus"])
-        atk_round = max(1.0, float(race["num_attacks"] + caste["bonus_attacks"]))
+        mv = max(8, race_prof["base_move"] + caste["move_bonus"])
+        atk_round = max(1.0, float(race_prof.get("attacks_per_round", race["num_attacks"] + caste["bonus_attacks"])))
 
         heroes_out.append(
             {
@@ -689,10 +721,16 @@ def build_bywater_m1_payloads(realmz_base: Path) -> Dict[str, Any]:
         ranged_dice = "1d6" if ranged_range > 0 else ""
         xp_val = m["exp"] if m["exp"] > 0 else hd * 25
         mtypes = m["monster_types"]
+        mon_slug = _slugify(m["name"], f"monster_{m['index']}")
+        mon_gold_max = max(0, m["money"][0])
+        mon_gold_min = 0
+        if mon_slug == "skeletal_warrior" and mon_gold_max == 0:
+            mon_gold_min = 3
+            mon_gold_max = 10
         monsters_out.append(
             {
                 "index": m["index"],
-                "id": _slugify(m["name"], f"monster_{m['index']}"),
+                "id": mon_slug,
                 "name": m["name"],
                 "icon_id": m["icon_id"],
                 "hit_dice": hd,
@@ -719,8 +757,8 @@ def build_bywater_m1_payloads(realmz_base: Path) -> Dict[str, Any]:
                 "is_evil": bool(mtypes[4]) if len(mtypes) > 4 else False,
                 "is_undead": bool(mtypes[1]) if len(mtypes) > 1 else False,
                 "xp_reward": xp_val,
-                "gold_min": 0,
-                "gold_max": max(0, m["money"][0]),
+                "gold_min": mon_gold_min,
+                "gold_max": mon_gold_max,
                 "loot_item_ids": [iid for iid in m["loot_item_ids"] if iid in item_price_map],
             }
         )

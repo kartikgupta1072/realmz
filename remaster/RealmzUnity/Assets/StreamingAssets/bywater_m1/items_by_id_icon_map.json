@@ -125,7 +125,7 @@
     },
     "102": {
       "id": 102,
-      "name": "Quarter Staff",
+      "name": "Sparring Quarter Staff",
       "category": "Weapon",
       "slot": "Weapon",
       "icon_path": "icons/icon_quarter_staff_sparring.png"
@@ -273,8 +273,8 @@
     "250": {
       "id": 250,
       "name": "Padded Cloak",
-      "category": "Armor",
-      "slot": "Armor",
+      "category": "Cloak",
+      "slot": "Accessory2",
       "icon_path": "icons/icon_padded_cloak.png"
     },
     "400": {
@@ -301,22 +301,22 @@
     "452": {
       "id": 452,
       "name": "Leather Gloves",
-      "category": "Helm",
-      "slot": "Helm",
+      "category": "Gloves",
+      "slot": "Hands",
       "icon_path": "icons/icon_leather_gloves.png"
     },
     "454": {
       "id": 454,
       "name": "Leather Boots",
-      "category": "Helm",
-      "slot": "Helm",
+      "category": "Boots",
+      "slot": "Feet",
       "icon_path": "icons/icon_leather_boots.png"
     },
     "455": {
       "id": 455,
       "name": "Steel Shod Boots",
-      "category": "Helm",
-      "slot": "Helm",
+      "category": "Boots",
+      "slot": "Feet",
       "icon_path": "icons/icon_steel_shod_boots.png"
     },
     "602": {
@@ -329,7 +329,7 @@
     "603": {
       "id": 603,
       "name": "Heat Resistance",
-      "category": "Magic",
+      "category": "Potion",
       "slot": "Consumable",
       "icon_path": "icons/icon_potion_heat_resist.png"
     },
@@ -350,15 +350,15 @@
     "622": {
       "id": 622,
       "name": "Speckled Luck Stone +2",
-      "category": "Magic",
-      "slot": "Consumable",
+      "category": "Accessory",
+      "slot": "Accessory1",
       "icon_path": "icons/icon_luck_stone.png"
     },
     "675": {
       "id": 675,
       "name": "Quiver of Protection +2",
-      "category": "Magic",
-      "slot": "Consumable",
+      "category": "Accessory",
+      "slot": "Accessory2",
       "icon_path": "icons/icon_quiver_protection.png"
     },
     "723": {
@@ -371,15 +371,15 @@
     "747": {
       "id": 747,
       "name": "Salt",
-      "category": "Magic",
-      "slot": "Consumable",
+      "category": "Supply",
+      "slot": "Utility",
       "icon_path": "icons/icon_salt.png"
     },
     "748": {
       "id": 748,
       "name": "Pepper",
-      "category": "Magic",
-      "slot": "Consumable",
+      "category": "Supply",
+      "slot": "Utility",
       "icon_path": "icons/icon_pepper.png"
     },
     "803": {
@@ -533,7 +533,7 @@
     },
     {
       "id": 102,
-      "name": "Quarter Staff",
+      "name": "Sparring Quarter Staff",
       "category": "Weapon",
       "slot": "Weapon",
       "icon_path": "icons/icon_quarter_staff_sparring.png"
@@ -681,8 +681,8 @@
     {
       "id": 250,
       "name": "Padded Cloak",
-      "category": "Armor",
-      "slot": "Armor",
+      "category": "Cloak",
+      "slot": "Accessory2",
       "icon_path": "icons/icon_padded_cloak.png"
     },
     {
@@ -709,22 +709,22 @@
     {
       "id": 452,
       "name": "Leather Gloves",
-      "category": "Helm",
-      "slot": "Helm",
+      "category": "Gloves",
+      "slot": "Hands",
       "icon_path": "icons/icon_leather_gloves.png"
     },
     {
       "id": 454,
       "name": "Leather Boots",
-      "category": "Helm",
-      "slot": "Helm",
+      "category": "Boots",
+      "slot": "Feet",
       "icon_path": "icons/icon_leather_boots.png"
     },
     {
       "id": 455,
       "name": "Steel Shod Boots",
-      "category": "Helm",
-      "slot": "Helm",
+      "category": "Boots",
+      "slot": "Feet",
       "icon_path": "icons/icon_steel_shod_boots.png"
     },
     {
@@ -737,7 +737,7 @@
     {
       "id": 603,
       "name": "Heat Resistance",
-      "category": "Magic",
+      "category": "Potion",
       "slot": "Consumable",
       "icon_path": "icons/icon_potion_heat_resist.png"
     },
@@ -758,15 +758,15 @@
     {
       "id": 622,
       "name": "Speckled Luck Stone +2",
-      "category": "Magic",
-      "slot": "Consumable",
+      "category": "Accessory",
+      "slot": "Accessory1",
       "icon_path": "icons/icon_luck_stone.png"
     },
     {
       "id": 675,
       "name": "Quiver of Protection +2",
-      "category": "Magic",
-      "slot": "Consumable",
+      "category": "Accessory",
+      "slot": "Accessory2",
       "icon_path": "icons/icon_quiver_protection.png"
     },
     {
@@ -779,15 +779,15 @@
     {
       "id": 747,
       "name": "Salt",
-      "category": "Magic",
-      "slot": "Consumable",
+      "category": "Supply",
+      "slot": "Utility",
       "icon_path": "icons/icon_salt.png"
     },
     {
       "id": 748,
       "name": "Pepper",
-      "category": "Magic",
-      "slot": "Consumable",
+      "category": "Supply",
+      "slot": "Utility",
       "icon_path": "icons/icon_pepper.png"
     },
     {

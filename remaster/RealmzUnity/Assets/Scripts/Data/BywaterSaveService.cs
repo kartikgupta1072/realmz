@@ -42,6 +42,14 @@ namespace Realmz.Data
         public int maxSp;
         public int baseToHit;
         public int baseMissile;
+        public int pendingLevelUps;
+        public int brawn;
+        public int knowledge;
+        public int judgment;
+        public int agility;
+        public int vitality;
+        public int luck;
+        public int[] knownSpellIds = Array.Empty<int>();
         public int exhaustionStacks;
         public int curseStacks;
         public SavedConditionState[] conditions = Array.Empty<SavedConditionState>();
@@ -69,6 +77,7 @@ namespace Realmz.Data
         public int gold;
         public bool hasBoat;
         public int torchTurnsRemaining;
+        public int quickBandageCharges = PartyState.MaxQuickBandageCharges;
         public int turnCount;
         public ulong prngState;
         public string prngStateText = "0";
@@ -79,11 +88,11 @@ namespace Realmz.Data
     }
 
     /// <summary>
-    /// Atomic JSON persistence service for City of Bywater exploration sessions (v2 schema with v1 backward compatibility).
+    /// Atomic JSON persistence service for City of Bywater exploration sessions (v3 schema with v1/v2 backward compatibility).
     /// </summary>
     public static class BywaterSaveService
     {
-        public const int CurrentSaveVersion = 2;
+        public const int CurrentSaveVersion = 3;
         private const ulong DefaultFallbackSeed = 0x5245414C4D5AUL;
 
         public static BywaterSaveData CaptureSnapshot(
@@ -159,6 +168,12 @@ namespace Realmz.Data
                     equippedItemIds[e] = kvp.Value.ItemId;
                 }
 
+                int[] knownCopy = new int[member.KnownSpellIds.Count];
+                for (int ks = 0; ks < member.KnownSpellIds.Count; ks++)
+                {
+                    knownCopy[ks] = member.KnownSpellIds[ks];
+                }
+
                 memberStates[i] = new SavedMemberState
                 {
                     id = member.Id,
@@ -170,6 +185,14 @@ namespace Realmz.Data
                     maxSp = member.MaxSp,
                     baseToHit = member.BaseToHit,
                     baseMissile = member.BaseMissile,
+                    pendingLevelUps = member.PendingLevelUps,
+                    brawn = member.Brawn,
+                    knowledge = member.Knowledge,
+                    judgment = member.Judgment,
+                    agility = member.Agility,
+                    vitality = member.Vitality,
+                    luck = member.Luck,
+                    knownSpellIds = knownCopy,
                     exhaustionStacks = member.ExhaustionStacks,
                     curseStacks = member.CurseStacks,
                     conditions = savedConditions,
@@ -198,6 +221,7 @@ namespace Realmz.Data
                 gold = session.Party.Gold,
                 hasBoat = session.Party.HasBoat,
                 torchTurnsRemaining = session.Party.TorchTurnsRemaining,
+                quickBandageCharges = session.Party.QuickBandageCharges,
                 turnCount = session.TurnCount,
                 prngState = seedState,
                 prngStateText = seedState.ToString(CultureInfo.InvariantCulture),
@@ -231,6 +255,9 @@ namespace Realmz.Data
             party.Gold = Math.Max(0, data.gold);
             party.HasBoat = data.hasBoat;
             party.TorchTurnsRemaining = Math.Max(0, data.torchTurnsRemaining);
+            party.QuickBandageCharges = data.version >= 3
+                ? Clamp(data.quickBandageCharges, 0, PartyState.MaxQuickBandageCharges)
+                : PartyState.MaxQuickBandageCharges;
 
             ClearStash(party);
             if (items != null)
@@ -283,6 +310,28 @@ namespace Realmz.Data
                     {
                         member.BaseToHit = saved.baseToHit;
                         member.BaseMissile = saved.baseMissile;
+                    }
+
+                    if (data.version >= 3)
+                    {
+                        member.PendingLevelUps = Math.Max(0, saved.pendingLevelUps);
+                        if (saved.brawn > 0) member.Brawn = saved.brawn;
+                        if (saved.knowledge > 0) member.Knowledge = saved.knowledge;
+                        if (saved.judgment > 0) member.Judgment = saved.judgment;
+                        if (saved.agility > 0) member.Agility = saved.agility;
+                        if (saved.vitality > 0) member.Vitality = saved.vitality;
+                        if (saved.luck > 0) member.Luck = saved.luck;
+                        if (saved.knownSpellIds != null)
+                        {
+                            for (int ks = 0; ks < saved.knownSpellIds.Length; ks++)
+                            {
+                                member.AddKnownSpell(saved.knownSpellIds[ks]);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        member.PendingLevelUps = 0;
                     }
 
                     member.Hp = Clamp(saved.hp, 0, member.MaxHp);

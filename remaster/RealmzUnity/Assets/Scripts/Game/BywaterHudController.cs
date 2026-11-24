@@ -29,7 +29,7 @@ namespace Realmz.Game
     /// Builds and manages the responsive 1920x1080 Canvas UI for City of Bywater
     /// exploration, party/stash/camp management, town shops, and tactical combat.
     /// </summary>
-    public sealed class BywaterHudController : MonoBehaviour
+    public sealed partial class BywaterHudController : MonoBehaviour
     {
         public const CombatActionMode DefaultSmartMode = CombatActionMode.Smart;
 
@@ -61,9 +61,13 @@ namespace Realmz.Game
             public TextMeshProUGUI HpText;
             public Image SpFill;
             public TextMeshProUGUI SpText;
+            public Image XpFill;
+            public Button LvlUpBadgeBtn;
             public bool LastVisible;
             public string LastMemberId;
             public int LastLevel = -1;
+            public int LastXp = -1;
+            public int LastPendingLevels = -1;
             public int LastHp = -1;
             public int LastMaxHp = -1;
             public int LastSp = -1;
@@ -132,6 +136,7 @@ namespace Realmz.Game
         {
             public GameObject Root;
             public Image ItemIcon;
+            public GameObject UpgradePill;
             public TextMeshProUGUI InfoText;
             public Button EquipBtn;
             public Button UseBtn;
@@ -234,6 +239,7 @@ namespace Realmz.Game
         private int _selectedHeroIndex;
         private PartyState _cachedParty;
         private BywaterM1Bundle _cachedBundle;
+        private bool _cachedSafeZone = true;
 
         // Town Shop Modal (Single-Venue)
         private GameObject _shopModalRoot;
@@ -458,7 +464,7 @@ namespace Realmz.Game
         public bool IsSettingsOpen => _settingsModalRoot != null && _settingsModalRoot.activeSelf;
         public bool IsSettingsModalOpen => IsSettingsOpen;
         public bool IsQuickResolveOpen => _quickResolveModalRoot != null && _quickResolveModalRoot.activeSelf;
-        public bool IsModalOpen => IsPartyOpen || IsShopOpen || IsTempleOpen || IsOutcomeOpen || IsSettingsOpen || IsQuickResolveOpen;
+        public bool IsModalOpen => IsPartyOpen || IsShopOpen || IsTempleOpen || IsOutcomeOpen || IsSettingsOpen || IsQuickResolveOpen || IsLevelUpModalOpen;
         public bool IsAnyModalOpen => IsModalOpen;
         public bool IsDevToolsVisible => _isDevToolsVisible;
         public bool IsCursorTooltipActive => _cursorTooltipRoot != null && _cursorTooltipRoot.activeSelf;
@@ -571,6 +577,7 @@ namespace Realmz.Game
             BuildSettingsModal(_canvas.transform);
             BuildQuickResolveModal(_canvas.transform);
             BuildOutcomeModal(_canvas.transform);
+            BuildLevelUpModal(_canvas.transform);
             BuildToastBanner(_canvas.transform);
 
             SetCombatHudActive(false);
@@ -825,6 +832,7 @@ namespace Realmz.Game
             if (_settingsModalRoot != null) _settingsModalRoot.SetActive(false);
             if (_quickResolveModalRoot != null) _quickResolveModalRoot.SetActive(false);
             if (_outcomeModalRoot != null) _outcomeModalRoot.SetActive(false);
+            if (_levelUpModalRoot != null) _levelUpModalRoot.SetActive(false);
             _quitConfirmArmed = false;
         }
 
@@ -1054,6 +1062,7 @@ namespace Realmz.Game
 
             _cachedParty = session.Party;
             _cachedBundle = bundle;
+            _cachedSafeZone = session.IsInSafeZone();
             if (updateContextPoi)
             {
                 _contextPoiLabel = string.IsNullOrWhiteSpace(contextPoiLabel) ? null : contextPoiLabel.Trim();
@@ -1120,6 +1129,8 @@ namespace Realmz.Game
                     card.LastVisible &&
                     string.Equals(card.LastMemberId, m.Id, StringComparison.Ordinal) &&
                     card.LastLevel == m.Level &&
+                    card.LastXp == m.Xp &&
+                    card.LastPendingLevels == m.PendingLevelUps &&
                     card.LastHp == m.Hp &&
                     card.LastMaxHp == m.MaxHp &&
                     card.LastSp == m.Sp &&
@@ -1138,6 +1149,8 @@ namespace Realmz.Game
                 card.LastVisible = true;
                 card.LastMemberId = m.Id;
                 card.LastLevel = m.Level;
+                card.LastXp = m.Xp;
+                card.LastPendingLevels = m.PendingLevelUps;
                 card.LastHp = m.Hp;
                 card.LastMaxHp = m.MaxHp;
                 card.LastSp = m.Sp;
@@ -1168,6 +1181,19 @@ namespace Realmz.Game
                 {
                     card.SpFill.rectTransform.anchorMax = new Vector2(0f, 1f);
                     card.SpText.text = "SP -";
+                }
+
+                if (card.XpFill != null)
+                {
+                    int curFloor = PartyMemberState.GetXpRequiredForLevel(m.Level);
+                    int span = Math.Max(1, m.XpForNextLevel - curFloor);
+                    float xpRatio = m.Level >= PartyMemberState.MaxLevel ? 1f : Mathf.Clamp01((m.Xp - curFloor) / (float)span);
+                    card.XpFill.rectTransform.anchorMax = new Vector2(xpRatio, 1f);
+                }
+
+                if (card.LvlUpBadgeBtn != null)
+                {
+                    card.LvlUpBadgeBtn.gameObject.SetActive(m.HasPendingLevelUp);
                 }
 
                 card.Background.color = selected ? BywaterUiHelpers.CardSelectedBg : BywaterUiHelpers.CardBg;
@@ -1241,7 +1267,7 @@ namespace Realmz.Game
             }
 
             _selectedHeroIndex = Mathf.Clamp(selectedHeroIndex, 0, party.Members.Count - 1);
-            _drawerGoldTorchLabel.text = $"Gold: {party.Gold}g   |   Torch: {party.TorchTurnsRemaining} turns";
+            _drawerGoldTorchLabel.text = $"Gold: {party.Gold}g  |  Torch: {party.TorchTurnsRemaining}t";
 
             for (int i = 0; i < _partyHeroSelectorBtns.Count; i++)
             {
@@ -1311,7 +1337,7 @@ namespace Realmz.Game
                 _drawerHeroSpells.text = "Known Spells: " + (spellNames.Count > 0 ? string.Join(", ", spellNames) : "None");
             }
 
-            // 5 equipment slots
+            // Legacy 5-row compat loop (empty in new Paper-Doll mode) & 9-slot Paper-Doll + Character Sheet
             for (int i = 0; i < _equipSlots.Count; i++)
             {
                 EquipSlotRefs slotRef = _equipSlots[i];
@@ -1343,14 +1369,18 @@ namespace Realmz.Game
                 }
             }
 
-            // Shared Stash rows (pooled)
+            RefreshUxOverhaulDrawer(party, bundle, hero, _cachedSafeZone);
+
+            // Filtered & sorted Shared Stash rows (pooled)
+            List<int> order = BuildFilteredSortedStashIndices(party, items, hero);
             if (_stashEmptyLabel != null)
             {
-                _stashEmptyLabel.gameObject.SetActive(party.Stash.Count == 0);
+                _stashEmptyLabel.gameObject.SetActive(order.Count == 0);
             }
 
-            for (int i = 0; i < party.Stash.Count; i++)
+            for (int rowIdx = 0; rowIdx < order.Count; rowIdx++)
             {
+                int i = order[rowIdx];
                 InventoryItem entry = party.Stash[i];
                 ItemDefinition def = items != null && items.TryGetValue(entry.ItemId, out ItemDefinition found) ? found : null;
                 string itemName = def != null ? def.Name : $"Item #{entry.ItemId}";
@@ -1364,9 +1394,13 @@ namespace Realmz.Game
                 bool canEquip = def != null && PartyMemberState.TryParseSlot(def.Slot, out _);
                 bool canUse = def != null && (!string.IsNullOrWhiteSpace(def.HealDice) ||
                     string.Equals(def.Category, "Potion", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(def.Name, "Torch", StringComparison.OrdinalIgnoreCase));
+                    string.Equals(def.Slot, "Consumable", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(def.Name, "Torch", StringComparison.OrdinalIgnoreCase) ||
+                    entry.ItemId == PartyState.TorchItemId);
+                bool isUpgrade = def != null && IsStashEntryUpgradeForHero(hero, def, items);
 
-                StashRowRefs rowRef = GetOrCreateStashRow(i);
+                string chgTag = entry.RemainingCharges > 0 ? $" ({entry.RemainingCharges} chg)" : string.Empty;
+                StashRowRefs rowRef = GetOrCreateStashRow(rowIdx);
                 rowRef.BoundStashIndex = i;
                 Sprite stashSprite = _catalog != null
                     ? _catalog.GetItemIcon(def != null ? def.Id : entry.ItemId, def != null ? def.Name : itemName)
@@ -1377,15 +1411,30 @@ namespace Realmz.Game
                     rowRef.ItemIcon.preserveAspect = true;
                     rowRef.ItemIcon.gameObject.SetActive(stashSprite != null);
                 }
-                rowRef.InfoText.text = $"{itemName} x{entry.Quantity}  [{sellPrice}g]{(string.IsNullOrEmpty(stats) ? "" : " - " + stats)}";
+                if (rowRef.UpgradePill != null)
+                {
+                    rowRef.UpgradePill.SetActive(isUpgrade);
+                }
+                rowRef.InfoText.text = $"{itemName} x{entry.Quantity}{chgTag} [{sellPrice}g]{(string.IsNullOrEmpty(stats) ? "" : " - " + stats)}";
                 rowRef.EquipBtn.gameObject.SetActive(canEquip);
                 rowRef.UseBtn.gameObject.SetActive(canUse);
+
+                ItemDefinition capturedDef = def;
+                AttachTooltipCallbacks(rowRef.Root, () =>
+                {
+                    if (capturedDef == null) return (itemName, string.Empty);
+                    string body = canEquip
+                        ? BuildGearComparisonTooltip(hero, capturedDef, items)
+                        : $"{stats}{(entry.RemainingCharges > 0 ? $" | {entry.RemainingCharges} charges left" : "")}\nValue: {sellPrice}g sell\n\n{capturedDef.Description}";
+                    return ($"{itemName} x{entry.Quantity}", body);
+                });
+
                 rowRef.Root.SetActive(true);
             }
 
-            for (int i = party.Stash.Count; i < _stashRowPool.Count; i++)
+            for (int r = order.Count; r < _stashRowPool.Count; r++)
             {
-                _stashRowPool[i].Root.SetActive(false);
+                _stashRowPool[r].Root.SetActive(false);
             }
         }
 
@@ -1434,10 +1483,24 @@ namespace Realmz.Game
             LayoutElement infoLe = info.gameObject.AddComponent<LayoutElement>();
             infoLe.flexibleWidth = 1f;
 
+            TextMeshProUGUI upgLbl = BywaterUiHelpers.CreateLabel(
+                row,
+                "UpgradePill",
+                "UPG",
+                _font,
+                15f,
+                BywaterUiHelpers.SuccessGreen,
+                TextAlignmentOptions.Center,
+                FontStyles.Bold,
+                wrap: false);
+            upgLbl.gameObject.AddComponent<LayoutElement>().preferredWidth = 42f;
+            upgLbl.gameObject.SetActive(false);
+
             StashRowRefs rowRef = new StashRowRefs
             {
                 Root = row.gameObject,
                 ItemIcon = iconImg,
+                UpgradePill = upgLbl.gameObject,
                 InfoText = info,
                 BoundStashIndex = index
             };
@@ -1458,7 +1521,24 @@ namespace Realmz.Game
                 "UseBtn",
                 "Use",
                 _font,
-                () => OnUseStashItemRequested?.Invoke(_selectedHeroIndex, rowRef.BoundStashIndex),
+                () =>
+                {
+                    if (_cachedParty != null && rowRef.BoundStashIndex >= 0 && rowRef.BoundStashIndex < _cachedParty.Stash.Count)
+                    {
+                        InventoryItem itemEntry = _cachedParty.Stash[rowRef.BoundStashIndex];
+                        if (itemEntry.ItemId == PartyState.TorchItemId)
+                        {
+                            OnUseStashItemRequested?.Invoke(_selectedHeroIndex, rowRef.BoundStashIndex);
+                        }
+                        else
+                        {
+                            string itemLabel = _cachedBundle != null && _cachedBundle.Items.TryGetValue(itemEntry.ItemId, out ItemDefinition d)
+                                ? d.Name
+                                : "Potion";
+                            OpenPotionPicker(rowRef.BoundStashIndex, itemLabel);
+                        }
+                    }
+                },
                 15f);
             LayoutElement useLe = useBtn.gameObject.AddComponent<LayoutElement>();
             useLe.preferredWidth = 72f;
@@ -2958,6 +3038,15 @@ namespace Realmz.Game
                 return;
             }
 
+            if (_outcomeModalRect != null)
+            {
+                _outcomeModalRect.sizeDelta = new Vector2(600f, 430f);
+            }
+            if (_outcomeRichVictoryRoot != null) _outcomeRichVictoryRoot.SetActive(false);
+            if (_outcomeSummary != null) _outcomeSummary.gameObject.SetActive(true);
+            if (_victoryEquipUpgradesBtn != null) _victoryEquipUpgradesBtn.gameObject.SetActive(false);
+            if (_victoryLevelUpNowBtn != null) _victoryLevelUpNowBtn.gameObject.SetActive(false);
+
             bool isVictory = outcome == CombatOutcome.Victory;
             _outcomeTitle.text = isVictory ? "VICTORY!" : "DEFEAT";
             _outcomeTitle.color = isVictory ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.DangerRed;
@@ -3550,13 +3639,27 @@ namespace Realmz.Game
 
                 Image spFill = BywaterUiHelpers.CreateProgressBar(infoCol.transform, "SpBar", BywaterUiHelpers.SpFillColor, out RectTransform spBarRt);
                 LayoutElement spBarLe = spBarRt.gameObject.AddComponent<LayoutElement>();
-                spBarLe.preferredHeight = 17f;
+                spBarLe.preferredHeight = 16f;
                 TextMeshProUGUI spTxt = BywaterUiHelpers.CreateLabel(spBarRt, "SpText", "SP 0/0", _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
                 BywaterUiHelpers.AddTextDropShadow(spTxt);
                 spTxt.rectTransform.anchorMin = Vector2.zero;
                 spTxt.rectTransform.anchorMax = Vector2.one;
                 spTxt.rectTransform.offsetMin = Vector2.zero;
                 spTxt.rectTransform.offsetMax = Vector2.zero;
+
+                Image xpFill = BywaterUiHelpers.CreateProgressBar(infoCol.transform, "XpBar", BywaterUiHelpers.BrassHighlight, out RectTransform xpBarRt);
+                LayoutElement xpBarLe = xpBarRt.gameObject.AddComponent<LayoutElement>();
+                xpBarLe.preferredHeight = 5f;
+
+                Button lvlUpBtn = BywaterUiHelpers.CreateButton(portraitFrameRt, "LvlUpBadge", "LVL UP!", _font, () => OpenLevelUpModal(heroIdx), 15f);
+                BywaterUiHelpers.SetButtonColors(lvlUpBtn, true);
+                RectTransform lvlRt = lvlUpBtn.GetComponent<RectTransform>();
+                lvlRt.anchorMin = new Vector2(0f, 1f);
+                lvlRt.anchorMax = new Vector2(1f, 1f);
+                lvlRt.pivot = new Vector2(0.5f, 1f);
+                lvlRt.anchoredPosition = new Vector2(0f, 2f);
+                lvlRt.sizeDelta = new Vector2(0f, 22f);
+                lvlUpBtn.gameObject.SetActive(false);
 
                 _heroCards.Add(new HeroCardRefs
                 {
@@ -3569,7 +3672,9 @@ namespace Realmz.Game
                     HpFill = hpFill,
                     HpText = hpTxt,
                     SpFill = spFill,
-                    SpText = spTxt
+                    SpText = spTxt,
+                    XpFill = xpFill,
+                    LvlUpBadgeBtn = lvlUpBtn
                 });
             }
         }
@@ -3581,8 +3686,9 @@ namespace Realmz.Game
             modal.anchorMax = new Vector2(0.5f, 0.5f);
             modal.pivot = new Vector2(0.5f, 0.5f);
             modal.anchoredPosition = new Vector2(0f, 8f);
-            modal.sizeDelta = new Vector2(1320f, 820f);
+            modal.sizeDelta = new Vector2(1380f, 840f);
             _partyDrawerRoot = modal.gameObject;
+            _partyModalRect = modal;
 
             VerticalLayoutGroup rootVlg = modal.gameObject.AddComponent<VerticalLayoutGroup>();
             rootVlg.padding = new RectOffset(16, 16, 14, 14);
@@ -3606,11 +3712,17 @@ namespace Realmz.Game
             BywaterUiHelpers.AddTextDropShadow(title);
             title.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
 
-            _drawerGoldTorchLabel = BywaterUiHelpers.CreateLabel(header.transform, "GoldTorch", "Gold: 400g | Torch: 0 turns", _font, 16f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineRight, wrap: false);
-            _drawerGoldTorchLabel.gameObject.AddComponent<LayoutElement>().preferredWidth = 310f;
+            _drawerGoldTorchLabel = BywaterUiHelpers.CreateLabel(header.transform, "GoldTorch", "Gold: 400g  |  Torch: 0t", _font, 15.5f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineRight, wrap: false);
+            LayoutElement gtLe = _drawerGoldTorchLabel.gameObject.AddComponent<LayoutElement>();
+            gtLe.preferredWidth = 230f;
+            gtLe.flexibleHeight = 0f;
+
+            BuildHeaderCampPills(header.transform);
 
             Button closeBtn = BywaterUiHelpers.CreateButton(header.transform, "CloseBtn", "Close", _font, () => TogglePartyPanel(false), 15.5f);
-            closeBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 96f;
+            LayoutElement closeLe = closeBtn.gameObject.AddComponent<LayoutElement>();
+            closeLe.preferredWidth = 90f;
+            closeLe.flexibleHeight = 0f;
 
             // Hero Selector Strip
             GameObject selectorRow = new GameObject("HeroSelectorRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
@@ -3673,92 +3785,27 @@ namespace Realmz.Game
             _drawerHeroConditions.gameObject.AddComponent<LayoutElement>().preferredHeight = 28f;
 
             _drawerHeroSpells = BywaterUiHelpers.CreateLabel(leftCol, "HeroSpells", "Known Spells: None", _font, 15f, BywaterUiHelpers.MutedSlate);
-            _drawerHeroSpells.gameObject.AddComponent<LayoutElement>().preferredHeight = 52f;
+            _drawerHeroSpells.gameObject.AddComponent<LayoutElement>().preferredHeight = 44f;
 
-            TextMeshProUGUI equipHeader = BywaterUiHelpers.CreateLabel(leftCol, "EquipHeader", "Equipped Gear (5 Slots)", _font, 17f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold);
-            BywaterUiHelpers.AddTextDropShadow(equipHeader);
-            equipHeader.gameObject.AddComponent<LayoutElement>().preferredHeight = 28f;
+            BuildPaperDollAndCharSheet(leftCol);
 
-            EquipmentSlot[] slots =
-            {
-                EquipmentSlot.Weapon,
-                EquipmentSlot.MissileWeapon,
-                EquipmentSlot.Armor,
-                EquipmentSlot.Shield,
-                EquipmentSlot.Helm
-            };
-
-            for (int i = 0; i < slots.Length; i++)
-            {
-                EquipmentSlot slot = slots[i];
-                RectTransform slotRow = BywaterUiHelpers.CreatePanel(leftCol, $"Slot_{slot}", BywaterUiHelpers.CardBg, withBrassOutline: false);
-                slotRow.gameObject.AddComponent<LayoutElement>().preferredHeight = 44f;
-                HorizontalLayoutGroup sHlg = slotRow.gameObject.AddComponent<HorizontalLayoutGroup>();
-                sHlg.padding = new RectOffset(8, 8, 4, 4);
-                sHlg.spacing = 8f;
-                sHlg.childControlWidth = true;
-                sHlg.childControlHeight = true;
-                sHlg.childForceExpandWidth = false;
-
-                TextMeshProUGUI slotTag = BywaterUiHelpers.CreateLabel(slotRow, "SlotName", slot.ToString(), _font, 15f, BywaterUiHelpers.BrassAccent, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
-                slotTag.gameObject.AddComponent<LayoutElement>().preferredWidth = 128f;
-
-                Image slotIcon = BywaterUiHelpers.CreateImage(slotRow, "Icon", null, Color.white, preserveAspect: true);
-                slotIcon.raycastTarget = false;
-                LayoutElement slotIconLe = slotIcon.gameObject.AddComponent<LayoutElement>();
-                slotIconLe.preferredWidth = 26f;
-                slotIconLe.preferredHeight = 26f;
-                slotIconLe.minWidth = 26f;
-                slotIconLe.minHeight = 26f;
-                slotIcon.gameObject.SetActive(false);
-
-                TextMeshProUGUI itemLbl = BywaterUiHelpers.CreateLabel(slotRow, "ItemName", "- Empty -", _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, wrap: false);
-                itemLbl.overflowMode = TextOverflowModes.Truncate;
-                itemLbl.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
-
-                Button unequipBtn = BywaterUiHelpers.CreateButton(slotRow, "UnequipBtn", "Unequip", _font, () => OnUnequipRequested?.Invoke(_selectedHeroIndex, slot), 15f);
-                unequipBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 96f;
-
-                _equipSlots.Add(new EquipSlotRefs
-                {
-                    Slot = slot,
-                    ItemIcon = slotIcon,
-                    ItemLabel = itemLbl,
-                    UnequipBtn = unequipBtn
-                });
-            }
-
-            // Right Column: Camp & Shared Stash
+            // Right Column: Shared Stash (full height, Camp buttons moved cleanly into Header)
             RectTransform rightCol = BywaterUiHelpers.CreatePanel(body.transform, "StashCampCol", BywaterUiHelpers.PanelBg, withBrassOutline: true, outlinePx: 1f);
             rightCol.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
             VerticalLayoutGroup rightVlg = rightCol.gameObject.AddComponent<VerticalLayoutGroup>();
             rightVlg.padding = new RectOffset(12, 12, 12, 12);
-            rightVlg.spacing = 8f;
+            rightVlg.spacing = 6f;
             rightVlg.childControlWidth = true;
             rightVlg.childControlHeight = true;
             rightVlg.childForceExpandHeight = false;
 
-            GameObject campBar = new GameObject("CampBar", typeof(RectTransform), typeof(HorizontalLayoutGroup));
-            campBar.transform.SetParent(rightCol, false);
-            campBar.AddComponent<LayoutElement>().preferredHeight = 42f;
-            HorizontalLayoutGroup campHlg = campBar.GetComponent<HorizontalLayoutGroup>();
-            campHlg.spacing = 10f;
-            campHlg.childControlWidth = true;
-            campHlg.childControlHeight = true;
-            campHlg.childForceExpandWidth = false;
-
-            TextMeshProUGUI stashTitle = BywaterUiHelpers.CreateLabel(campBar.transform, "StashTitle", "Shared Stash & Camp", _font, 17f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
-            BywaterUiHelpers.AddTextDropShadow(stashTitle);
-            stashTitle.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
-
-            Button bandageBtn = BywaterUiHelpers.CreateButton(campBar.transform, "QuickBandageBtn", "Quick Bandage", _font, () => OnCampModeRequested?.Invoke(CampMode.QuickBandage), 15f);
-            bandageBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 160f;
-
-            Button fullRestBtn = BywaterUiHelpers.CreateButton(campBar.transform, "FullRestBtn", "Full Rest", _font, () => OnCampModeRequested?.Invoke(CampMode.FullRest), 15f);
-            fullRestBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 130f;
+            BuildStashControls(rightCol);
 
             _partyStashScroll = BywaterUiHelpers.CreateScrollView(rightCol, "StashScroll", _font, spacing: 5f);
-            _partyStashScroll.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
+            LayoutElement stashScrollLe = _partyStashScroll.gameObject.AddComponent<LayoutElement>();
+            stashScrollLe.minHeight = 320f;
+            stashScrollLe.preferredHeight = 520f;
+            stashScrollLe.flexibleHeight = 1f;
 
             _stashEmptyLabel = BywaterUiHelpers.CreateLabel(
                 _partyStashScroll.content,
@@ -5463,15 +5510,17 @@ namespace Realmz.Game
             _outcomeModalRoot = modal.gameObject;
 
             VerticalLayoutGroup vlg = modal.gameObject.AddComponent<VerticalLayoutGroup>();
-            vlg.padding = new RectOffset(22, 22, 20, 20);
-            vlg.spacing = 12f;
+            vlg.padding = new RectOffset(18, 18, 14, 14);
+            vlg.spacing = 6f;
             vlg.childControlWidth = true;
             vlg.childControlHeight = true;
             vlg.childForceExpandHeight = false;
 
-            _outcomeTitle = BywaterUiHelpers.CreateLabel(modal, "OutcomeTitle", "VICTORY!", _font, 28f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.Center, FontStyles.Bold);
+            _outcomeTitle = BywaterUiHelpers.CreateLabel(modal, "OutcomeTitle", "VICTORY!", _font, 26f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.Center, FontStyles.Bold);
             BywaterUiHelpers.AddTextDropShadow(_outcomeTitle);
-            _outcomeTitle.gameObject.AddComponent<LayoutElement>().preferredHeight = 44f;
+            LayoutElement titleLe = _outcomeTitle.gameObject.AddComponent<LayoutElement>();
+            titleLe.preferredHeight = 36f;
+            titleLe.flexibleHeight = 0f;
 
             RectTransform lvlBanner = BywaterUiHelpers.CreatePanel(
                 modal,
@@ -5480,7 +5529,9 @@ namespace Realmz.Game
                 withBrassOutline: true,
                 outlinePx: 1.5f);
             BywaterUiHelpers.SetBorderColor(lvlBanner, BywaterUiHelpers.BrassHighlight);
-            lvlBanner.gameObject.AddComponent<LayoutElement>().preferredHeight = 36f;
+            LayoutElement lvlBannerLe = lvlBanner.gameObject.AddComponent<LayoutElement>();
+            lvlBannerLe.preferredHeight = 30f;
+            lvlBannerLe.flexibleHeight = 0f;
             _outcomeLevelUpBanner = lvlBanner.gameObject;
 
             _outcomeLevelUpText = BywaterUiHelpers.CreateLabel(
@@ -5505,7 +5556,9 @@ namespace Realmz.Game
 
             GameObject btnRow = new GameObject("OutcomeButtons", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             btnRow.transform.SetParent(modal, false);
-            btnRow.AddComponent<LayoutElement>().preferredHeight = 48f;
+            LayoutElement btnRowLe = btnRow.AddComponent<LayoutElement>();
+            btnRowLe.preferredHeight = 44f;
+            btnRowLe.flexibleHeight = 0f;
             HorizontalLayoutGroup bHlg = btnRow.GetComponent<HorizontalLayoutGroup>();
             bHlg.spacing = 14f;
             bHlg.childControlWidth = true;
@@ -5515,6 +5568,8 @@ namespace Realmz.Game
             _outcomeContinueBtn = BywaterUiHelpers.CreateButton(btnRow.transform, "ContinueBtn", "Continue Exploring", _font, () => OnContinueAfterVictoryRequested?.Invoke(), 16f);
             _outcomeRetryBtn = BywaterUiHelpers.CreateButton(btnRow.transform, "RetryBtn", "Retry Skirmish", _font, () => OnRetrySkirmishRequested?.Invoke(), 16f);
             _outcomeReviveBtn = BywaterUiHelpers.CreateButton(btnRow.transform, "ReviveBtn", "Revive at Shrine", _font, () => OnReviveAtShrineRequested?.Invoke(), 16f);
+
+            BuildRichVictoryLayout(modal, btnRow.transform);
         }
 
         private void BuildToastBanner(Transform parent)
@@ -5523,8 +5578,8 @@ namespace Realmz.Game
             toast.anchorMin = new Vector2(0.5f, 1f);
             toast.anchorMax = new Vector2(0.5f, 1f);
             toast.pivot = new Vector2(0.5f, 1f);
-            toast.anchoredPosition = new Vector2(0f, -126f);
-            toast.sizeDelta = new Vector2(720f, 48f);
+            toast.anchoredPosition = new Vector2(0f, -60f);
+            toast.sizeDelta = new Vector2(620f, 38f);
 
             Image bg = toast.GetComponent<Image>();
             bg.raycastTarget = false;
@@ -5653,14 +5708,7 @@ namespace Realmz.Game
                 return false;
             }
 
-            if (!PartyMemberState.TryParseSlot(candidate.Slot, out EquipmentSlot slot))
-            {
-                return false;
-            }
-
-            bool isWeaponSlot = slot == EquipmentSlot.Weapon || slot == EquipmentSlot.MissileWeapon;
-            float candidateScore = ScoreItemForSlot(candidate, isWeaponSlot);
-            if (candidateScore <= 0f)
+            if (!PartyMemberState.TryParseSlot(candidate.Slot, out _))
             {
                 return false;
             }
@@ -5673,81 +5721,13 @@ namespace Realmz.Game
                     continue;
                 }
 
-                InventoryItem equipped = member.GetEquipped(slot);
-                if (equipped == null)
-                {
-                    return true;
-                }
-
-                if (!items.TryGetValue(equipped.ItemId, out ItemDefinition current))
-                {
-                    return true;
-                }
-
-                float currentScore = ScoreItemForSlot(current, isWeaponSlot);
-                if (candidateScore > currentScore + 0.01f)
+                if (IsStashEntryUpgradeForHero(member, candidate, items))
                 {
                     return true;
                 }
             }
 
             return false;
-        }
-
-        private static float ScoreItemForSlot(ItemDefinition item, bool isWeaponSlot)
-        {
-            if (item == null)
-            {
-                return 0f;
-            }
-
-            if (isWeaponSlot)
-            {
-                return EstimateDiceAverage(item.DamageDice) + item.WeaponBonus * 2.5f + item.ArmorClassBonus * 0.5f;
-            }
-
-            return item.ArmorClassBonus * 2.0f + item.WeaponBonus * 1.0f + item.MovementMod * 0.25f;
-        }
-
-        private static float EstimateDiceAverage(string dice)
-        {
-            if (string.IsNullOrWhiteSpace(dice))
-            {
-                return 0f;
-            }
-
-            string text = dice.Trim().ToLowerInvariant();
-            int dIndex = text.IndexOf('d');
-            if (dIndex < 0)
-            {
-                return int.TryParse(text, out int flatOnly) ? flatOnly : 0f;
-            }
-
-            int count = 1;
-            if (dIndex > 0 && int.TryParse(text.Substring(0, dIndex), out int parsedCount))
-            {
-                count = Math.Max(1, parsedCount);
-            }
-
-            int bonus = 0;
-            int plusIndex = text.IndexOf('+', dIndex + 1);
-            int minusIndex = text.IndexOf('-', dIndex + 1);
-            int modIndex = plusIndex >= 0 ? plusIndex : minusIndex;
-            string sidesPart = modIndex >= 0
-                ? text.Substring(dIndex + 1, modIndex - (dIndex + 1))
-                : text.Substring(dIndex + 1);
-
-            if (!int.TryParse(sidesPart, out int sides) || sides <= 0)
-            {
-                return 0f;
-            }
-
-            if (modIndex >= 0 && int.TryParse(text.Substring(modIndex), out int parsedBonus))
-            {
-                bonus = parsedBonus;
-            }
-
-            return count * ((sides + 1) * 0.5f) + bonus;
         }
     }
 }

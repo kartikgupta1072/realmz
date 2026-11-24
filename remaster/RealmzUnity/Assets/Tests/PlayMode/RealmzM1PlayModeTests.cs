@@ -285,6 +285,90 @@ namespace Realmz.PlayModeTests
                 Assert.That(ctrl.worldRenderer.AreTownNpcsHiddenForCombat, Is.False);
                 Assert.That(ctrl.worldRenderer.VisibleTownNpcCount, Is.EqualTo(4));
 
+                // 7. UX Overhaul #7-#10 Live Verification + Proof Captures
+                // Stage 9-slot gear, Camp bandages (1/2 after click), stacked potions/torches -> Paper-Doll & Camp proof
+                PartyState party = ctrl.ExploreSession.Party;
+                party.AddItemToStash(452, 1);
+                party.AddItemToStash(455, 1);
+                party.AddItemToStash(250, 1);
+                party.AddItemToStash(622, 1);
+                party.AddItemToStash(675, 1);
+                party.AddItemToStash(603, 1, charges: 3);
+                party.AddItemToStash(723, 1, charges: 2);
+                party.EquipBestForHero(0, ctrl.Bundle.Items);
+                party.Members[0].Hp = Math.Max(1, party.Members[0].MaxHp - 10);
+
+                ctrl.hudController.TogglePartyPanel(true);
+                ctrl.hudController.RefreshPartyDrawer(party, ctrl.Bundle, 0);
+                yield return null;
+                UnityEngine.UI.Button qbBtn = GameObject.Find("QuickBandageBtn")?.GetComponent<UnityEngine.UI.Button>();
+                Assert.That(qbBtn, Is.Not.Null);
+                qbBtn.onClick.Invoke();
+                yield return null;
+                Assert.That(party.QuickBandageCharges, Is.EqualTo(1));
+
+                if (captureProofs)
+                {
+                    CaptureCameraToPng(Camera.main, ctrl.hudController,
+                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_PaperDoll_Camp_Proof.png", 1600, 900);
+                }
+
+                // Level-Up badge & interactive modal -> LevelUp proof
+                party.Members[0].AwardXp(250);
+                ctrl.hudController.RefreshExploreHud(ctrl.ExploreSession, ctrl.Bundle, null, null, 0, string.Empty, false);
+                ctrl.hudController.OpenLevelUpModal(0);
+                yield return null;
+                Assert.That(ctrl.hudController.IsLevelUpModalOpen, Is.True);
+
+                if (captureProofs)
+                {
+                    CaptureCameraToPng(Camera.main, ctrl.hudController,
+                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_LevelUp_Proof.png", 1600, 900);
+                }
+
+                UnityEngine.UI.Button lvlConfirm = GameObject.Find("ConfirmLevelUpBtn")?.GetComponent<UnityEngine.UI.Button>();
+                Assert.That(lvlConfirm, Is.Not.Null);
+                lvlConfirm.onClick.Invoke();
+                yield return null;
+                Assert.That(party.Members[0].Level, Is.EqualTo(2));
+                Assert.That(ctrl.hudController.IsLevelUpModalOpen, Is.False);
+
+                // Rich 980x690 Victory Screen -> Victory Loot proof
+                party.Members[1].AwardXp(250);
+                List<HeroVictorySummary> hv = new List<HeroVictorySummary>();
+                for (int i = 0; i < party.Members.Count; i++)
+                {
+                    PartyMemberState pm = party.Members[i];
+                    hv.Add(new HeroVictorySummary(
+                        pm.Id, pm.Name, pm.Archetype, pm.IconId, pm.PortraitId,
+                        pm.Level, pm.Level, Math.Max(0, pm.Xp - 90), pm.Xp, 90,
+                        PartyMemberState.GetXpRequiredForLevel(pm.Level), pm.XpForNextLevel,
+                        pm.HasPendingLevelUp, pm.PendingLevelUps, i == 5, i == 0 ? 2 : 1, 24 - i * 2, i == 1 ? 12 : 0, i == 0));
+                }
+                List<LootStackSummary> loot = new List<LootStackSummary>
+                {
+                    new LootStackSummary(452, "Leather Gloves", "Gloves", "Hands", 2, 0, 5, false),
+                    new LootStackSummary(622, "Speckled Luck Stone +2", "Accessory", "Accessory1", 1, 0, 750, false),
+                    new LootStackSummary(250, "Padded Cloak", "Cloak", "Accessory2", 1, 0, 25, false),
+                    new LootStackSummary(455, "Steel Shod Boots", "Boots", "Feet", 1, 0, 35, false),
+                    new LootStackSummary(603, "Heat Resistance", "Potion", "Consumable", 1, 3, 300, false),
+                    new LootStackSummary(611, "Heal Small Wounds", "Potion", "Consumable", 3, 3, 50, false),
+                    new LootStackSummary(723, "Refresh Potion", "Potion", "Consumable", 1, 2, 500, false),
+                };
+                CombatVictorySummary summary = new CombatVictorySummary(540, 42, 8, 50, party.Gold, 4, hv, loot);
+                ctrl.hudController.ShowVictoryOutcome(summary, party, ctrl.Bundle);
+                yield return null;
+                Assert.That(ctrl.hudController.IsOutcomeOpen, Is.True);
+
+                if (captureProofs)
+                {
+                    CaptureCameraToPng(Camera.main, ctrl.hudController,
+                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_Victory_Loot_Proof.png", 1600, 900);
+                }
+
+                ctrl.hudController.CloseAllModals();
+                yield return null;
+
                 Assert.That(errors, Is.Empty, "PlayMode runtime errors/warnings detected:\n" + string.Join("\n", errors));
             }
             finally

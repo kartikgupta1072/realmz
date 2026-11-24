@@ -442,8 +442,8 @@
       "is_evil": false,
       "is_undead": true,
       "xp_reward": 25,
-      "gold_min": 0,
-      "gold_max": 0,
+      "gold_min": 3,
+      "gold_max": 10,
       "loot_item_ids": [
         10,
         400,

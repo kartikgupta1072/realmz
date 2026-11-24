@@ -2614,5 +2614,151 @@ namespace Realmz.EditorTests
                 }
             }
         }
+
+        [Test]
+        public void UxOverhaul_PaperDoll_CampIcons_LevelUpModal_SaveV3_And_RichVictoryScreen_MeetContracts()
+        {
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(Path.Combine(Application.streamingAssetsPath, "bywater_m1"));
+            PartyState party = PartyState.FromBundle(bundle);
+            ExplorationSession session = new ExplorationSession(bundle.Maps, "land_0", party);
+
+            // Verify 12 exported item & hero stat fixes on StreamingAssets bundle.
+            Assert.That(bundle.Items[452].Slot, Is.EqualTo("Hands"));
+            Assert.That(bundle.Items[454].Slot, Is.EqualTo("Feet"));
+            Assert.That(bundle.Items[455].Slot, Is.EqualTo("Feet"));
+            Assert.That(bundle.Items[250].Slot, Is.EqualTo("Accessory2"));
+            Assert.That(bundle.Items[622].Slot, Is.EqualTo("Accessory1"));
+            Assert.That(bundle.Items[675].Slot, Is.EqualTo("Accessory2"));
+            Assert.That(bundle.Items[603].Category, Is.EqualTo("Potion"));
+            Assert.That(bundle.Items[747].Category, Is.EqualTo("Supply"));
+            Assert.That(bundle.Items[748].Category, Is.EqualTo("Supply"));
+            Assert.That(bundle.Items[102].Name, Is.EqualTo("Sparring Quarter Staff"));
+            Assert.That(bundle.Items[2].ArmorClassBonus, Is.EqualTo(2));
+            Assert.That(bundle.Party[1].AttacksPerRound, Is.EqualTo(1.0)); // Liora fixed from 49.0
+
+            // Stacked starter consumables (4x Heal Small Wounds, 2x Torch)
+            party.AddItemToStash(452, 1);
+            party.AddItemToStash(455, 1);
+            party.AddItemToStash(250, 1);
+            party.AddItemToStash(622, 1);
+            Assert.That(party.EquipBestForHero(0, bundle.Items), Is.GreaterThanOrEqualTo(4));
+
+            GameObject hudGo = new GameObject("TempUxHudTest");
+            bool hadEs = Object.FindFirstObjectByType<EventSystem>() != null;
+            try
+            {
+                BywaterHudController hud = hudGo.AddComponent<BywaterHudController>();
+                hud.BuildUi(catalog);
+                Canvas canvas = hud.GetComponentInChildren<Canvas>(true);
+                Assert.That(canvas, Is.Not.Null);
+
+                // Strict >= 15f font floor across ALL TMP labels in entire HUD (including new UX panels).
+                TextMeshProUGUI[] allTexts = canvas.GetComponentsInChildren<TextMeshProUGUI>(true);
+                for (int i = 0; i < allTexts.Length; i++)
+                {
+                    Assert.That(allTexts[i].fontSize, Is.GreaterThanOrEqualTo(15f),
+                        $"Font floor violated (<15pt) on {allTexts[i].name}: {allTexts[i].fontSize}");
+                }
+
+                // Header Camp Icon+Badge buttons exist in Header (NOT inside StashCampCol).
+                Transform header = FindDescendantByPathSuffix(canvas.transform, "PartyDrawerModal/Header");
+                Transform stashCol = FindDescendantByPathSuffix(canvas.transform, "PartyDrawerModal/Body/StashCampCol");
+                Assert.That(header.Find("QuickBandageBtn"), Is.Not.Null);
+                Assert.That(header.Find("FullRestBtn"), Is.Not.Null);
+                Assert.That(stashCol.Find("CampBar"), Is.Null, "Old CampBar must be removed from Stash column.");
+
+                // All 9 anatomical Paper-Doll slots exist cleanly with ZERO Unequip buttons.
+                EquipmentSlot[] expectedSlots = (EquipmentSlot[])System.Enum.GetValues(typeof(EquipmentSlot));
+                for (int i = 0; i < expectedSlots.Length; i++)
+                {
+                    Transform slotTf = FindDescendantByName(canvas.transform, $"PaperDollSlot_{expectedSlots[i]}");
+                    Assert.That(slotTf, Is.Not.Null, $"Missing PaperDollSlot_{expectedSlots[i]}");
+                    Assert.That(slotTf.Find("UnequipBtn"), Is.Null, $"Redundant UnequipBtn found on {expectedSlots[i]}");
+                }
+
+                // Refresh drawer + check zero row churn + XP/Level-up badge + Level-Up modal.
+                party.Members[0].AwardXp(250);
+                hud.RefreshExploreHud(session, bundle, null, null, 0, string.Empty, false);
+                hud.TogglePartyPanel(true);
+                int pooledBefore = hud.PooledStashRowCount;
+                hud.RefreshPartyDrawer(party, bundle, 0);
+                Assert.That(hud.PooledStashRowCount, Is.EqualTo(pooledBefore));
+
+                Transform badge0 = FindDescendantByPathSuffix(canvas.transform, "HeroCard_0/PortraitFrame/LvlUpBadge");
+                Assert.That(badge0 != null && badge0.gameObject.activeSelf, Is.True, "LVL UP! badge should show for Aldric.");
+
+                bool confirmFired = false;
+                hud.OnConfirmLevelUpRequested += (heroIdx, alloc, spellId) =>
+                {
+                    confirmFired = heroIdx == 0 && alloc.TotalPoints == 2;
+                    party.Members[heroIdx].ApplyPendingLevelUp(alloc, spellId);
+                };
+                hud.OpenLevelUpModal(0);
+                Assert.That(hud.IsLevelUpModalOpen, Is.True);
+                Assert.That(hud.IsAnyModalOpen, Is.True);
+                Transform confirmBtnTf = FindDescendantByPathSuffix(canvas.transform, "LevelUpModal/Footer/ConfirmLevelUpBtn");
+                confirmBtnTf.GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                Assert.That(confirmFired, Is.True);
+                Assert.That(party.Members[0].Level, Is.EqualTo(2));
+
+                // Save v3 round-trip preserves QuickBandageCharges, attributes, PendingLevelUps & KnownSpellIds.
+                party.QuickBandageCharges = 1;
+                party.Members[1].AwardXp(250);
+                string tempSave = Path.Combine(Path.GetTempPath(), "realmz_v3_test.json");
+                try
+                {
+                    BywaterSaveData snap = BywaterSaveService.CaptureSnapshot(session);
+                    Assert.That(snap.version, Is.EqualTo(3));
+                    Assert.That(BywaterSaveService.TryWriteSave(tempSave, snap), Is.True);
+                    Assert.That(BywaterSaveService.TryLoadSave(tempSave, out BywaterSaveData loaded, out string _), Is.True);
+
+                    ExplorationSession restored = new ExplorationSession(bundle.Maps, "land_0", PartyState.FromBundle(bundle));
+                    BywaterSaveService.ApplySnapshot(loaded, restored, bundle.Items, out ulong _);
+                    Assert.That(restored.Party.QuickBandageCharges, Is.EqualTo(1));
+                    Assert.That(restored.Party.Members[0].Level, Is.EqualTo(2));
+                    Assert.That(restored.Party.Members[1].PendingLevelUps, Is.EqualTo(1));
+                }
+                finally
+                {
+                    if (File.Exists(tempSave)) File.Delete(tempSave);
+                }
+
+                // Rich 980x690 Victory screen renders all 6 hero XP cards & un-truncated stacked loot tiles.
+                List<HeroVictorySummary> hv = new List<HeroVictorySummary>();
+                for (int i = 0; i < party.Members.Count; i++)
+                {
+                    PartyMemberState pm = party.Members[i];
+                    hv.Add(new HeroVictorySummary(
+                        pm.Id, pm.Name, pm.Archetype, pm.IconId, pm.PortraitId,
+                        pm.Level, pm.Level, System.Math.Max(0, pm.Xp - 60), pm.Xp, 60,
+                        PartyMemberState.GetXpRequiredForLevel(pm.Level), pm.XpForNextLevel,
+                        pm.HasPendingLevelUp, pm.PendingLevelUps, i == 5, 1, 20, 4, i == 0));
+                }
+                List<LootStackSummary> loot = new List<LootStackSummary>
+                {
+                    new LootStackSummary(452, "Leather Gloves", "Gloves", "Hands", 2, 0, 5, false),
+                    new LootStackSummary(622, "Speckled Luck Stone +2", "Accessory", "Accessory1", 1, 0, 750, false),
+                    new LootStackSummary(611, "Heal Small Wounds", "Potion", "Consumable", 3, 3, 50, false),
+                    new LootStackSummary(250, "Padded Cloak", "Cloak", "Accessory2", 1, 0, 25, false),
+                };
+                CombatVictorySummary summary = new CombatVictorySummary(360, 40, 6, 46, party.Gold, 3, hv, loot);
+                hud.ShowVictoryOutcome(summary, party, bundle);
+
+                RectTransform outcomeRt = FindDescendantByName(canvas.transform, "OutcomeModal").GetComponent<RectTransform>();
+                Assert.That(outcomeRt.sizeDelta, Is.EqualTo(new Vector2(980f, 690f)));
+                Assert.That(FindDescendantByName(canvas.transform, "LootTile_3").gameObject.activeSelf, Is.True);
+                Assert.That(FindDescendantByName(canvas.transform, "OutcomeSummary").gameObject.activeSelf, Is.False);
+            }
+            finally
+            {
+                Object.DestroyImmediate(hudGo);
+                if (!hadEs)
+                {
+                    EventSystem created = Object.FindFirstObjectByType<EventSystem>();
+                    if (created != null) Object.DestroyImmediate(created.gameObject);
+                }
+            }
+        }
     }
 }

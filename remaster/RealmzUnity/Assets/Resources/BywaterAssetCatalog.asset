@@ -2561,8 +2561,8 @@ MonoBehaviour:
     iconKey: quarter_staff_plus1
     sprite: {fileID: 21300000, guid: 4b32d2320f6c4e148abef23499e179b0, type: 3}
   - id: 102
-    key: quarter_staff
-    name: Quarter Staff
+    key: sparring_quarter_staff
+    name: Sparring Quarter Staff
     category: Weapon
     iconKey: quarter_staff_sparring
     sprite: {fileID: 21300000, guid: 075d950e875218046990b95291988640, type: 3}
@@ -2689,7 +2689,7 @@ MonoBehaviour:
   - id: 250
     key: padded_cloak
     name: Padded Cloak
-    category: Armor
+    category: Cloak
     iconKey: padded_cloak
     sprite: {fileID: 21300000, guid: 4b22e55a8d6b5ed4d8562aad95da1032, type: 3}
   - id: 400
@@ -2713,19 +2713,19 @@ MonoBehaviour:
   - id: 452
     key: leather_gloves
     name: Leather Gloves
-    category: Helm
+    category: Gloves
     iconKey: leather_gloves
     sprite: {fileID: 21300000, guid: 89c59487589131e49a276df53a993a17, type: 3}
   - id: 454
     key: leather_boots
     name: Leather Boots
-    category: Helm
+    category: Boots
     iconKey: leather_boots
     sprite: {fileID: 21300000, guid: 145d2d4fcf28858479c7106b372ed901, type: 3}
   - id: 455
     key: steel_shod_boots
     name: Steel Shod Boots
-    category: Helm
+    category: Boots
     iconKey: steel_shod_boots
     sprite: {fileID: 21300000, guid: 01a1e178edb24624ab4db1fd968b4e4d, type: 3}
   - id: 602
@@ -2737,7 +2737,7 @@ MonoBehaviour:
   - id: 603
     key: heat_resistance
     name: Heat Resistance
-    category: Magic
+    category: Potion
     iconKey: potion_heat_resist
     sprite: {fileID: 21300000, guid: ca37d054c89c50846879b0b8be1d6ad4, type: 3}
   - id: 611
@@ -2755,13 +2755,13 @@ MonoBehaviour:
   - id: 622
     key: speckled_luck_stone_2
     name: Speckled Luck Stone +2
-    category: Magic
+    category: Accessory
     iconKey: luck_stone
     sprite: {fileID: 21300000, guid: d29184328bbfbfb4a97159c1acb6f12a, type: 3}
   - id: 675
     key: quiver_of_protection_2
     name: Quiver of Protection +2
-    category: Magic
+    category: Accessory
     iconKey: quiver_protection
     sprite: {fileID: 21300000, guid: c650aa4551ae6564db1e1d7a89ba0a1e, type: 3}
   - id: 723
@@ -2773,13 +2773,13 @@ MonoBehaviour:
   - id: 747
     key: salt
     name: Salt
-    category: Magic
+    category: Supply
     iconKey: salt
     sprite: {fileID: 21300000, guid: b1de5bb0c23fbec4b8aa9ee554155510, type: 3}
   - id: 748
     key: pepper
     name: Pepper
-    category: Magic
+    category: Supply
     iconKey: pepper
     sprite: {fileID: 21300000, guid: e8896ca15726252498995f9b70169804, type: 3}
   - id: 803

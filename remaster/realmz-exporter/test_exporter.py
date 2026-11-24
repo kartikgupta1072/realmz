@@ -295,6 +295,34 @@ class TestP04UnequippedStatContract(unittest.TestCase):
             disk_party = json.loads(raw_bytes.decode("utf-8"))
             self.assertEqual(disk_party["heroes"], party["heroes"])
 
+    def test_ux_overhaul_item_hero_and_monster_fixes(self) -> None:
+        payloads = build_bywater_m1_payloads(REALMZ_BASE)
+        items = {it["id"]: it for it in payloads["spells_items_m1.json"]["items"]}
+        self.assertEqual((items[452]["category"], items[452]["slot"]), ("Gloves", "Hands"))
+        self.assertFalse(items[452]["is_junk"])
+        self.assertEqual((items[454]["category"], items[454]["slot"]), ("Boots", "Feet"))
+        self.assertEqual((items[455]["category"], items[455]["slot"]), ("Boots", "Feet"))
+        self.assertEqual((items[250]["category"], items[250]["slot"]), ("Cloak", "Accessory2"))
+        self.assertEqual((items[622]["category"], items[622]["slot"]), ("Accessory", "Accessory1"))
+        self.assertEqual((items[675]["category"], items[675]["slot"]), ("Accessory", "Accessory2"))
+        self.assertEqual((items[603]["category"], items[603]["slot"]), ("Potion", "Consumable"))
+        self.assertEqual(items[603]["heal_dice"], "")
+        self.assertEqual((items[723]["category"], items[723]["slot"]), ("Potion", "Consumable"))
+        self.assertEqual((items[747]["category"], items[747]["slot"]), ("Supply", "Utility"))
+        self.assertEqual((items[748]["category"], items[748]["slot"]), ("Supply", "Utility"))
+        self.assertEqual(items[102]["name"], "Sparring Quarter Staff")
+        self.assertEqual(items[2]["armor_class_bonus"], 2)
+
+        heroes = {h["id"]: h for h in payloads["party_m1.json"]["heroes"]}
+        self.assertEqual(heroes["hero_cleric"]["attacks_per_round"], 1.0)
+        self.assertEqual(heroes["hero_mage"]["attacks_per_round"], 1.0)
+        self.assertEqual(heroes["hero_ranger"]["attributes"]["agility"], 17)
+        self.assertEqual(heroes["hero_rogue"]["attributes"]["luck"], 17)
+        self.assertEqual(heroes["hero_rogue"]["attacks_per_round"], 1.5)
+
+        monsters = {m["id"]: m for m in payloads["monsters_bywater_m1.json"]["monsters"]}
+        self.assertEqual((monsters["skeletal_warrior"]["gold_min"], monsters["skeletal_warrior"]["gold_max"]), (3, 10))
+
 
 class TestAudioExtraction(unittest.TestCase):
     """Verify Mac snd decoding, MADG->MOD conversion, and extracted audio_manifest.json."""

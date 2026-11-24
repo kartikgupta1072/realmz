@@ -551,7 +551,8 @@ namespace RealmzCore.Combat
         public static CombatantState FromHero(
             PartyMemberState hero,
             GridCoord position,
-            IReadOnlyDictionary<int, ItemDefinition>? catalog = null)
+            IReadOnlyDictionary<int, ItemDefinition>? catalog = null,
+            bool isEncumbered = false)
         {
             if (hero == null)
             {
@@ -567,9 +568,9 @@ namespace RealmzCore.Combat
             int weaponBonus = hero.GetEffectiveWeaponBonus(catalog);
             int rangedRange = hero.GetEffectiveRangedRange(catalog);
             string rangedDice = hero.GetEffectiveRangedDice(catalog);
-            int moveMax = hero.GetEffectiveMovementMax(catalog);
+            int moveMax = hero.GetEffectiveMovementMax(catalog, isEncumbered);
             int attacks = Math.Clamp((int)Math.Floor(hero.AttacksPerRound), 1, 5);
-            int damageBonus = Math.Max(0, (hero.Brawn - 12) / 3);
+            int damageBonus = hero.GetMeleeDamageAttributeBonus();
             bool prefersRanged = rangedRange > 1 && !string.IsNullOrWhiteSpace(rangedDice);
 
             CombatantState state = new CombatantState(
@@ -594,7 +595,7 @@ namespace RealmzCore.Combat
                 rangedDice: rangedDice,
                 rangedRange: rangedRange,
                 spellIds: hero.KnownSpellIds,
-                magicResistance: 0,
+                magicResistance: hero.GetMagicResistancePercent(),
                 saves: null,
                 spellImmunities: null,
                 isEvil: false,
@@ -607,8 +608,21 @@ namespace RealmzCore.Combat
                 lootItemIds: null,
                 prefersRanged: prefersRanged,
                 weaponBonusIncludedInToHit: true);
+            state.Knowledge = hero.Knowledge;
+            state.Judgment = hero.Judgment;
+            state.Vitality = hero.Vitality;
+            state.Luck = hero.Luck;
             state.ExhaustionStacks = hero.ExhaustionStacks;
             state.CurseStacks = hero.CurseStacks;
+
+            if (hero.Conditions.Has(CharConditionId.Poisoned)) state.Conditions.Apply(CharConditionId.Poisoned);
+            if (hero.Conditions.Has(CharConditionId.Diseased)) state.Conditions.Apply(CharConditionId.Diseased);
+            if (hero.Conditions.Has(CharConditionId.Cursed)) state.Conditions.Apply(CharConditionId.Cursed);
+            if (hero.Conditions.Has(CharConditionId.FireProtection))
+            {
+                state.Conditions.Apply(CharConditionId.FireProtection, magnitude: 1, turnsRemaining: 10, baseRecoveryChancePercent: 0, canRecoverBySave: false);
+            }
+
             return state;
         }
 
@@ -698,6 +712,18 @@ namespace RealmzCore.Combat
         public string RangedDice { get; set; }
         public int RangedRange { get; set; }
         public int Brawn { get; set; }
+        public int Knowledge { get; set; } = 10;
+        public int Judgment { get; set; } = 10;
+        public int Vitality { get; set; } = 10;
+        public int Luck { get; set; } = 10;
+        public int CritBonusPct => Side == CombatSide.Hero ? Math.Max(0, (Luck - 10) / 2) : 0;
+        public int ArcaneSpellPowerBonus => Side == CombatSide.Hero ? Math.Max(0, (Knowledge - 10) / 4) : 0;
+        public int DivineHealingBonus => Side == CombatSide.Hero ? Math.Max(0, (Judgment - 10) / 4) : 0;
+        public int SpellHitDcBonusPct => Side == CombatSide.Hero ? Knowledge - 10 : 0;
+        public int ConditionSaveBonusPct => Side == CombatSide.Hero ? Math.Max(0, (Vitality - 10) * 2) + Math.Max(0, Luck - 10) : 0;
+        public int CombatKills { get; internal set; }
+        public int CombatDamageDealt { get; internal set; }
+        public int CombatHealingDone { get; internal set; }
         public bool PrefersRanged { get; set; }
         public bool WeaponBonusIncludedInToHit { get; }
         public IReadOnlyList<int> SpellIds => _spellIds;
@@ -816,6 +842,153 @@ namespace RealmzCore.Combat
         public int RoundNumber { get; }
         public int EffectiveDexterity { get; }
         public bool IsCurrentTurn { get; }
+    }
+
+    public sealed class HeroVictorySummary
+    {
+        public HeroVictorySummary(
+            string heroId,
+            string name,
+            string archetype,
+            int iconId,
+            int portraitId,
+            int levelBefore,
+            int levelAfter,
+            int xpBefore,
+            int xpAfter,
+            int xpAwarded,
+            int currentLevelFloorXp,
+            int nextLevelXp,
+            bool readyToLevelUp,
+            int pendingLevelUps,
+            bool wasFallenRevived,
+            int kills,
+            int damageDealt,
+            int healingDone,
+            bool isMvp)
+        {
+            HeroId = heroId ?? string.Empty;
+            Name = name ?? string.Empty;
+            Archetype = archetype ?? string.Empty;
+            IconId = iconId;
+            PortraitId = portraitId;
+            LevelBefore = levelBefore;
+            LevelAfter = levelAfter;
+            XpBefore = xpBefore;
+            XpAfter = xpAfter;
+            XpAwarded = xpAwarded;
+            CurrentLevelFloorXp = currentLevelFloorXp;
+            NextLevelXp = nextLevelXp;
+            ReadyToLevelUp = readyToLevelUp;
+            PendingLevelUps = pendingLevelUps;
+            WasFallenRevived = wasFallenRevived;
+            Kills = kills;
+            DamageDealt = damageDealt;
+            HealingDone = healingDone;
+            IsMvp = isMvp;
+        }
+
+        public string HeroId { get; }
+        public string Name { get; }
+        public string Archetype { get; }
+        public int IconId { get; }
+        public int PortraitId { get; }
+        public int LevelBefore { get; }
+        public int LevelAfter { get; }
+        public int XpBefore { get; }
+        public int XpAfter { get; }
+        public int XpAwarded { get; }
+        public int CurrentLevelFloorXp { get; }
+        public int NextLevelXp { get; }
+        public bool ReadyToLevelUp { get; }
+        public int PendingLevelUps { get; }
+        public bool WasFallenRevived { get; }
+        public int Kills { get; }
+        public int DamageDealt { get; }
+        public int HealingDone { get; }
+        public bool IsMvp { get; set; }
+    }
+
+    public sealed class LootStackSummary
+    {
+        public LootStackSummary(
+            int itemId,
+            string name,
+            string category,
+            string slot,
+            int quantity,
+            int remainingCharges,
+            int basePrice,
+            bool isJunk)
+        {
+            ItemId = itemId;
+            Name = name ?? string.Empty;
+            Category = category ?? string.Empty;
+            Slot = slot ?? string.Empty;
+            Quantity = quantity;
+            RemainingCharges = remainingCharges;
+            BasePrice = basePrice;
+            IsJunk = isJunk;
+        }
+
+        public int ItemId { get; }
+        public string Name { get; }
+        public string Category { get; }
+        public string Slot { get; }
+        public int Quantity { get; }
+        public int RemainingCharges { get; }
+        public int BasePrice { get; }
+        public bool IsJunk { get; }
+    }
+
+    public sealed class CombatVictorySummary
+    {
+        public CombatVictorySummary(
+            int totalXpEarned,
+            int baseGoldLoot,
+            int luckBonusGold,
+            int totalGoldLoot,
+            int partyGoldAfter,
+            int roundsTaken,
+            IReadOnlyList<HeroVictorySummary> heroes,
+            IReadOnlyList<LootStackSummary> lootStacks)
+        {
+            TotalXpEarned = totalXpEarned;
+            BaseGoldLoot = baseGoldLoot;
+            LuckBonusGold = luckBonusGold;
+            TotalGoldLoot = totalGoldLoot;
+            PartyGoldAfter = partyGoldAfter;
+            RoundsTaken = roundsTaken;
+            Heroes = heroes ?? Array.Empty<HeroVictorySummary>();
+            LootStacks = lootStacks ?? Array.Empty<LootStackSummary>();
+        }
+
+        public int TotalXpEarned { get; }
+        public int BaseGoldLoot { get; }
+        public int LuckBonusGold { get; }
+        public int TotalGoldLoot { get; }
+        public int PartyGoldAfter { get; }
+        public int RoundsTaken { get; }
+        public IReadOnlyList<HeroVictorySummary> Heroes { get; }
+        public IReadOnlyList<LootStackSummary> LootStacks { get; }
+
+        public int ReadyToLevelUpCount
+        {
+            get
+            {
+                int count = 0;
+                for (int i = 0; i < Heroes.Count; i++)
+                {
+                    if (Heroes[i].ReadyToLevelUp)
+                    {
+                        count++;
+                    }
+                }
+                return count;
+            }
+        }
+
+        public bool AnyReadyToLevelUp => ReadyToLevelUpCount > 0;
     }
 
     public sealed class ReachableTileInfo

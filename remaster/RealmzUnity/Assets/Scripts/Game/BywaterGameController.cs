@@ -809,6 +809,9 @@ namespace Realmz.Game
             hudController.OnEquipFromStashRequested += HandleEquipFromStash;
             hudController.OnUseStashItemRequested += HandleUseStashItem;
             hudController.OnCampModeRequested += HandleCampRest;
+            hudController.OnEquipBestHeroRequested += HandleEquipBestHero;
+            hudController.OnEquipBestPartyRequested += HandleEquipBestParty;
+            hudController.OnConfirmLevelUpRequested += HandleConfirmLevelUp;
 
             hudController.OnBuyItemRequested += HandleBuyItem;
             hudController.OnSellItemRequested += HandleSellItem;
@@ -2282,56 +2285,103 @@ namespace Realmz.Game
         {
             audioDirector?.PlayUiClick();
             PartyState party = ExploreSession.Party;
-            if (stashIdx < 0 || stashIdx >= party.Stash.Count || heroIdx < 0 || heroIdx >= party.Members.Count)
+            if (party.TryUseConsumableOnHero(heroIdx, stashIdx, Bundle.Items, _roller, out string feedback))
             {
-                return;
-            }
-
-            InventoryItem entry = party.Stash[stashIdx];
-            if (!Bundle.Items.TryGetValue(entry.ItemId, out ItemDefinition def))
-            {
-                return;
-            }
-
-            if (string.Equals(def.Name, "Torch", StringComparison.OrdinalIgnoreCase) || entry.ItemId == 805)
-            {
-                party.RemoveItemFromStash(stashIdx, 1);
-                party.TorchTurnsRemaining += 30;
+                audioDirector?.PlaySpell("heal");
                 hudController?.RefreshPartyDrawer(party, Bundle, heroIdx);
                 hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false);
-                hudController?.ShowToast("Lit a Torch (+30 turns).", 2.2f);
+                if (!string.IsNullOrEmpty(feedback))
+                {
+                    hudController?.ShowToast(feedback, 2.4f);
+                }
+            }
+        }
+
+        private void HandleEquipBestHero(int heroIdx)
+        {
+            audioDirector?.PlayUiClick();
+            int equipped = ExploreSession.Party.EquipBestForHero(heroIdx, Bundle.Items);
+            hudController?.RefreshPartyDrawer(ExploreSession.Party, Bundle, heroIdx);
+            hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false);
+            hudController?.ShowToast(
+                equipped > 0 ? $"Equipped {equipped} upgrade(s) for hero." : "No upgrades available in stash.",
+                2.0f);
+        }
+
+        private void HandleEquipBestParty()
+        {
+            audioDirector?.PlayUiClick();
+            int equipped = ExploreSession.Party.EquipBestForParty(Bundle.Items);
+            hudController?.RefreshPartyDrawer(ExploreSession.Party, Bundle, _selectedPartyHeroIndex);
+            hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false);
+            hudController?.ShowToast(
+                equipped > 0 ? $"Equipped {equipped} party upgrade(s) from stash." : "Party already wears the best gear in stash.",
+                2.2f);
+        }
+
+        private void HandleConfirmLevelUp(int heroIdx, AttributeAllocation alloc, int? learnedSpellId)
+        {
+            PartyState party = ExploreSession.Party;
+            if (heroIdx < 0 || heroIdx >= party.Members.Count)
+            {
                 return;
             }
 
             PartyMemberState hero = party.Members[heroIdx];
-            if (!string.IsNullOrWhiteSpace(def.HealDice) && DiceSpec.TryParse(def.HealDice, out DiceSpec spec))
+            if (hero.ApplyPendingLevelUp(alloc, learnedSpellId))
             {
-                party.RemoveItemFromStash(stashIdx, 1);
-                int healed = Math.Max(1, spec.Roll(_roller));
-                int before = hero.Hp;
-                hero.Hp = Math.Min(hero.MaxHp, Math.Max(1, hero.Hp) + healed);
-                if (def.Name.IndexOf("Poison", StringComparison.OrdinalIgnoreCase) >= 0)
+                audioDirector?.PlaySpell("heal");
+                hudController?.ShowToast($"{hero.Name} reached Level {hero.Level}!", 2.8f);
+                hudController?.CloseLevelUpModal();
+
+                // Auto-advance to next hero with a pending level-up, otherwise return to drawer or exploration.
+                for (int i = 0; i < party.Members.Count; i++)
                 {
-                    hero.Conditions.Remove(CharConditionId.Poisoned);
+                    if (party.Members[i].HasPendingLevelUp)
+                    {
+                        hudController?.RefreshPartyDrawer(party, Bundle, i);
+                        hudController?.OpenLevelUpModal(i);
+                        hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false);
+                        return;
+                    }
                 }
 
-                audioDirector?.PlaySpell("heal");
                 hudController?.RefreshPartyDrawer(party, Bundle, heroIdx);
                 hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false);
-                hudController?.ShowToast($"{hero.Name} used {def.Name} (+{hero.Hp - before} HP).", 2.2f);
             }
         }
 
         private void HandleCampRest(CampMode mode)
         {
             audioDirector?.PlayUiClick();
-            RestResult res = ExploreSession.Party.Rest(mode);
+            RestResult res = ExploreSession.TryCampRest(mode, out EncounterZoneData ambushZone, out int _);
+            if (res.Ambushed && ambushZone != null)
+            {
+                audioDirector?.PlaySpell("fire");
+                hudController?.CloseAllModals();
+                hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false);
+                hudController?.ShowToast("Ambush while resting in the wilds!", 2.8f);
+                List<MonsterDefinition> monsters = SelectMonstersFromEncounterZone(ambushZone);
+                _activeEncounterZoneKey = ExplorationSession.GetEncounterZoneKey(ExploreSession.CurrentMap.MapId, ambushZone);
+                StartTacticalCombat(monsters, "Camp Ambush!");
+                return;
+            }
+
+            if (!res.Success)
+            {
+                hudController?.ShowToast(string.IsNullOrEmpty(res.Reason) ? "Cannot rest here right now." : res.Reason, 2.8f);
+                hudController?.RefreshPartyDrawer(ExploreSession.Party, Bundle, _selectedPartyHeroIndex);
+                hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false);
+                return;
+            }
+
             audioDirector?.PlaySpell("heal");
             EnsureExploreHeroViews();
             hudController?.RefreshPartyDrawer(ExploreSession.Party, Bundle, _selectedPartyHeroIndex);
             hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false);
             string label = mode == CampMode.FullRest ? "Full Rest" : "Quick Bandage";
-            hudController?.ShowToast($"{label}: +{res.TotalHpRestored} HP, +{res.TotalSpRestored} SP.", 2.6f);
+            string extra = res.TorchChargesConsumed > 0 ? " (-1 Torch)" : string.Empty;
+            hudController?.ShowToast($"{label}{extra}: +{res.TotalHpRestored} HP, +{res.TotalSpRestored} SP.", 2.6f);
         }
 
         private void HandleBuyItem(string shopId, int itemId)
@@ -4512,28 +4562,35 @@ namespace Realmz.Game
 
                 ExploreSession?.SyncAfterCombat(CombatSession, floorDeadToOne: true);
 
-                List<string> lootNames = new List<string>(CombatSession.CollectedLootItemIds.Count);
-                for (int i = 0; i < CombatSession.CollectedLootItemIds.Count; i++)
-                {
-                    int itemId = CombatSession.CollectedLootItemIds[i];
-                    if (Bundle != null && Bundle.Items != null && Bundle.Items.TryGetValue(itemId, out ItemDefinition def))
-                    {
-                        lootNames.Add(def.Name);
-                    }
-                    else
-                    {
-                        lootNames.Add($"Item #{itemId}");
-                    }
-                }
-
                 audioDirector?.PlayMusic("treasure", 0.7f);
                 audioDirector?.PlayCoin();
-                hudController?.ShowOutcomeModal(
-                    CombatOutcome.Victory,
-                    CombatSession.TotalXpEarned,
-                    CombatSession.VictoryLevelsGained,
-                    CombatSession.TotalGoldLoot,
-                    lootNames);
+                if (CombatSession.LastVictorySummary != null)
+                {
+                    hudController?.ShowVictoryOutcome(CombatSession.LastVictorySummary, ExploreSession?.Party, Bundle);
+                }
+                else
+                {
+                    List<string> lootNames = new List<string>(CombatSession.CollectedLootItemIds.Count);
+                    for (int i = 0; i < CombatSession.CollectedLootItemIds.Count; i++)
+                    {
+                        int itemId = CombatSession.CollectedLootItemIds[i];
+                        if (Bundle != null && Bundle.Items != null && Bundle.Items.TryGetValue(itemId, out ItemDefinition def))
+                        {
+                            lootNames.Add(def.Name);
+                        }
+                        else
+                        {
+                            lootNames.Add($"Item #{itemId}");
+                        }
+                    }
+
+                    hudController?.ShowOutcomeModal(
+                        CombatOutcome.Victory,
+                        CombatSession.TotalXpEarned,
+                        CombatSession.VictoryLevelsGained,
+                        CombatSession.TotalGoldLoot,
+                        lootNames);
+                }
             }
             else
             {
@@ -6559,31 +6616,38 @@ namespace Realmz.Game
 
                 ExploreSession.SyncAfterCombat(qrSession, floorDeadToOne: true);
 
-                List<string> lootNames = new List<string>(qrSession.CollectedLootItemIds.Count);
-                for (int i = 0; i < qrSession.CollectedLootItemIds.Count; i++)
-                {
-                    int itemId = qrSession.CollectedLootItemIds[i];
-                    if (Bundle.Items != null && Bundle.Items.TryGetValue(itemId, out ItemDefinition def))
-                    {
-                        lootNames.Add(def.Name);
-                    }
-                    else
-                    {
-                        lootNames.Add($"Item #{itemId}");
-                    }
-                }
-
                 EnsureExploreHeroViews();
                 RefreshContextualExplorePoi();
                 hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false, _lastContextPoiLabel);
                 audioDirector?.PlayMusic("treasure", 0.7f);
                 audioDirector?.PlayCoin();
-                hudController?.ShowOutcomeModal(
-                    CombatOutcome.Victory,
-                    qrSession.TotalXpEarned,
-                    qrSession.VictoryLevelsGained,
-                    qrSession.TotalGoldLoot,
-                    lootNames);
+                if (qrSession.LastVictorySummary != null)
+                {
+                    hudController?.ShowVictoryOutcome(qrSession.LastVictorySummary, ExploreSession.Party, Bundle);
+                }
+                else
+                {
+                    List<string> lootNames = new List<string>(qrSession.CollectedLootItemIds.Count);
+                    for (int i = 0; i < qrSession.CollectedLootItemIds.Count; i++)
+                    {
+                        int itemId = qrSession.CollectedLootItemIds[i];
+                        if (Bundle.Items != null && Bundle.Items.TryGetValue(itemId, out ItemDefinition def))
+                        {
+                            lootNames.Add(def.Name);
+                        }
+                        else
+                        {
+                            lootNames.Add($"Item #{itemId}");
+                        }
+                    }
+
+                    hudController?.ShowOutcomeModal(
+                        CombatOutcome.Victory,
+                        qrSession.TotalXpEarned,
+                        qrSession.VictoryLevelsGained,
+                        qrSession.TotalGoldLoot,
+                        lootNames);
+                }
             }
             else if (outcome == CombatOutcome.Defeat)
             {

@@ -434,7 +434,123 @@ namespace RealmzCore.Exploration
                 Facing = portal.DestFacing;
             }
 
+            if (!CurrentMap.IsDungeon && IsInSafeZone())
+            {
+                Party.QuickBandageCharges = PartyState.MaxQuickBandageCharges;
+            }
+
             return true;
+        }
+
+        private bool IsHostileZone(EncounterZoneData zone)
+        {
+            if (zone == null || zone.Percent <= 0)
+            {
+                return false;
+            }
+
+            string key = GetEncounterZoneKey(CurrentMap.MapId, zone);
+            if (_clearedEncounterIds.Contains(key))
+            {
+                return false;
+            }
+
+            if (zone.MonsterIndices.Count > 0)
+            {
+                return true;
+            }
+
+            for (int i = 0; i < zone.BattleIds.Count; i++)
+            {
+                if (zone.BattleIds[i] > 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        public EncounterZoneData? GetUnclearedHostileZoneAtCurrentTile()
+        {
+            IReadOnlyList<EncounterZoneData> zones = CurrentMap.GetZonesAt(Position.X, Position.Y);
+            for (int i = 0; i < zones.Count; i++)
+            {
+                if (IsHostileZone(zones[i]))
+                {
+                    return zones[i];
+                }
+            }
+            return null;
+        }
+
+        public bool IsInUnclearedHostileZone()
+        {
+            return GetUnclearedHostileZoneAtCurrentTile() != null;
+        }
+
+        public bool IsInSafeZone()
+        {
+            if (CurrentMap.IsDungeon || IsInUnclearedHostileZone())
+            {
+                return false;
+            }
+
+            if (!string.Equals(CurrentMap.MapId, "land_0", StringComparison.OrdinalIgnoreCase))
+            {
+                return CurrentMap.EncounterZones.Count == 0;
+            }
+
+            // Bywater Town Safe Zone covers the gated town compound and town POIs (outside Zone 3 haunted quarters).
+            if (Position.X <= 11 && Position.Y <= 22)
+            {
+                return true;
+            }
+
+            for (int i = 0; i < CurrentMap.PointsOfInterest.Count; i++)
+            {
+                MapPointOfInterest poi = CurrentMap.PointsOfInterest[i];
+                if (Position.ChebyshevDistance(poi.Coord) <= 6)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        public RestResult TryCampRest(
+            CampMode mode,
+            out EncounterZoneData? ambushZone,
+            out int ambushBattleId)
+        {
+            ambushZone = null;
+            ambushBattleId = 0;
+
+            bool isSafeZone = IsInSafeZone();
+            EncounterZoneData? hostileZone = GetUnclearedHostileZoneAtCurrentTile();
+            bool inHostile = hostileZone != null;
+
+            RestResult result = Party.Rest(mode, isSafeZone, inHostile, _roller);
+            if (result.TurnsElapsed > 0)
+            {
+                TurnCount += result.TurnsElapsed;
+            }
+
+            if (result.Ambushed && hostileZone != null)
+            {
+                ambushZone = hostileZone;
+                if (hostileZone.BattleIds.Count == 1)
+                {
+                    ambushBattleId = hostileZone.BattleIds[0];
+                }
+                else if (hostileZone.BattleIds.Count > 1)
+                {
+                    ambushBattleId = hostileZone.BattleIds[_roller.NextInt(0, hostileZone.BattleIds.Count)];
+                }
+            }
+
+            return result;
         }
 
         public void SyncAfterCombat(TacticalCombatSession combat, bool floorDeadToOne = false)
@@ -459,11 +575,30 @@ namespace RealmzCore.Exploration
                 member.Sp = Math.Clamp(unit.Sp, 0, member.MaxSp);
                 member.ExhaustionStacks = unit.ExhaustionStacks;
                 member.CurseStacks = unit.CurseStacks;
+
+                SyncPersistentCondition(unit.Conditions, member.Conditions, CharConditionId.Poisoned);
+                SyncPersistentCondition(unit.Conditions, member.Conditions, CharConditionId.Diseased);
+                SyncPersistentCondition(unit.Conditions, member.Conditions, CharConditionId.Cursed);
             }
 
             if (combat.Outcome == CombatOutcome.Victory)
             {
                 combat.GrantVictoryRewardsToParty(Party);
+            }
+        }
+
+        private static void SyncPersistentCondition(
+            ConditionTracker source,
+            ConditionTracker target,
+            CharConditionId conditionId)
+        {
+            if (source.Has(conditionId))
+            {
+                target.Apply(conditionId);
+            }
+            else
+            {
+                target.Remove(conditionId);
             }
         }
 
@@ -494,6 +629,7 @@ namespace RealmzCore.Exploration
             }
 
             Party.Gold -= goldCost;
+            Party.QuickBandageCharges = PartyState.MaxQuickBandageCharges;
 
             for (int i = 0; i < Party.Members.Count; i++)
             {
@@ -540,6 +676,7 @@ namespace RealmzCore.Exploration
             }
 
             Party.Gold -= goldCost;
+            Party.QuickBandageCharges = PartyState.MaxQuickBandageCharges;
 
             for (int i = 0; i < Party.Members.Count; i++)
             {

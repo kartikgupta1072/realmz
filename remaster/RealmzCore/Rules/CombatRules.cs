@@ -190,7 +190,8 @@ namespace RealmzCore.Rules
             int defenderElevation = 0,
             bool weaponBonusAlreadyIncluded = false,
             bool defenderIsProne = false,
-            bool attackerIsProne = false)
+            bool attackerIsProne = false,
+            int attackerCritBonusPct = 0)
         {
             int weaponHitBonus = weaponBonusAlreadyIncluded ? 0 : (5 * equippedWeaponBonus);
             int score = 50 + attackerToHit + (isFlanking ? 20 : 0) + weaponHitBonus - defenderAc;
@@ -301,7 +302,9 @@ namespace RealmzCore.Rules
             }
 
             int clamped = Math.Clamp(score, 5, 95);
-            int critThreshold = mode == RulesetMode.ModernBalanced ? 5 : 0;
+            int critThreshold = mode == RulesetMode.ModernBalanced
+                ? Math.Clamp(5 + Math.Max(0, attackerCritBonusPct), 5, 50)
+                : 0;
             int grazeThreshold = mode == RulesetMode.ModernBalanced
                 ? Math.Min(95, clamped + 10)
                 : clamped;
@@ -332,7 +335,8 @@ namespace RealmzCore.Rules
             int defenderElevation = 0,
             bool weaponBonusAlreadyIncluded = false,
             bool defenderIsProne = false,
-            bool attackerIsProne = false)
+            bool attackerIsProne = false,
+            int attackerCritBonusPct = 0)
         {
             if (roller == null)
             {
@@ -352,7 +356,8 @@ namespace RealmzCore.Rules
                 defenderElevation: defenderElevation,
                 weaponBonusAlreadyIncluded: weaponBonusAlreadyIncluded,
                 defenderIsProne: defenderIsProne,
-                attackerIsProne: attackerIsProne);
+                attackerIsProne: attackerIsProne,
+                attackerCritBonusPct: attackerCritBonusPct);
 
             int roll = roller.NextInt(1, 101);
             AttackOutcomeKind kind;

@@ -217,17 +217,23 @@ namespace RealmzCore.Tests
             Assert.Equal(3, junkRes.ItemsSold); // 2 Goblin Ears (5g each) + 1 Rusty Spoon (2g) = 12g
             Assert.Equal(192, party.Gold);
 
-            // QuickBandage heals partial HP and lights torch; FullRest restores full HP/SP and removes ExhaustionStacks.
+            // QuickBandage heals living HP using 1 charge (no free torch); FullRest restores full HP/SP, removes ExhaustionStacks, and refills bandages.
             RestResult quick = party.Rest(CampMode.QuickBandage);
-            Assert.True(quick.TorchLit);
-            Assert.Equal(30, party.TorchTurnsRemaining);
+            Assert.True(quick.Success);
+            Assert.False(quick.TorchLit);
+            Assert.Equal(0, party.TorchTurnsRemaining);
+            Assert.Equal(1, party.QuickBandageCharges);
+            Assert.Equal(1, quick.TurnsElapsed);
             Assert.True(hero.Hp > 12 && hero.Hp < 30);
 
             RestResult full = party.Rest(CampMode.FullRest);
+            Assert.True(full.Success);
             Assert.Equal(30, hero.Hp);
             Assert.Equal(12, hero.Sp);
             Assert.Equal(0, hero.ExhaustionStacks);
             Assert.Equal(2, full.ExhaustionCleared);
+            Assert.Equal(PartyState.MaxQuickBandageCharges, party.QuickBandageCharges);
+            Assert.Equal(8, full.TurnsElapsed);
         }
 
         [Fact]
