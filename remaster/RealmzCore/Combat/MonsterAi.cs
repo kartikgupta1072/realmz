@@ -15,7 +15,8 @@ namespace RealmzCore.Combat
                 GridCoord targetCoord,
                 string targetId,
                 GridCoord? moveCoord = null,
-                string spellKey = "")
+                string spellKey = "",
+                IReadOnlyList<GridCoord>? telegraphedTiles = null)
             {
                 ActionKind = actionKind;
                 ActionType = actionType;
@@ -23,6 +24,7 @@ namespace RealmzCore.Combat
                 TargetId = targetId;
                 MoveCoord = moveCoord;
                 SpellKey = spellKey;
+                TelegraphedTiles = telegraphedTiles ?? Array.Empty<GridCoord>();
             }
 
             public CombatIntentActionType ActionKind { get; }
@@ -31,6 +33,7 @@ namespace RealmzCore.Combat
             public string TargetId { get; }
             public GridCoord? MoveCoord { get; }
             public string SpellKey { get; }
+            public IReadOnlyList<GridCoord> TelegraphedTiles { get; }
         }
 
         public static EnemyIntentPrediction PredictNextIntent(TacticalCombatSession session, string? actorId = null)
@@ -65,7 +68,8 @@ namespace RealmzCore.Combat
                 targetId: decision.TargetId,
                 plannedMoveCoord: decision.MoveCoord ?? actor.Position,
                 hasPlannedMove: decision.MoveCoord.HasValue && decision.MoveCoord.Value != actor.Position,
-                spellKey: decision.SpellKey);
+                spellKey: decision.SpellKey,
+                telegraphedTiles: decision.TelegraphedTiles);
         }
 
         public static CombatActionResult ExecuteTurn(TacticalCombatSession session)
@@ -104,6 +108,7 @@ namespace RealmzCore.Combat
 
             CombatActionResult finalResult = new CombatActionResult(true, $"{actor.Name} holds position.");
             bool tookAttackOrCast = false;
+            bool tookTonguePull = false;
             const int maxSubActions = 5;
 
             for (int step = 0; step < maxSubActions; step++)
@@ -135,13 +140,15 @@ namespace RealmzCore.Combat
                     bool canFollowUpRanged = actor.RangedRange > 1 && !string.IsNullOrWhiteSpace(actor.RangedDice) &&
                                              PickBestRangedTarget(session, actor, actor.Position, enemies, ignoreActionBudget: false, out _) != null;
                     bool canFollowUpMelee = PickBestMeleeTarget(session, actor, actor.Position, enemies, ignoreActionBudget: false, out _) != null;
-                    if (!canFollowUpCast && !canFollowUpRanged && !canFollowUpMelee)
+                    bool canFollowUpPull = !tookTonguePull && actor.HasSpecialAbility("tongue_pull") &&
+                                           TryPickBestTonguePull(session, actor, enemies, ignoreBudget: false, out _, out _);
+                    if (!canFollowUpCast && !canFollowUpRanged && !canFollowUpMelee && !canFollowUpPull)
                     {
                         break;
                     }
                 }
 
-                AiDecision decision = ChooseNextDecision(session, actor, dryRun: false);
+                AiDecision decision = ChooseNextDecision(session, actor, dryRun: false, allowTonguePull: !tookTonguePull);
 
                 if (decision.ActionKind == CombatIntentActionType.Flee)
                 {
@@ -177,7 +184,27 @@ namespace RealmzCore.Combat
                 }
 
                 CombatActionResult? actionResult = null;
-                if ((decision.ActionKind == CombatIntentActionType.CastSpell ||
+                if (string.Equals(decision.ActionType, "TonguePull", StringComparison.Ordinal) &&
+                    !string.IsNullOrEmpty(decision.TargetId))
+                {
+                    CombatActionResult pullRes = session.ExecuteTonguePull(decision.TargetId);
+                    if (pullRes.Success)
+                    {
+                        actionResult = pullRes;
+                        tookTonguePull = true;
+                    }
+                }
+
+                if (actionResult == null &&
+                    string.Equals(decision.ActionType, "Cleave", StringComparison.Ordinal) &&
+                    !string.IsNullOrEmpty(decision.TargetId) &&
+                    session.PreviewMeleeAttack(actor.Id, decision.TargetId).CanExecute)
+                {
+                    actionResult = session.ExecuteCleaveAttack(decision.TargetId);
+                }
+
+                if (actionResult == null &&
+                    (decision.ActionKind == CombatIntentActionType.CastSpell ||
                      decision.ActionKind == CombatIntentActionType.MoveAndCast ||
                      decision.ActionKind == CombatIntentActionType.HealAlly) &&
                     !string.IsNullOrEmpty(decision.SpellKey))
@@ -229,7 +256,15 @@ namespace RealmzCore.Combat
 
                     if (meleeTarget != null)
                     {
-                        actionResult = session.ExecuteMeleeAttack(meleeTarget.Id);
+                        if (actor.HasSpecialAbility("cleave_2tile") &&
+                            session.FindBestCleaveSecondaryTarget(actor, meleeTarget) != null)
+                        {
+                            actionResult = session.ExecuteCleaveAttack(meleeTarget.Id);
+                        }
+                        else
+                        {
+                            actionResult = session.ExecuteMeleeAttack(meleeTarget.Id);
+                        }
                     }
                 }
 
@@ -269,7 +304,8 @@ namespace RealmzCore.Combat
         private static AiDecision ChooseNextDecision(
             TacticalCombatSession session,
             CombatantState actor,
-            bool dryRun)
+            bool dryRun,
+            bool allowTonguePull = true)
         {
             if (!actor.IsConscious)
             {
@@ -366,6 +402,23 @@ namespace RealmzCore.Combat
                 }
             }
 
+            // 4b. Orc Cleave when 2+ living enemies are adjacent (or reachable adjacent for melee units).
+            if (actor.HasSpecialAbility("cleave_2tile") && !actor.PrefersRanged)
+            {
+                if (TryPickBestCleaveAt(session, actor, actor.Position, enemies, ignoreBudget, out CombatantState? cleavePrimary, out CombatantState? cleaveSecondary) &&
+                    cleavePrimary != null &&
+                    cleaveSecondary != null)
+                {
+                    return new AiDecision(
+                        CombatIntentActionType.MeleeAttack,
+                        "Cleave",
+                        cleavePrimary.Position,
+                        cleavePrimary.Id,
+                        moveCoord: null,
+                        telegraphedTiles: new[] { cleavePrimary.Position, cleaveSecondary.Position });
+                }
+            }
+
             // 5. Standing melee attack if already engaged (and not a kiting ranged unit that retreated).
             if (adjacentMelee != null && !actor.PrefersRanged)
             {
@@ -376,12 +429,34 @@ namespace RealmzCore.Combat
                     adjacentMelee.Id);
             }
 
-            // 6. Standing ranged shot if in range & clear/partial LOS.
+            // 5b. Giant Frog TonguePull (range 2..4, non-blocked LOS, prefers pulling onto hazards or off high ground).
+            if (allowTonguePull &&
+                actor.HasSpecialAbility("tongue_pull") &&
+                TryPickBestTonguePull(session, actor, enemies, ignoreBudget, out CombatantState? pullTarget, out GridCoord pullDest) &&
+                pullTarget != null)
+            {
+                return new AiDecision(
+                    CombatIntentActionType.RangedAttack,
+                    "TonguePull",
+                    pullTarget.Position,
+                    pullTarget.Id,
+                    moveCoord: null,
+                    telegraphedTiles: new[] { pullTarget.Position, pullDest });
+            }
+
+            // 6. Standing ranged shot if in range & clear/partial LOS (unless high_ground_seeker can climb to a higher bluff and still shoot).
             if (actor.RangedRange > 1 && !string.IsNullOrWhiteSpace(actor.RangedDice))
             {
                 CombatantState? rangedHere = PickBestRangedTarget(session, actor, actor.Position, enemies, ignoreBudget, out _);
                 if (rangedHere != null && !isAdjacentToEnemy)
                 {
+                    if (actor.HasSpecialAbility("high_ground_seeker") &&
+                        TryFindBestMoveAndRanged(session, actor, reachable, enemies, out AiDecision? climbDecision, requireHigherElevationThan: session.Grid.GetElevation(actor.Position.X, actor.Position.Y), requireApForShot: !ignoreBudget) &&
+                        climbDecision != null)
+                    {
+                        return climbDecision;
+                    }
+
                     return new AiDecision(
                         CombatIntentActionType.RangedAttack,
                         "RangedAttack",
@@ -416,6 +491,16 @@ namespace RealmzCore.Combat
                     "MeleeAttack",
                     adjacentMelee.Position,
                     adjacentMelee.Id);
+            }
+
+            // 9b. Move-then-Cleave if reachable tile puts 2+ enemies in cleave reach.
+            if (actor.HasSpecialAbility("cleave_2tile") && !actor.PrefersRanged)
+            {
+                if (TryPickBestMoveAndCleave(session, actor, reachable, enemies, ignoreBudget, out AiDecision? moveCleave) &&
+                    moveCleave != null)
+                {
+                    return moveCleave;
+                }
             }
 
             // 10. Move toward best melee engagement tile (preferring flanking, High Ground, no AoO, safe surface).
@@ -601,7 +686,8 @@ namespace RealmzCore.Combat
                 }
 
                 int surfacePenalty = GetSurfaceRiskPenalty(session.Grid, tile.Coord);
-                int elevBonus = session.Grid.GetElevation(tile.Coord.X, tile.Coord.Y) * 15;
+                int elevMult = actor.HasSpecialAbility("high_ground_seeker") ? 35 : 15;
+                int elevBonus = session.Grid.GetElevation(tile.Coord.X, tile.Coord.Y) * elevMult;
                 int aooPenalty = tile.ProvokesAoO ? -25 : 20;
 
                 if (actor.SpellIds.Count > 0 && actor.Sp > 0 && !actor.Conditions.Has(CharConditionId.Silenced))
@@ -722,14 +808,28 @@ namespace RealmzCore.Combat
             CombatantState actor,
             IReadOnlyList<ReachableTileInfo> reachable,
             List<CombatantState> enemies,
-            out AiDecision? bestDecision)
+            out AiDecision? bestDecision,
+            int? requireHigherElevationThan = null,
+            bool requireApForShot = false)
         {
             bestDecision = null;
             int bestScore = int.MinValue;
+            int elevMult = actor.HasSpecialAbility("high_ground_seeker") ? 35 : 15;
 
             for (int r = 0; r < reachable.Count; r++)
             {
                 ReachableTileInfo tile = reachable[r];
+                int tileElev = session.Grid.GetElevation(tile.Coord.X, tile.Coord.Y);
+                if (requireHigherElevationThan.HasValue && tileElev <= requireHigherElevationThan.Value)
+                {
+                    continue;
+                }
+
+                if (requireApForShot && tile.PathCost + actor.RangedApCost > actor.Economy.CurrentAp)
+                {
+                    continue;
+                }
+
                 CombatantState? target = PickBestRangedTarget(
                     session,
                     actor,
@@ -744,7 +844,7 @@ namespace RealmzCore.Combat
 
                 int minDist = MinChebyshevDistance(tile.Coord, enemies);
                 int safeDistBonus = minDist >= 2 ? 35 : -20;
-                int elevBonus = session.Grid.GetElevation(tile.Coord.X, tile.Coord.Y) * 15;
+                int elevBonus = tileElev * elevMult;
                 int aooPenalty = tile.ProvokesAoO ? -30 : 15;
                 int surfacePenalty = GetSurfaceRiskPenalty(session.Grid, tile.Coord);
                 int score = rangedScore + safeDistBonus + elevBonus + aooPenalty - surfacePenalty - tile.PathCost;
@@ -762,6 +862,214 @@ namespace RealmzCore.Combat
             }
 
             return bestDecision != null;
+        }
+
+        private static bool TryPickBestCleaveAt(
+            TacticalCombatSession session,
+            CombatantState actor,
+            GridCoord fromPos,
+            List<CombatantState> enemies,
+            bool ignoreActionBudget,
+            out CombatantState? bestPrimary,
+            out CombatantState? bestSecondary)
+        {
+            bestPrimary = null;
+            bestSecondary = null;
+            int bestScore = int.MinValue;
+
+            for (int i = 0; i < enemies.Count; i++)
+            {
+                CombatantState primary = enemies[i];
+                if (!primary.IsAlive || fromPos.ChebyshevDistance(primary.Position) != 1)
+                {
+                    continue;
+                }
+
+                TacticalAttackPreview preview = session.PreviewMeleeAttackInternal(
+                    actor.Id,
+                    primary.Id,
+                    fromPos,
+                    ignoreActionBudget);
+                if (!preview.CanExecute)
+                {
+                    continue;
+                }
+
+                for (int j = 0; j < enemies.Count; j++)
+                {
+                    if (i == j)
+                    {
+                        continue;
+                    }
+
+                    CombatantState secondary = enemies[j];
+                    if (!secondary.IsAlive ||
+                        fromPos.ChebyshevDistance(secondary.Position) != 1 ||
+                        primary.Position.ChebyshevDistance(secondary.Position) > 2)
+                    {
+                        continue;
+                    }
+
+                    int score = preview.HitChancePct +
+                                (preview.IsFlanking ? 25 : 0) +
+                                (100 - Math.Min(99, primary.Hp)) +
+                                (100 - Math.Min(99, secondary.Hp));
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                        bestPrimary = primary;
+                        bestSecondary = secondary;
+                    }
+                }
+            }
+
+            return bestPrimary != null && bestSecondary != null;
+        }
+
+        private static bool TryPickBestMoveAndCleave(
+            TacticalCombatSession session,
+            CombatantState actor,
+            IReadOnlyList<ReachableTileInfo> reachable,
+            List<CombatantState> enemies,
+            bool ignoreBudget,
+            out AiDecision? bestDecision)
+        {
+            bestDecision = null;
+            int bestScore = int.MinValue;
+
+            for (int r = 0; r < reachable.Count; r++)
+            {
+                ReachableTileInfo tile = reachable[r];
+                if (!ignoreBudget && tile.PathCost + actor.MeleeApCost > actor.Economy.CurrentAp)
+                {
+                    continue;
+                }
+
+                if (!TryPickBestCleaveAt(
+                        session,
+                        actor,
+                        tile.Coord,
+                        enemies,
+                        ignoreActionBudget: true,
+                        out CombatantState? primary,
+                        out CombatantState? secondary) ||
+                    primary == null ||
+                    secondary == null)
+                {
+                    continue;
+                }
+
+                int surfacePenalty = GetSurfaceRiskPenalty(session.Grid, tile.Coord);
+                int aooPenalty = tile.ProvokesAoO ? -30 : 20;
+                int score = 200 +
+                            (100 - Math.Min(99, primary.Hp)) +
+                            (100 - Math.Min(99, secondary.Hp)) +
+                            aooPenalty -
+                            surfacePenalty -
+                            tile.PathCost;
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestDecision = new AiDecision(
+                        CombatIntentActionType.MoveAndAttack,
+                        "Cleave",
+                        primary.Position,
+                        primary.Id,
+                        tile.Coord,
+                        telegraphedTiles: new[] { primary.Position, secondary.Position });
+                }
+            }
+
+            return bestDecision != null;
+        }
+
+        private static bool TryPickBestTonguePull(
+            TacticalCombatSession session,
+            CombatantState actor,
+            List<CombatantState> enemies,
+            bool ignoreBudget,
+            out CombatantState? bestTarget,
+            out GridCoord bestPullDest)
+        {
+            bestTarget = null;
+            bestPullDest = actor.Position;
+
+            if (!ignoreBudget && !actor.Economy.HasApFor(CombatActionEconomy.DefaultShoveApCost))
+            {
+                return false;
+            }
+
+            int bestScore = int.MinValue;
+            for (int i = 0; i < enemies.Count; i++)
+            {
+                CombatantState enemy = enemies[i];
+                if (!enemy.IsAlive)
+                {
+                    continue;
+                }
+
+                int dist = actor.Position.ChebyshevDistance(enemy.Position);
+                if (dist < 2 || dist > 4)
+                {
+                    continue;
+                }
+
+                LosResult los = session.CheckLineOfSight(actor.Position, enemy.Position, includeSteamObscuration: true);
+                if (los.Kind == LosKind.Blocked)
+                {
+                    continue;
+                }
+
+                GridCoord? pullDest = session.FindTonguePullDestination(actor.Position, enemy.Position);
+                if (!pullDest.HasValue || pullDest.Value == enemy.Position)
+                {
+                    continue;
+                }
+
+                int score = 50 + (100 - Math.Min(99, enemy.Hp));
+                SurfaceType destSurf = session.Grid.GetSurface(pullDest.Value.X, pullDest.Value.Y);
+                switch (destSurf)
+                {
+                    case SurfaceType.Fire:
+                        score += 80;
+                        break;
+                    case SurfaceType.ElectrifiedWater:
+                        score += 70;
+                        break;
+                    case SurfaceType.Poison:
+                        score += 60;
+                        break;
+                    case SurfaceType.Ice:
+                        score += 40;
+                        break;
+                }
+
+                int enemyElev = session.Grid.GetElevation(enemy.Position.X, enemy.Position.Y);
+                int destElev = session.Grid.GetElevation(pullDest.Value.X, pullDest.Value.Y);
+                if (enemyElev > destElev)
+                {
+                    score += 60 * (enemyElev - destElev);
+                }
+
+                if (enemy.PrefersRanged)
+                {
+                    score += 30;
+                }
+
+                if (pullDest.Value.ChebyshevDistance(actor.Position) == 1)
+                {
+                    score += 25;
+                }
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestTarget = enemy;
+                    bestPullDest = pullDest.Value;
+                }
+            }
+
+            return bestTarget != null;
         }
 
         private static bool TryPickBestApproachTile(

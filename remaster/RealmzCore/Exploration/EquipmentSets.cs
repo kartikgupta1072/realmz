@@ -46,7 +46,8 @@ namespace RealmzCore.Exploration
             string name,
             IReadOnlyList<int> itemIds,
             IReadOnlyList<EquipmentSetBonusTier> tiers,
-            int displayMaxPieces = 3)
+            int displayMaxPieces = 3,
+            bool isPreview = false)
         {
             SetId = setId ?? throw new ArgumentNullException(nameof(setId));
             Name = name ?? throw new ArgumentNullException(nameof(name));
@@ -54,6 +55,7 @@ namespace RealmzCore.Exploration
             _itemIdSet = new HashSet<int>(ItemIds);
             Tiers = tiers ?? Array.Empty<EquipmentSetBonusTier>();
             DisplayMaxPieces = Math.Max(1, displayMaxPieces);
+            IsPreview = isPreview;
         }
 
         public string SetId { get; }
@@ -61,6 +63,7 @@ namespace RealmzCore.Exploration
         public IReadOnlyList<int> ItemIds { get; }
         public IReadOnlyList<EquipmentSetBonusTier> Tiers { get; }
         public int DisplayMaxPieces { get; }
+        public bool IsPreview { get; }
 
         public bool ContainsItem(int itemId) => _itemIdSet.Contains(itemId);
     }
@@ -116,6 +119,8 @@ namespace RealmzCore.Exploration
     {
         public const string ScoutsLeatherSetId = "scouts_leather";
         public const string IronVanguardSetId = "iron_vanguard";
+        public const string ThornwoodStalkerSetId = "thornwood_stalker";
+        public const string CryptbreakerSetId = "cryptbreaker";
 
         public static readonly EquipmentSetDefinition ScoutsLeather = new EquipmentSetDefinition(
             setId: ScoutsLeatherSetId,
@@ -152,10 +157,56 @@ namespace RealmzCore.Exploration
             },
             displayMaxPieces: 3);
 
+        public static readonly EquipmentSetDefinition ThornwoodStalker = new EquipmentSetDefinition(
+            setId: ThornwoodStalkerSetId,
+            name: "Thornwood Stalker",
+            itemIds: new[] { 9101, 9102, 9103 },
+            tiers: new[]
+            {
+                new EquipmentSetBonusTier(
+                    requiredPieces: 2,
+                    acBonus: 1,
+                    freeMoveTiles: 1,
+                    summary: "+1 AC & +1 Free Move Tile"),
+                new EquipmentSetBonusTier(
+                    requiredPieces: 3,
+                    apBonus: 1,
+                    summary: "+1 Max AP")
+            },
+            displayMaxPieces: 3,
+            isPreview: true);
+
+        public static readonly EquipmentSetDefinition Cryptbreaker = new EquipmentSetDefinition(
+            setId: CryptbreakerSetId,
+            name: "Cryptbreaker",
+            itemIds: new[] { 9201, 9202, 9203 },
+            tiers: new[]
+            {
+                new EquipmentSetBonusTier(
+                    requiredPieces: 2,
+                    acBonus: 2,
+                    summary: "+2 AC"),
+                new EquipmentSetBonusTier(
+                    requiredPieces: 3,
+                    apBonus: 1,
+                    guardApDiscount: 1,
+                    summary: "Guard costs 1 AP & +1 Max AP")
+            },
+            displayMaxPieces: 3,
+            isPreview: true);
+
         public static readonly IReadOnlyList<EquipmentSetDefinition> AllSets = new[]
         {
             ScoutsLeather,
-            IronVanguard
+            IronVanguard,
+            ThornwoodStalker,
+            Cryptbreaker
+        };
+
+        public static readonly IReadOnlyList<EquipmentSetDefinition> PreviewSets = new[]
+        {
+            ThornwoodStalker,
+            Cryptbreaker
         };
 
         public static IReadOnlyList<EquipmentSetDefinition> GetSetsForItem(int itemId)

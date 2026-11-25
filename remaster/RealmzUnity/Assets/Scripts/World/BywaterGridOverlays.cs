@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
 using Realmz.Data;
+using Realmz.Rendering;
 using RealmzCore.Combat;
 using RealmzCore.Data;
+using TMPro;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.UI;
 
 namespace Realmz.World
 {
@@ -13,6 +16,17 @@ namespace Realmz.World
         public GridCoord From;
         public GridCoord To;
         public bool IsSpell;
+    }
+
+    public struct ShoveHazardVisualHint
+    {
+        public bool TriggersKegExplosion;
+        public bool IgnitesOnBrazier;
+        public bool CrushesWall;
+        public bool PushesOffLedge;
+        public bool DestroysCover;
+        public SurfaceType EntersSurface;
+        public string HazardBadgeText;
     }
 
     /// <summary>
@@ -24,6 +38,7 @@ namespace Realmz.World
         private const int IntentArcSegments = 12;
         private const int SurfaceTextureSize = 64;
         private const int MaxCombatVfxPool = 8;
+        private const int MaxHoverPathPips = 24;
         private const float DefaultVfxDuration = 0.35f;
 
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
@@ -32,9 +47,9 @@ namespace Realmz.World
         private static readonly int BaseMapStId = Shader.PropertyToID("_BaseMap_ST");
         private static readonly int MainTexStId = Shader.PropertyToID("_MainTex_ST");
 
-        private static readonly Color ReachableNormalColor = new Color(0.176f, 0.831f, 0.749f, 0.88f); // #2DD4BF
-        private static readonly Color ReachableAooColor = new Color(0.976f, 0.451f, 0.086f, 0.92f);    // #F97316
-        private static readonly Color ThreatenedColor = new Color(0.937f, 0.267f, 0.267f, 0.22f);
+        private static readonly Color ReachableNormalColor = new Color(0.220f, 0.741f, 0.973f, 0.20f); // #38BDF8 @ 20%
+        private static readonly Color ReachableAooColor = new Color(0.980f, 0.800f, 0.082f, 0.20f);    // #FACC15 @ 20%
+        private static readonly Color ThreatenedColor = new Color(0.937f, 0.267f, 0.267f, 0.20f);      // #EF4444 @ 20%
         private static readonly Color HoverPathSafeColor = new Color(1.00f, 0.95f, 0.72f, 0.76f);
         private static readonly Color HoverPathAooColor = new Color(0.98f, 0.25f, 0.18f, 0.80f);
         private static readonly Color ExploreReachableColor = new Color(0.22f, 0.86f, 0.64f, 0.78f);
@@ -46,7 +61,7 @@ namespace Realmz.World
         private static readonly Color AoeHostileColor = new Color(0.96f, 0.32f, 0.18f, 0.94f);
         private static readonly Color AoeBlockedColor = new Color(0.22f, 0.22f, 0.25f, 0.78f);
         private static readonly Color FlankGoldColor = new Color(0.98f, 0.80f, 0.15f, 0.60f);
-        private static readonly Color AttackTargetColor = new Color(0.937f, 0.267f, 0.267f, 0.92f);   // #EF4444
+        private static readonly Color AttackTargetColor = new Color(0.937f, 0.267f, 0.267f, 0.20f);    // #EF4444 @ 20%
         private static readonly Color HoveredAttackTargetColor = new Color(0.98f, 0.34f, 0.24f, 0.95f);
         private static readonly Color TacticalSelectColor = new Color(0.98f, 0.84f, 0.24f, 0.92f);
         private static readonly Color CombatBoundsColor = new Color(0.98f, 0.78f, 0.22f, 0.52f);
@@ -78,9 +93,22 @@ namespace Realmz.World
             }
         }
 
+        private sealed class WorldBadgeInstance
+        {
+            public GameObject Root;
+            public Image Border;
+            public Image Background;
+            public TextMeshProUGUI Label;
+        }
+
         private BywaterAssetCatalog _catalog;
         private Func<int, int, float> _elevationResolver;
+        private Func<int, int, bool> _waterTileResolver;
+        private float _waterSurfaceHeight = Realmz.Cartography.CartographyWorldData.TileMapWaterSurfaceElevation;
         private MaterialPropertyBlock _propBlock;
+        private BywaterCombatVfxDirector _vfxDirector;
+        private readonly Vector3[] _lightningTwoHopScratch = new Vector3[2];
+        private readonly Dictionary<GridCoord, SurfaceType> _surfaceByCoord = new Dictionary<GridCoord, SurfaceType>(64);
 
         private OverlayLayer _surfaceLayer;
         private OverlayLayer _combatBoundsLayer;
@@ -143,6 +171,16 @@ namespace Realmz.World
         private Texture2D _vfxFallbackTexture;
         private int _vfxRoundRobinCursor;
 
+        private Transform _hoverPipContainer;
+        private readonly List<WorldBadgeInstance> _hoverPipPool = new List<WorldBadgeInstance>(MaxHoverPathPips);
+
+        private Transform _shoveExtrasContainer;
+        private LineRenderer _shoveArrowLine;
+        private MeshRenderer _shoveArrowhead;
+        private WorldBadgeInstance _shoveHazardBadge;
+        private Material _shoveLineMaterial;
+        private readonly Vector3[] _shoveLinePoints = new Vector3[2];
+
         private Material _shoveChevronMaterial;
         private Texture2D _shoveChevronTexture;
         private Material _intentMeleeMaterial;
@@ -204,6 +242,16 @@ namespace Realmz.World
             _elevationResolver = resolver;
         }
 
+        public void SetWaterTileResolver(Func<int, int, bool> resolver)
+        {
+            _waterTileResolver = resolver;
+        }
+
+        public void SetWaterSurfaceHeight(float waterSurfaceHeight)
+        {
+            _waterSurfaceHeight = waterSurfaceHeight;
+        }
+
         public float GetTileElevation(int x, int y)
         {
             return _elevationResolver != null ? _elevationResolver(x, y) : 0f;
@@ -242,6 +290,9 @@ namespace Realmz.World
 
         private void OnDestroy()
         {
+            ClearAll();
+            ClearCombatVfx();
+
             DisposeSurfaceCache();
             DisposeVfxMaterialCache();
 
@@ -252,6 +303,8 @@ namespace Realmz.World
             _shoveChevronMaterial = null;
             DestroySafe(_shoveChevronTexture);
             _shoveChevronTexture = null;
+            DestroySafe(_shoveLineMaterial);
+            _shoveLineMaterial = null;
 
             DestroySafe(_intentMeleeMaterial);
             _intentMeleeMaterial = null;
@@ -311,6 +364,7 @@ namespace Realmz.World
         public void ClearAll()
         {
             EnsureLayers();
+            _surfaceByCoord.Clear();
             HideLayer(_surfaceLayer);
             HideLayer(_combatBoundsLayer);
             HideLayer(_combatReachableLayer);
@@ -321,9 +375,11 @@ namespace Realmz.World
             HideLayer(_tacticalSelectLayer);
             HideLayer(_exploreHoverLayer);
             HideLayer(_combatHoverLayer);
+            HideAllHoverPips();
             HideLayer(_losLayer);
             HideLayer(_flankLayer);
             HideLayer(_shoveLayer);
+            HideShoveExtras();
             HideLayer(_deploymentZoneLayer);
             ClearEnemyIntentArcs();
         }
@@ -332,6 +388,7 @@ namespace Realmz.World
         {
             EnsureLayers();
             _surfaceLayer.ActiveCount = 0;
+            _surfaceByCoord.Clear();
 
             if (cells != null)
             {
@@ -344,13 +401,28 @@ namespace Realmz.World
                         continue;
                     }
 
+                    _surfaceByCoord[cell.Coord] = cell.Surface;
+
+                    float elev = GetTileElevation(cell.X, cell.Y);
+                    bool isRealRiverTile = (_waterTileResolver != null && _waterTileResolver(cell.X, cell.Y)) ||
+                                           elev <= _waterSurfaceHeight - 0.04f;
+                    if (cell.Surface == SurfaceType.Water && isRealRiverTile)
+                    {
+                        continue;
+                    }
+
                     Material mat = GetOrCreateSurfaceMaterial(cell.Surface);
                     Color baseCol = _surfaceBaseColors.TryGetValue(cell.Surface, out Color cachedCol)
                         ? cachedCol
                         : GetSurfaceBaseColor(cell.Surface);
-                    float y = Mathf.Max(
-                        GetTileElevation(cell.X, cell.Y) + 0.085f,
-                        Realmz.Cartography.CartographyWorldData.TileMapWaterSurfaceElevation + 0.045f);
+                    float y = (cell.Surface == SurfaceType.ElectrifiedWater ||
+                               cell.Surface == SurfaceType.Ice ||
+                               cell.Surface == SurfaceType.SteamCloud ||
+                               cell.Surface == SurfaceType.Fire ||
+                               cell.Surface == SurfaceType.Oil ||
+                               cell.Surface == SurfaceType.Water)
+                        ? Mathf.Max(elev, _waterSurfaceHeight) + 0.025f
+                        : Mathf.Max(elev + 0.085f, _waterSurfaceHeight + 0.045f);
                     Vector3 pos = new Vector3(cell.X + 0.5f, y, -(cell.Y + 0.5f));
                     PlaceCustomQuad(_surfaceLayer, pos, 0.96f, 0.96f, 0f, mat, baseCol);
                 }
@@ -367,6 +439,7 @@ namespace Realmz.World
         public void ClearSurfaceCells()
         {
             EnsureLayers();
+            _surfaceByCoord.Clear();
             HideLayer(_surfaceLayer);
         }
 
@@ -391,6 +464,8 @@ namespace Realmz.World
 
             UpdateCombatVfxInstanceVisual(inst);
             inst.Root.SetActive(true);
+
+            RouteVfxToDirector(vfxKey, startWorldPos, targetWorldPos, inst.IsProjectile);
         }
 
         public void ClearCombatVfx()
@@ -409,29 +484,56 @@ namespace Realmz.World
                     inst.Root.SetActive(false);
                 }
             }
+
+            if (_vfxDirector == null)
+            {
+                _vfxDirector = GetComponent<BywaterCombatVfxDirector>();
+            }
+            if (_vfxDirector != null)
+            {
+                _vfxDirector.ClearAll();
+            }
         }
 
         public void ShowShovePreview(GridCoord actor, GridCoord target, TacticalShovePreview preview)
+        {
+            ShowShovePreview(actor, target, preview, default(ShoveHazardVisualHint));
+        }
+
+        public void ShowShovePreview(
+            GridCoord actor,
+            GridCoord target,
+            TacticalShovePreview preview,
+            ShoveHazardVisualHint hazardHint)
         {
             EnsureLayers();
             _shoveLayer.ActiveCount = 0;
 
             if (preview == null)
             {
+                HideShoveExtras();
                 TrimLayer(_shoveLayer);
                 return;
             }
+
+            bool hasKeg = hazardHint.TriggersKegExplosion;
+            bool hasBrazier = hazardHint.IgnitesOnBrazier;
+            bool hasCrush = hazardHint.CrushesWall || preview.HitsWallOrBounds || !string.IsNullOrEmpty(preview.CollidingUnitId);
+            bool hasLedge = hazardHint.PushesOffLedge || preview.PushesOffLedge;
+            SurfaceType enteredSurface = hazardHint.EntersSurface != SurfaceType.None
+                ? hazardHint.EntersSurface
+                : preview.DestinationSurface;
 
             Color previewColor;
             if (!preview.CanExecute)
             {
                 previewColor = ShoveInvalidRed;
             }
-            else if (preview.HitsWallOrBounds || !string.IsNullOrEmpty(preview.CollidingUnitId))
+            else if (hasKeg || hasBrazier || hasCrush || enteredSurface == SurfaceType.Fire || enteredSurface == SurfaceType.ElectrifiedWater)
             {
                 previewColor = ShoveCrushCrimson;
             }
-            else if (preview.PushesOffLedge)
+            else if (hasLedge || hazardHint.DestroysCover)
             {
                 previewColor = ShoveLedgeGold;
             }
@@ -445,7 +547,8 @@ namespace Realmz.World
 
             // Highlight destination tile (or target tile if invalid)
             GridCoord highlightTile = preview.CanExecute ? dest : target;
-            float destY = GetTileElevation(highlightTile.X, highlightTile.Y) + 0.025f + shoveLayerOffset;
+            float destElev = GetTileElevation(highlightTile.X, highlightTile.Y);
+            float destY = destElev + 0.025f + shoveLayerOffset;
             PlaceQuad(
                 _shoveLayer,
                 highlightTile.X + 0.5f,
@@ -483,6 +586,7 @@ namespace Realmz.World
                     previewColor);
             }
 
+            UpdateShoveTrajectoryAndBadge(target, highlightTile, dir, preview.CanExecute, previewColor, hazardHint, preview);
             TrimLayer(_shoveLayer);
         }
 
@@ -490,6 +594,7 @@ namespace Realmz.World
         {
             EnsureLayers();
             HideLayer(_shoveLayer);
+            HideShoveExtras();
         }
 
         public void ShowEnemyIntentArcs(IReadOnlyList<EnemyIntentArcData> arcs)
@@ -912,17 +1017,59 @@ namespace Realmz.World
 
         public void SetCombatHoverPath(IReadOnlyList<GridCoord> path, bool provokesAoO)
         {
+            SetCombatHoverPath(path, provokesAoO, null);
+        }
+
+        public void SetCombatHoverPath(IReadOnlyList<GridCoord> path, bool provokesAoO, IReadOnlyList<int> stepApCosts)
+        {
             EnsureLayers();
             _combatHoverLayer.ActiveCount = 0;
+            int activePips = 0;
 
             if (path != null)
             {
                 Color color = provokesAoO ? HoverPathAooColor : HoverPathSafeColor;
+                TMPro.TMP_FontAsset font = _catalog != null ? _catalog.uiFont : null;
+
                 for (int i = 0; i < path.Count; i++)
                 {
                     GridCoord step = path[i];
-                    float y = GetTileElevation(step.X, step.Y) + 0.025f + 0.010f;
+                    float elev = GetTileElevation(step.X, step.Y);
+                    float y = elev + 0.025f + 0.010f;
                     PlaceQuad(_combatHoverLayer, step.X + 0.5f, y, -(step.Y + 0.5f), 0.42f, 0.42f, color);
+
+                    int stepCost = (stepApCosts != null && i < stepApCosts.Count)
+                        ? Mathf.Max(0, stepApCosts[i])
+                        : InferStepApCost(path, i);
+
+                    if (stepCost > 0 && activePips < MaxHoverPathPips)
+                    {
+                        WorldBadgeInstance pip = GetOrCreateHoverPip(activePips++);
+                        pip.Root.transform.position = new Vector3(step.X + 0.5f, elev + 0.34f, -(step.Y + 0.5f));
+                        if (font != null && pip.Label.font != font)
+                        {
+                            pip.Label.font = font;
+                        }
+
+                        pip.Label.text = stepCost == 1 ? "1 AP" : (stepCost == 2 ? "2 AP" : stepCost + " AP");
+                        bool highCostOrAoo = stepCost >= 2 || (provokesAoO && i == path.Count - 1);
+                        Color accent = highCostOrAoo
+                            ? new Color(0.980f, 0.800f, 0.082f, 0.96f)
+                            : new Color(0.220f, 0.741f, 0.973f, 0.96f);
+                        pip.Border.color = accent;
+                        pip.Label.color = highCostOrAoo
+                            ? new Color(1.00f, 0.90f, 0.45f, 1f)
+                            : new Color(0.84f, 0.96f, 1.00f, 1f);
+                        pip.Root.SetActive(true);
+                    }
+                }
+            }
+
+            for (int i = activePips; i < _hoverPipPool.Count; i++)
+            {
+                if (_hoverPipPool[i]?.Root != null)
+                {
+                    _hoverPipPool[i].Root.SetActive(false);
                 }
             }
 
@@ -1837,7 +1984,6 @@ namespace Realmz.World
             Color32[] pixels = new Color32[size * size];
             Color32 clear = new Color32(0, 0, 0, 0);
             Color32 bracket = new Color32(255, 255, 255, 255);
-            Color32 hairline = new Color32(255, 255, 255, 115);
 
             const int armLen = 14;
             const int armThick = 3;
@@ -1846,27 +1992,14 @@ namespace Realmz.World
             {
                 bool inCornerY = y < armLen || y >= size - armLen;
                 bool inEdgeBandY = y < armThick || y >= size - armThick;
-                bool onHairlineY = y == 0 || y == size - 1;
 
                 for (int x = 0; x < size; x++)
                 {
                     bool inCornerX = x < armLen || x >= size - armLen;
                     bool inEdgeBandX = x < armThick || x >= size - armThick;
-                    bool onHairlineX = x == 0 || x == size - 1;
 
                     bool isBracket = (inCornerX && inEdgeBandY) || (inCornerY && inEdgeBandX);
-                    if (isBracket)
-                    {
-                        pixels[y * size + x] = bracket;
-                    }
-                    else if (onHairlineX || onHairlineY)
-                    {
-                        pixels[y * size + x] = hairline;
-                    }
-                    else
-                    {
-                        pixels[y * size + x] = clear;
-                    }
+                    pixels[y * size + x] = isBracket ? bracket : clear;
                 }
             }
 
@@ -2321,6 +2454,406 @@ namespace Realmz.World
             }
         }
 
+        private void RouteVfxToDirector(string vfxKey, Vector3 startWorldPos, Vector3 targetWorldPos, bool isProjectile)
+        {
+            if (_vfxDirector == null)
+            {
+                _vfxDirector = GetComponent<BywaterCombatVfxDirector>();
+            }
+            if (_vfxDirector == null)
+            {
+                return;
+            }
+
+            if (vfxKey.IndexOf("keg", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                vfxKey.IndexOf("barrel", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                _vfxDirector.PlayKegExplosion(targetWorldPos);
+                return;
+            }
+
+            if (vfxKey.IndexOf("fire", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                vfxKey.IndexOf("flame", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                _vfxDirector.PlayFireball(startWorldPos, targetWorldPos);
+                return;
+            }
+
+            if (vfxKey.IndexOf("lightning", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                vfxKey.IndexOf("shock", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                _lightningTwoHopScratch[0] = startWorldPos;
+                _lightningTwoHopScratch[1] = targetWorldPos;
+                _vfxDirector.PlayChainLightning(_lightningTwoHopScratch);
+                return;
+            }
+
+            if (vfxKey.IndexOf("frost", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                vfxKey.IndexOf("ice", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                vfxKey.IndexOf("cold", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                _vfxDirector.PlayFrostShatter(targetWorldPos);
+                return;
+            }
+
+            if (isProjectile ||
+                vfxKey.IndexOf("arrow", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                vfxKey.IndexOf("bolt", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                _vfxDirector.PlayArrowArc(startWorldPos, targetWorldPos);
+            }
+        }
+
+        private int InferStepApCost(IReadOnlyList<GridCoord> path, int index)
+        {
+            GridCoord step = path[index];
+            if (_surfaceByCoord.TryGetValue(step, out SurfaceType surf) &&
+                (surf == SurfaceType.Water ||
+                 surf == SurfaceType.ElectrifiedWater ||
+                 surf == SurfaceType.Oil ||
+                 surf == SurfaceType.Poison))
+            {
+                return 2;
+            }
+
+            if (index > 0)
+            {
+                GridCoord prev = path[index - 1];
+                float elevDelta = Mathf.Abs(GetTileElevation(step.X, step.Y) - GetTileElevation(prev.X, prev.Y));
+                if (elevDelta >= 0.30f)
+                {
+                    return 2;
+                }
+            }
+
+            return 1;
+        }
+
+        private WorldBadgeInstance GetOrCreateHoverPip(int index)
+        {
+            while (_hoverPipPool.Count <= index)
+            {
+                WorldBadgeInstance created = CreateWorldBadge(
+                    _hoverPipContainer,
+                    "HoverApPip_" + _hoverPipPool.Count,
+                    new Vector2(84f, 30f),
+                    0.0052f,
+                    16f,
+                    45);
+                created.Root.SetActive(false);
+                _hoverPipPool.Add(created);
+            }
+
+            return _hoverPipPool[index];
+        }
+
+        private void HideAllHoverPips()
+        {
+            for (int i = 0; i < _hoverPipPool.Count; i++)
+            {
+                if (_hoverPipPool[i]?.Root != null)
+                {
+                    _hoverPipPool[i].Root.SetActive(false);
+                }
+            }
+        }
+
+        private void UpdateShoveTrajectoryAndBadge(
+            GridCoord target,
+            GridCoord highlightTile,
+            GridCoord pushDir,
+            bool canExecute,
+            Color previewColor,
+            ShoveHazardVisualHint hazardHint,
+            TacticalShovePreview preview)
+        {
+            EnsureShoveExtras();
+
+            float startElev = GetTileElevation(target.X, target.Y);
+            float endElev = GetTileElevation(highlightTile.X, highlightTile.Y);
+            Vector3 startPos = new Vector3(target.X + 0.5f, startElev + 0.34f, -(target.Y + 0.5f));
+            Vector3 endPos = new Vector3(highlightTile.X + 0.5f, endElev + 0.34f, -(highlightTile.Y + 0.5f));
+
+            Vector3 delta = endPos - startPos;
+            Vector3 flatDir = new Vector3(delta.x, 0f, delta.z);
+            if (flatDir.sqrMagnitude < 0.0001f && (pushDir.X != 0 || pushDir.Y != 0))
+            {
+                flatDir = new Vector3(pushDir.X, 0f, -pushDir.Y);
+                endPos = startPos + flatDir.normalized * 0.75f;
+                delta = endPos - startPos;
+            }
+
+            if (flatDir.sqrMagnitude > 0.0001f)
+            {
+                Vector3 dirNorm = delta.normalized;
+                Vector3 lineEnd = endPos - dirNorm * 0.22f;
+
+                _shoveLinePoints[0] = startPos;
+                _shoveLinePoints[1] = lineEnd;
+                Color arrowCol = new Color(previewColor.r, previewColor.g, previewColor.b, 0.96f);
+                _shoveArrowLine.sharedMaterial = GetOrCreateShoveLineMaterial();
+                _shoveArrowLine.startColor = arrowCol;
+                _shoveArrowLine.endColor = arrowCol;
+                _shoveArrowLine.positionCount = 2;
+                _shoveArrowLine.SetPositions(_shoveLinePoints);
+                _shoveArrowLine.gameObject.SetActive(true);
+
+                Vector3 arrowPos = endPos - dirNorm * 0.14f;
+                OrientIntentArrowhead(_shoveArrowhead.transform, arrowPos, dirNorm);
+                _shoveArrowhead.transform.localScale = new Vector3(0.42f, 0.48f, 1f);
+                _shoveArrowhead.sharedMaterial = GetOrCreateIntentArrowheadMaterial();
+                _propBlock ??= new MaterialPropertyBlock();
+                _propBlock.Clear();
+                _propBlock.SetColor(BaseColorId, arrowCol);
+                _propBlock.SetColor(ColorId, arrowCol);
+                _shoveArrowhead.SetPropertyBlock(_propBlock);
+                _shoveArrowhead.gameObject.SetActive(true);
+            }
+            else
+            {
+                _shoveArrowLine.positionCount = 0;
+                _shoveArrowLine.gameObject.SetActive(false);
+                _shoveArrowhead.gameObject.SetActive(false);
+            }
+
+            string badgeText = ResolveShoveHazardBadgeText(canExecute, hazardHint, preview);
+            if (!string.IsNullOrEmpty(badgeText))
+            {
+                TMPro.TMP_FontAsset font = _catalog != null ? _catalog.uiFont : null;
+                if (font != null && _shoveHazardBadge.Label.font != font)
+                {
+                    _shoveHazardBadge.Label.font = font;
+                }
+
+                _shoveHazardBadge.Label.text = badgeText;
+                Color borderCol = new Color(previewColor.r, previewColor.g, previewColor.b, 0.98f);
+                _shoveHazardBadge.Border.color = borderCol;
+                _shoveHazardBadge.Label.color = new Color(1.00f, 0.94f, 0.72f, 1f);
+                _shoveHazardBadge.Root.transform.position = new Vector3(
+                    highlightTile.X + 0.5f,
+                    Mathf.Max(endElev, _waterSurfaceHeight) + 1.18f,
+                    -(highlightTile.Y + 0.5f));
+                _shoveHazardBadge.Root.SetActive(true);
+            }
+            else
+            {
+                _shoveHazardBadge.Root.SetActive(false);
+            }
+        }
+
+        private void HideShoveExtras()
+        {
+            if (_shoveArrowLine != null)
+            {
+                _shoveArrowLine.positionCount = 0;
+                _shoveArrowLine.gameObject.SetActive(false);
+            }
+
+            if (_shoveArrowhead != null)
+            {
+                _shoveArrowhead.gameObject.SetActive(false);
+            }
+
+            if (_shoveHazardBadge?.Root != null)
+            {
+                _shoveHazardBadge.Root.SetActive(false);
+            }
+        }
+
+        private static string ResolveShoveHazardBadgeText(
+            bool canExecute,
+            ShoveHazardVisualHint hazardHint,
+            TacticalShovePreview preview)
+        {
+            if (!string.IsNullOrWhiteSpace(hazardHint.HazardBadgeText))
+            {
+                return hazardHint.HazardBadgeText;
+            }
+
+            if (!canExecute)
+            {
+                return string.Empty;
+            }
+
+            if (hazardHint.TriggersKegExplosion)
+            {
+                return "KEG BLAST 2d6!";
+            }
+
+            if (hazardHint.IgnitesOnBrazier)
+            {
+                return "BRAZIER +1d6 FIRE";
+            }
+
+            if (hazardHint.CrushesWall || preview.HitsWallOrBounds || !string.IsNullOrEmpty(preview.CollidingUnitId))
+            {
+                return "WALL CRUSH +1d4";
+            }
+
+            if (hazardHint.PushesOffLedge || preview.PushesOffLedge)
+            {
+                return "LEDGE FALL +1d6";
+            }
+
+            SurfaceType entered = hazardHint.EntersSurface != SurfaceType.None
+                ? hazardHint.EntersSurface
+                : preview.DestinationSurface;
+            if (entered == SurfaceType.ElectrifiedWater)
+            {
+                return "WATER SHOCK!";
+            }
+
+            if (hazardHint.DestroysCover)
+            {
+                return "COVER SMASH!";
+            }
+
+            return entered != SurfaceType.None ? ResolveSurfaceHazardBadge(entered) : string.Empty;
+        }
+
+        private static string ResolveSurfaceHazardBadge(SurfaceType surface)
+        {
+            switch (surface)
+            {
+                case SurfaceType.Fire: return "FIRE +1d4";
+                case SurfaceType.Poison: return "POISON CLOUD";
+                case SurfaceType.Ice: return "ICE SLIP";
+                case SurfaceType.Oil: return "OIL SLICK";
+                case SurfaceType.Water: return "SHALLOW WATER";
+                default: return string.Empty;
+            }
+        }
+
+        private Material GetOrCreateShoveLineMaterial()
+        {
+            if (_shoveLineMaterial == null)
+            {
+                _shoveLineMaterial = CreateTransparentOverlayMaterial("ShoveTrajectoryLine", Texture2D.whiteTexture, Color.white);
+            }
+            return _shoveLineMaterial;
+        }
+
+        private void EnsureShoveExtras()
+        {
+            if (_shoveExtrasContainer == null)
+            {
+                GameObject containerGo = new GameObject("ShoveTrajectoryAndBadges");
+                containerGo.transform.SetParent(transform, false);
+                _shoveExtrasContainer = containerGo.transform;
+            }
+
+            if (_shoveArrowLine == null)
+            {
+                GameObject lineGo = new GameObject("ShoveTrajectoryArrow");
+                lineGo.transform.SetParent(_shoveExtrasContainer, false);
+                _shoveArrowLine = lineGo.AddComponent<LineRenderer>();
+                _shoveArrowLine.useWorldSpace = true;
+                _shoveArrowLine.shadowCastingMode = ShadowCastingMode.Off;
+                _shoveArrowLine.receiveShadows = false;
+                _shoveArrowLine.startWidth = 0.14f;
+                _shoveArrowLine.endWidth = 0.11f;
+                _shoveArrowLine.numCapVertices = 2;
+                _shoveArrowLine.numCornerVertices = 2;
+                _shoveArrowLine.alignment = LineAlignment.View;
+                lineGo.SetActive(false);
+            }
+
+            if (_shoveArrowhead == null)
+            {
+                GameObject headGo = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                headGo.name = "ShoveArrowhead";
+                headGo.transform.SetParent(_shoveExtrasContainer, false);
+                Collider col = headGo.GetComponent<Collider>();
+                if (col != null)
+                {
+                    DestroySafe(col);
+                }
+
+                _shoveArrowhead = headGo.GetComponent<MeshRenderer>();
+                _shoveArrowhead.shadowCastingMode = ShadowCastingMode.Off;
+                _shoveArrowhead.receiveShadows = false;
+                headGo.SetActive(false);
+            }
+
+            if (_shoveHazardBadge == null)
+            {
+                _shoveHazardBadge = CreateWorldBadge(
+                    _shoveExtrasContainer,
+                    "ShoveHazardBadge",
+                    new Vector2(210f, 40f),
+                    0.0060f,
+                    15.5f,
+                    48);
+                _shoveHazardBadge.Root.SetActive(false);
+            }
+        }
+
+        private WorldBadgeInstance CreateWorldBadge(
+            Transform parent,
+            string badgeName,
+            Vector2 sizeDelta,
+            float worldScale,
+            float fontSize,
+            int sortingOrder)
+        {
+            GameObject rootGo = new GameObject(badgeName, typeof(RectTransform), typeof(Canvas));
+            rootGo.transform.SetParent(parent, false);
+            rootGo.transform.localScale = Vector3.one * worldScale;
+            rootGo.AddComponent<PixelBillboard>();
+
+            Canvas canvas = rootGo.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.WorldSpace;
+            canvas.sortingOrder = sortingOrder;
+
+            RectTransform rootRt = rootGo.GetComponent<RectTransform>();
+            rootRt.sizeDelta = sizeDelta;
+
+            Image borderImg = rootGo.AddComponent<Image>();
+            borderImg.color = new Color(0.220f, 0.741f, 0.973f, 0.95f);
+            borderImg.raycastTarget = false;
+
+            GameObject innerGo = new GameObject("Inner", typeof(RectTransform), typeof(Image));
+            innerGo.transform.SetParent(rootGo.transform, false);
+            RectTransform innerRt = innerGo.GetComponent<RectTransform>();
+            innerRt.anchorMin = Vector2.zero;
+            innerRt.anchorMax = Vector2.one;
+            innerRt.offsetMin = new Vector2(2f, 2f);
+            innerRt.offsetMax = new Vector2(-2f, -2f);
+
+            Image bgImg = innerGo.GetComponent<Image>();
+            bgImg.color = new Color(0.055f, 0.075f, 0.125f, 0.92f);
+            bgImg.raycastTarget = false;
+
+            GameObject textGo = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
+            textGo.transform.SetParent(innerGo.transform, false);
+            RectTransform textRt = textGo.GetComponent<RectTransform>();
+            textRt.anchorMin = Vector2.zero;
+            textRt.anchorMax = Vector2.one;
+            textRt.offsetMin = new Vector2(4f, 1f);
+            textRt.offsetMax = new Vector2(-4f, -1f);
+
+            TextMeshProUGUI tmp = textGo.GetComponent<TextMeshProUGUI>();
+            if (_catalog != null && _catalog.uiFont != null)
+            {
+                tmp.font = _catalog.uiFont;
+            }
+            tmp.fontSize = fontSize;
+            tmp.fontStyle = FontStyles.Bold;
+            tmp.textWrappingMode = TextWrappingModes.NoWrap;
+            tmp.overflowMode = TextOverflowModes.Overflow;
+            tmp.alignment = TextAlignmentOptions.Center;
+            tmp.color = Color.white;
+            tmp.raycastTarget = false;
+
+            return new WorldBadgeInstance
+            {
+                Root = rootGo,
+                Border = borderImg,
+                Background = bgImg,
+                Label = tmp
+            };
+        }
+
         private void EnsureLayers()
         {
             if (_surfaceLayer == null) _surfaceLayer = new OverlayLayer(transform, "ElementalSurfaces");
@@ -2351,6 +2884,15 @@ namespace Realmz.World
                 go.transform.SetParent(transform, false);
                 _vfxContainer = go.transform;
             }
+
+            if (_hoverPipContainer == null)
+            {
+                GameObject go = new GameObject("CombatHoverPathPips");
+                go.transform.SetParent(transform, false);
+                _hoverPipContainer = go.transform;
+            }
+
+            EnsureShoveExtras();
         }
 
         private static void DestroySafe(UnityEngine.Object obj)

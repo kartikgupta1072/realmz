@@ -10,6 +10,7 @@ using Realmz.World;
 using RealmzCore.Combat;
 using RealmzCore.Data;
 using RealmzCore.Exploration;
+using RealmzCore.Rules;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
@@ -532,7 +533,8 @@ namespace Realmz.PlayModeTests
                 Assert.That(ctrl.IsInCombat, Is.True);
                 Assert.That(ctrl.biomeAtmosphere.IsCombatActive, Is.True);
                 Assert.That(ctrl.biomeAtmosphere.CurrentTimePhase, Is.EqualTo(WorldTimePhase.Night));
-                Assert.That(RenderSettings.ambientIntensity, Is.GreaterThanOrEqualTo(1.30f));
+                Assert.That(RenderSettings.ambientIntensity, Is.InRange(0.95f, 1.12f));
+                Assert.That(Shader.GetGlobalFloat("_GlobalNightRimStrength"), Is.GreaterThanOrEqualTo(0.50f));
                 Assert.That(ctrl.worldRenderer.IsCombatForegroundClearActive, Is.True);
                 Assert.That(ctrl.CombatSession.IsInTheDark, Is.True);
 
@@ -909,6 +911,656 @@ namespace Realmz.PlayModeTests
                     hudCanvas.planeDistance = prevPlaneDist;
                     hudCanvas.sortingOrder = prevOrder;
                 }
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator PlayMode_Stage2_CinemachineTacticalPitch_FocusBeat_AndHudLabelBounds()
+        {
+            var errors = new List<string>();
+            void LogHandler(string condition, string stackTrace, LogType type)
+            {
+                if (type == LogType.Error || type == LogType.Exception || type == LogType.Assert || type == LogType.Warning)
+                {
+                    if (!condition.Contains("Curl error") && !condition.Contains("LicenseClient"))
+                    {
+                        errors.Add($"[{type}] {condition}");
+                    }
+                }
+            }
+
+            Application.logMessageReceived += LogHandler;
+            try
+            {
+                AsyncOperation loadOp = SceneManager.LoadSceneAsync("M1_Bywater_Slice", LoadSceneMode.Single);
+                while (loadOp != null && !loadOp.isDone)
+                {
+                    yield return null;
+                }
+                yield return null;
+                yield return null;
+
+                BywaterGameController ctrl = Object.FindFirstObjectByType<BywaterGameController>();
+                Assert.That(ctrl, Is.Not.Null);
+                bool captureProofs = string.Equals(Environment.GetEnvironmentVariable("REALMZ_CAPTURE_PROOFS"), "1", StringComparison.Ordinal);
+
+                ctrl.StageCombatArenaArchetypeShowcaseForCapture(CombatArenaArchetype.DeepWoods, new GridCoord(58, 18));
+                yield return null;
+                yield return null;
+
+                Assert.That(ctrl.IsInCombat, Is.True);
+                Assert.That(ctrl.cameraRig, Is.Not.Null);
+                Assert.That(ctrl.cameraRig.transform.Find("CinemachineVirtualCamera"), Is.Not.Null, "CinemachineVirtualCamera must be active on BywaterCameraRig.");
+                Assert.That(ctrl.cameraRig.IsTacticalPitchActive, Is.False);
+
+                float pitchBefore = ctrl.cameraRig.CurrentPitchDegrees;
+                UnityEngine.UI.Button pitchBtn = GameObject.Find("CombatPitchBtn")?.GetComponent<UnityEngine.UI.Button>();
+                Assert.That(pitchBtn, Is.Not.Null, "CombatPitchBtn missing in combat top bar.");
+                pitchBtn.onClick.Invoke();
+
+                float elapsed = 0f;
+                while (elapsed < 0.45f)
+                {
+                    elapsed += Time.unscaledDeltaTime;
+                    yield return null;
+                }
+
+                Assert.That(ctrl.cameraRig.IsTacticalPitchActive, Is.True);
+                Assert.That(ctrl.cameraRig.CurrentPitchDegrees, Is.GreaterThan(pitchBefore + 5f),
+                    "Tactical pitch toggle [T] must smoothly raise camera pitch.");
+
+                ctrl.cameraRig.PlayFocusBeat(ctrl.cameraRig.transform.position, -1.5f, 0.25f);
+                yield return null;
+
+                // Verify active HUD buttons in TopBar and TacticalActionBar render without TMP truncation
+                GameObject actionBar = GameObject.Find("TacticalActionBar");
+                Assert.That(actionBar != null && actionBar.activeInHierarchy, Is.True);
+                UnityEngine.UI.Button[] barButtons = actionBar.GetComponentsInChildren<UnityEngine.UI.Button>(false);
+                for (int i = 0; i < barButtons.Length; i++)
+                {
+                    TMPro.TextMeshProUGUI[] btnLabels = barButtons[i].GetComponentsInChildren<TMPro.TextMeshProUGUI>(false);
+                    for (int j = 0; j < btnLabels.Length; j++)
+                    {
+                        TMPro.TextMeshProUGUI lbl = btnLabels[j];
+                        if (string.IsNullOrWhiteSpace(lbl.text)) continue;
+                        lbl.ForceMeshUpdate();
+                        Assert.That(lbl.isTextTruncated, Is.False,
+                            $"Combat HUD label '{lbl.gameObject.name}' ('{lbl.text}') was truncated.");
+                    }
+                }
+
+                TMPro.TextMeshProUGUI pitchBtnLbl = pitchBtn.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+                Assert.That(pitchBtnLbl, Is.Not.Null);
+                pitchBtnLbl.ForceMeshUpdate();
+                Assert.That(pitchBtnLbl.isTextTruncated, Is.False, "CombatPitchBtn label must not truncate.");
+
+                ctrl.hudController?.HideToast();
+                yield return null;
+
+                if (captureProofs)
+                {
+                    CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
+                        @"c:\Users\karti\LifeTwin\scratch\stage2_proof_03_biome_forest_combat.png", 1600, 900);
+                }
+
+                pitchBtn.onClick.Invoke();
+                yield return null;
+                Assert.That(ctrl.cameraRig.IsTacticalPitchActive, Is.False);
+
+                Assert.That(errors, Is.Empty, "PlayMode Stage2 TacticalPitch errors:\n" + string.Join("\n", errors));
+            }
+            finally
+            {
+                Application.logMessageReceived -= LogHandler;
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator PlayMode_Stage2_OilKegDetonation_AndShoveBrazierHazard_VerifyContracts()
+        {
+            var errors = new List<string>();
+            void LogHandler(string condition, string stackTrace, LogType type)
+            {
+                if (type == LogType.Error || type == LogType.Exception || type == LogType.Assert || type == LogType.Warning)
+                {
+                    if (!condition.Contains("Curl error") && !condition.Contains("LicenseClient"))
+                    {
+                        errors.Add($"[{type}] {condition}");
+                    }
+                }
+            }
+
+            Application.logMessageReceived += LogHandler;
+            try
+            {
+                AsyncOperation loadOp = SceneManager.LoadSceneAsync("M1_Bywater_Slice", LoadSceneMode.Single);
+                while (loadOp != null && !loadOp.isDone)
+                {
+                    yield return null;
+                }
+                yield return null;
+                yield return null;
+
+                BywaterGameController ctrl = Object.FindFirstObjectByType<BywaterGameController>();
+                Assert.That(ctrl, Is.Not.Null);
+                bool captureProofs = string.Equals(Environment.GetEnvironmentVariable("REALMZ_CAPTURE_PROOFS"), "1", StringComparison.Ordinal);
+
+                ctrl.TriggerDemoSkirmish(enterDeployment: false);
+                yield return null;
+                yield return null;
+
+                float waitElapsed = 0f;
+                while (ctrl.CombatSession != null &&
+                       ctrl.CombatSession.Outcome == CombatOutcome.InProgress &&
+                       (ctrl.CombatSession.CurrentActor == null || ctrl.CombatSession.CurrentActor.Side != CombatSide.Hero) &&
+                       waitElapsed < 10f)
+                {
+                    waitElapsed += Time.unscaledDeltaTime;
+                    yield return null;
+                }
+                Assert.That(ctrl.CombatSession, Is.Not.Null);
+                Assert.That(ctrl.CombatSession.CurrentActor?.Side, Is.EqualTo(CombatSide.Hero));
+
+                CombatantState hero = ctrl.CombatSession.CurrentActor;
+                CombatantState enemy = null;
+                for (int i = 0; i < ctrl.CombatSession.Combatants.Count; i++)
+                {
+                    CombatantState c = ctrl.CombatSession.Combatants[i];
+                    if (c.Side == CombatSide.Monster && c.IsAlive)
+                    {
+                        enemy = c;
+                        break;
+                    }
+                }
+                Assert.That(enemy, Is.Not.Null);
+
+                // 1. Find 3 open contiguous horizontal tiles inside the combat grid for Hero -> Enemy -> LitBrazier
+                static CombatantState FindLivingAt(TacticalCombatSession session, GridCoord coord)
+                {
+                    for (int i = 0; i < session.Combatants.Count; i++)
+                    {
+                        CombatantState c = session.Combatants[i];
+                        if (c.IsAlive && c.Position == coord)
+                        {
+                            return c;
+                        }
+                    }
+                    return null;
+                }
+
+                GridCoord heroPos = new GridCoord(-1, -1);
+                GridCoord enemyPos = new GridCoord(-1, -1);
+                GridCoord brazierPos = new GridCoord(-1, -1);
+                CombatGrid grid = ctrl.CombatSession.Grid;
+                for (int y = 2; y < grid.Height - 2 && heroPos.X < 0; y++)
+                {
+                    for (int x = 2; x < grid.Width - 4; x++)
+                    {
+                        GridCoord c0 = new GridCoord(x, y);
+                        GridCoord c1 = new GridCoord(x + 1, y);
+                        GridCoord c2 = new GridCoord(x + 2, y);
+                        if (!grid.IsWalkable(c0.X, c0.Y) || !grid.IsWalkable(c1.X, c1.Y) || !grid.IsWalkable(c2.X, c2.Y))
+                        {
+                            continue;
+                        }
+                        if (FindLivingAt(ctrl.CombatSession, c0) != null ||
+                            FindLivingAt(ctrl.CombatSession, c1) != null ||
+                            FindLivingAt(ctrl.CombatSession, c2) != null)
+                        {
+                            continue;
+                        }
+                        if (ctrl.CombatSession.GetDestructiblePropAt(c0) != null ||
+                            ctrl.CombatSession.GetDestructiblePropAt(c1) != null ||
+                            ctrl.CombatSession.GetDestructiblePropAt(c2) != null)
+                        {
+                            continue;
+                        }
+
+                        heroPos = c0;
+                        enemyPos = c1;
+                        brazierPos = c2;
+                        break;
+                    }
+                }
+                Assert.That(heroPos.X, Is.GreaterThanOrEqualTo(0), "Could not locate 3 open tiles for Shove -> Brazier test.");
+
+                hero.Position = heroPos;
+                enemy.Position = enemyPos;
+                enemy.Hp = 40;
+                enemy.MaxHp = 40;
+                hero.Brawn = 30;
+                hero.Economy.ResetUnifiedTurn(CombatActionEconomy.DefaultBaseApPerTurn, applyCarryover: false);
+
+                CombatDestructibleProp brazier = ctrl.CombatSession.AddDestructibleProp(
+                    "stage2_test_brazier", brazierPos, CombatArenaObstacleKind.LitBrazier);
+                Assert.That(brazier, Is.Not.Null);
+
+                ctrl.SelectCombatModeForUi(CombatActionMode.Shove);
+                typeof(BywaterGameController).GetMethod("UpdateCombatHoverVisuals", BindingFlags.Instance | BindingFlags.NonPublic)
+                    ?.Invoke(ctrl, new object[] { enemy.Position });
+                yield return null;
+
+                TacticalShovePreview shovePreview = ctrl.CombatSession.PreviewShove(hero.Id, enemy.Id);
+                Assert.That(shovePreview.CanExecute, Is.True);
+                Assert.That(shovePreview.IgnitesOnBrazier, Is.True, "Shove preview must detect LitBrazier hazard.");
+
+                GameObject shoveBadge = GameObject.Find("ShoveHazardBadge");
+                Assert.That(shoveBadge != null && shoveBadge.activeInHierarchy, Is.True,
+                    "ShoveHazardBadge must appear when hovering Shove -> Brazier.");
+                TMPro.TextMeshProUGUI badgeLbl = shoveBadge.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+                Assert.That(badgeLbl != null && badgeLbl.text.Contains("BRAZIER"), Is.True,
+                    "ShoveHazardBadge must indicate Brazier ignition hazard.");
+
+                bool shovedIntoBrazier = false;
+                for (int attempt = 0; attempt < 3; attempt++)
+                {
+                    if (!hero.Economy.HasApFor(CombatActionEconomy.DefaultShoveApCost))
+                    {
+                        hero.Economy.ResetUnifiedTurn(CombatActionEconomy.DefaultBaseApPerTurn, applyCarryover: false);
+                    }
+                    CombatActionResult shoveRes = ctrl.CombatSession.TryShove(enemy.Id);
+                    Assert.That(shoveRes.Success, Is.True);
+                    if (enemy.Conditions.Has(RealmzCore.Rules.CharConditionId.Burning) || enemy.Hp < 40)
+                    {
+                        shovedIntoBrazier = true;
+                        break;
+                    }
+                }
+                Assert.That(shovedIntoBrazier, Is.True, "Shove -> Brazier must ignite or inflict Heat damage on target.");
+
+                // 2. Destructible OilKegCluster detonation removes cover obstacle, fires PropDetonated, and leaves scorch
+                CombatDestructibleProp keg = null;
+                for (int i = 0; i < ctrl.CombatSession.DestructibleProps.Count; i++)
+                {
+                    CombatDestructibleProp p = ctrl.CombatSession.DestructibleProps[i];
+                    if (p != null && !p.IsDestroyed && p.ObstacleKind == CombatArenaObstacleKind.OilKegCluster)
+                    {
+                        keg = p;
+                        break;
+                    }
+                }
+                if (keg == null)
+                {
+                    GridCoord kegCoord = new GridCoord(Mathf.Clamp(heroPos.X, 1, grid.Width - 2), Mathf.Clamp(heroPos.Y + 2, 1, grid.Height - 2));
+                    keg = ctrl.CombatSession.AddDestructibleProp("stage2_test_oilkeg", kegCoord, CombatArenaObstacleKind.OilKegCluster);
+                    ctrl.worldRenderer.ApplyCombatArenaVisuals(ctrl.ExploreSession.CurrentMap, ctrl.ArenaOrigin.X, ctrl.ArenaOrigin.Y, grid);
+                }
+                Assert.That(keg, Is.Not.Null);
+
+                CombatExplosionEvent capturedBlast = null;
+                ctrl.CombatSession.PropDetonated += ev => capturedBlast = ev;
+
+                CombatActionResult dmgRes = ctrl.CombatSession.DamageDestructibleProp(keg.PropId, keg.MaxHp, "Heat", hero.Id);
+                Assert.That(dmgRes.Success, Is.True);
+                yield return null;
+                yield return null;
+
+                Assert.That(keg.IsDestroyed, Is.True, "OilKegCluster must be marked destroyed after detonation.");
+                Assert.That(capturedBlast, Is.Not.Null, "PropDetonated event must fire on OilKegCluster detonation.");
+                GridCoord worldKegCoord = new GridCoord(ctrl.ArenaOrigin.X + keg.Coord.X, ctrl.ArenaOrigin.Y + keg.Coord.Y);
+                Assert.That(ctrl.worldRenderer.CartographyData.IsBlockedByProp(worldKegCoord.X, worldKegCoord.Y), Is.False,
+                    "MarkArenaObstacleDestroyed must clear blocked prop tile on CartographyData.");
+                Assert.That(grid.GetCell(keg.Coord.X, keg.Coord.Y).Surface, Is.EqualTo(SurfaceType.Fire),
+                    "OilKegCluster detonation must leave Fire surface.");
+
+                // 3. Stage Night Combat with Tactical Pitch + VFX proof capture
+                if (captureProofs)
+                {
+                    ctrl.StageScoutInterceptShowcaseForCapture(new GridCoord(18, 54), worldClockTurns: 58, torchTurnsRemaining: 24);
+                    yield return null;
+                    GameObject.Find("InterceptEngageBtn")?.GetComponent<UnityEngine.UI.Button>()?.onClick.Invoke();
+                    yield return null;
+                    yield return null;
+                    GameObject.Find("StartBattleBtn")?.GetComponent<UnityEngine.UI.Button>()?.onClick.Invoke();
+                    yield return null;
+                    yield return null;
+
+                    GameObject.Find("CombatPitchBtn")?.GetComponent<UnityEngine.UI.Button>()?.onClick.Invoke();
+                    float pWait = 0f;
+                    while (pWait < 0.45f)
+                    {
+                        pWait += Time.unscaledDeltaTime;
+                        yield return null;
+                    }
+
+                    BywaterCombatVfxDirector vfx = ctrl.gridOverlays != null ? ctrl.gridOverlays.GetComponent<BywaterCombatVfxDirector>() : null;
+                    if (vfx != null && ctrl.CombatSession.CurrentActor != null)
+                    {
+                        GridCoord aWorld = new GridCoord(ctrl.ArenaOrigin.X + ctrl.CombatSession.CurrentActor.Position.X,
+                            ctrl.ArenaOrigin.Y + ctrl.CombatSession.CurrentActor.Position.Y);
+                        Vector3 aPos = CartographyWorldData.GridToWorld(aWorld, ctrl.worldRenderer.GetTileElevation(aWorld.X, aWorld.Y));
+                        vfx.PlayKegExplosion(aPos + Vector3.right * 2.2f, 1.9f);
+                        yield return null;
+                        yield return null;
+                    }
+
+                    ctrl.hudController?.HideToast();
+                    yield return null;
+                    CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
+                        @"c:\Users\karti\LifeTwin\scratch\stage2_proof_04_night_combat_vfx_pitch.png", 1600, 900);
+                }
+
+                Assert.That(errors, Is.Empty, "PlayMode Stage2 OilKeg/Shove errors:\n" + string.Join("\n", errors));
+            }
+            finally
+            {
+                Application.logMessageReceived -= LogHandler;
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator PlayMode_Stage2_FogOfWar3State_ContinuousSunRotation_AndClockHud_VerifyCleanly()
+        {
+            var errors = new List<string>();
+            void LogHandler(string condition, string stackTrace, LogType type)
+            {
+                if (type == LogType.Error || type == LogType.Exception || type == LogType.Assert || type == LogType.Warning)
+                {
+                    if (!condition.Contains("Curl error") && !condition.Contains("LicenseClient"))
+                    {
+                        errors.Add($"[{type}] {condition}");
+                    }
+                }
+            }
+
+            Application.logMessageReceived += LogHandler;
+            try
+            {
+                AsyncOperation loadOp = SceneManager.LoadSceneAsync("M1_Bywater_Slice", LoadSceneMode.Single);
+                while (loadOp != null && !loadOp.isDone)
+                {
+                    yield return null;
+                }
+                yield return null;
+                yield return null;
+
+                BywaterGameController ctrl = Object.FindFirstObjectByType<BywaterGameController>();
+                Assert.That(ctrl, Is.Not.Null);
+                bool captureProofs = string.Equals(Environment.GetEnvironmentVariable("REALMZ_CAPTURE_PROOFS"), "1", StringComparison.Ordinal);
+
+                ctrl.WarpToOverworldTownShowcase();
+                yield return null;
+                yield return null;
+
+                Assert.That(Shader.GetGlobalFloat("_FogOfWarEnabled"), Is.GreaterThan(0.5f),
+                    "Live Exploration must enable _FogOfWarEnabled shader state.");
+
+                TMPro.TextMeshProUGUI clockTxt = GameObject.Find("ClockText")?.GetComponent<TMPro.TextMeshProUGUI>();
+                Assert.That(clockTxt, Is.Not.Null, "ClockText missing in Explore HUD.");
+                Assert.That(clockTxt.text, Does.StartWith("Day 1 - "));
+                clockTxt.ForceMeshUpdate();
+                Assert.That(clockTxt.isTextTruncated, Is.False, "Explore ClockText must not truncate.");
+
+                ctrl.hudController?.HideToast();
+                yield return null;
+                if (captureProofs)
+                {
+                    CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
+                        @"c:\Users\karti\LifeTwin\scratch\stage2_proof_01_town_day.png", 1600, 900);
+                }
+
+                MethodInfo applyAtmoMethod = typeof(BywaterGameController).GetMethod(
+                    "ApplyAtmosphereAndTorchLighting", BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.That(applyAtmoMethod, Is.Not.Null);
+
+                // Advance continuous WorldClock across Dawn -> Noon -> Dusk and verify directional sun arc rotation
+                double startMin = ctrl.ExploreSession.CurrentWorldClock.TimeOfDayMinutes;
+                double toNextDawn = (WorldClock.MinutesPerDay - startMin) + 360.0; // 06:00 AM Dawn
+                ctrl.ExploreSession.AdvanceWorldClockMinutes(toNextDawn);
+                Vector3 focusPos = CartographyWorldData.GridToWorld(
+                    ctrl.ExploreSession.Position,
+                    ctrl.worldRenderer.GetTileElevation(ctrl.ExploreSession.Position.X, ctrl.ExploreSession.Position.Y));
+                applyAtmoMethod.Invoke(ctrl, new object[] { focusPos, true, true });
+                ctrl.hudController.RefreshExploreHud(ctrl.ExploreSession, ctrl.Bundle, null, null, 0, string.Empty, false);
+                yield return null;
+
+                Quaternion qDawn = ctrl.biomeAtmosphere.CurrentSunRotation;
+                Assert.That(clockTxt.text, Is.EqualTo(ctrl.ExploreSession.CurrentWorldClock.DisplayLabel));
+                clockTxt.ForceMeshUpdate();
+                Assert.That(clockTxt.isTextTruncated, Is.False);
+
+                ctrl.ExploreSession.AdvanceWorldClockMinutes(390.0); // 12:30 PM Noon
+                applyAtmoMethod.Invoke(ctrl, new object[] { focusPos, true, true });
+                ctrl.hudController.RefreshExploreHud(ctrl.ExploreSession, ctrl.Bundle, null, null, 0, string.Empty, false);
+                yield return null;
+                Quaternion qNoon = ctrl.biomeAtmosphere.CurrentSunRotation;
+
+                ctrl.ExploreSession.AdvanceWorldClockMinutes(345.0); // 06:15 PM Dusk
+                applyAtmoMethod.Invoke(ctrl, new object[] { focusPos, true, true });
+                ctrl.hudController.RefreshExploreHud(ctrl.ExploreSession, ctrl.Bundle, null, null, 0, string.Empty, false);
+                yield return null;
+                Quaternion qDusk = ctrl.biomeAtmosphere.CurrentSunRotation;
+
+                Assert.That(Quaternion.Angle(qDawn, qNoon), Is.GreaterThan(15f), "Sun rotation must advance smoothly from Dawn to Noon.");
+                Assert.That(Quaternion.Angle(qDawn, qDusk), Is.GreaterThan(40f), "Sun rotation must sweep smoothly from Dawn to Dusk.");
+                if (ctrl.biomeAtmosphere.directionalSun != null)
+                {
+                    Assert.That(Quaternion.Angle(ctrl.biomeAtmosphere.directionalSun.transform.rotation, qDusk), Is.LessThan(1.0f));
+                }
+
+                // Stage Riverbank Dusk (06:15 PM) + Fog-of-War proof capture
+                ctrl.ExploreSession.MoveAlongPath(new GridCoord(53, 62), autoHaltOnEvents: false);
+                double curMinOfDay = ctrl.ExploreSession.CurrentWorldClock.TimeOfDayMinutes;
+                double deltaToDusk = 1095.0 - curMinOfDay; // 18:15 (06:15 PM) Dusk
+                if (deltaToDusk < 0.0) deltaToDusk += WorldClock.MinutesPerDay;
+                if (deltaToDusk > 0.01) ctrl.ExploreSession.AdvanceWorldClockMinutes(deltaToDusk);
+                typeof(BywaterGameController).GetMethod("SyncExploreHeroViewsToTrail", BindingFlags.Instance | BindingFlags.NonPublic)
+                    ?.Invoke(ctrl, new object[] { true });
+                typeof(BywaterGameController).GetMethod("SyncFogOfWarAndWeatherVisuals", BindingFlags.Instance | BindingFlags.NonPublic)
+                    ?.Invoke(ctrl, null);
+                Vector3 riverPos = CartographyWorldData.GridToWorld(new GridCoord(53, 62), ctrl.worldRenderer.GetTileElevation(53, 62));
+                applyAtmoMethod.Invoke(ctrl, new object[] { riverPos, true, true });
+                ctrl.cameraRig?.FocusWorld(riverPos, immediate: true, recenterManualPan: true);
+                ctrl.hudController.RefreshExploreHud(ctrl.ExploreSession, ctrl.Bundle, null, null, 0, string.Empty, false);
+                ctrl.hudController?.HideToast();
+                yield return null;
+                yield return null;
+
+                if (captureProofs)
+                {
+                    CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
+                        @"c:\Users\karti\LifeTwin\scratch\stage2_proof_02_riverbank_dusk_fog.png", 1600, 900);
+                }
+
+                Assert.That(errors, Is.Empty, "PlayMode Stage2 Fog/Clock/Sun errors:\n" + string.Join("\n", errors));
+            }
+            finally
+            {
+                Application.logMessageReceived -= LogHandler;
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator PlayMode_Stage2_AnimatedVictoryXp_Option2SelectableLoot_AndMixerBound()
+        {
+            var errors = new List<string>();
+            void LogHandler(string condition, string stackTrace, LogType type)
+            {
+                if (type == LogType.Error || type == LogType.Exception || type == LogType.Assert || type == LogType.Warning)
+                {
+                    if (!condition.Contains("Curl error") && !condition.Contains("LicenseClient"))
+                    {
+                        errors.Add($"[{type}] {condition}");
+                    }
+                }
+            }
+
+            Application.logMessageReceived += LogHandler;
+            try
+            {
+                AsyncOperation loadOp = SceneManager.LoadSceneAsync("M1_Bywater_Slice", LoadSceneMode.Single);
+                while (loadOp != null && !loadOp.isDone)
+                {
+                    yield return null;
+                }
+                yield return null;
+                yield return null;
+
+                BywaterGameController ctrl = Object.FindFirstObjectByType<BywaterGameController>();
+                Assert.That(ctrl, Is.Not.Null);
+                bool captureProofs = string.Equals(Environment.GetEnvironmentVariable("REALMZ_CAPTURE_PROOFS"), "1", StringComparison.Ordinal);
+
+                Assert.That(ctrl.audioDirector, Is.Not.Null);
+                Assert.That(ctrl.audioDirector.MasterMixer, Is.Not.Null,
+                    "RealmzMasterMixer must be bound on BywaterAudioDirector in M1_Bywater_Slice.");
+
+                PartyState party = ctrl.ExploreSession.Party;
+                int preStashTotal = 0;
+                for (int i = 0; i < party.Stash.Count; i++) preStashTotal += party.Stash[i].Quantity;
+
+                ctrl.TriggerDemoSkirmish(enterDeployment: false);
+                yield return null;
+                yield return null;
+
+                float waitElapsed = 0f;
+                while (ctrl.CombatSession != null &&
+                       ctrl.CombatSession.Outcome == CombatOutcome.InProgress &&
+                       (ctrl.CombatSession.CurrentActor == null || ctrl.CombatSession.CurrentActor.Side != CombatSide.Hero) &&
+                       waitElapsed < 10f)
+                {
+                    waitElapsed += Time.unscaledDeltaTime;
+                    yield return null;
+                }
+
+                var lootField = typeof(TacticalCombatSession).GetField("_collectedLootItemIds", BindingFlags.Instance | BindingFlags.NonPublic);
+                var lootList = lootField?.GetValue(ctrl.CombatSession) as List<int>;
+                Assert.That(lootList, Is.Not.Null);
+                lootList.Clear();
+                lootList.AddRange(new[] { 10, 418, 622, 611 });
+
+                CombatantState currentHero = ctrl.CombatSession.CurrentActor;
+                Assert.That(currentHero, Is.Not.Null);
+                CombatantState finalMob = null;
+                for (int i = 0; i < ctrl.CombatSession.Combatants.Count; i++)
+                {
+                    CombatantState u = ctrl.CombatSession.Combatants[i];
+                    if (u.Side == CombatSide.Monster && u.IsAlive)
+                    {
+                        if (finalMob == null) finalMob = u;
+                        else u.Hp = 0;
+                    }
+                }
+                Assert.That(finalMob, Is.Not.Null);
+                finalMob.Hp = 1;
+                finalMob.Ac = 0;
+                int adjX = finalMob.Position.X > 0 ? finalMob.Position.X - 1 : finalMob.Position.X + 1;
+                currentHero.Position = new GridCoord(adjX, finalMob.Position.Y);
+                currentHero.ToHit = 95;
+                currentHero.WeaponDice = "2d6+6";
+                CombatActionResult killRes = ctrl.CombatSession.ExecuteMeleeAttack(finalMob.Id);
+                Assert.That(killRes.Success, Is.True);
+                Assert.That(ctrl.CombatSession.Outcome, Is.EqualTo(CombatOutcome.Victory));
+
+                typeof(BywaterGameController).GetMethod("HandleCombatOutcome", BindingFlags.Instance | BindingFlags.NonPublic)?.Invoke(ctrl, null);
+                yield return null;
+                yield return null;
+
+                Assert.That(ctrl.hudController.IsOutcomeOpen, Is.True);
+                Assert.That(GameObject.Find("TakeAndEquipBtn"), Is.Null, "Option 2 must omit TakeAndEquipBtn.");
+                Assert.That(GameObject.Find("VictoryHero_0/Right/XpTrack"), Is.Not.Null, "VictoryHero_0 XpTrack missing.");
+                Assert.That(GameObject.Find("VictoryHero_0/Right/XpTrack/XpGainFill"), Is.Not.Null, "VictoryHero_0 XpGainFill missing.");
+                Assert.That(GameObject.Find("LootTile_0"), Is.Not.Null);
+
+                int duringStashTotal = 0;
+                for (int i = 0; i < party.Stash.Count; i++) duringStashTotal += party.Stash[i].Quantity;
+                Assert.That(duringStashTotal, Is.EqualTo(preStashTotal), "Option 2 loot must remain deferred until clicked.");
+
+                ctrl.hudController?.HideToast();
+                yield return null;
+                if (captureProofs)
+                {
+                    CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
+                        @"c:\Users\karti\LifeTwin\scratch\stage2_proof_05_victory_loot_hud.png", 1600, 900);
+                }
+
+                // Deselect first loot card and confirm Take Selected updates count & deposits only remaining items
+                UnityEngine.UI.Button continueBtn = GameObject.Find("ContinueBtn")?.GetComponent<UnityEngine.UI.Button>();
+                Assert.That(continueBtn, Is.Not.Null);
+                string beforeLabel = continueBtn.GetComponentInChildren<TMPro.TextMeshProUGUI>()?.text ?? string.Empty;
+                int beforeCount = int.Parse(System.Text.RegularExpressions.Regex.Match(beforeLabel, @"\d+").Value);
+                Assert.That(beforeCount, Is.GreaterThanOrEqualTo(4));
+
+                UnityEngine.UI.Button tile0Btn = GameObject.Find("LootTile_0")?.GetComponent<UnityEngine.UI.Button>();
+                Assert.That(tile0Btn, Is.Not.Null);
+                tile0Btn.onClick.Invoke();
+                yield return null;
+
+                string afterLabel = continueBtn.GetComponentInChildren<TMPro.TextMeshProUGUI>()?.text ?? string.Empty;
+                int afterCount = int.Parse(System.Text.RegularExpressions.Regex.Match(afterLabel, @"\d+").Value);
+                Assert.That(afterLabel, Is.EqualTo($"Take Selected ({afterCount})"));
+                Assert.That(afterCount, Is.LessThan(beforeCount));
+                Assert.That(afterCount, Is.GreaterThan(0));
+                continueBtn.onClick.Invoke();
+                yield return null;
+                yield return null;
+
+                int postStashTotal = 0;
+                for (int i = 0; i < party.Stash.Count; i++) postStashTotal += party.Stash[i].Quantity;
+                Assert.That(postStashTotal, Is.EqualTo(preStashTotal + afterCount));
+
+                Assert.That(errors, Is.Empty, "PlayMode Stage2 Victory/Mixer errors:\n" + string.Join("\n", errors));
+            }
+            finally
+            {
+                Application.logMessageReceived -= LogHandler;
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator PlayMode_Stage2_PerformanceBudget_120FramesUnder3Ms()
+        {
+            var errors = new List<string>();
+            void LogHandler(string condition, string stackTrace, LogType type)
+            {
+                if (type == LogType.Error || type == LogType.Exception || type == LogType.Assert || type == LogType.Warning)
+                {
+                    if (!condition.Contains("Curl error") && !condition.Contains("LicenseClient"))
+                    {
+                        errors.Add($"[{type}] {condition}");
+                    }
+                }
+            }
+
+            Application.logMessageReceived += LogHandler;
+            try
+            {
+                AsyncOperation loadOp = SceneManager.LoadSceneAsync("M1_Bywater_Slice", LoadSceneMode.Single);
+                while (loadOp != null && !loadOp.isDone)
+                {
+                    yield return null;
+                }
+                yield return null;
+                yield return null;
+
+                BywaterGameController ctrl = Object.FindFirstObjectByType<BywaterGameController>();
+                Assert.That(ctrl, Is.Not.Null);
+                ctrl.WarpToOverworldTownShowcase();
+
+                // Exclude first 8 warmup frames before measuring 120 live PlayMode frames
+                for (int w = 0; w < 8; w++)
+                {
+                    yield return null;
+                }
+
+                const int sampleFrames = 120;
+                double totalDeltaSeconds = 0.0;
+                for (int f = 0; f < sampleFrames; f++)
+                {
+                    yield return null;
+                    totalDeltaSeconds += Time.unscaledDeltaTime;
+                }
+
+                double avgMs = (totalDeltaSeconds / sampleFrames) * 1000.0;
+                double avgFps = 1000.0 / Math.Max(0.0001, avgMs);
+                Debug.Log($"[Stage2Perf] Measured {sampleFrames} live frames: avg={avgMs:F3} ms/frame ({avgFps:F1} FPS)");
+
+                Assert.That(avgMs, Is.LessThan(3.0),
+                    $"Stage 2 PlayMode performance budget exceeded: {avgMs:F3} ms/frame ({avgFps:F1} FPS) >= 3.0 ms.");
+                Assert.That(errors, Is.Empty, "PlayMode Stage2 Performance errors:\n" + string.Join("\n", errors));
+            }
+            finally
+            {
+                Application.logMessageReceived -= LogHandler;
             }
         }
     }

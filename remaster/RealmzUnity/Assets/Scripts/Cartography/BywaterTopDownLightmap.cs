@@ -18,6 +18,8 @@ namespace Realmz.Cartography
         private static readonly int TopDownLightmapTexId = Shader.PropertyToID("_TopDownLightmapTex");
         private static readonly int TopDownLightmapBoundsId = Shader.PropertyToID("_TopDownLightmapBounds");
         private static readonly int WorldStaticMapId = Shader.PropertyToID("_WorldStaticMap");
+        private static readonly int FogOfWarTexId = Shader.PropertyToID("_FogOfWarTex");
+        private static readonly int FogOfWarEnabledId = Shader.PropertyToID("_FogOfWarEnabled");
 
         private static readonly int SimTimeId = Shader.PropertyToID("_SimTime");
         private static readonly int WorldSizeId = Shader.PropertyToID("_WorldSize");
@@ -32,6 +34,11 @@ namespace Realmz.Cartography
 
         private RenderTexture _lightmapRT;
         private Texture2D _worldStaticMap;
+        private Texture2D _fogOfWarTex;
+        private Color32[] _fogPixelScratch;
+        private ulong _lastFogHash;
+        private bool _hasFogHash;
+        private bool _fogOfWarEnabled;
         private Texture2D _fallbackTexture;
         private Material _generatorMaterial;
         private bool _configured;
@@ -47,6 +54,8 @@ namespace Realmz.Cartography
 
         public RenderTexture LightmapRT => _lightmapRT;
         public Texture2D WorldStaticMap => _worldStaticMap;
+        public Texture2D FogOfWarTexture => _fogOfWarTex;
+        public bool FogOfWarEnabled => _fogOfWarEnabled;
         public Vector4 WorldBounds => new Vector4(0f, -_worldHeight, 1f / _worldWidth, 1f / _worldHeight);
 
         private void OnEnable()
@@ -131,6 +140,8 @@ namespace Realmz.Cartography
             }
 
             Color[] pixels = new Color[staticRes * staticRes];
+            float[] rawShore = new float[staticRes * staticRes];
+            bool[] waterPixelMask = new bool[staticRes * staticRes];
 
             for (int py = 0; py < staticRes; py++)
             {
@@ -201,9 +212,23 @@ namespace Realmz.Cartography
                             float dy = worldY - cy;
                             float d = Mathf.Sqrt(dx * dx + dy * dy);
 
-                            if (checkLandDist && !nb.IsWater && d < minLandDist)
+                            if (checkLandDist && !nb.IsWater)
                             {
-                                minLandDist = d;
+                                int sideX = nx + (wx < nx + 0.5f ? -1 : 1);
+                                int sideY = ny + (worldY < ny + 0.5f ? -1 : 1);
+                                bool horizWater = data.InBounds(sideX, ny) && data.GetTile(sideX, ny).IsWater;
+                                bool vertWater = data.InBounds(nx, sideY) && data.GetTile(nx, sideY).IsWater;
+
+                                float cornerRadius = (horizWater && vertWater) ? 0.34f : 0.14f;
+                                float innerHalf = 0.5f - cornerRadius;
+                                float ox = Mathf.Max(Mathf.Abs(wx - (nx + 0.5f)) - innerHalf, 0f);
+                                float oy = Mathf.Max(Mathf.Abs(worldY - (ny + 0.5f)) - innerHalf, 0f);
+                                float dShore = Mathf.Max(0f, Mathf.Sqrt(ox * ox + oy * oy) + Mathf.Min(Mathf.Max(ox, oy), 0f) - cornerRadius);
+
+                                if (dShore < minLandDist)
+                                {
+                                    minLandDist = dShore;
+                                }
                             }
 
                             if (nb.Elevation > curTile.Elevation + 0.25f && d < 0.95f)
@@ -264,7 +289,10 @@ namespace Realmz.Cartography
                         }
                     }
 
-                    pixels[py * staticRes + px] = new Color(
+                    int pixIdx = py * staticRes + px;
+                    rawShore[pixIdx] = shoreProx;
+                    waterPixelMask[pixIdx] = curTile.IsWater;
+                    pixels[pixIdx] = new Color(
                         1f - canopyDarkness,
                         shoreProx,
                         Mathf.Clamp01(lanternGlow),
@@ -272,10 +300,122 @@ namespace Realmz.Cartography
                 }
             }
 
+            // 3x3 Gaussian smoothing pass ([1,2,1; 2,4,2; 1,2,1] / 16) on .g ONLY for water pixels
+            for (int py = 0; py < staticRes; py++)
+            {
+                int py0 = py > 0 ? py - 1 : 0;
+                int py2 = py + 1 < staticRes ? py + 1 : staticRes - 1;
+                int row0 = py0 * staticRes;
+                int row1 = py * staticRes;
+                int row2 = py2 * staticRes;
+
+                for (int px = 0; px < staticRes; px++)
+                {
+                    int pixIdx = row1 + px;
+                    if (!waterPixelMask[pixIdx])
+                    {
+                        continue;
+                    }
+
+                    int px0 = px > 0 ? px - 1 : 0;
+                    int px2 = px + 1 < staticRes ? px + 1 : staticRes - 1;
+
+                    float smoothed =
+                        (rawShore[row0 + px0] + 2f * rawShore[row0 + px] + rawShore[row0 + px2] +
+                         2f * rawShore[row1 + px0] + 4f * rawShore[pixIdx] + 2f * rawShore[row1 + px2] +
+                         rawShore[row2 + px0] + 2f * rawShore[row2 + px] + rawShore[row2 + px2]) * (1f / 16f);
+                    pixels[pixIdx].g = Mathf.Clamp01(smoothed);
+                }
+            }
+
             _worldStaticMap.SetPixels(pixels);
             _worldStaticMap.Apply(false, false);
             _configured = true;
             _lastBlitValid = false;
+        }
+
+        public void SetFogOfWarData(byte[] states, int width, int height, bool enabled)
+        {
+            if (!enabled || states == null || width <= 0 || height <= 0 || states.Length < width * height)
+            {
+                _fogOfWarEnabled = false;
+                Shader.SetGlobalFloat(FogOfWarEnabledId, 0f);
+                if (_fogOfWarTex == null)
+                {
+                    Shader.SetGlobalTexture(FogOfWarTexId, Texture2D.whiteTexture);
+                }
+                return;
+            }
+
+            const ulong fnvOffsetBasis = 14695981039346656037UL;
+            const ulong fnvPrime = 1099511628211UL;
+            ulong hash = fnvOffsetBasis;
+            hash ^= (uint)width;
+            hash *= fnvPrime;
+            hash ^= (uint)height;
+            hash *= fnvPrime;
+
+            int count = width * height;
+            for (int i = 0; i < count; i++)
+            {
+                hash ^= states[i];
+                hash *= fnvPrime;
+            }
+
+            if (_fogOfWarTex != null &&
+                _fogOfWarTex.width == width &&
+                _fogOfWarTex.height == height &&
+                _hasFogHash &&
+                _lastFogHash == hash)
+            {
+                _fogOfWarEnabled = true;
+                Shader.SetGlobalTexture(FogOfWarTexId, _fogOfWarTex);
+                Shader.SetGlobalFloat(FogOfWarEnabledId, 1f);
+                return;
+            }
+
+            if (_fogOfWarTex == null || _fogOfWarTex.width != width || _fogOfWarTex.height != height)
+            {
+                if (_fogOfWarTex != null)
+                {
+                    DestroySafe(_fogOfWarTex);
+                }
+
+                _fogOfWarTex = new Texture2D(width, height, TextureFormat.RGBA32, false, true)
+                {
+                    name = "Bywater_FogOfWarTex",
+                    filterMode = FilterMode.Bilinear,
+                    wrapMode = TextureWrapMode.Clamp,
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+            }
+
+            if (_fogPixelScratch == null || _fogPixelScratch.Length != count)
+            {
+                _fogPixelScratch = new Color32[count];
+            }
+
+            for (int ty = 0; ty < height; ty++)
+            {
+                int texY = (height - 1) - ty;
+                int srcRow = ty * width;
+                int dstRow = texY * width;
+                for (int tx = 0; tx < width; tx++)
+                {
+                    byte s = states[srcRow + tx];
+                    byte v = s == 0 ? (byte)0 : (s == 1 ? (byte)115 : (byte)255);
+                    _fogPixelScratch[dstRow + tx] = new Color32(v, v, v, 255);
+                }
+            }
+
+            _fogOfWarTex.SetPixels32(_fogPixelScratch);
+            _fogOfWarTex.Apply(false, false);
+            _lastFogHash = hash;
+            _hasFogHash = true;
+            _fogOfWarEnabled = true;
+
+            Shader.SetGlobalTexture(FogOfWarTexId, _fogOfWarTex);
+            Shader.SetGlobalFloat(FogOfWarEnabledId, 1f);
         }
 
         public void UpdateLightmap(float simTimeSeconds)
@@ -288,6 +428,15 @@ namespace Realmz.Cartography
             Vector4 bounds = WorldBounds;
             Shader.SetGlobalVector(TopDownLightmapBoundsId, bounds);
             Shader.SetGlobalTexture(WorldStaticMapId, _worldStaticMap);
+            if (!_fogOfWarEnabled)
+            {
+                Shader.SetGlobalFloat(FogOfWarEnabledId, 0f);
+            }
+            else if (_fogOfWarTex != null)
+            {
+                Shader.SetGlobalTexture(FogOfWarTexId, _fogOfWarTex);
+                Shader.SetGlobalFloat(FogOfWarEnabledId, 1f);
+            }
 
             bool hasGpu = SystemInfo.graphicsDeviceType != GraphicsDeviceType.Null;
             if (hasGpu && EnsureGeneratorMaterial())
@@ -508,6 +657,12 @@ namespace Realmz.Cartography
                 _worldStaticMap = null;
             }
 
+            if (_fogOfWarTex != null)
+            {
+                DestroySafe(_fogOfWarTex);
+                _fogOfWarTex = null;
+            }
+
             if (_generatorMaterial != null)
             {
                 DestroySafe(_generatorMaterial);
@@ -520,6 +675,11 @@ namespace Realmz.Cartography
                 _fallbackTexture = null;
             }
 
+            _fogPixelScratch = null;
+            _lastFogHash = 0UL;
+            _hasFogHash = false;
+            _fogOfWarEnabled = false;
+            Shader.SetGlobalFloat(FogOfWarEnabledId, 0f);
             _configured = false;
             _lastBlitValid = false;
         }

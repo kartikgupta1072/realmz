@@ -1,0 +1,196 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f669963317e94634387d2f9386e467b9, type: 3}
+  m_Name: RealmzBalanceCatalog
+  m_EditorClassIdentifier: 
+  version: 1
+  monsters:
+  - id: orc_warrior
+    name: Orc Warrior
+    alias: 
+    hitDice: 3
+    hpBonus: 3
+    hpMin: 18
+    hpMax: 24
+    hpDefault: 21
+    xpReward: 65
+    role: Bruiser
+    specialAbilities:
+    - cleave_2tile
+  - id: giant_frog
+    name: Giant Frog
+    alias: 
+    hitDice: 0
+    hpBonus: 0
+    hpMin: 15
+    hpMax: 19
+    hpDefault: 17
+    xpReward: 70
+    role: Controller
+    specialAbilities:
+    - tongue_pull
+  - id: goblin
+    name: Goblin
+    alias: Goblin Raider
+    hitDice: 0
+    hpBonus: 0
+    hpMin: 8
+    hpMax: 11
+    hpDefault: 9
+    xpReward: 0
+    role: Skirmisher
+    specialAbilities: []
+  - id: goblin_archer
+    name: Goblin Archer
+    alias: 
+    hitDice: 0
+    hpBonus: 0
+    hpMin: 6
+    hpMax: 9
+    hpDefault: 8
+    xpReward: 0
+    role: Ranged
+    specialAbilities:
+    - high_ground_seeker
+  survival:
+    torchPrice: 12
+    rationPrice: 5
+    torchTurnDuration: 30
+    bandageMaxCharges: 2
+    minutesPerRealSecond: 1
+    visionRadii:
+      dayBase: 11
+      dayScoutBonus: 2
+      duskUnlit: 8
+      duskLitTorch: 10
+      nightUnlit: 4
+      nightLitTorch: 9
+      dungeonUnlit: 3
+      dungeonLitTorch: 8
+  equipmentSets:
+  - setId: scouts_leather
+    name: Scout's Leather
+    isPreview: 0
+    displayMaxPieces: 3
+    itemIds: d1000000d2000000d3000000c2010000c4010000c6010000
+    tiers:
+    - requiredPieces: 2
+      acBonus: 0
+      apBonus: 0
+      freeMoveTiles: 1
+      guardApDiscount: 0
+      summary: +1 Free Move Tile
+    - requiredPieces: 3
+      acBonus: 0
+      apBonus: 1
+      freeMoveTiles: 0
+      guardApDiscount: 0
+      summary: +1 Max AP
+  - setId: iron_vanguard
+    name: Iron Vanguard
+    isPreview: 0
+    displayMaxPieces: 3
+    itemIds: 90010000a2010000c7010000140000000a0000000b000000
+    tiers:
+    - requiredPieces: 2
+      acBonus: 2
+      apBonus: 0
+      freeMoveTiles: 0
+      guardApDiscount: 0
+      summary: +2 AC
+    - requiredPieces: 3
+      acBonus: 0
+      apBonus: 1
+      freeMoveTiles: 0
+      guardApDiscount: 1
+      summary: Guard costs 1 AP & +1 Max AP
+  - setId: thornwood_stalker
+    name: Thornwood Stalker
+    isPreview: 1
+    displayMaxPieces: 3
+    itemIds: 8d2300008e2300008f230000
+    tiers:
+    - requiredPieces: 2
+      acBonus: 1
+      apBonus: 0
+      freeMoveTiles: 1
+      guardApDiscount: 0
+      summary: +1 AC & +1 Free Move Tile
+    - requiredPieces: 3
+      acBonus: 0
+      apBonus: 1
+      freeMoveTiles: 0
+      guardApDiscount: 0
+      summary: +1 Max AP
+  - setId: cryptbreaker
+    name: Cryptbreaker
+    isPreview: 1
+    displayMaxPieces: 3
+    itemIds: f1230000f2230000f3230000
+    tiers:
+    - requiredPieces: 2
+      acBonus: 2
+      apBonus: 0
+      freeMoveTiles: 0
+      guardApDiscount: 0
+      summary: +2 AC
+    - requiredPieces: 3
+      acBonus: 0
+      apBonus: 1
+      freeMoveTiles: 0
+      guardApDiscount: 1
+      summary: Guard costs 1 AP & +1 Max AP
+  quests:
+  - questId: bounty_river_frogs
+    title: Clear the Riverbed Frogs
+    source: BywaterNoticeBoard
+    description: Giant frogs along the Bywater riverbanks have been ambushing ferrymen
+      and pulling livestock into the reeds. Thin their numbers before dusk.
+    targetMonsterId: giant_frog
+    targetCount: 4
+    goldReward: 120
+    xpReward: 150
+    locationHint: Bywater Riverbanks (East & South Meadows)
+    isNoticeBoardBounty: 1
+  - questId: bounty_road_goblins
+    title: Break the Road Goblin Ambush
+    source: BywaterNoticeBoard
+    description: Goblin raiders have been harassing merchant wagons along the trade
+      road outside Bywater Gate. Drive them off the road.
+    targetMonsterId: goblin
+    targetCount: 6
+    goldReward: 140
+    xpReward: 180
+    locationHint: Bywater Trade Road & Foothills
+    isNoticeBoardBounty: 1
+  - questId: bounty_thornwood_orcs
+    title: Push Back the Thornwood Orcs
+    source: BywaterNoticeBoard
+    description: Heavy orc warriors have set up camp in the Thornwood approaches.
+      Break their warband and claim the magistrate's bounty.
+    targetMonsterId: orc_warrior
+    targetCount: 3
+    goldReward: 180
+    xpReward: 220
+    locationHint: Thornwood Forest & Outlying Woods
+    isNoticeBoardBounty: 1
+  - questId: bounty_cavern_undead
+    title: Purge the Cavern Undead
+    source: BywaterNoticeBoard
+    description: Restless skeletal warriors patrol the upper chambers of the Bywater
+      Cavern. Put them back to rest and report to the Magistrate.
+    targetMonsterId: skeletal_warrior
+    targetCount: 5
+    goldReward: 200
+    xpReward: 250
+    locationHint: Bywater Cavern (Dungeon Level 0)
+    isNoticeBoardBounty: 1

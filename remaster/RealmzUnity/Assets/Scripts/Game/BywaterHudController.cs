@@ -72,6 +72,8 @@ namespace Realmz.Game
             public int LastMaxHp = -1;
             public int LastSp = -1;
             public int LastMaxSp = -1;
+            public int LastEffectiveAp = -1;
+            public int LastEffectiveGuardAp = -1;
             public int LastCondCount = -1;
             public bool LastSelected;
             public bool HasCachedState;
@@ -217,6 +219,9 @@ namespace Realmz.Game
         private Button _combatAudioBtn;
         private TextMeshProUGUI _combatAudioBtnLabel;
         private Button _combatGridBtn;
+        private Button _combatPitchBtn;
+        private TextMeshProUGUI _combatPitchBtnLabel;
+        private bool _isTacticalPitchActive;
         private Button _combatMenuBtn;
 
         // Explore HUD
@@ -459,6 +464,7 @@ namespace Realmz.Game
         public event Action<bool> OnMuteToggled;
         public event Action<float> OnGridOpacityChanged;
         public event Action OnCombatGridToggleRequested;
+        public event Action OnTacticalPitchToggleRequested;
         public event Action<bool> OnNameplatesAlwaysOnChanged;
         public event Action<bool> OnDevToolsToggled;
         public event Action OnFleeCombatRequested;
@@ -470,6 +476,9 @@ namespace Realmz.Game
         public event Action OnContinueAfterVictoryRequested;
         public event Action OnRetrySkirmishRequested;
         public event Action OnReviveAtShrineRequested;
+        public event Action OnVictoryLevelUpPopped;
+
+        public bool SkipAnimations { get; set; }
 
         public bool IsPartyOpen => _partyDrawerRoot != null && _partyDrawerRoot.activeSelf;
         public bool IsShopOpen => _shopModalRoot != null && _shopModalRoot.activeSelf;
@@ -548,6 +557,25 @@ namespace Realmz.Game
             if (_cursorTooltipRoot != null && _cursorTooltipRoot.activeSelf && !_hasManualTooltipPos && Mouse.current != null)
             {
                 UpdateCursorTooltipPosition(Mouse.current.position.ReadValue());
+            }
+        }
+
+        private void OnDestroy()
+        {
+            StopVictoryAnimation();
+        }
+
+        public void SetTacticalPitchActive(bool active)
+        {
+            _isTacticalPitchActive = active;
+            if (_combatPitchBtn != null)
+            {
+                BywaterUiHelpers.SetButtonColors(_combatPitchBtn, active);
+            }
+            if (_combatPitchBtnLabel != null)
+            {
+                _combatPitchBtnLabel.text = active ? "Tact [T]" : "Pitch [T]";
+                _combatPitchBtnLabel.color = active ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.ParchmentText;
             }
         }
 
@@ -1162,6 +1190,8 @@ namespace Realmz.Game
                 PartyMemberState m = members[i];
                 bool selected = partyDrawerOpen && i == _selectedHeroIndex;
                 int condCount = m.Conditions.Count;
+                int effectiveAp = CombatActionEconomy.DefaultBaseApPerTurn + m.GetSetApBonus();
+                int effectiveGuardAp = Math.Max(1, CombatActionEconomy.DefaultGuardApCost - m.GetSetGuardApDiscount());
 
                 if (card.HasCachedState &&
                     card.LastVisible &&
@@ -1173,6 +1203,8 @@ namespace Realmz.Game
                     card.LastMaxHp == m.MaxHp &&
                     card.LastSp == m.Sp &&
                     card.LastMaxSp == m.MaxSp &&
+                    card.LastEffectiveAp == effectiveAp &&
+                    card.LastEffectiveGuardAp == effectiveGuardAp &&
                     card.LastCondCount == condCount &&
                     card.LastSelected == selected)
                 {
@@ -1193,6 +1225,8 @@ namespace Realmz.Game
                 card.LastMaxHp = m.MaxHp;
                 card.LastSp = m.Sp;
                 card.LastMaxSp = m.MaxSp;
+                card.LastEffectiveAp = effectiveAp;
+                card.LastEffectiveGuardAp = effectiveGuardAp;
                 card.LastCondCount = condCount;
                 card.LastSelected = selected;
                 card.HasCachedState = true;
@@ -1212,13 +1246,15 @@ namespace Realmz.Game
                 if (m.MaxSp > 0)
                 {
                     float spRatio = Mathf.Clamp01(m.Sp / (float)m.MaxSp);
+                    card.SpFill.color = BywaterUiHelpers.SpFillColor;
                     card.SpFill.rectTransform.anchorMax = new Vector2(spRatio, 1f);
                     card.SpText.text = $"SP {m.Sp}/{m.MaxSp}";
                 }
                 else
                 {
-                    card.SpFill.rectTransform.anchorMax = new Vector2(0f, 1f);
-                    card.SpText.text = "SP -";
+                    card.SpFill.color = BywaterUiHelpers.ApBarFillColor;
+                    card.SpFill.rectTransform.anchorMax = Vector2.one;
+                    card.SpText.text = $"{effectiveAp} AP | Grd {effectiveGuardAp}";
                 }
 
                 if (card.XpFill != null)
@@ -1461,7 +1497,9 @@ namespace Realmz.Game
                 {
                     rowRef.UpgradePill.SetActive(isUpgrade);
                 }
-                rowRef.InfoText.text = $"{itemName} x{entry.Quantity}{chgTag} [{sellPrice}g]{(string.IsNullOrEmpty(stats) ? "" : " - " + stats)}";
+                string qtyTag = entry.Quantity > 1 ? $" x{entry.Quantity}" : string.Empty;
+                string statsCompact = string.IsNullOrEmpty(stats) ? string.Empty : " | " + stats;
+                rowRef.InfoText.text = $"{itemName}{qtyTag}{chgTag} [{sellPrice}g]{statsCompact}";
                 rowRef.EquipBtn.gameObject.SetActive(canEquip);
                 if (canEquip)
                 {
@@ -1478,10 +1516,14 @@ namespace Realmz.Game
                 AttachTooltipCallbacks(rowRef.Root, () =>
                 {
                     if (capturedDef == null) return (itemName, string.Empty);
+                    string setTag = FormatItemSetProgressTag(hero, capturedDef);
+                    string tipTitle = string.IsNullOrEmpty(setTag)
+                        ? $"{itemName}{qtyTag}"
+                        : $"{itemName} {setTag}{qtyTag}";
                     string body = canEquip
                         ? BuildGearComparisonTooltip(hero, capturedDef, items)
                         : $"{stats}{(entry.RemainingCharges > 0 ? $" | {entry.RemainingCharges} charges left" : "")}\nValue: {sellPrice}g sell\n\n{capturedDef.Description}";
-                    return ($"{itemName} x{entry.Quantity}", body);
+                    return (tipTitle, body);
                 });
 
                 rowRef.Root.SetActive(true);
@@ -1534,6 +1576,9 @@ namespace Realmz.Game
                 BywaterUiHelpers.ParchmentText,
                 TextAlignmentOptions.MidlineLeft,
                 wrap: false);
+            info.enableAutoSizing = true;
+            info.fontSizeMin = 11.5f;
+            info.fontSizeMax = 15f;
             info.overflowMode = TextOverflowModes.Truncate;
             LayoutElement infoLe = info.gameObject.AddComponent<LayoutElement>();
             infoLe.flexibleWidth = 1f;
@@ -2040,12 +2085,15 @@ namespace Realmz.Game
                     card.Root.localScale = new Vector3(1.10f, 1.18f, 1f);
                     if (card.Layout != null)
                     {
-                        card.Layout.preferredWidth = 174f;
+                        card.Layout.preferredWidth = 196f;
                     }
                 }
                 else
                 {
-                    card.MetaText.text = unit != null ? $"HP {unit.Hp}/{unit.MaxHp}" : "Ready";
+                    string roleTag = unit != null ? ResolveCombatantRoleTag(unit) : string.Empty;
+                    card.MetaText.text = unit != null
+                        ? (string.IsNullOrEmpty(roleTag) ? $"HP {unit.Hp}/{unit.MaxHp}" : $"HP {unit.Hp}/{unit.MaxHp} {roleTag}")
+                        : "Ready";
                     card.MetaText.color = BywaterUiHelpers.ParchmentText;
                     card.Background.color = entry.Side == CombatSide.Hero
                         ? new Color(0.070f, 0.115f, 0.200f, 0.94f)
@@ -2058,7 +2106,7 @@ namespace Realmz.Game
                     card.Root.localScale = Vector3.one;
                     if (card.Layout != null)
                     {
-                        card.Layout.preferredWidth = 160f;
+                        card.Layout.preferredWidth = 184f;
                     }
                 }
             }
@@ -2820,6 +2868,37 @@ namespace Realmz.Game
             return trimmed.Substring(0, 10) + ".";
         }
 
+        private static string ResolveCombatantRoleTag(CombatantState unit)
+        {
+            if (unit == null)
+            {
+                return string.Empty;
+            }
+
+            if (unit.SpellIds != null && unit.SpellIds.Count > 0 && unit.MaxSp > 0 &&
+                (!unit.PrefersRanged || unit.SpellIds.Count >= 2))
+            {
+                return "Ctrl";
+            }
+
+            if (unit.PrefersRanged)
+            {
+                return "Rng";
+            }
+
+            if (unit.SpellIds != null && unit.SpellIds.Count > 0)
+            {
+                return "Ctrl";
+            }
+
+            if (unit.Ac >= 14 || unit.MaxHp >= 28)
+            {
+                return "Tank";
+            }
+
+            return "Skirm";
+        }
+
         private static string ShortenWeaponName(string fullName)
         {
             if (string.IsNullOrWhiteSpace(fullName))
@@ -2828,18 +2907,47 @@ namespace Realmz.Game
             }
 
             string trimmed = fullName.Trim();
-            if (trimmed.Length <= 11)
+            if (trimmed.Equals("Short Sword", StringComparison.OrdinalIgnoreCase)) return "Short Swd";
+            if (trimmed.Equals("Broad Sword", StringComparison.OrdinalIgnoreCase)) return "Broadswd";
+            if (trimmed.Equals("Long Sword", StringComparison.OrdinalIgnoreCase)) return "Longswd";
+            if (trimmed.Equals("Two-Handed Sword", StringComparison.OrdinalIgnoreCase)) return "Greatswd";
+            if (trimmed.Equals("Heavy Crossbow", StringComparison.OrdinalIgnoreCase)) return "Hvy Xbow";
+            if (trimmed.Equals("Light Crossbow", StringComparison.OrdinalIgnoreCase)) return "Lgt Xbow";
+            if (trimmed.Equals("Battle Axe", StringComparison.OrdinalIgnoreCase)) return "Battleaxe";
+            if (trimmed.Equals("Hand Axe", StringComparison.OrdinalIgnoreCase)) return "Handaxe";
+            if (trimmed.Equals("Short Bow", StringComparison.OrdinalIgnoreCase)) return "Shortbow";
+            if (trimmed.Equals("Long Bow", StringComparison.OrdinalIgnoreCase)) return "Longbow";
+            if (trimmed.Equals("Composite Bow", StringComparison.OrdinalIgnoreCase)) return "Comp. Bow";
+            if (trimmed.Equals("Morning Star", StringComparison.OrdinalIgnoreCase)) return "Morn.Star";
+            if (trimmed.Equals("Quarterstaff", StringComparison.OrdinalIgnoreCase)) return "Qtrstaff";
+            if (trimmed.Equals("War Hammer", StringComparison.OrdinalIgnoreCase)) return "Warhammer";
+
+            string compacted = trimmed;
+            compacted = ReplaceCaseInsensitive(compacted, "Two-Handed Sword", "Greatswd");
+            compacted = ReplaceCaseInsensitive(compacted, "Heavy Crossbow", "Hvy Xbow");
+            compacted = ReplaceCaseInsensitive(compacted, "Light Crossbow", "Lgt Xbow");
+            compacted = ReplaceCaseInsensitive(compacted, "Short Sword", "Short Swd");
+            compacted = ReplaceCaseInsensitive(compacted, "Broad Sword", "Broadswd");
+            compacted = ReplaceCaseInsensitive(compacted, "Long Sword", "Longswd");
+            compacted = ReplaceCaseInsensitive(compacted, "Battle Axe", "Battleaxe");
+            compacted = ReplaceCaseInsensitive(compacted, "Hand Axe", "Handaxe");
+            compacted = ReplaceCaseInsensitive(compacted, "Short Bow", "Shortbow");
+            compacted = ReplaceCaseInsensitive(compacted, "Long Bow", "Longbow");
+            compacted = ReplaceCaseInsensitive(compacted, "Quarterstaff", "Qtrstaff");
+            compacted = ReplaceCaseInsensitive(compacted, "War Hammer", "Warhammer");
+
+            if (compacted.Length <= 11)
             {
-                return trimmed;
+                return compacted;
             }
 
-            int lastSpace = trimmed.LastIndexOf(' ');
-            if (lastSpace > 0 && lastSpace < trimmed.Length - 1)
+            int lastSpace = compacted.LastIndexOf(' ');
+            if (lastSpace > 0 && lastSpace < compacted.Length - 1)
             {
-                return trimmed.Substring(lastSpace + 1);
+                return compacted.Substring(lastSpace + 1);
             }
 
-            return trimmed.Substring(0, 11);
+            return compacted.Substring(0, 11);
         }
 
         private static string ResolveSpellIconKey(SpellDefinition spell)
@@ -2945,6 +3053,17 @@ namespace Realmz.Game
 
             _tooltipTitle.text = string.IsNullOrEmpty(title) ? "Tactical Preview" : title;
             string rawDetails = string.IsNullOrEmpty(details) ? string.Empty : details;
+
+            if (_tooltipPanel != null)
+            {
+                bool isLongContent = (!string.IsNullOrEmpty(title) && title.Length > 26) ||
+                                     (!string.IsNullOrEmpty(rawDetails) && rawDetails.Length > 140);
+                float targetWidth = isLongContent ? 440f : 384f;
+                if (!Mathf.Approximately(_tooltipPanel.sizeDelta.x, targetWidth))
+                {
+                    _tooltipPanel.sizeDelta = new Vector2(targetWidth, _tooltipPanel.sizeDelta.y);
+                }
+            }
 
             ApplyCombatTooltipStyling(title, rawDetails, elevationBadge);
             _tooltipBody.text = HighlightCombatCallouts(rawDetails);
@@ -3263,6 +3382,7 @@ namespace Realmz.Game
 
         public void HideOutcomeModal()
         {
+            StopVictoryAnimation();
             if (_outcomeModalRoot != null)
             {
                 _outcomeModalRoot.SetActive(false);
@@ -3426,6 +3546,7 @@ namespace Realmz.Game
             if (_combatSpeedBtn != null) _combatSpeedBtn.gameObject.SetActive(inCombat);
             if (_combatAudioBtn != null) _combatAudioBtn.gameObject.SetActive(inCombat);
             if (_combatGridBtn != null) _combatGridBtn.gameObject.SetActive(inCombat);
+            if (_combatPitchBtn != null) _combatPitchBtn.gameObject.SetActive(inCombat);
             if (_combatMenuBtn != null) _combatMenuBtn.gameObject.SetActive(inCombat);
         }
 
@@ -3586,7 +3707,7 @@ namespace Realmz.Game
             _warpBtnLabel = _warpBtn.GetComponentInChildren<TextMeshProUGUI>(true);
             _shopBtn = AddTopButton(bar, "ShopBtn", "Shop (B)", 98f, () => OnToggleShopRequested?.Invoke());
             _shrineBtn = AddTopButton(bar, "ShrineBtn", "Shrine", 84f, () => OnShrineRequested?.Invoke());
-            _contextPoiBtn = AddTopButton(bar, "ContextPoiBtn", "Enter Shop", 196f, () =>
+            _contextPoiBtn = AddTopButton(bar, "ContextPoiBtn", "Enter Shop", 224f, () =>
             {
                 if (_contextPoiAction != null) _contextPoiAction.Invoke();
                 else OnContextPoiRequested?.Invoke();
@@ -3629,6 +3750,10 @@ namespace Realmz.Game
             _combatAudioBtnLabel = _combatAudioBtn.GetComponentInChildren<TextMeshProUGUI>();
 
             _combatGridBtn = AddTopIconButton(bar, "CombatGridBtn", "grid", "Grid", 94f, () => OnCombatGridToggleRequested?.Invoke());
+            _combatPitchBtn = AddTopButton(bar, "CombatPitchBtn", "Pitch [T]", 98f, () => OnTacticalPitchToggleRequested?.Invoke());
+            _combatPitchBtnLabel = _combatPitchBtn.GetComponentInChildren<TextMeshProUGUI>(true);
+            AttachTooltipCallbacks(_combatPitchBtn.gameObject, () => ("Tactical Camera Pitch [T]", "Toggle between isometric exploration camera angle and steep tactical grid pitch."));
+            SetTacticalPitchActive(_isTacticalPitchActive);
             _combatMenuBtn = AddTopIconButton(bar, "CombatMenuBtn", "settings", "[Esc] Menu", 138f, () => ToggleSettingsModal());
         }
 
@@ -3790,8 +3915,10 @@ namespace Realmz.Game
 
                 Image spFill = BywaterUiHelpers.CreateProgressBar(infoCol.transform, "SpBar", BywaterUiHelpers.SpFillColor, out RectTransform spBarRt);
                 LayoutElement spBarLe = spBarRt.gameObject.AddComponent<LayoutElement>();
-                spBarLe.preferredHeight = 16f;
+                spBarLe.preferredHeight = 18f;
                 TextMeshProUGUI spTxt = BywaterUiHelpers.CreateLabel(spBarRt, "SpText", "SP 0/0", _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
+                spTxt.enableAutoSizing = false;
+                spTxt.overflowMode = TextOverflowModes.Truncate;
                 BywaterUiHelpers.AddTextDropShadow(spTxt);
                 spTxt.rectTransform.anchorMin = Vector2.zero;
                 spTxt.rectTransform.anchorMax = Vector2.one;
@@ -4529,7 +4656,7 @@ namespace Realmz.Game
             ribbonPanel.anchorMax = new Vector2(0.5f, 1f);
             ribbonPanel.pivot = new Vector2(0.5f, 1f);
             ribbonPanel.anchoredPosition = new Vector2(0f, -52f);
-            ribbonPanel.sizeDelta = new Vector2(1500f, 82f);
+            ribbonPanel.sizeDelta = new Vector2(1680f, 82f);
 
             HorizontalLayoutGroup ribHlg = ribbonPanel.gameObject.AddComponent<HorizontalLayoutGroup>();
             ribHlg.padding = new RectOffset(8, 8, 6, 6);
@@ -4583,7 +4710,7 @@ namespace Realmz.Game
 
                 RectTransform cardRt = BywaterUiHelpers.CreatePanel(ribbonPanel, $"InitCard_{i}", BywaterUiHelpers.CardBg, withBrassOutline: true, outlinePx: 1.5f);
                 LayoutElement cardLe = cardRt.gameObject.AddComponent<LayoutElement>();
-                cardLe.preferredWidth = 160f;
+                cardLe.preferredWidth = 184f;
                 cardLe.preferredHeight = 56f;
 
                 HorizontalLayoutGroup ch = cardRt.gameObject.AddComponent<HorizontalLayoutGroup>();
@@ -4606,9 +4733,15 @@ namespace Realmz.Game
                 tv.childControlHeight = true;
 
                 TextMeshProUGUI nameLbl = BywaterUiHelpers.CreateLabel(txtCol.transform, "Name", $"Unit {i + 1}", _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+                nameLbl.enableAutoSizing = true;
+                nameLbl.fontSizeMin = 11f;
+                nameLbl.fontSizeMax = 15f;
                 nameLbl.overflowMode = TextOverflowModes.Truncate;
                 BywaterUiHelpers.AddTextDropShadow(nameLbl);
                 TextMeshProUGUI metaLbl = BywaterUiHelpers.CreateLabel(txtCol.transform, "Meta", "HP 10/10", _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, wrap: false);
+                metaLbl.enableAutoSizing = true;
+                metaLbl.fontSizeMin = 11f;
+                metaLbl.fontSizeMax = 15f;
                 metaLbl.overflowMode = TextOverflowModes.Truncate;
 
                 _initiativeCards.Add(new InitiativeCardRefs
@@ -4737,7 +4870,7 @@ namespace Realmz.Game
             tickerPanel.anchorMax = new Vector2(1f, 0f);
             tickerPanel.pivot = new Vector2(1f, 0f);
             tickerPanel.anchoredPosition = new Vector2(-12f, 10f);
-            tickerPanel.sizeDelta = new Vector2(340f, 108f);
+            tickerPanel.sizeDelta = new Vector2(360f, 136f);
             _combatTickerRoot = tickerPanel.gameObject;
 
             VerticalLayoutGroup tkVlg = tickerPanel.gameObject.AddComponent<VerticalLayoutGroup>();
@@ -4772,9 +4905,11 @@ namespace Realmz.Game
             _tickerLines.Clear();
             for (int i = 0; i < 3; i++)
             {
-                TextMeshProUGUI line = BywaterUiHelpers.CreateLabel(tickerPanel, $"TickerLine_{i}", string.Empty, _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, wrap: false);
-                line.overflowMode = TextOverflowModes.Truncate;
-                line.gameObject.AddComponent<LayoutElement>().preferredHeight = 22f;
+                TextMeshProUGUI line = BywaterUiHelpers.CreateLabel(tickerPanel, $"TickerLine_{i}", string.Empty, _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, wrap: true);
+                line.overflowMode = TextOverflowModes.Ellipsis;
+                LayoutElement lineLe = line.gameObject.AddComponent<LayoutElement>();
+                lineLe.minHeight = 20f;
+                lineLe.flexibleHeight = 1f;
                 _tickerLines.Add(line);
             }
 
@@ -4782,7 +4917,7 @@ namespace Realmz.Game
             drawerPanel.anchorMin = new Vector2(1f, 0f);
             drawerPanel.anchorMax = new Vector2(1f, 0f);
             drawerPanel.pivot = new Vector2(1f, 0f);
-            drawerPanel.anchoredPosition = new Vector2(-12f, 126f);
+            drawerPanel.anchoredPosition = new Vector2(-12f, 154f);
             drawerPanel.sizeDelta = new Vector2(400f, 360f);
             _combatLogDrawerRoot = drawerPanel.gameObject;
 
@@ -4838,7 +4973,7 @@ namespace Realmz.Game
             tooltipPanel.anchorMax = new Vector2(0.5f, 0.5f);
             tooltipPanel.pivot = new Vector2(0f, 1f);
             tooltipPanel.anchoredPosition = new Vector2(-420f, 180f);
-            tooltipPanel.sizeDelta = new Vector2(360f, 150f);
+            tooltipPanel.sizeDelta = new Vector2(384f, 150f);
             _tooltipPanel = tooltipPanel;
             _cursorTooltipRoot = tooltipPanel.gameObject;
 
@@ -4858,6 +4993,9 @@ namespace Realmz.Game
             ttCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             _tooltipTitle = BywaterUiHelpers.CreateLabel(tooltipPanel, "TooltipTitle", "Tactical Preview", _font, 17f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            _tooltipTitle.enableAutoSizing = true;
+            _tooltipTitle.fontSizeMin = 12.5f;
+            _tooltipTitle.fontSizeMax = 17f;
             _tooltipTitle.overflowMode = TextOverflowModes.Truncate;
             BywaterUiHelpers.AddTextDropShadow(_tooltipTitle);
             _tooltipTitle.gameObject.AddComponent<LayoutElement>().preferredHeight = 24f;
@@ -5012,8 +5150,8 @@ namespace Realmz.Game
             deployRt.anchorMin = new Vector2(0.5f, 0f);
             deployRt.anchorMax = new Vector2(0.5f, 0f);
             deployRt.pivot = new Vector2(0.5f, 0f);
-            deployRt.anchoredPosition = new Vector2(-145f, 16f);
-            deployRt.sizeDelta = new Vector2(960f, 58f);
+            deployRt.anchoredPosition = new Vector2(-115f, 16f);
+            deployRt.sizeDelta = new Vector2(1080f, 58f);
 
             HorizontalLayoutGroup dpHlg = deployRt.gameObject.AddComponent<HorizontalLayoutGroup>();
             dpHlg.padding = new RectOffset(14, 14, 8, 8);
@@ -5144,6 +5282,9 @@ namespace Realmz.Game
             spLbl.gameObject.AddComponent<LayoutElement>().preferredHeight = 18f;
 
             TextMeshProUGUI nameLbl = BywaterUiHelpers.CreateLabel(go.transform, "SkillLabel", string.Empty, _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
+            nameLbl.enableAutoSizing = true;
+            nameLbl.fontSizeMin = 10.5f;
+            nameLbl.fontSizeMax = 15f;
             nameLbl.overflowMode = TextOverflowModes.Truncate;
             BywaterUiHelpers.AddTextDropShadow(nameLbl);
             nameLbl.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;

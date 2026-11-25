@@ -16,7 +16,7 @@ if str(EXPORTER_DIR) not in sys.path:
     sys.path.insert(0, str(EXPORTER_DIR))
 
 from audio import convert_madg_to_mod, decode_mac_snd, write_wav
-from bywater_m1 import STARTER_PARTY_SPECS, build_bywater_m1_payloads
+from bywater_m1 import MONSTER_BALANCE_OVERRIDES, STARTER_PARTY_SPECS, build_bywater_m1_payloads
 from export_realmz import export_scenario
 from formats import (
     parse_battles_tactical,
@@ -486,6 +486,125 @@ class TestMultiScenarioExporter(unittest.TestCase):
                             for p in portals_doc["portals"]
                         )
                     )
+
+
+class TestStage2MonsterAndBalanceOverrides(unittest.TestCase):
+    """Verify Stage 2 monster HP/role overrides and StreamingAssets balance_overrides.json."""
+
+    def test_monster_balance_overrides_and_roles(self) -> None:
+        payloads = build_bywater_m1_payloads(REALMZ_BASE)
+        monsters_doc = payloads["monsters_bywater_m1.json"]
+        monsters = {m["id"]: m for m in monsters_doc["monsters"]}
+
+        for m in monsters_doc["monsters"]:
+            self.assertIn("role", m)
+            self.assertIsInstance(m["role"], str)
+            self.assertTrue(m["role"], f"Monster {m['id']} missing non-empty role")
+            self.assertIn("special_abilities", m)
+            self.assertIsInstance(m["special_abilities"], list)
+            self.assertTrue(all(isinstance(a, str) for a in m["special_abilities"]))
+
+        orc = monsters["orc_warrior"]
+        self.assertEqual((orc["hit_dice"], orc["hp_bonus"]), (3, 3))
+        self.assertEqual((orc["hp_min"], orc["hp_max"], orc["hp_default"]), (18, 24, 21))
+        self.assertEqual(orc["xp_reward"], 65)
+        self.assertEqual(orc["role"], "Bruiser")
+        self.assertEqual(orc["special_abilities"], ["cleave_2tile"])
+
+        frog = monsters["giant_frog"]
+        self.assertEqual((frog["hp_min"], frog["hp_max"], frog["hp_default"]), (15, 19, 17))
+        self.assertEqual(frog["xp_reward"], 70)
+        self.assertEqual(frog["role"], "Controller")
+        self.assertEqual(frog["special_abilities"], ["tongue_pull"])
+
+        gob = monsters["goblin"]
+        self.assertEqual(gob["name"], "Goblin")
+        self.assertEqual((gob["hp_min"], gob["hp_max"], gob["hp_default"]), (8, 11, 9))
+        self.assertEqual(gob["role"], "Skirmisher")
+        self.assertEqual(gob["special_abilities"], [])
+
+        arch = monsters["goblin_archer"]
+        self.assertEqual((arch["hp_min"], arch["hp_max"], arch["hp_default"]), (6, 9, 8))
+        self.assertEqual(arch["role"], "Ranged")
+        self.assertEqual(arch["special_abilities"], ["high_ground_seeker"])
+
+        self.assertEqual(monsters["goblin_shaman"]["role"], "Caster")
+        self.assertEqual(monsters["orc_archer"]["role"], "Ranged")
+
+        extracted_dir = Path(r"C:\realmz\remaster\extracted\bywater_m1")
+        extracted_jsons = sorted(p.name for p in extracted_dir.glob("*.json"))
+        self.assertEqual(len(extracted_jsons), 5)
+
+        for disk_path in (
+            extracted_dir / "monsters_bywater_m1.json",
+            Path(r"C:\realmz\remaster\RealmzUnity\Assets\StreamingAssets\bywater_m1\monsters_bywater_m1.json"),
+        ):
+            self.assertTrue(disk_path.is_file(), f"Missing {disk_path}")
+            raw_bytes = disk_path.read_bytes()
+            self.assertFalse(raw_bytes.startswith(b"\xef\xbb\xbf"), f"BOM found in {disk_path}")
+            raw_text = raw_bytes.decode("utf-8")
+            self.assertNotIn("\u2014", raw_text)
+            self.assertNotIn("\u2013", raw_text)
+            self.assertEqual(json.loads(raw_text), monsters_doc)
+
+    def test_streaming_balance_overrides_json(self) -> None:
+        path = Path(r"C:\realmz\remaster\RealmzUnity\Assets\StreamingAssets\bywater_m1\balance_overrides.json")
+        self.assertTrue(path.is_file(), f"Missing {path}")
+        raw_bytes = path.read_bytes()
+        self.assertFalse(raw_bytes.startswith(b"\xef\xbb\xbf"), "balance_overrides.json must be BOM-free")
+        raw_text = raw_bytes.decode("utf-8")
+        self.assertNotIn("\u2014", raw_text)
+        self.assertNotIn("\u2013", raw_text)
+
+        data = json.loads(raw_text)
+        self.assertEqual(data["version"], 1)
+
+        mon_by_id = {m["id"]: m for m in data["monsters"]}
+        self.assertEqual(set(mon_by_id.keys()), set(MONSTER_BALANCE_OVERRIDES.keys()))
+        self.assertEqual(mon_by_id["goblin"]["alias"], "Goblin Raider")
+        for mid, expected in MONSTER_BALANCE_OVERRIDES.items():
+            for k, v in expected.items():
+                self.assertEqual(mon_by_id[mid][k], v, f"Mismatch on {mid}.{k}")
+
+        surv = data["survival"]
+        self.assertEqual(surv["torch_price"], 12)
+        self.assertEqual(surv["ration_price"], 5)
+        self.assertEqual(surv["torch_turn_duration"], 30)
+        self.assertEqual(surv["bandage_max_charges"], 2)
+        self.assertEqual(
+            surv["vision_radii"],
+            {
+                "day_base": 11,
+                "day_scout_bonus": 2,
+                "dusk_unlit": 8,
+                "dusk_lit_torch": 10,
+                "night_unlit": 4,
+                "night_lit_torch": 9,
+                "dungeon_unlit": 3,
+                "dungeon_lit_torch": 8,
+            },
+        )
+
+        sets_by_id = {s["set_id"]: s for s in data["equipment_sets"]}
+        self.assertEqual(set(sets_by_id.keys()), {"scouts_leather", "iron_vanguard", "thornwood_stalker", "cryptbreaker"})
+        self.assertEqual(sets_by_id["scouts_leather"]["item_ids"], [209, 210, 211, 450, 452, 454])
+        self.assertEqual(sets_by_id["iron_vanguard"]["item_ids"], [400, 418, 455, 20, 10, 11])
+        self.assertTrue(sets_by_id["thornwood_stalker"]["is_preview"])
+        self.assertEqual(sets_by_id["thornwood_stalker"]["item_ids"], [9101, 9102, 9103])
+        self.assertTrue(sets_by_id["cryptbreaker"]["is_preview"])
+        self.assertEqual(sets_by_id["cryptbreaker"]["item_ids"], [9201, 9202, 9203])
+
+        quests = data["quests"]
+        self.assertEqual(len(quests), 4)
+        self.assertEqual(
+            [q["quest_id"] for q in quests],
+            ["bounty_river_frogs", "bounty_road_goblins", "bounty_thornwood_orcs", "bounty_cavern_undead"],
+        )
+        for q in quests:
+            self.assertEqual(q["source"], "BywaterNoticeBoard")
+            self.assertTrue(q["is_notice_board_bounty"])
+            for field in ("title", "description", "target_monster_id", "target_count", "gold_reward", "xp_reward", "location_hint"):
+                self.assertIn(field, q)
 
 
 if __name__ == "__main__":

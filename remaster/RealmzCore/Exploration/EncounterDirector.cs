@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using RealmzCore.Combat;
 using RealmzCore.Data;
 using RealmzCore.Rules;
@@ -37,25 +38,120 @@ namespace RealmzCore.Exploration
 
     public readonly struct WorldClock : IEquatable<WorldClock>
     {
+        public const int MinutesPerDay = 1440;
+        public const int MinutesPerStep = 2;
+        public const int FullRestMinutes = 480;
+        public const double DefaultStartMinutes = 480.0; // Day 1 - 08:00 AM (Morning)
+
+        // Legacy 72-turn constants preserved for backwards source compatibility.
         public const int TurnsPerPhase = 18;
         public const int PhasesPerDay = 4;
         public const int TurnsPerDay = TurnsPerPhase * PhasesPerDay; // 72 turns per full day
-        public const int DefaultStartTurns = TurnsPerPhase; // Morning Day 1 (Noon phase)
+        public const int DefaultStartTurns = TurnsPerPhase; // 18 -> maps to 08:00 AM Morning
+
+        public WorldClock(double totalMinutes)
+        {
+            TotalMinutes = double.IsNaN(totalMinutes) || double.IsInfinity(totalMinutes)
+                ? 0.0
+                : Math.Max(0.0, totalMinutes);
+        }
 
         public WorldClock(int totalTurns)
         {
-            TotalTurns = Math.Max(0, totalTurns);
+            TotalMinutes = LegacyTurnsToMinutes(totalTurns);
         }
 
-        public int TotalTurns { get; }
-        public int DayNumber => (TotalTurns / TurnsPerDay) + 1;
-        public int PhaseIndex => (TotalTurns / TurnsPerPhase) % PhasesPerDay;
-        public WorldTimePhase Phase => (WorldTimePhase)PhaseIndex;
-        public int TurnInPhase => TotalTurns % TurnsPerPhase;
-        public int TurnsUntilNextPhase => TurnsPerPhase - TurnInPhase;
-        public int NextPhaseStartTurn => ((TotalTurns / TurnsPerPhase) + 1) * TurnsPerPhase;
-        public float PhaseProgress01 => TurnInPhase / (float)TurnsPerPhase;
+        public double TotalMinutes { get; }
+        public double TimeOfDayMinutes => TotalMinutes % MinutesPerDay;
+        public float NormalizedTimeOfDay => (float)(TimeOfDayMinutes / MinutesPerDay);
+        public int DayNumber => ((int)Math.Floor(TotalMinutes) / MinutesPerDay) + 1;
+        public int Hour24 => ((int)Math.Floor(TimeOfDayMinutes) / 60) % 24;
+        public int MinuteOfHour => (int)Math.Floor(TimeOfDayMinutes) % 60;
+        public int TotalTurns => (int)Math.Floor(TotalMinutes / MinutesPerStep);
+
+        public WorldTimePhase Phase
+        {
+            get
+            {
+                double m = TimeOfDayMinutes;
+                if (m >= 330.0 && m < 450.0) return WorldTimePhase.Dawn;
+                if (m >= 450.0 && m < 1050.0) return WorldTimePhase.Day;
+                if (m >= 1050.0 && m < 1170.0) return WorldTimePhase.Dusk;
+                return WorldTimePhase.Night;
+            }
+        }
+
+        public int PhaseIndex => (int)Phase;
         public bool IsNight => Phase == WorldTimePhase.Night;
+
+        public float PhaseProgress01
+        {
+            get
+            {
+                double m = TimeOfDayMinutes;
+                if (m >= 330.0 && m < 450.0)
+                {
+                    return (float)((m - 330.0) / 120.0);
+                }
+
+                if (m >= 450.0 && m < 1050.0)
+                {
+                    return (float)((m - 450.0) / 600.0);
+                }
+
+                if (m >= 1050.0 && m < 1170.0)
+                {
+                    return (float)((m - 1050.0) / 120.0);
+                }
+
+                double nightElapsed = m >= 1170.0 ? m - 1170.0 : m + 270.0;
+                return (float)(nightElapsed / 600.0);
+            }
+        }
+
+        public int TurnInPhase
+        {
+            get
+            {
+                double m = TimeOfDayMinutes;
+                double elapsed;
+                if (m >= 330.0 && m < 450.0) elapsed = m - 330.0;
+                else if (m >= 450.0 && m < 1050.0) elapsed = m - 450.0;
+                else if (m >= 1050.0 && m < 1170.0) elapsed = m - 1050.0;
+                else elapsed = m >= 1170.0 ? m - 1170.0 : m + 270.0;
+                return (int)Math.Floor(elapsed / MinutesPerStep);
+            }
+        }
+
+        public int MinutesUntilNextPhase
+        {
+            get
+            {
+                double m = TimeOfDayMinutes;
+                double remaining;
+                if (m >= 330.0 && m < 450.0)
+                {
+                    remaining = 450.0 - m;
+                }
+                else if (m >= 450.0 && m < 1050.0)
+                {
+                    remaining = 1050.0 - m;
+                }
+                else if (m >= 1050.0 && m < 1170.0)
+                {
+                    remaining = 1170.0 - m;
+                }
+                else
+                {
+                    remaining = m >= 1170.0 ? (1770.0 - m) : (330.0 - m);
+                }
+
+                return Math.Max(1, (int)Math.Ceiling(remaining));
+            }
+        }
+
+        public int TurnsUntilNextPhase => Math.Max(1, (int)Math.Ceiling(MinutesUntilNextPhase / (double)MinutesPerStep));
+        public int NextPhaseStartTurn => TotalTurns + TurnsUntilNextPhase;
 
         public string PhaseLabel
         {
@@ -64,21 +160,66 @@ namespace RealmzCore.Exploration
                 switch (Phase)
                 {
                     case WorldTimePhase.Dawn: return "Dawn";
-                    case WorldTimePhase.Day: return "Noon";
+                    case WorldTimePhase.Day: return "Day";
                     case WorldTimePhase.Dusk: return "Dusk";
                     case WorldTimePhase.Night: return "Night";
-                    default: return "Noon";
+                    default: return "Day";
                 }
             }
         }
 
-        public string DisplayLabel => $"Day {DayNumber} - {PhaseLabel}";
+        public string SubPhaseLabel
+        {
+            get
+            {
+                double m = TimeOfDayMinutes;
+                if (m >= 330.0 && m < 450.0) return "Dawn";
+                if (m >= 450.0 && m < 690.0) return "Morning";
+                if (m >= 690.0 && m < 870.0) return "Noon";
+                if (m >= 870.0 && m < 1050.0) return "Afternoon";
+                if (m >= 1050.0 && m < 1170.0) return "Dusk";
+                return "Night";
+            }
+        }
 
+        public string FormattedTime12h =>
+            new DateTime(2000, 1, 1, Hour24, MinuteOfHour, 0).ToString("hh:mm tt", CultureInfo.InvariantCulture);
+
+        public string DisplayLabel => $"Day {DayNumber} - {FormattedTime12h} ({SubPhaseLabel})";
+
+        public static WorldClock FromMinutes(double totalMinutes) => new WorldClock(totalMinutes);
         public static WorldClock FromTurns(int totalTurns) => new WorldClock(totalTurns);
 
-        public bool Equals(WorldClock other) => TotalTurns == other.TotalTurns;
+        public static double LegacyTurnsToMinutes(int turns)
+        {
+            int clamped = Math.Max(0, turns);
+            int day = clamped / TurnsPerDay;
+            int t = clamped % TurnsPerDay;
+
+            double dayMinutes;
+            if (t < TurnsPerPhase)
+            {
+                dayMinutes = 330.0 + (t / (double)TurnsPerPhase) * 120.0;
+            }
+            else if (t < TurnsPerPhase * 2)
+            {
+                dayMinutes = 480.0 + ((t - TurnsPerPhase) / (double)TurnsPerPhase) * 570.0;
+            }
+            else if (t < TurnsPerPhase * 3)
+            {
+                dayMinutes = 1050.0 + ((t - (TurnsPerPhase * 2)) / (double)TurnsPerPhase) * 120.0;
+            }
+            else
+            {
+                dayMinutes = 1170.0 + ((t - (TurnsPerPhase * 3)) / (double)TurnsPerPhase) * 269.0;
+            }
+
+            return (day * (double)MinutesPerDay) + dayMinutes;
+        }
+
+        public bool Equals(WorldClock other) => Math.Abs(TotalMinutes - other.TotalMinutes) < 0.0001;
         public override bool Equals(object? obj) => obj is WorldClock other && Equals(other);
-        public override int GetHashCode() => TotalTurns;
+        public override int GetHashCode() => Math.Round(TotalMinutes, 4).GetHashCode();
         public static bool operator ==(WorldClock left, WorldClock right) => left.Equals(right);
         public static bool operator !=(WorldClock left, WorldClock right) => !left.Equals(right);
         public override string ToString() => DisplayLabel;
@@ -1120,7 +1261,8 @@ namespace RealmzCore.Exploration
             CombatGrid grid,
             EncounterGeographyInfo? geo,
             IReadOnlyCollection<GridCoord>? reservedCoords,
-            IDiceRoller? roller)
+            IDiceRoller? roller,
+            WeatherState weather = WeatherState.Clear)
         {
             if (grid == null)
             {
@@ -1128,7 +1270,7 @@ namespace RealmzCore.Exploration
             }
 
             CombatArenaArchetype archetype = ResolveArenaArchetype(geo, roller);
-            ApplyArenaArchetype(grid, archetype, reservedCoords, roller, geo);
+            ApplyArenaArchetype(grid, archetype, reservedCoords, roller, geo, weather);
         }
 
         public static CombatArenaLayout ApplyArenaArchetype(
@@ -1136,7 +1278,8 @@ namespace RealmzCore.Exploration
             CombatArenaArchetype archetype,
             IReadOnlyCollection<GridCoord>? reservedCoords,
             IDiceRoller? roller,
-            EncounterGeographyInfo? geo = null)
+            EncounterGeographyInfo? geo = null,
+            WeatherState weather = WeatherState.Clear)
         {
             if (grid == null)
             {
@@ -1220,6 +1363,11 @@ namespace RealmzCore.Exploration
             }
 
             EnforceSpawnsAndMultiLaneBfs(grid, mapFeatures, w, h, reserved, out int verifiedLanes, out bool allConnected);
+
+            if (weather != WeatherState.Clear && archetype != CombatArenaArchetype.DungeonChamber)
+            {
+                ApplyWeatherPuddles(mapFeatures, w, h, reserved, seedVal, weather);
+            }
 
             List<CombatArenaFeature> featureList = new List<CombatArenaFeature>(w * h);
             for (int y = 0; y < h; y++)
@@ -1417,6 +1565,76 @@ namespace RealmzCore.Exploration
                     map[c.X, c.Y].Surface = SurfaceType.Oil;
                     map[c.X, c.Y].SurfaceRounds = -1;
                 }
+            }
+
+            // Explosive OilKegCluster and flammable HayBale in open non-reserved slots without touching existing features
+            GridCoord[] kegCandidates =
+            {
+                new GridCoord(Math.Clamp(brazierX - 1, 3, w - 4), northShoulderY),
+                new GridCoord(Math.Clamp(brazierX + 1, 3, w - 4), northShoulderY),
+                new GridCoord(Math.Clamp(midX, 3, w - 4), southShoulderY),
+                new GridCoord(Math.Clamp(midX - 1, 3, w - 4), southShoulderY),
+                new GridCoord(Math.Clamp(midX + 1, 3, w - 4), southShoulderY)
+            };
+            bool placedKeg = PlaceFirstOpenPropSlot(
+                grid,
+                map,
+                w,
+                h,
+                kegCandidates,
+                isOpen,
+                CombatArenaObstacleKind.OilKegCluster,
+                blocksMove: true,
+                blocksLos: false,
+                providesCover: true,
+                moveCost: 1);
+            if (!placedKeg)
+            {
+                PlaceFirstInteriorFallbackProp(
+                    grid,
+                    map,
+                    w,
+                    h,
+                    isOpen,
+                    CombatArenaObstacleKind.OilKegCluster,
+                    blocksMove: true,
+                    blocksLos: false,
+                    providesCover: true,
+                    moveCost: 1);
+            }
+
+            GridCoord[] hayCandidates =
+            {
+                new GridCoord(Math.Clamp(midX + 1, 3, w - 4), southShoulderY),
+                new GridCoord(Math.Clamp(midX - 1, 3, w - 4), southShoulderY),
+                new GridCoord(Math.Clamp(midX + 2, 3, w - 4), roadY0),
+                new GridCoord(Math.Clamp(midX - 2, 3, w - 4), roadY1)
+            };
+            bool placedHay = PlaceFirstOpenPropSlot(
+                grid,
+                map,
+                w,
+                h,
+                hayCandidates,
+                isOpen,
+                CombatArenaObstacleKind.HayBale,
+                blocksMove: false,
+                blocksLos: false,
+                providesCover: true,
+                moveCost: 2);
+            if (!placedHay)
+            {
+                PlaceFirstInteriorFallbackProp(
+                    grid,
+                    map,
+                    w,
+                    h,
+                    isOpen,
+                    CombatArenaObstacleKind.HayBale,
+                    blocksMove: false,
+                    blocksLos: false,
+                    providesCover: true,
+                    moveCost: 2);
             }
         }
 
@@ -1675,6 +1893,164 @@ namespace RealmzCore.Exploration
                     map[p.X, p.Y].Surface = SurfaceType.Poison;
                     map[p.X, p.Y].SurfaceRounds = -1;
                 }
+            }
+
+            GridCoord[] ruinsKegCandidates =
+            {
+                new GridCoord(Math.Clamp(midX + 1, 2, w - 3), 3),
+                new GridCoord(Math.Clamp(midX, 2, w - 3), 3),
+                new GridCoord(Math.Clamp(midX - 1, 2, w - 3), Math.Max(2, h - 3))
+            };
+            PlaceFirstOpenPropSlot(
+                grid,
+                map,
+                w,
+                h,
+                ruinsKegCandidates,
+                isOpen,
+                CombatArenaObstacleKind.OilKegCluster,
+                blocksMove: true,
+                blocksLos: false,
+                providesCover: true,
+                moveCost: 1);
+        }
+
+        private static bool CanPlacePropAt(CombatArenaFeature[,] map, int x, int y, Func<int, int, bool> isOpen)
+        {
+            if (!isOpen(x, y))
+            {
+                return false;
+            }
+
+            CombatArenaFeature f = map[x, y];
+            return !f.BlocksMovement &&
+                   !f.ProvidesCover &&
+                   f.ObstacleKind == CombatArenaObstacleKind.None &&
+                   f.Surface == SurfaceType.None &&
+                   f.ElevationTier == 0 &&
+                   !f.IsBridgeTile;
+        }
+
+        private static bool PlaceFirstOpenPropSlot(
+            CombatGrid grid,
+            CombatArenaFeature[,] map,
+            int w,
+            int h,
+            GridCoord[] candidates,
+            Func<int, int, bool> isOpen,
+            CombatArenaObstacleKind kind,
+            bool blocksMove,
+            bool blocksLos,
+            bool providesCover,
+            int moveCost)
+        {
+            for (int i = 0; i < candidates.Length; i++)
+            {
+                GridCoord c = candidates[i];
+                if (c.X >= 1 && c.X <= w - 2 && c.Y >= 1 && c.Y <= h - 2 && CanPlacePropAt(map, c.X, c.Y, isOpen))
+                {
+                    SetObstacleFeature(grid, map, c.X, c.Y, kind, blocksMove, blocksLos, providesCover, moveCost);
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool PlaceFirstInteriorFallbackProp(
+            CombatGrid grid,
+            CombatArenaFeature[,] map,
+            int w,
+            int h,
+            Func<int, int, bool> isOpen,
+            CombatArenaObstacleKind kind,
+            bool blocksMove,
+            bool blocksLos,
+            bool providesCover,
+            int moveCost)
+        {
+            int minX = Math.Min(3, Math.Max(1, w / 3));
+            int maxX = Math.Max(minX, w - 4);
+            for (int y = 1; y < h - 1; y++)
+            {
+                for (int x = minX; x <= maxX; x++)
+                {
+                    if (CanPlacePropAt(map, x, y, isOpen))
+                    {
+                        SetObstacleFeature(grid, map, x, y, kind, blocksMove, blocksLos, providesCover, moveCost);
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private static void ApplyWeatherPuddles(
+            CombatArenaFeature[,] map,
+            int w,
+            int h,
+            HashSet<GridCoord> reserved,
+            ulong seedVal,
+            WeatherState weather)
+        {
+            if (weather == WeatherState.Clear)
+            {
+                return;
+            }
+
+            List<GridCoord> eligible = new List<GridCoord>(w * h);
+            for (int y = 1; y < h - 1; y++)
+            {
+                for (int x = 1; x < w - 1; x++)
+                {
+                    GridCoord coord = new GridCoord(x, y);
+                    if (reserved.Contains(coord))
+                    {
+                        continue;
+                    }
+
+                    CombatArenaFeature f = map[x, y];
+                    if (f.BlocksMovement ||
+                        f.Surface != SurfaceType.None ||
+                        f.ObstacleKind != CombatArenaObstacleKind.None ||
+                        f.IsBridgeTile)
+                    {
+                        continue;
+                    }
+
+                    eligible.Add(coord);
+                }
+            }
+
+            if (eligible.Count == 0)
+            {
+                return;
+            }
+
+            int targetCount = Math.Max(1, (int)Math.Round(eligible.Count * 0.15, MidpointRounding.AwayFromZero));
+            ulong state = seedVal ^ ((ulong)((int)weather + 1) * 0x9E3779B97F4A7C15UL);
+            for (int i = eligible.Count - 1; i > 0; i--)
+            {
+                state += 0x9E3779B97F4A7C15UL;
+                ulong z = state;
+                z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9UL;
+                z = (z ^ (z >> 27)) * 0x94D049BB133111EBUL;
+                z ^= z >> 31;
+                int j = (int)(z % (ulong)(i + 1));
+                GridCoord tmp = eligible[i];
+                eligible[i] = eligible[j];
+                eligible[j] = tmp;
+            }
+
+            int count = Math.Min(targetCount, eligible.Count);
+            for (int i = 0; i < count; i++)
+            {
+                GridCoord c = eligible[i];
+                CombatArenaFeature f = map[c.X, c.Y];
+                f.Surface = SurfaceType.Water;
+                f.SurfaceRounds = -1;
+                f.MoveCost = Math.Max(f.MoveCost, 2);
             }
         }
 

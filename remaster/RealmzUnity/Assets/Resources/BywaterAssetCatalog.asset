@@ -219,6 +219,96 @@ MonoBehaviour:
   - kind: 41
     material: {fileID: 2100000, guid: f664c7fee7af16748b2ff91f5605b55f, type: 2}
     sizeMeters: {x: 2, y: 2}
+  - kind: 42
+    material: {fileID: 2100000, guid: 558231b4e480071439228e33c1f2d4a1, type: 2}
+    sizeMeters: {x: 1.5, y: 1.5}
+  - kind: 43
+    material: {fileID: 2100000, guid: b5e52d775174e804ea021707e2f71b1d, type: 2}
+    sizeMeters: {x: 1.75, y: 1.5}
+  - kind: 44
+    material: {fileID: 2100000, guid: bed3669b1c0c6854291ec128ab439306, type: 2}
+    sizeMeters: {x: 1.25, y: 1.25}
+  - kind: 45
+    material: {fileID: 2100000, guid: 33de0d332efd4574686237a0c5b9d07a, type: 2}
+    sizeMeters: {x: 2.5, y: 1.25}
+  - kind: 46
+    material: {fileID: 2100000, guid: d4a01ab5188e6a648a1865c766d9e8b7, type: 2}
+    sizeMeters: {x: 3, y: 3.5}
+  - kind: 47
+    material: {fileID: 2100000, guid: dbee7b209c223224b9d1974c5ed237c8, type: 2}
+    sizeMeters: {x: 1.5, y: 1.25}
+  - kind: 48
+    material: {fileID: 2100000, guid: 823a41caff8c5314c9b6896bde1ca3b0, type: 2}
+    sizeMeters: {x: 2, y: 2}
+  - kind: 49
+    material: {fileID: 2100000, guid: 23a2e5d732cda214d9f0cfe7f085d30d, type: 2}
+    sizeMeters: {x: 3, y: 2.5}
+  - kind: 50
+    material: {fileID: 2100000, guid: 4a5d3d3617be88343a4385871b0668ba, type: 2}
+    sizeMeters: {x: 1.5, y: 1.25}
+  - kind: 51
+    material: {fileID: 2100000, guid: 3e877eb104438b4499c8adc6f5d82aa8, type: 2}
+    sizeMeters: {x: 1.75, y: 1.25}
+  - kind: 52
+    material: {fileID: 2100000, guid: cc52fa97ae93f054381df1231fbf044e, type: 2}
+    sizeMeters: {x: 2.5, y: 1.5}
+  - kind: 53
+    material: {fileID: 2100000, guid: 047fc75fd879a424382a44bcc1e88ea0, type: 2}
+    sizeMeters: {x: 2, y: 2}
+  - kind: 54
+    material: {fileID: 2100000, guid: cdc97580459200347bf9edb098e3c1c1, type: 2}
+    sizeMeters: {x: 1.25, y: 1}
+  - kind: 55
+    material: {fileID: 2100000, guid: 5cb839dc549ee3b4787b4080dc0213a1, type: 2}
+    sizeMeters: {x: 1.5, y: 2}
+  - kind: 56
+    material: {fileID: 2100000, guid: aeb89f4c201a3c344a7b7cc6145d35cd, type: 2}
+    sizeMeters: {x: 1.5, y: 1.5}
+  - kind: 57
+    material: {fileID: 2100000, guid: 0d9bf29ca17172446bc965b5a3ef7839, type: 2}
+    sizeMeters: {x: 2, y: 1.5}
+  - kind: 58
+    material: {fileID: 2100000, guid: b9018c28e3327914caf10157c9fc345d, type: 2}
+    sizeMeters: {x: 3, y: 2}
+  - kind: 59
+    material: {fileID: 2100000, guid: 9a891128fc20b5b4f83236584fe66b7a, type: 2}
+    sizeMeters: {x: 1.5, y: 1.25}
+  - kind: 60
+    material: {fileID: 2100000, guid: c4ba978e5814e6d4da3070f43de0a7b6, type: 2}
+    sizeMeters: {x: 1.5, y: 1.25}
+  - kind: 61
+    material: {fileID: 2100000, guid: 38f454a55db191448b6eaf6d6d6fa17f, type: 2}
+    sizeMeters: {x: 2, y: 2.25}
+  - kind: 62
+    material: {fileID: 2100000, guid: 1756f408f514fdb40b3e457fdade1e04, type: 2}
+    sizeMeters: {x: 2, y: 2}
+  - kind: 63
+    material: {fileID: 2100000, guid: 7e2efb5602952dc4dbba62fdbc329bd3, type: 2}
+    sizeMeters: {x: 3, y: 2}
+  - kind: 64
+    material: {fileID: 2100000, guid: 95696d33a0338c441808940556a56b78, type: 2}
+    sizeMeters: {x: 2, y: 2}
+  - kind: 65
+    material: {fileID: 2100000, guid: adad0114dd45da045b764f0ed20410d0, type: 2}
+    sizeMeters: {x: 2, y: 1.25}
+  - kind: 66
+    material: {fileID: 2100000, guid: 9e75ecc887a48ed43bc37250b0ef9bc9, type: 2}
+    sizeMeters: {x: 2.5, y: 1.5}
+  - kind: 67
+    material: {fileID: 2100000, guid: 4a4d45d271b877442b1769dfd29a97ba, type: 2}
+    sizeMeters: {x: 1.5, y: 1.5}
+  - kind: 68
+    material: {fileID: 2100000, guid: dd489e8cf91795b45a33e425ec82df84, type: 2}
+    sizeMeters: {x: 1.5, y: 1.5}
+  - kind: 69
+    material: {fileID: 2100000, guid: a5c4e08d2a60e364f8e6115668efb4fd, type: 2}
+    sizeMeters: {x: 1.5, y: 1.5}
+  - kind: 70
+    material: {fileID: 2100000, guid: c3b4af9a4dbdde9468f5c5bd07ee214f, type: 2}
+    sizeMeters: {x: 1.5, y: 1.5}
+  - kind: 71
+    material: {fileID: 2100000, guid: 80038e4abff24fe4d9f74fb5aa163c58, type: 2}
+    sizeMeters: {x: 2, y: 1}
   hotbarIcons:
   - key: sword
     sprite: {fileID: 21300000, guid: 71ec1dd8bf9850e42a4dec5e3d69d155, type: 3}

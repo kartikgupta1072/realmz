@@ -44,6 +44,9 @@ Shader "Realmz/CartographyTerrain"
         TEXTURE2D(_TopDownLightmapTex);
         SAMPLER(sampler_TopDownLightmapTex);
         float4 _TopDownLightmapBounds;
+        TEXTURE2D(_FogOfWarTex);
+        SAMPLER(sampler_FogOfWarTex);
+        float _FogOfWarEnabled;
 
         CBUFFER_START(UnityPerMaterial)
             float _WorldTexelScale;
@@ -171,10 +174,12 @@ Shader "Realmz/CartographyTerrain"
                 else if (absN.x >= absN.z)
                 {
                     rawUV = float2(positionWS.z, positionWS.y) * scale;
+                    rawUV.y += CartoHash12(floor(positionWS.xz - normalWS.xz * 0.02)) * 0.37;
                 }
                 else
                 {
                     rawUV = float2(positionWS.x, positionWS.y) * scale;
+                    rawUV.y += CartoHash12(floor(positionWS.xz - normalWS.xz * 0.02)) * 0.37;
                 }
 
                 pixelCoord = floor(rawUV * texRes);
@@ -488,7 +493,7 @@ Shader "Realmz/CartographyTerrain"
 
                 // Elevation crease and structure footprint AO from TEXCOORD1.y
                 half creaseAO = lerp(1.0h, saturate((half)input.cliffAOAndBiome.y), _CreaseAOStrength);
-                albedo *= lerp(0.55h, 1.0h, creaseAO);
+                albedo *= lerp(0.45h, 1.0h, creaseAO);
 
                 // SoC chiaroscuro ground-vs-road value split
                 half roadFactor = saturate(b2 * 0.65h + b3);
@@ -535,9 +540,10 @@ Shader "Realmz/CartographyTerrain"
 
                 // Global top-down cloud/canopy shadow (rgb) and warm lantern pools (a)
                 half4 topDownLM = half4(1.0h, 1.0h, 1.0h, 0.0h);
-                if (_TopDownLightmapBounds.z > 0.00001 && _TopDownLightmapBounds.w > 0.00001)
+                bool hasBounds = (_TopDownLightmapBounds.z > 0.00001 && _TopDownLightmapBounds.w > 0.00001);
+                float2 lmUV = hasBounds ? saturate((input.positionWS.xz - _TopDownLightmapBounds.xy) * _TopDownLightmapBounds.zw) : float2(0.0, 0.0);
+                if (hasBounds)
                 {
-                    float2 lmUV = saturate((input.positionWS.xz - _TopDownLightmapBounds.xy) * _TopDownLightmapBounds.zw);
                     topDownLM = SAMPLE_TEXTURE2D(_TopDownLightmapTex, sampler_TopDownLightmapTex, lmUV);
                 }
 
@@ -595,6 +601,17 @@ Shader "Realmz/CartographyTerrain"
                     color = lerp(color, _HorizonHazeColor.rgb, smoothstep(0.76h, 1.0h, northFrac) * _HorizonHazeStrength);
                 }
                 color = clamp(color, half3(0.0h, 0.0h, 0.0h), half3(64.0h, 64.0h, 64.0h));
+                if (_FogOfWarEnabled > 0.5 && hasBounds)
+                {
+                    half fogState = (half)SAMPLE_TEXTURE2D_LOD(_FogOfWarTex, sampler_FogOfWarTex, lmUV, 0).r;
+                    half luma = dot(color, half3(0.2126h, 0.7152h, 0.0722h));
+                    half3 desat = lerp(color, half3(luma, luma, luma), 0.55h);
+                    half3 exploredColor = desat * half3(0.84h, 0.92h, 1.12h) * 0.42h;
+                    half3 unseenColor = lerp(half3(0.051h, 0.063h, 0.106h) * 0.25h, desat * half3(0.75h, 0.85h, 1.12h) * 0.08h, 0.45h);
+                    half toExplored = saturate(fogState / 0.45h);
+                    half toVisible = saturate((fogState - 0.45h) / 0.55h);
+                    color = lerp(lerp(unseenColor, exploredColor, toExplored), color, toVisible);
+                }
                 color = MixFog(color, input.fogFactor);
 
                 return half4(color, 1.0h);

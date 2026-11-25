@@ -193,9 +193,13 @@ namespace Realmz.EditorTools.Cartography
                             assetPath.EndsWith("_4f.png", StringComparison.OrdinalIgnoreCase);
             bool isSurface = !isNormal && assetPath.IndexOf("/Surfaces/", StringComparison.OrdinalIgnoreCase) >= 0;
             bool isVfx = !isNormal && assetPath.IndexOf("/Vfx/", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isPropsPath = assetPath.IndexOf("/Props/", StringComparison.OrdinalIgnoreCase) >= 0;
+            string fileName = Path.GetFileName(assetPath);
             bool isFlatFloorProp = !isNormal &&
                                    (assetPath.EndsWith("/dungeon_iron_grate.png", StringComparison.OrdinalIgnoreCase) ||
-                                    assetPath.EndsWith("/dungeon_spike_trap.png", StringComparison.OrdinalIgnoreCase));
+                                    assetPath.EndsWith("/dungeon_floor_grate_rusted.png", StringComparison.OrdinalIgnoreCase) ||
+                                    assetPath.EndsWith("/dungeon_spike_trap.png", StringComparison.OrdinalIgnoreCase) ||
+                                    (isPropsPath && fileName.StartsWith("decal_", StringComparison.OrdinalIgnoreCase)));
 
             bool dirty = false;
 
@@ -300,9 +304,13 @@ namespace Realmz.EditorTools.Cartography
                 }
 
                 importer.GetSourceTextureWidthAndHeight(out int texW, out int texH);
-                bool sliceAs4Frames = (isUnitSheet || isProp4f || isSurface || isVfx) &&
-                                      texW >= UnitFrameSize * UnitFrameCount &&
-                                      texH == UnitFrameSize;
+                bool sliceAs4Frames = ((isUnitSheet || isSurface || isVfx) &&
+                                       texW >= UnitFrameSize * UnitFrameCount &&
+                                       texH == UnitFrameSize) ||
+                                      (isProp4f &&
+                                       texH > 0 &&
+                                       texW >= texH * 3 &&
+                                       texW % UnitFrameCount == 0);
                 SpriteImportMode desiredMode = sliceAs4Frames ? SpriteImportMode.Multiple : SpriteImportMode.Single;
                 if (importer.spriteImportMode != desiredMode)
                 {
@@ -1063,16 +1071,16 @@ namespace Realmz.EditorTools.Cartography
                 mat.shader = shader;
             }
 
-            bool is4FrameSheet = kind == CartographyPropKind.Campfire4f ||
-                                 kind == CartographyPropKind.DungeonWallSconce4f ||
+            bool is4FrameSheet = CartographyWorldData.IsAnimated4FrameKind(kind) ||
                                  (tex != null && tex.height > 0 && tex.width >= tex.height * 3);
-            bool isBridge = kind == CartographyPropKind.StoneBridge;
-            bool isFlatFloor = kind == CartographyPropKind.DungeonIronGrate ||
-                               kind == CartographyPropKind.DungeonSpikeTrap;
+            bool isBridge = kind == CartographyPropKind.StoneBridge ||
+                            kind == CartographyPropKind.WoodenPlankBridge;
+            bool isFlatFloor = CartographyWorldData.IsFloorDecalKind(kind);
             bool isStoneFenceV = kind == CartographyPropKind.StoneFenceV;
             bool isTree = kind == CartographyPropKind.TreeOakA || kind == CartographyPropKind.TreeOakB ||
                           kind == CartographyPropKind.TreePineA || kind == CartographyPropKind.TreePineB ||
-                          kind == CartographyPropKind.TreeWillowA;
+                          kind == CartographyPropKind.TreeWillowA ||
+                          kind == CartographyPropKind.GnarledDeadTree;
             bool isBuilding = kind == CartographyPropKind.BywaterInn ||
                               kind == CartographyPropKind.Blacksmith ||
                               kind == CartographyPropKind.Apothecary ||
@@ -1120,6 +1128,18 @@ namespace Realmz.EditorTools.Cartography
                 emissionColor = new Color(2.4f, 1.15f, 0.30f, 1f);
                 emissionWarmMask = 1f;
                 emissionMinV = kind == CartographyPropKind.TorchBrazier ? 0.44f : 0.30f;
+            }
+            else if (kind == CartographyPropKind.TownLanternPost4f)
+            {
+                emissionColor = new Color(1.0f, 0.72f, 0.30f, 1f);
+                emissionWarmMask = 1f;
+                emissionMinV = 0.50f;
+            }
+            else if (kind == CartographyPropKind.RuneObelisk4f)
+            {
+                emissionColor = new Color(0.08f, 0.20f, 0.35f, 1f);
+                emissionWarmMask = 0f;
+                emissionMinV = 0f;
             }
             else if (isBuilding)
             {
@@ -1309,6 +1329,70 @@ namespace Realmz.EditorTools.Cartography
                     return new[] { PropsDir + "/dungeon_spike_trap.png" };
                 case CartographyPropKind.DungeonIronGrate:
                     return new[] { PropsDir + "/dungeon_iron_grate.png" };
+                case CartographyPropKind.GnarledDeadTree:
+                    return new[]
+                    {
+                        CartographyArtRoot + "/trees/gnarled_dead_tree.png",
+                        PropsDir + "/gnarled_dead_tree.png"
+                    };
+                case CartographyPropKind.BoulderMossA:
+                    return new[] { PropsDir + "/boulder_moss_a.png" };
+                case CartographyPropKind.BoulderMossB:
+                    return new[] { PropsDir + "/boulder_moss_b.png" };
+                case CartographyPropKind.BoulderMossC:
+                    return new[] { PropsDir + "/boulder_moss_c.png" };
+                case CartographyPropKind.FallenHollowLog:
+                    return new[] { PropsDir + "/fallen_hollow_log.png" };
+                case CartographyPropKind.ThornBrambleThicket:
+                    return new[] { PropsDir + "/thorn_bramble_thicket.png" };
+                case CartographyPropKind.RuinedWallCorner:
+                    return new[] { PropsDir + "/ruined_wall_corner.png" };
+                case CartographyPropKind.BrokenArchway:
+                    return new[] { PropsDir + "/broken_archway.png" };
+                case CartographyPropKind.RubblePileA:
+                    return new[] { PropsDir + "/rubble_pile_a.png" };
+                case CartographyPropKind.RubblePileB:
+                    return new[] { PropsDir + "/rubble_pile_b.png" };
+                case CartographyPropKind.FallenStatue:
+                    return new[] { PropsDir + "/fallen_statue.png" };
+                case CartographyPropKind.RuneObelisk4f:
+                    return new[] { PropsDir + "/rune_obelisk_4f.png" };
+                case CartographyPropKind.BonePile:
+                    return new[] { PropsDir + "/bone_pile.png" };
+                case CartographyPropKind.IronCage:
+                    return new[] { PropsDir + "/iron_cage.png" };
+                case CartographyPropKind.DungeonFloorGrateRusted:
+                    return new[] { PropsDir + "/dungeon_floor_grate_rusted.png" };
+                case CartographyPropKind.PalisadeStakes:
+                    return new[] { PropsDir + "/palisade_stakes.png" };
+                case CartographyPropKind.CartWreck:
+                    return new[] { PropsDir + "/cart_wreck.png" };
+                case CartographyPropKind.HayBale:
+                    return new[] { PropsDir + "/hay_bale.png" };
+                case CartographyPropKind.OilKegCluster:
+                    return new[] { PropsDir + "/oil_keg_cluster.png" };
+                case CartographyPropKind.TownNoticeBoard:
+                    return new[] { PropsDir + "/town_notice_board.png" };
+                case CartographyPropKind.TownLanternPost4f:
+                    return new[] { PropsDir + "/town_lantern_post_4f.png" };
+                case CartographyPropKind.WoodenPlankBridge:
+                    return new[] { PropsDir + "/wooden_plank_bridge.png" };
+                case CartographyPropKind.RiverReeds4f:
+                    return new[] { PropsDir + "/river_reeds_4f.png" };
+                case CartographyPropKind.DriftwoodSnag:
+                    return new[] { PropsDir + "/driftwood_snag.png" };
+                case CartographyPropKind.HalfSunkRowboat:
+                    return new[] { PropsDir + "/half_sunk_rowboat.png" };
+                case CartographyPropKind.DecalMossSkirt:
+                    return new[] { PropsDir + "/decal_moss_skirt.png" };
+                case CartographyPropKind.DecalPebbles:
+                    return new[] { PropsDir + "/decal_pebbles.png" };
+                case CartographyPropKind.DecalFallenLeaves:
+                    return new[] { PropsDir + "/decal_fallen_leaves.png" };
+                case CartographyPropKind.DecalCrackedStone:
+                    return new[] { PropsDir + "/decal_cracked_stone.png" };
+                case CartographyPropKind.DecalShoreFoam:
+                    return new[] { PropsDir + "/decal_shore_foam.png" };
                 default:
                     return Array.Empty<string>();
             }

@@ -34,6 +34,9 @@ Shader "Realmz/CartographyWater"
         SAMPLER(sampler_WorldStaticMap);
         float4 _TopDownLightmapBounds;
         float _CartographyTimeOffset;
+        TEXTURE2D(_FogOfWarTex);
+        SAMPLER(sampler_FogOfWarTex);
+        float _FogOfWarEnabled;
 
         CBUFFER_START(UnityPerMaterial)
             half4 _BaseColor;
@@ -117,9 +120,10 @@ Shader "Realmz/CartographyWater"
                 // Global top-down lightmap (bridge shadows, cloud dapples, lantern pools) + baked SDF shoreline proximity
                 half4 tdLm = half4(1.0h, 1.0h, 1.0h, 0.0h);
                 half shoreProx = 0.0h;
-                if (_TopDownLightmapBounds.z > 0.00001 && _TopDownLightmapBounds.w > 0.00001)
+                bool hasBounds = (_TopDownLightmapBounds.z > 0.00001 && _TopDownLightmapBounds.w > 0.00001);
+                float2 lmUV = hasBounds ? saturate((input.positionWS.xz - _TopDownLightmapBounds.xy) * _TopDownLightmapBounds.zw) : float2(0.0, 0.0);
+                if (hasBounds)
                 {
-                    float2 lmUV = saturate((input.positionWS.xz - _TopDownLightmapBounds.xy) * _TopDownLightmapBounds.zw);
                     tdLm = SAMPLE_TEXTURE2D(_TopDownLightmapTex, sampler_TopDownLightmapTex, lmUV);
                     shoreProx = SAMPLE_TEXTURE2D(_WorldStaticMap, sampler_WorldStaticMap, lmUV).g;
                 }
@@ -174,7 +178,8 @@ Shader "Realmz/CartographyWater"
                 half glint = step(0.955, sparkHash) * isRippleBar * (half)_ShimmerStrength * shadowAtten;
 
                 // Dynamic pixel-dithered shoreline foam driven by baked _WorldStaticMap.g SDF proximity
-                float distToBank = (1.0 - (float)shoreProx) * 0.55;
+                float wavePerturb = Hash21(floor(snappedWS * 16.0)) * 0.07 + sin(snappedWS.x * 3.5 + snappedWS.y * 2.7) * 0.04;
+                float distToBank = (1.0 - (float)shoreProx) * 0.55 + wavePerturb;
                 float waveEdge = 0.16 + 0.05 * sin(snappedWS.x * 5.0 + snappedWS.y * 3.0 + floor(waterTime * 4.0) * 0.45);
                 float edgeNoise = Hash21(floor(snappedWS * 64.0));
                 half foam = step(distToBank + edgeNoise * 0.06, waveEdge) * 0.55h;
@@ -184,6 +189,18 @@ Shader "Realmz/CartographyWater"
                 half3 lit = col * (mainLight.color * (0.45h + 0.55h * ndl) * shadowAtten + ambient) * tdLm.rgb + addLighting + lanternPool;
                 lit = lerp(lit, _ShimmerColor.rgb * 0.88h * tdLm.rgb, foam);
                 lit += _ShimmerColor.rgb * glint * tdLm.rgb;
+
+                if (_FogOfWarEnabled > 0.5 && hasBounds)
+                {
+                    half fogState = (half)SAMPLE_TEXTURE2D_LOD(_FogOfWarTex, sampler_FogOfWarTex, lmUV, 0).r;
+                    half luma = dot(lit, half3(0.2126h, 0.7152h, 0.0722h));
+                    half3 desat = lerp(lit, half3(luma, luma, luma), 0.55h);
+                    half3 exploredColor = desat * half3(0.84h, 0.92h, 1.12h) * 0.42h;
+                    half3 unseenColor = lerp(half3(0.051h, 0.063h, 0.106h) * 0.25h, desat * half3(0.75h, 0.85h, 1.12h) * 0.08h, 0.45h);
+                    half toExplored = saturate(fogState / 0.45h);
+                    half toVisible = saturate((fogState - 0.45h) / 0.55h);
+                    lit = lerp(lerp(unseenColor, exploredColor, toExplored), lit, toVisible);
+                }
 
                 lit = MixFog(lit, input.fogCoord);
                 return half4(lit, 1.0h);

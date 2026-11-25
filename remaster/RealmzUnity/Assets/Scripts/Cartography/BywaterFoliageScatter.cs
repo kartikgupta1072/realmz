@@ -24,6 +24,7 @@ namespace Realmz.Cartography
         private static readonly int TintColorId = Shader.PropertyToID("_TintColor");
         private static readonly int FrameCountId = Shader.PropertyToID("_FrameCount");
         private static readonly int AnimFpsId = Shader.PropertyToID("_AnimFps");
+        private static readonly int FlipXId = Shader.PropertyToID("_FlipX");
 
         [Header("Material & Camera")]
         public Material foliageMaterial;
@@ -33,10 +34,12 @@ namespace Realmz.Cartography
         [Header("Scatter Stats")]
         [SerializeField] private int totalCardCount;
         [SerializeField] private int populatedTileCount;
+        [SerializeField] private int rootCollarCardCount;
 
         public int TotalCardCount => totalCardCount;
         public int TotalInstanceCount => totalCardCount;
         public int PopulatedTileCount => populatedTileCount;
+        public int RootCollarCardCount => rootCollarCardCount;
         public int ChunkCount => _chunks.Count;
         public int LastVisibleChunkCount { get; private set; }
 
@@ -52,6 +55,17 @@ namespace Realmz.Cartography
             public Bounds Bounds;
             public readonly List<FoliageBatch> Batches = new List<FoliageBatch>(4);
             public readonly List<FoliageBatch> MarshBatches = new List<FoliageBatch>(4);
+        }
+
+        private struct RootCollarCard
+        {
+            public Matrix4x4 Matrix;
+            public float Variant;
+            public float WindPhase;
+            public Vector4 Tint;
+            public float FrameCount;
+            public float AnimFps;
+            public float FlipX;
         }
 
         private readonly List<FoliageChunk> _chunks = new List<FoliageChunk>(36);
@@ -223,8 +237,97 @@ namespace Realmz.Cartography
 
                 totalCardCount = 0;
                 populatedTileCount = 0;
+                rootCollarCardCount = 0;
                 _hasBuilt = true;
                 return;
+            }
+
+            List<RootCollarCard>[] collarBuckets = new List<RootCollarCard>[chunksX * chunksY];
+            int collarCardsPlaced = 0;
+            IReadOnlyList<CartographyPropPlacement> props = data.Props;
+            for (int p = 0; p < props.Count; p++)
+            {
+                CartographyPropPlacement prop = props[p];
+                if (!prop.HasRootCollar)
+                {
+                    continue;
+                }
+
+                CartographyWorldData.WorldToGrid(prop.WorldPosition, out int ax, out int ay);
+                if (!data.InBounds(ax, ay))
+                {
+                    continue;
+                }
+
+                CartographyTile anchorTile = data.GetTile(ax, ay);
+                if (anchorTile.IsWater || anchorTile.CobbleWeight > 0.45f || anchorTile.DirtWeight > 0.65f)
+                {
+                    continue;
+                }
+
+                int propHash = CartographyWorldData.DeterministicHash(ax * 31 + p, ay * 47 + (int)prop.Kind, 613);
+                int collarCount = 4 + (propHash % 5);
+                for (int i = 0; i < collarCount; i++)
+                {
+                    int h = CartographyWorldData.DeterministicHash(propHash + i * 19, p * 53 + i * 7, 859);
+                    float angleJitter = (((h & 0xFF) / 255f) - 0.5f) * (Mathf.PI * 2f / collarCount) * 0.55f;
+                    float angle = (i / (float)collarCount) * Mathf.PI * 2f + angleJitter;
+                    float radiusFrac = ((h >> 8) & 0xFF) / 255f;
+                    float radius = 0.36f + radiusFrac * 0.14f;
+
+                    float wx = prop.WorldPosition.x + Mathf.Cos(angle) * radius;
+                    float wz = prop.WorldPosition.z + Mathf.Sin(angle) * radius;
+                    CartographyWorldData.WorldToGrid(new Vector3(wx, 0f, wz), out int tx, out int ty);
+                    if (!data.InBounds(tx, ty))
+                    {
+                        continue;
+                    }
+
+                    CartographyTile tile = data.GetTile(tx, ty);
+                    if (tile.IsWater ||
+                        tile.CobbleWeight > 0.45f ||
+                        tile.DirtWeight > 0.65f ||
+                        (tile.BiomeZone == CartographyBiomeZone.Blocked && !data.IsBlockedByProp(tx, ty)))
+                    {
+                        continue;
+                    }
+
+                    int chunkX = tx / ChunkSizeTiles;
+                    int chunkY = ty / ChunkSizeTiles;
+                    int chunkIdx = chunkY * chunksX + chunkX;
+                    List<RootCollarCard> bucket = collarBuckets[chunkIdx];
+                    if (bucket == null)
+                    {
+                        bucket = new List<RootCollarCard>(16);
+                        collarBuckets[chunkIdx] = bucket;
+                    }
+
+                    float scaleW = 0.72f + (((h >> 16) & 0x1F) / 31f) * 0.28f;
+                    float scaleH = 0.64f + (((h >> 21) & 0x1F) / 31f) * 0.28f;
+                    CartographyBiomeZone collarZone = tile.BiomeZone == CartographyBiomeZone.Blocked
+                        ? CartographyBiomeZone.ForestShade
+                        : tile.BiomeZone;
+                    int variant = PickVariantForBiome(collarZone, h);
+                    float windPhase = ((h >> 12) & 0xFF) / 255f;
+                    float fps = 5.0f + (((h >> 26) & 0x0F) / 15f) * 2.5f;
+                    Vector4 tint = ComputeCardTint(collarZone, wx, wz, h);
+                    float flipX = ((h >> 3) & 1) == 1 ? 1f : 0f;
+
+                    bucket.Add(new RootCollarCard
+                    {
+                        Matrix = Matrix4x4.TRS(
+                            new Vector3(wx, tile.Elevation, wz),
+                            Quaternion.identity,
+                            new Vector3(scaleW, scaleH, 1.0f)),
+                        Variant = variant,
+                        WindPhase = windPhase,
+                        Tint = tint,
+                        FrameCount = 8f,
+                        AnimFps = fps,
+                        FlipX = flipX
+                    });
+                    collarCardsPlaced++;
+                }
             }
 
             List<Matrix4x4> matrices = new List<Matrix4x4>(4096);
@@ -233,6 +336,7 @@ namespace Realmz.Cartography
             List<Vector4> tints = new List<Vector4>(4096);
             List<float> frameCounts = new List<float>(4096);
             List<float> animFps = new List<float>(4096);
+            List<float> flipXs = new List<float>(4096);
 
             List<Matrix4x4> marshMatrices = new List<Matrix4x4>(1024);
             List<float> marshVariants = new List<float>(1024);
@@ -240,6 +344,7 @@ namespace Realmz.Cartography
             List<Vector4> marshTints = new List<Vector4>(1024);
             List<float> marshFrameCounts = new List<float>(1024);
             List<float> marshAnimFps = new List<float>(1024);
+            List<float> marshFlipXs = new List<float>(1024);
 
             System.Span<int> strataPass0 = stackalloc int[25];
             System.Span<int> strataPass1 = stackalloc int[25];
@@ -264,6 +369,7 @@ namespace Realmz.Cartography
                     tints.Clear();
                     frameCounts.Clear();
                     animFps.Clear();
+                    flipXs.Clear();
 
                     marshMatrices.Clear();
                     marshVariants.Clear();
@@ -271,6 +377,7 @@ namespace Realmz.Cartography
                     marshTints.Clear();
                     marshFrameCounts.Clear();
                     marshAnimFps.Clear();
+                    marshFlipXs.Clear();
 
                     float minElev = float.MaxValue;
                     float maxElev = float.MinValue;
@@ -318,6 +425,7 @@ namespace Realmz.Cartography
                             List<Vector4> dstTints = useMarsh ? marshTints : tints;
                             List<float> dstFrames = useMarsh ? marshFrameCounts : frameCounts;
                             List<float> dstFps = useMarsh ? marshAnimFps : animFps;
+                            List<float> dstFlips = useMarsh ? marshFlipXs : flipXs;
 
                             for (int i = 0; i < cardCount; i++)
                             {
@@ -343,6 +451,7 @@ namespace Realmz.Cartography
                                 float windPhase = ((h >> 12) & 0xFF) / 255f;
                                 float fps = 5.5f + (((h >> 26) & 0x0F) / 15f) * 3.0f;
                                 Vector4 tint = ComputeCardTint(tile.BiomeZone, wx, wz, h);
+                                float flipX = ((h >> 3) & 1) == 1 ? 1f : 0f;
 
                                 dstMatrices.Add(Matrix4x4.TRS(
                                     new Vector3(wx, tile.Elevation, wz),
@@ -353,7 +462,28 @@ namespace Realmz.Cartography
                                 dstTints.Add(tint);
                                 dstFrames.Add(8f);
                                 dstFps.Add(fps);
+                                dstFlips.Add(flipX);
                             }
+                        }
+                    }
+
+                    List<RootCollarCard> collarBucket = collarBuckets[cy * chunksX + cx];
+                    if (collarBucket != null)
+                    {
+                        for (int ci = 0; ci < collarBucket.Count; ci++)
+                        {
+                            RootCollarCard card = collarBucket[ci];
+                            float cardElev = card.Matrix.m13;
+                            if (cardElev < minElev) minElev = cardElev;
+                            if (cardElev > maxElev) maxElev = cardElev;
+
+                            matrices.Add(card.Matrix);
+                            variants.Add(card.Variant);
+                            windPhases.Add(card.WindPhase);
+                            tints.Add(card.Tint);
+                            frameCounts.Add(card.FrameCount);
+                            animFps.Add(card.AnimFps);
+                            flipXs.Add(card.FlipX);
                         }
                     }
 
@@ -366,8 +496,8 @@ namespace Realmz.Cartography
                         chunk.Bounds = new Bounds((boundsMin + boundsMax) * 0.5f, boundsMax - boundsMin);
 
                         total += chunkTotal;
-                        BuildBatchesFromLists(chunk.Batches, matrices, variants, windPhases, tints, frameCounts, animFps);
-                        BuildBatchesFromLists(chunk.MarshBatches, marshMatrices, marshVariants, marshWindPhases, marshTints, marshFrameCounts, marshAnimFps);
+                        BuildBatchesFromLists(chunk.Batches, matrices, variants, windPhases, tints, frameCounts, animFps, flipXs);
+                        BuildBatchesFromLists(chunk.MarshBatches, marshMatrices, marshVariants, marshWindPhases, marshTints, marshFrameCounts, marshAnimFps, marshFlipXs);
                     }
                     else
                     {
@@ -382,6 +512,7 @@ namespace Realmz.Cartography
 
             totalCardCount = total;
             populatedTileCount = openTiles;
+            rootCollarCardCount = collarCardsPlaced;
             _hasBuilt = true;
         }
 
@@ -419,6 +550,7 @@ namespace Realmz.Cartography
             List<Vector4> tints = new List<Vector4>(512);
             List<float> frameCounts = new List<float>(512);
             List<float> animFps = new List<float>(512);
+            List<float> flipXs = new List<float>(512);
             System.Span<int> strata = stackalloc int[25];
 
             int total = 0;
@@ -440,6 +572,7 @@ namespace Realmz.Cartography
                     tints.Clear();
                     frameCounts.Clear();
                     animFps.Clear();
+                    flipXs.Clear();
 
                     float minElev = float.MaxValue;
                     float maxElev = float.MinValue;
@@ -499,6 +632,7 @@ namespace Realmz.Cartography
                                 Vector4 tint = nearWallOrCrease
                                     ? new Vector4(0.76f * lum, 0.90f * lum, 0.98f * lum, 1f)
                                     : new Vector4(0.84f * lum, 0.86f * lum, 0.90f * lum, 1f);
+                                float flipX = ((h >> 3) & 1) == 1 ? 1f : 0f;
 
                                 matrices.Add(Matrix4x4.TRS(
                                     new Vector3(wx, tile.Elevation, wz),
@@ -509,6 +643,7 @@ namespace Realmz.Cartography
                                 tints.Add(tint);
                                 frameCounts.Add(8f);
                                 animFps.Add(fps);
+                                flipXs.Add(flipX);
                             }
                         }
                     }
@@ -521,7 +656,7 @@ namespace Realmz.Cartography
                         chunk.Bounds = new Bounds((boundsMin + boundsMax) * 0.5f, boundsMax - boundsMin);
 
                         total += matrices.Count;
-                        BuildBatchesFromLists(chunk.Batches, matrices, variants, windPhases, tints, frameCounts, animFps);
+                        BuildBatchesFromLists(chunk.Batches, matrices, variants, windPhases, tints, frameCounts, animFps, flipXs);
                     }
                     else
                     {
@@ -536,6 +671,7 @@ namespace Realmz.Cartography
 
             totalCardCount = total;
             populatedTileCount = populatedTiles;
+            rootCollarCardCount = 0;
             _hasBuilt = true;
         }
 
@@ -546,7 +682,8 @@ namespace Realmz.Cartography
             List<float> windPhases,
             List<Vector4> tints,
             List<float> frameCounts,
-            List<float> animFps)
+            List<float> animFps,
+            List<float> flipXs)
         {
             int totalCount = matrices.Count;
             if (totalCount == 0)
@@ -563,6 +700,7 @@ namespace Realmz.Cartography
                 Vector4[] batchTints = new Vector4[count];
                 float[] batchFrameCounts = new float[count];
                 float[] batchAnimFps = new float[count];
+                float[] batchFlipXs = new float[count];
 
                 for (int i = 0; i < count; i++)
                 {
@@ -573,6 +711,7 @@ namespace Realmz.Cartography
                     batchTints[i] = tints[src];
                     batchFrameCounts[i] = frameCounts[src];
                     batchAnimFps[i] = animFps[src];
+                    batchFlipXs[i] = flipXs[src];
                 }
 
                 MaterialPropertyBlock mpb = new MaterialPropertyBlock();
@@ -581,6 +720,7 @@ namespace Realmz.Cartography
                 mpb.SetVectorArray(TintColorId, batchTints);
                 mpb.SetFloatArray(FrameCountId, batchFrameCounts);
                 mpb.SetFloatArray(AnimFpsId, batchAnimFps);
+                mpb.SetFloatArray(FlipXId, batchFlipXs);
 
                 targetBatches.Add(new FoliageBatch
                 {

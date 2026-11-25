@@ -41,7 +41,10 @@ namespace RealmzCore.Data
             {
                 string filePath = jsonFiles[i];
                 string fileName = Path.GetFileNameWithoutExtension(filePath);
-                if (string.Equals(fileName, "manifest", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(fileName, "manifest", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(fileName, "archetype_mapping", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(fileName, "items_by_id_icon_map", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(fileName, "balance_overrides", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
@@ -75,6 +78,14 @@ namespace RealmzCore.Data
                 }
             }
 
+            BalanceOverrides? balanceOverrides = null;
+            string balanceOverridesPath = Path.Combine(dir, "balance_overrides.json");
+            if (File.Exists(balanceOverridesPath))
+            {
+                balanceOverrides = BalanceOverrides.LoadFromFile(balanceOverridesPath);
+                monsters = balanceOverrides.ApplyToMonsters(monsters);
+            }
+
             return new BywaterM1Bundle(
                 maps: maps,
                 party: party,
@@ -84,7 +95,14 @@ namespace RealmzCore.Data
                 spellAreas: spellAreas,
                 spells: spells,
                 items: items,
-                shops: shops);
+                shops: shops,
+                balanceOverrides: balanceOverrides,
+                quests: balanceOverrides?.Quests);
+        }
+
+        public static BalanceOverrides LoadBalanceOverrides(string json)
+        {
+            return BalanceOverrides.FromJson(json);
         }
 
         public static TileMapData LoadMap(string json)
@@ -540,6 +558,8 @@ namespace RealmzCore.Data
 
                 List<int> saves = ParseIntArray(obj, "saves");
                 List<bool> immunities = ParseBoolArray(obj, "spell_immunities", "spellImmunities");
+                string role = GetFirstString(obj, string.Empty, "role");
+                List<string> specialAbilities = ParseStringArray(obj, "special_abilities", "specialAbilities");
 
                 list.Add(new MonsterDefinition(
                     index: index,
@@ -572,7 +592,9 @@ namespace RealmzCore.Data
                     xpReward: GetFirstInt(obj, 0, "xp_reward", "xpReward", "exp"),
                     goldMin: GetFirstInt(obj, 0, "gold_min", "goldMin"),
                     goldMax: GetFirstInt(obj, 0, "gold_max", "goldMax"),
-                    lootItemIds: ParseIntArray(obj, "loot_item_ids", "lootItemIds")));
+                    lootItemIds: ParseIntArray(obj, "loot_item_ids", "lootItemIds"),
+                    role: role,
+                    specialAbilities: specialAbilities));
             }
 
             return list;
@@ -989,6 +1011,34 @@ namespace RealmzCore.Data
             for (int i = 0; i < arr.Count; i++)
             {
                 list.Add(ToBoolCell(arr[i]));
+            }
+
+            return list;
+        }
+
+        private static List<string> ParseStringArray(IReadOnlyDictionary<string, object?> obj, params string[] keys)
+        {
+            List<string> list = new List<string>();
+            if (!TryGetAny(obj, out object? raw, keys) || raw == null)
+            {
+                return list;
+            }
+
+            IReadOnlyList<object?> arr = MiniJson.AsArray(raw);
+            for (int i = 0; i < arr.Count; i++)
+            {
+                if (arr[i] is string s && !string.IsNullOrWhiteSpace(s))
+                {
+                    list.Add(s.Trim());
+                }
+                else if (arr[i] != null)
+                {
+                    string converted = Convert.ToString(arr[i], CultureInfo.InvariantCulture) ?? string.Empty;
+                    if (!string.IsNullOrWhiteSpace(converted))
+                    {
+                        list.Add(converted.Trim());
+                    }
+                }
             }
 
             return list;

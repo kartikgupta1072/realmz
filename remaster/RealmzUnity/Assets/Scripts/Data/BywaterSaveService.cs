@@ -75,6 +75,15 @@ namespace Realmz.Data
     }
 
     [Serializable]
+    public sealed class SavedFogMapEntry
+    {
+        public string mapId = string.Empty;
+        public int width;
+        public int height;
+        public string packedExploredBase64 = string.Empty;
+    }
+
+    [Serializable]
     public sealed class BywaterSaveData
     {
         public int version = BywaterSaveService.CurrentSaveVersion;
@@ -89,11 +98,15 @@ namespace Realmz.Data
         public int turnCount;
         public int worldTimeTurns = -1;
         public bool hasWorldClock;
+        public double worldTimeMinutes = -1.0;
+        public bool hasWorldClockMinutes;
         public int postCombatGraceSteps;
         public ulong prngState;
         public string prngStateText = "0";
         public string[] clearedEncounterIds = Array.Empty<string>();
         public SavedZoneCooldownEntry[] zoneCooldowns = Array.Empty<SavedZoneCooldownEntry>();
+        public SavedFogMapEntry[] exploredFogByMap = Array.Empty<SavedFogMapEntry>();
+        public string weatherState = "Clear";
         public SavedMemberState[] members = Array.Empty<SavedMemberState>();
         public SavedStashEntry[] stash = Array.Empty<SavedStashEntry>();
         public string[] combatLogLines = Array.Empty<string>();
@@ -238,7 +251,7 @@ namespace Realmz.Data
             }
             cooldownEntries.Sort((a, b) => string.Compare(a.zoneKey, b.zoneKey, StringComparison.OrdinalIgnoreCase));
 
-            return new BywaterSaveData
+            BywaterSaveData snapshot = new BywaterSaveData
             {
                 version = CurrentSaveVersion,
                 mapId = session.CurrentMap.MapId,
@@ -252,6 +265,8 @@ namespace Realmz.Data
                 turnCount = session.TurnCount,
                 worldTimeTurns = session.WorldClockTurns,
                 hasWorldClock = true,
+                worldTimeMinutes = session.WorldClockMinutes,
+                hasWorldClockMinutes = true,
                 postCombatGraceSteps = session.PostCombatGraceStepsRemaining,
                 prngState = seedState,
                 prngStateText = seedState.ToString(CultureInfo.InvariantCulture),
@@ -261,6 +276,37 @@ namespace Realmz.Data
                 stash = stashEntries,
                 combatLogLines = logCopy
             };
+
+            string weatherText = session.Weather.ToString();
+            snapshot.weatherState = string.IsNullOrWhiteSpace(weatherText) ? "Clear" : weatherText;
+            if (session.FogMaps != null)
+            {
+                List<string> mapIds = new List<string>(session.FogMaps.Count);
+                foreach (string mapKey in session.FogMaps.Keys)
+                {
+                    if (!string.IsNullOrWhiteSpace(mapKey))
+                    {
+                        mapIds.Add(mapKey);
+                    }
+                }
+                mapIds.Sort(StringComparer.OrdinalIgnoreCase);
+
+                for (int i = 0; i < mapIds.Count; i++)
+                {
+                    if (session.FogMaps.TryGetValue(mapIds[i], out FogOfWarMap fogMap) && fogMap != null)
+                    {
+                        AttachFogAndWeather(
+                            snapshot,
+                            fogMap.MapId,
+                            fogMap.Width,
+                            fogMap.Height,
+                            fogMap.ExportExploredBitsetBase64(),
+                            snapshot.weatherState);
+                    }
+                }
+            }
+
+            return snapshot;
         }
 
         public static void ApplySnapshot(
@@ -281,13 +327,52 @@ namespace Realmz.Data
 
             restoredSeed = ResolveRestoredSeed(data);
             int restoredClockTurns = ResolveRestoredWorldClockTurns(data);
+            double restoredClockMinutes = ResolveRestoredWorldClockMinutes(data);
             List<KeyValuePair<string, int>> cooldowns = ExtractZoneCooldowns(data);
+            string weatherText = ExtractWeatherState(data);
+            WeatherState restoredWeather = Enum.TryParse(weatherText, ignoreCase: true, out WeatherState parsedWeather)
+                ? parsedWeather
+                : WeatherState.Clear;
             session.RestorePersistenceState(
                 data.turnCount,
                 data.clearedEncounterIds,
                 restoredClockTurns,
                 Math.Max(0, data.postCombatGraceSteps),
-                cooldowns);
+                cooldowns,
+                weather: restoredWeather,
+                worldClockMinutes: restoredClockMinutes);
+
+            if (data.exploredFogByMap != null && data.exploredFogByMap.Length > 0)
+            {
+                for (int i = 0; i < data.exploredFogByMap.Length; i++)
+                {
+                    SavedFogMapEntry fogEntry = data.exploredFogByMap[i];
+                    if (fogEntry == null ||
+                        string.IsNullOrWhiteSpace(fogEntry.mapId) ||
+                        string.IsNullOrWhiteSpace(fogEntry.packedExploredBase64))
+                    {
+                        continue;
+                    }
+
+                    string fogMapId = fogEntry.mapId.Trim();
+                    FogOfWarMap fogMap = null;
+                    if (session.FogMaps != null && session.FogMaps.TryGetValue(fogMapId, out FogOfWarMap existingFog))
+                    {
+                        fogMap = existingFog;
+                    }
+                    else if (session.Maps != null && session.Maps.ContainsKey(fogMapId))
+                    {
+                        fogMap = session.GetFogMap(fogMapId);
+                    }
+
+                    if (fogMap != null)
+                    {
+                        fogMap.ImportExploredBitsetBase64(fogEntry.packedExploredBase64);
+                    }
+                }
+            }
+
+            session.RefreshFogOfWar();
 
             PartyState party = session.Party;
             party.Gold = Math.Max(0, data.gold);
@@ -769,6 +854,7 @@ namespace Realmz.Data
                 x = MiniJson.GetInt(root, "x", 0),
                 y = MiniJson.GetInt(root, "y", 0),
                 facing = MiniJson.GetString(root, "facing", "South"),
+                weatherState = "Clear",
                 gold = Math.Max(0, MiniJson.GetInt(root, "gold", 0)),
                 hasBoat = MiniJson.GetBool(root, "hasBoat", false),
                 torchTurnsRemaining = Math.Max(0, MiniJson.GetInt(root, "torchTurnsRemaining", 0)),
@@ -776,6 +862,7 @@ namespace Realmz.Data
                 prngState = DefaultFallbackSeed,
                 prngStateText = DefaultFallbackSeed.ToString(CultureInfo.InvariantCulture),
                 clearedEncounterIds = Array.Empty<string>(),
+                exploredFogByMap = Array.Empty<SavedFogMapEntry>(),
                 members = members.ToArray(),
                 stash = stash.ToArray(),
                 combatLogLines = Array.Empty<string>()
@@ -785,11 +872,25 @@ namespace Realmz.Data
         private static void NormalizeLoadedSaveData(BywaterSaveData data)
         {
             data.facing = string.IsNullOrWhiteSpace(data.facing) ? "South" : data.facing;
+            data.weatherState = string.IsNullOrWhiteSpace(data.weatherState) ? "Clear" : data.weatherState.Trim();
             data.clearedEncounterIds ??= Array.Empty<string>();
             data.zoneCooldowns ??= Array.Empty<SavedZoneCooldownEntry>();
+            data.exploredFogByMap ??= Array.Empty<SavedFogMapEntry>();
             data.members ??= Array.Empty<SavedMemberState>();
             data.stash ??= Array.Empty<SavedStashEntry>();
             data.combatLogLines ??= Array.Empty<string>();
+
+            for (int i = 0; i < data.exploredFogByMap.Length; i++)
+            {
+                SavedFogMapEntry fog = data.exploredFogByMap[i];
+                if (fog == null)
+                {
+                    continue;
+                }
+
+                fog.mapId ??= string.Empty;
+                fog.packedExploredBase64 ??= string.Empty;
+            }
 
             if (string.IsNullOrWhiteSpace(data.prngStateText))
             {
@@ -829,6 +930,21 @@ namespace Realmz.Data
             return WorldClock.DefaultStartTurns + Math.Max(0, data.turnCount);
         }
 
+        public static double ResolveRestoredWorldClockMinutes(BywaterSaveData data)
+        {
+            if (data == null)
+            {
+                return WorldClock.DefaultStartMinutes;
+            }
+
+            if (data.hasWorldClockMinutes && data.worldTimeMinutes >= 0.0)
+            {
+                return data.worldTimeMinutes;
+            }
+
+            return WorldClock.LegacyTurnsToMinutes(ResolveRestoredWorldClockTurns(data));
+        }
+
         public static List<KeyValuePair<string, int>> ExtractZoneCooldowns(BywaterSaveData data)
         {
             List<KeyValuePair<string, int>> list = new List<KeyValuePair<string, int>>();
@@ -847,6 +963,108 @@ namespace Realmz.Data
             }
 
             return list;
+        }
+
+        public static void AttachFogAndWeather(
+            BywaterSaveData data,
+            string mapId,
+            int width,
+            int height,
+            string exploredBase64,
+            string weather)
+        {
+            if (data == null)
+            {
+                throw new ArgumentNullException(nameof(data));
+            }
+
+            data.weatherState = string.IsNullOrWhiteSpace(weather) ? "Clear" : weather.Trim();
+            data.exploredFogByMap ??= Array.Empty<SavedFogMapEntry>();
+
+            if (string.IsNullOrWhiteSpace(mapId))
+            {
+                return;
+            }
+
+            string normalizedMapId = mapId.Trim();
+            string normalizedBase64 = exploredBase64 ?? string.Empty;
+            int safeWidth = Math.Max(0, width);
+            int safeHeight = Math.Max(0, height);
+
+            List<SavedFogMapEntry> updated = new List<SavedFogMapEntry>(data.exploredFogByMap.Length + 1);
+            bool replaced = false;
+            for (int i = 0; i < data.exploredFogByMap.Length; i++)
+            {
+                SavedFogMapEntry existing = data.exploredFogByMap[i];
+                if (existing == null || string.IsNullOrWhiteSpace(existing.mapId))
+                {
+                    continue;
+                }
+
+                if (string.Equals(existing.mapId.Trim(), normalizedMapId, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!replaced)
+                    {
+                        updated.Add(new SavedFogMapEntry
+                        {
+                            mapId = normalizedMapId,
+                            width = safeWidth,
+                            height = safeHeight,
+                            packedExploredBase64 = normalizedBase64
+                        });
+                        replaced = true;
+                    }
+                }
+                else
+                {
+                    updated.Add(existing);
+                }
+            }
+
+            if (!replaced)
+            {
+                updated.Add(new SavedFogMapEntry
+                {
+                    mapId = normalizedMapId,
+                    width = safeWidth,
+                    height = safeHeight,
+                    packedExploredBase64 = normalizedBase64
+                });
+            }
+
+            data.exploredFogByMap = updated.ToArray();
+        }
+
+        public static SavedFogMapEntry ExtractFogForMap(BywaterSaveData data, string mapId)
+        {
+            if (data?.exploredFogByMap == null || string.IsNullOrWhiteSpace(mapId))
+            {
+                return null;
+            }
+
+            string normalizedMapId = mapId.Trim();
+            for (int i = 0; i < data.exploredFogByMap.Length; i++)
+            {
+                SavedFogMapEntry entry = data.exploredFogByMap[i];
+                if (entry != null &&
+                    !string.IsNullOrWhiteSpace(entry.mapId) &&
+                    string.Equals(entry.mapId.Trim(), normalizedMapId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return entry;
+                }
+            }
+
+            return null;
+        }
+
+        public static string ExtractWeatherState(BywaterSaveData data)
+        {
+            if (data == null || string.IsNullOrWhiteSpace(data.weatherState))
+            {
+                return "Clear";
+            }
+
+            return data.weatherState.Trim();
         }
 
         private static ulong ResolveRestoredSeed(BywaterSaveData data)

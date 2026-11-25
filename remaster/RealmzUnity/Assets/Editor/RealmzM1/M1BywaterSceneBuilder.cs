@@ -7,6 +7,7 @@ using RealmzCore.Data;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Audio;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
 using UnityEngine.Rendering;
@@ -38,6 +39,17 @@ namespace Realmz.EditorTools
                 Debug.LogError("[M1BywaterSceneBuilder] Failed to import BywaterAssetCatalog.");
                 return;
             }
+
+            AudioMixer mixer = RealmzAudioMixerBuilder.BuildMasterMixer()
+                ?? AssetDatabase.LoadAssetAtPath<AudioMixer>(RealmzAudioMixerBuilder.MixerAssetPath);
+            if (mixer == null)
+            {
+                Debug.LogWarning("[M1BywaterSceneBuilder] Failed to load or build RealmzMasterMixer.mixer.");
+            }
+
+            RealmzBalanceCatalog balanceCatalog = RealmzBalanceCatalogEditor.CreateOrSyncAsset()
+                ?? AssetDatabase.LoadAssetAtPath<RealmzBalanceCatalog>(RealmzBalanceCatalogEditor.AssetPath)
+                ?? Resources.Load<RealmzBalanceCatalog>("RealmzBalanceCatalog");
 
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
@@ -185,6 +197,11 @@ namespace Realmz.EditorTools
 
             GameObject overlaysGo = new GameObject("BywaterOverlays");
             BywaterGridOverlays gridOverlays = overlaysGo.AddComponent<BywaterGridOverlays>();
+            if (overlaysGo.GetComponent<BywaterCombatVfxDirector>() == null)
+            {
+                overlaysGo.AddComponent<BywaterCombatVfxDirector>();
+            }
+            EditorUtility.SetDirty(overlaysGo);
 
             GameObject hudGo = new GameObject("BywaterHUD");
             BywaterHudController hudController = hudGo.AddComponent<BywaterHudController>();
@@ -197,6 +214,10 @@ namespace Realmz.EditorTools
             GameObject audioGo = new GameObject("BywaterAudioDirector");
             audioGo.transform.SetParent(controllerGo.transform, false);
             BywaterAudioDirector audioDirector = audioGo.AddComponent<BywaterAudioDirector>();
+            if (mixer != null)
+            {
+                audioDirector.BindMixer(mixer);
+            }
 
             BywaterGameController controller = controllerGo.AddComponent<BywaterGameController>();
             controller.assetCatalog = catalog;
@@ -206,6 +227,8 @@ namespace Realmz.EditorTools
             controller.hudController = hudController;
             controller.biomeAtmosphere = atmosphere;
             controller.audioDirector = audioDirector;
+            controller.masterMixer = mixer;
+            controller.balanceCatalog = balanceCatalog;
             EditorUtility.SetDirty(audioDirector);
             EditorUtility.SetDirty(controller);
 

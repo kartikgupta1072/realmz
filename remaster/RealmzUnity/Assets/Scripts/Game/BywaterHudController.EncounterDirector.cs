@@ -27,9 +27,16 @@ namespace Realmz.Game
         private GameObject _topThreatPill;
         private Image _topThreatPillBg;
         private TextMeshProUGUI _topThreatText;
+        private GameObject _topSurvivalPill;
+        private Image _topSurvivalPillBg;
+        private TextMeshProUGUI _topSurvivalText;
+        private bool _hasSurvivalBannerState;
+        private string _survivalWeatherLabel = "Clear";
+        private int _survivalVisionRadius = 8;
 
         private ExplorationSession _cachedExploreSession;
-        private int _lastExploreClockTurns = int.MinValue;
+        private string _lastExploreClockText = string.Empty;
+        private int _lastExploreClockTotalMinutesInt = int.MinValue;
         private EncounterThreatTier _lastThreatTier = (EncounterThreatTier)(-1);
         private string _lastThreatLabel = string.Empty;
         private bool _hasLastTorchDarkDanger;
@@ -216,19 +223,20 @@ namespace Realmz.Game
             _topClockPill = clockPillRt.gameObject;
             _topClockPillBg = clockPillRt.GetComponent<Image>();
             LayoutElement clockLe = _topClockPill.AddComponent<LayoutElement>();
-            clockLe.preferredWidth = 144f;
-            clockLe.minWidth = 144f;
+            clockLe.preferredWidth = 248f;
+            clockLe.minWidth = 228f;
 
             _topClockText = BywaterUiHelpers.CreateLabel(
                 clockPillRt,
                 "ClockText",
-                "Day 1 - Noon",
+                "Day 1 - 08:00 AM (Morning)",
                 _font,
                 15f,
                 BywaterUiHelpers.BrassHighlight,
                 TextAlignmentOptions.Center,
                 FontStyles.Bold,
                 wrap: false);
+            _topClockText.enableAutoSizing = false;
             _topClockText.overflowMode = TextOverflowModes.Truncate;
             BywaterUiHelpers.AddTextDropShadow(_topClockText);
             _topClockText.rectTransform.anchorMin = Vector2.zero;
@@ -270,6 +278,49 @@ namespace Realmz.Game
 
             AttachTooltipCallbacks(_topThreatPill, BuildThreatPillTooltip);
 
+            // Survival Weather & Vision Pill
+            RectTransform survivalPillRt = BywaterUiHelpers.CreatePanel(
+                bar,
+                "SurvivalPill",
+                BywaterUiHelpers.CardBg,
+                withBrassOutline: true,
+                outlinePx: 1.2f);
+            _topSurvivalPill = survivalPillRt.gameObject;
+            _topSurvivalPillBg = survivalPillRt.GetComponent<Image>();
+            LayoutElement survivalLe = _topSurvivalPill.AddComponent<LayoutElement>();
+            survivalLe.preferredWidth = 148f;
+            survivalLe.minWidth = 132f;
+
+            _topSurvivalText = BywaterUiHelpers.CreateLabel(
+                survivalPillRt,
+                "SurvivalText",
+                "Clear | Vis 8",
+                _font,
+                15f,
+                BywaterUiHelpers.ParchmentText,
+                TextAlignmentOptions.Center,
+                FontStyles.Bold,
+                wrap: false);
+            _topSurvivalText.enableAutoSizing = true;
+            _topSurvivalText.fontSizeMin = 11f;
+            _topSurvivalText.fontSizeMax = 15f;
+            _topSurvivalText.overflowMode = TextOverflowModes.Truncate;
+            BywaterUiHelpers.AddTextDropShadow(_topSurvivalText);
+            _topSurvivalText.rectTransform.anchorMin = Vector2.zero;
+            _topSurvivalText.rectTransform.anchorMax = Vector2.one;
+            _topSurvivalText.rectTransform.offsetMin = new Vector2(6f, 2f);
+            _topSurvivalText.rectTransform.offsetMax = new Vector2(-6f, -2f);
+
+            AttachTooltipCallbacks(_topSurvivalPill, BuildSurvivalPillTooltip);
+            if (_hasSurvivalBannerState)
+            {
+                ApplySurvivalBannerVisuals();
+            }
+            else
+            {
+                _topSurvivalPill.SetActive(false);
+            }
+
             // Make Torch label clickable and tooltip-equipped
             if (_topTorchText != null)
             {
@@ -295,6 +346,73 @@ namespace Realmz.Game
         {
             _topClockPill?.SetActive(!inCombat);
             _topThreatPill?.SetActive(!inCombat);
+            _topSurvivalPill?.SetActive(!inCombat && _hasSurvivalBannerState);
+        }
+
+        public void SetSurvivalBannerState(string weatherLabel, int visionRadius)
+        {
+            if (string.IsNullOrWhiteSpace(weatherLabel) && visionRadius <= 0)
+            {
+                _hasSurvivalBannerState = false;
+                _survivalWeatherLabel = "Clear";
+                _survivalVisionRadius = 0;
+                if (_topSurvivalPill != null)
+                {
+                    _topSurvivalPill.SetActive(false);
+                }
+                return;
+            }
+
+            _hasSurvivalBannerState = true;
+            _survivalWeatherLabel = string.IsNullOrWhiteSpace(weatherLabel) ? "Clear" : weatherLabel.Trim();
+            _survivalVisionRadius = Math.Max(0, visionRadius);
+
+            if (_uiBuilt && _topSurvivalPill != null)
+            {
+                ApplySurvivalBannerVisuals();
+            }
+        }
+
+        private void ApplySurvivalBannerVisuals()
+        {
+            if (_topSurvivalPill == null || _topSurvivalText == null)
+            {
+                return;
+            }
+
+            _topSurvivalText.text = $"{_survivalWeatherLabel} | Vis {_survivalVisionRadius}";
+
+            string lower = _survivalWeatherLabel.ToLowerInvariant();
+            Color textColor = BywaterUiHelpers.ParchmentText;
+            Color borderColor = BywaterUiHelpers.BrassAccent;
+            Color bgColor = BywaterUiHelpers.CardBg;
+
+            if (lower.Contains("storm") || lower.Contains("blizzard") || lower.Contains("tempest"))
+            {
+                textColor = BywaterUiHelpers.DangerRed;
+                borderColor = BywaterUiHelpers.DangerRed;
+                bgColor = new Color(0.18f, 0.06f, 0.08f, 0.96f);
+            }
+            else if (lower.Contains("rain") || lower.Contains("fog") || lower.Contains("mist") || lower.Contains("snow"))
+            {
+                textColor = BywaterUiHelpers.InfoCyan;
+                borderColor = BywaterUiHelpers.InfoCyan;
+                bgColor = new Color(0.06f, 0.11f, 0.19f, 0.96f);
+            }
+            else if (lower.Contains("overcast") || lower.Contains("wind") || lower.Contains("dusk") || lower.Contains("night"))
+            {
+                textColor = BywaterUiHelpers.BrassHighlight;
+                borderColor = BywaterUiHelpers.BrassAccent;
+            }
+
+            _topSurvivalText.color = textColor;
+            BywaterUiHelpers.SetBorderColor(_topSurvivalPill.transform, borderColor);
+            if (_topSurvivalPillBg != null)
+            {
+                _topSurvivalPillBg.color = bgColor;
+            }
+
+            _topSurvivalPill.SetActive(!_isCombatHudActive && _hasSurvivalBannerState);
         }
 
         private void RefreshEncounterDirectorExploreHud(ExplorationSession session)
@@ -309,9 +427,11 @@ namespace Realmz.Game
             bool isDungeon = session.CurrentMap != null && session.CurrentMap.IsDungeon;
             int torchTurns = session.Party != null ? session.Party.TorchTurnsRemaining : 0;
 
-            if (_lastExploreClockTurns != clock.TotalTurns)
+            if (!string.Equals(_lastExploreClockText, clock.DisplayLabel, StringComparison.Ordinal) ||
+                _lastExploreClockTotalMinutesInt != (int)clock.TotalMinutes)
             {
-                _lastExploreClockTurns = clock.TotalTurns;
+                _lastExploreClockText = clock.DisplayLabel;
+                _lastExploreClockTotalMinutesInt = (int)clock.TotalMinutes;
                 if (_topClockText != null)
                 {
                     _topClockText.text = clock.DisplayLabel;
@@ -795,10 +915,13 @@ namespace Realmz.Game
             int torchTurns = _cachedExploreSession.Party != null ? _cachedExploreSession.Party.TorchTurnsRemaining : 0;
             bool isDungeon = _cachedExploreSession.CurrentMap != null && _cachedExploreSession.CurrentMap.IsDungeon;
 
+            int minsToNext = Math.Max(0, (int)Math.Ceiling((double)clock.MinutesUntilNextPhase));
             string title = $"{clock.DisplayLabel} ({geo.LocationLabel})";
             string body =
+                $"Time: {clock.DisplayLabel}\n" +
+                $"Next phase in {minsToNext} min\n" +
+                "Overland exploring ticks calmly (~24 min/day; paused in combat, shops, and menus).\n" +
                 $"Biome: {geo.LocationLabel} ({geo.TileTerrainLabel})\n" +
-                $"Next phase in {clock.TurnsUntilNextPhase} turn(s)\n" +
                 $"Threat: {threat.Label} ({threat.EffectiveChanceBasisPoints / 100.0:0.0}% per step)";
 
             if (threat.IsInGracePeriod)
@@ -831,11 +954,12 @@ namespace Realmz.Game
             int torchTurns = _cachedExploreSession.Party != null ? _cachedExploreSession.Party.TorchTurnsRemaining : 0;
             bool isDungeon = _cachedExploreSession.CurrentMap != null && _cachedExploreSession.CurrentMap.IsDungeon;
 
+            int minsToNext = Math.Max(0, (int)Math.Ceiling((double)clock.MinutesUntilNextPhase));
             string title = $"Threat: {threat.Label} ({geo.LocationLabel})";
             string body =
                 $"Biome: {geo.LocationLabel}\n" +
                 $"Encounter Odds: {threat.EffectiveChanceBasisPoints / 100.0:0.0}% ({threat.EffectiveChanceBasisPoints} bps)\n" +
-                $"Time: {clock.DisplayLabel} ({clock.TurnsUntilNextPhase} turn(s) to next phase)";
+                $"Time: {clock.DisplayLabel} ({minsToNext} min to next phase)";
 
             if (!string.IsNullOrWhiteSpace(threat.Reason))
             {
@@ -885,6 +1009,15 @@ namespace Realmz.Game
                 body += "\nWARNING: It is dark and no torch is lit! Light a torch immediately to avoid being ambushed in the dark.";
             }
 
+            return (title, body);
+        }
+
+        private (string title, string body) BuildSurvivalPillTooltip()
+        {
+            string title = $"Weather: {_survivalWeatherLabel} (Vision {_survivalVisionRadius})";
+            string body = $"Current weather: {_survivalWeatherLabel}\n" +
+                          $"Party sight radius: {_survivalVisionRadius} tile(s).\n" +
+                          "Weather and ambient light affect visibility and encounter scouting range.";
             return (title, body);
         }
     }

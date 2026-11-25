@@ -113,7 +113,9 @@ namespace RealmzCore.Rules
                 [CharConditionId.DefenseBonus] = new ConditionDescriptor(
                     "COND_DEFENSE_BONUS", "Fortified", "Defensive posture deflects blows.", "+5 AC", true, 10),
                 [CharConditionId.Silenced] = new ConditionDescriptor(
-                    "COND_SILENCED", "Silenced", "Cannot utter verbal components for spells.", "Cannot cast spells", false, 10)
+                    "COND_SILENCED", "Silenced", "Cannot utter verbal components for spells.", "Cannot cast spells", false, 10),
+                [CharConditionId.Burning] = new ConditionDescriptor(
+                    "COND_BURNING", "Burning", "Engulfed in flames; takes Heat damage at end of turn.", "Takes 1d4 Heat damage each turn", false, 15)
             };
 
         public static ConditionDescriptor GetDescriptor(CharConditionId condition)

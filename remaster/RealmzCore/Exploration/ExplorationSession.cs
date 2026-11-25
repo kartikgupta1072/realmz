@@ -94,6 +94,7 @@ namespace RealmzCore.Exploration
         public const int DefaultStealthEvadeGraceSteps = 6;
 
         private readonly Dictionary<string, TileMapData> _maps;
+        private readonly Dictionary<string, FogOfWarMap> _fogMaps;
         private readonly IDiceRoller _roller;
         private readonly AStarPathfinder _pathfinder;
         private readonly HashSet<string> _clearedEncounterIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -110,7 +111,10 @@ namespace RealmzCore.Exploration
             IEnumerable<string>? clearedEncounterIds = null,
             int initialWorldClockTurns = -1,
             int initialPostCombatGraceSteps = 0,
-            IEnumerable<KeyValuePair<string, int>>? initialZoneCooldowns = null)
+            IEnumerable<KeyValuePair<string, int>>? initialZoneCooldowns = null,
+            WeatherState initialWeather = WeatherState.Clear,
+            BalanceOverrides? balanceOverrides = null,
+            double initialWorldClockMinutes = -1.0)
         {
             if (maps == null)
             {
@@ -137,10 +141,34 @@ namespace RealmzCore.Exploration
             Position = startPosition ?? initialMap.StartSpawn;
             Facing = string.IsNullOrWhiteSpace(initialFacing) ? "South" : initialFacing!;
             TurnCount = Math.Max(0, initialTurnCount);
-            WorldClockTurns = initialWorldClockTurns >= 0
-                ? initialWorldClockTurns
-                : WorldClock.DefaultStartTurns + TurnCount;
+            if (initialWorldClockMinutes >= 0.0)
+            {
+                WorldClockMinutes = initialWorldClockMinutes;
+                WorldClockTurns = initialWorldClockTurns >= 0
+                    ? initialWorldClockTurns
+                    : (int)Math.Floor(initialWorldClockMinutes / WorldClock.MinutesPerStep);
+            }
+            else if (initialWorldClockTurns >= 0)
+            {
+                WorldClockTurns = initialWorldClockTurns;
+                WorldClockMinutes = WorldClock.LegacyTurnsToMinutes(initialWorldClockTurns);
+            }
+            else
+            {
+                WorldClockTurns = WorldClock.DefaultStartTurns + TurnCount;
+                WorldClockMinutes = WorldClock.DefaultStartMinutes + (TurnCount * WorldClock.MinutesPerStep);
+            }
             PostCombatGraceStepsRemaining = Math.Max(0, initialPostCombatGraceSteps);
+            Weather = initialWeather;
+            BalanceOverrides = balanceOverrides ?? BalanceOverrides.CreateDefault();
+
+            _fogMaps = new Dictionary<string, FogOfWarMap>(StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<string, TileMapData> kvp in _maps)
+            {
+                string mapKey = string.IsNullOrWhiteSpace(kvp.Value.MapId) ? kvp.Key : kvp.Value.MapId;
+                _fogMaps[kvp.Key] = new FogOfWarMap(mapKey, kvp.Value.Width, kvp.Value.Height);
+            }
+
             if (clearedEncounterIds != null)
             {
                 foreach (string id in clearedEncounterIds)
@@ -162,6 +190,8 @@ namespace RealmzCore.Exploration
                     }
                 }
             }
+
+            RefreshFogOfWar();
         }
 
         public IReadOnlyDictionary<string, TileMapData> Maps => _maps;
@@ -171,11 +201,180 @@ namespace RealmzCore.Exploration
         public string Facing { get; private set; }
         public int TurnCount { get; private set; }
         public int WorldClockTurns { get; private set; }
-        public WorldClock CurrentWorldClock => WorldClock.FromTurns(WorldClockTurns);
+        public double WorldClockMinutes { get; private set; }
+        public WorldClock CurrentWorldClock => WorldClock.FromMinutes(WorldClockMinutes);
         public int PostCombatGraceStepsRemaining { get; private set; }
         public IDiceRoller Roller => _roller;
         public IReadOnlyCollection<string> ClearedEncounterIds => _clearedEncounterIds;
         public IReadOnlyDictionary<string, int> ZoneCooldownUntilTurns => _zoneCooldownUntilTurn;
+        public FogOfWarMap FogOfWar => GetFogMap(CurrentMap.MapId);
+        public IReadOnlyDictionary<string, FogOfWarMap> FogMaps => _fogMaps;
+        public int CurrentVisionRadius => FogOfWar.CurrentVisionRadius;
+        public WeatherState Weather { get; private set; }
+        public BalanceOverrides BalanceOverrides { get; }
+
+        public FogOfWarMap GetFogMap(string mapId)
+        {
+            if (string.IsNullOrWhiteSpace(mapId))
+            {
+                throw new ArgumentException("Map ID cannot be null or whitespace.", nameof(mapId));
+            }
+
+            if (_fogMaps.TryGetValue(mapId, out FogOfWarMap? existing))
+            {
+                return existing;
+            }
+
+            if (_maps.TryGetValue(mapId, out TileMapData? mapData))
+            {
+                string resolvedId = string.IsNullOrWhiteSpace(mapData.MapId) ? mapId : mapData.MapId;
+                FogOfWarMap created = new FogOfWarMap(resolvedId, mapData.Width, mapData.Height);
+                _fogMaps[mapId] = created;
+                return created;
+            }
+
+            throw new KeyNotFoundException($"Map '{mapId}' not found.");
+        }
+
+        public void SetWeather(WeatherState weather)
+        {
+            Weather = weather;
+            RefreshFogOfWar();
+        }
+
+        public WeatherState RollWeatherShift()
+        {
+            int roll = _roller.NextInt(1, 101);
+            WeatherState next;
+            if (roll <= 65)
+            {
+                next = WeatherState.Clear;
+            }
+            else if (roll <= 90)
+            {
+                next = WeatherState.LightRain;
+            }
+            else
+            {
+                next = WeatherState.Storm;
+            }
+
+            Weather = next;
+            return next;
+        }
+
+        public int ComputeVisibilityRadius()
+        {
+            VisionRadiusConfig radii = BalanceOverrides.Survival.VisionRadii;
+            bool hasLitTorch = Party.TorchTurnsRemaining > 0;
+            if (CurrentMap.IsDungeon)
+            {
+                return hasLitTorch ? radii.DungeonLitTorch : radii.DungeonUnlit;
+            }
+
+            WorldTimePhase phase = CurrentWorldClock.Phase;
+            if (phase == WorldTimePhase.Night)
+            {
+                return hasLitTorch ? radii.NightLitTorch : radii.NightUnlit;
+            }
+
+            if (phase == WorldTimePhase.Dusk)
+            {
+                return hasLitTorch ? radii.DuskLitTorch : radii.DuskUnlit;
+            }
+
+            int radius = radii.DayBase;
+            if (HasConsciousScout())
+            {
+                radius += radii.DayScoutBonus;
+            }
+
+            return radius;
+        }
+
+        public void RefreshFogOfWar()
+        {
+            int radius = ComputeVisibilityRadius();
+            GetFogMap(CurrentMap.MapId).RecomputeVisibility(CurrentMap, Position, radius);
+        }
+
+        public bool TryLightTorchFromStash(
+            out string feedbackMessage,
+            IReadOnlyDictionary<int, ItemDefinition>? catalog = null)
+        {
+            if (!Party.TryLightTorchFromStash(out feedbackMessage, catalog))
+            {
+                return false;
+            }
+
+            int configuredDuration = Math.Max(1, BalanceOverrides.Survival.TorchTurnDuration);
+            if (configuredDuration != 30)
+            {
+                Party.TorchTurnsRemaining = Math.Max(1, Party.TorchTurnsRemaining + (configuredDuration - 30));
+                feedbackMessage = $"Lit a Torch (+{configuredDuration} turns; {Party.TorchTurnsRemaining} active).";
+            }
+
+            RefreshFogOfWar();
+            return true;
+        }
+
+        public void ExtinguishTorch()
+        {
+            Party.TorchTurnsRemaining = 0;
+            RefreshFogOfWar();
+        }
+
+        public bool BuyFoodRations(int count = 1)
+        {
+            if (count <= 0)
+            {
+                return false;
+            }
+
+            int unitPrice = Math.Max(1, BalanceOverrides.Survival.RationPrice);
+            long totalCost = (long)unitPrice * count;
+            if (totalCost > Party.Gold)
+            {
+                return false;
+            }
+
+            Party.Gold -= (int)totalCost;
+            Party.AddFoodRations(count);
+            return true;
+        }
+
+        private bool HasConsciousScout()
+        {
+            for (int i = 0; i < Party.Members.Count; i++)
+            {
+                PartyMemberState member = Party.Members[i];
+                if (!member.IsAlive ||
+                    member.Conditions.Has(CharConditionId.Helpless) ||
+                    member.Conditions.Has(CharConditionId.TurnedToStone))
+                {
+                    continue;
+                }
+
+                string arch = member.Archetype ?? string.Empty;
+                string name = member.Name ?? string.Empty;
+                string id = member.Id ?? string.Empty;
+                if (arch.IndexOf("Ranger", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    arch.IndexOf("Rogue", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    arch.IndexOf("Archer", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    arch.IndexOf("Thief", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    name.IndexOf("Kaelen", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    name.IndexOf("Vex", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    id.IndexOf("Ranger", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    id.IndexOf("Rogue", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    id.IndexOf("Archer", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    id.IndexOf("Thief", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
 
         public static string GetEncounterZoneKey(string mapId, EncounterZoneData zone)
         {
@@ -228,7 +427,7 @@ namespace RealmzCore.Exploration
             }
             else
             {
-                _zoneCooldownUntilTurn[key] = CurrentWorldClock.NextPhaseStartTurn;
+                _zoneCooldownUntilTurn[key] = WorldClockTurns + Math.Max(1, CurrentWorldClock.TurnsUntilNextPhase);
             }
         }
 
@@ -241,11 +440,33 @@ namespace RealmzCore.Exploration
             int turnsCost = DefaultStealthEvadeTurns,
             int graceSteps = DefaultStealthEvadeGraceSteps)
         {
+            WorldTimePhase prevPhase = CurrentWorldClock.Phase;
             int addedTurns = Math.Max(0, turnsCost);
             TurnCount += addedTurns;
             WorldClockTurns += addedTurns;
-            PruneExpiredCooldowns();
+            WorldClockMinutes += addedTurns * 5.0;
+            PruneExpiredCooldowns(CurrentWorldClock.Phase != prevPhase);
             GrantPostCombatGrace(graceSteps);
+            RefreshFogOfWar();
+        }
+
+        public bool AdvanceWorldClockMinutes(double deltaMinutes)
+        {
+            if (deltaMinutes <= 0.0 || double.IsNaN(deltaMinutes) || double.IsInfinity(deltaMinutes))
+            {
+                return false;
+            }
+
+            WorldTimePhase prevPhase = CurrentWorldClock.Phase;
+            WorldClockMinutes += deltaMinutes;
+            if (CurrentWorldClock.Phase != prevPhase)
+            {
+                PruneExpiredCooldowns(phaseChanged: true);
+                RefreshFogOfWar();
+                return true;
+            }
+
+            return false;
         }
 
         public void AdvanceWorldClockTurns(int turns)
@@ -255,8 +476,11 @@ namespace RealmzCore.Exploration
                 return;
             }
 
+            WorldTimePhase prevPhase = CurrentWorldClock.Phase;
             WorldClockTurns += turns;
-            PruneExpiredCooldowns();
+            WorldClockMinutes += turns * 20.0;
+            PruneExpiredCooldowns(CurrentWorldClock.Phase != prevPhase);
+            RefreshFogOfWar();
         }
 
         public void RestorePersistenceState(
@@ -264,13 +488,34 @@ namespace RealmzCore.Exploration
             IEnumerable<string>? clearedEncounterIds,
             int worldClockTurns = -1,
             int postCombatGraceSteps = 0,
-            IEnumerable<KeyValuePair<string, int>>? zoneCooldowns = null)
+            IEnumerable<KeyValuePair<string, int>>? zoneCooldowns = null,
+            WeatherState? weather = null,
+            double worldClockMinutes = -1.0)
         {
             TurnCount = Math.Max(0, turnCount);
-            WorldClockTurns = worldClockTurns >= 0
-                ? worldClockTurns
-                : WorldClock.DefaultStartTurns + TurnCount;
+            if (worldClockMinutes >= 0.0)
+            {
+                WorldClockMinutes = worldClockMinutes;
+                WorldClockTurns = worldClockTurns >= 0
+                    ? worldClockTurns
+                    : (int)Math.Floor(worldClockMinutes / WorldClock.MinutesPerStep);
+            }
+            else if (worldClockTurns >= 0)
+            {
+                WorldClockTurns = worldClockTurns;
+                WorldClockMinutes = WorldClock.LegacyTurnsToMinutes(worldClockTurns);
+            }
+            else
+            {
+                WorldClockTurns = WorldClock.DefaultStartTurns + TurnCount;
+                WorldClockMinutes = WorldClock.DefaultStartMinutes + (TurnCount * WorldClock.MinutesPerStep);
+            }
             PostCombatGraceStepsRemaining = Math.Max(0, postCombatGraceSteps);
+            if (weather.HasValue)
+            {
+                Weather = weather.Value;
+            }
+
             _clearedEncounterIds.Clear();
             if (clearedEncounterIds != null)
             {
@@ -294,12 +539,20 @@ namespace RealmzCore.Exploration
                     }
                 }
             }
+
+            RefreshFogOfWar();
         }
 
-        private void PruneExpiredCooldowns()
+        private void PruneExpiredCooldowns(bool phaseChanged = false)
         {
             if (_zoneCooldownUntilTurn.Count == 0)
             {
+                return;
+            }
+
+            if (phaseChanged)
+            {
+                _zoneCooldownUntilTurn.Clear();
                 return;
             }
 
@@ -397,11 +650,13 @@ namespace RealmzCore.Exploration
                     torchTurnsRemaining: Party.TorchTurnsRemaining);
             }
 
+            WorldTimePhase prevPhase = CurrentWorldClock.Phase;
             UpdateFacing(Position, nextTile);
             Position = nextTile;
             TurnCount++;
             WorldClockTurns++;
-            PruneExpiredCooldowns();
+            WorldClockMinutes += WorldClock.MinutesPerStep;
+            PruneExpiredCooldowns(CurrentWorldClock.Phase != prevPhase);
 
             bool inGraceCooldown = PostCombatGraceStepsRemaining > 0;
             if (inGraceCooldown)
@@ -415,6 +670,8 @@ namespace RealmzCore.Exploration
                 Party.TorchTurnsRemaining--;
                 torchExpired = Party.TorchTurnsRemaining == 0;
             }
+
+            RefreshFogOfWar();
 
             if (!autoHaltOnEvents)
             {
@@ -603,6 +860,7 @@ namespace RealmzCore.Exploration
                 Party.QuickBandageCharges = PartyState.MaxQuickBandageCharges;
             }
 
+            RefreshFogOfWar();
             return true;
         }
 
@@ -770,12 +1028,24 @@ namespace RealmzCore.Exploration
             EncounterZoneData? hostileZone = GetUnclearedHostileZoneAtCurrentTile();
             bool inHostile = hostileZone != null;
 
+            WorldTimePhase prevPhase = CurrentWorldClock.Phase;
             RestResult result = Party.Rest(mode, isSafeZone, inHostile, _roller);
             if (result.TurnsElapsed > 0)
             {
                 TurnCount += result.TurnsElapsed;
                 WorldClockTurns += result.TurnsElapsed;
-                PruneExpiredCooldowns();
+                if (mode == CampMode.FullRest)
+                {
+                    WorldClockMinutes += result.Success
+                        ? WorldClock.FullRestMinutes
+                        : (result.Ambushed || result.TurnsElapsed == 4 ? 240.0 : result.TurnsElapsed * 60.0);
+                }
+                else
+                {
+                    WorldClockMinutes += result.TurnsElapsed == 1 ? 15.0 : result.TurnsElapsed * 15.0;
+                }
+
+                PruneExpiredCooldowns(CurrentWorldClock.Phase != prevPhase);
             }
 
             if (result.Ambushed && hostileZone != null)
@@ -791,6 +1061,7 @@ namespace RealmzCore.Exploration
                 }
             }
 
+            RefreshFogOfWar();
             return result;
         }
 

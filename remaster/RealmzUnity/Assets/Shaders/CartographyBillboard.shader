@@ -16,6 +16,7 @@ Shader "Realmz/CartographyBillboard"
         _AnimFps ("Animation FPS", Float) = 7.0
         _WindPhase ("Per-Instance Wind Phase", Float) = 0.0
         _TintColor ("Instance Tint Color", Color) = (1, 1, 1, 1)
+        _FlipX ("Flip Horizontal (0/1)", Float) = 0.0
 
         [Header(Wind Gust and Trample)]
         _WindDir ("Wind Gust Direction XZ", Vector) = (0.86, 0.51, 0, 0)
@@ -40,6 +41,10 @@ Shader "Realmz/CartographyBillboard"
         _ReceiveRootShadowOnly ("Sample Shadow At Root (0/1)", Float) = 1.0
         _HorizonHazeColor ("North Horizon Haze Color", Color) = (0.91, 0.83, 0.70, 1)
         _HorizonHazeStrength ("North Horizon Haze Strength", Range(0, 0.35)) = 0.08
+        _NightRimColor ("Moonlight Rim Color", Color) = (0.659, 0.733, 0.878, 1)
+        _NightRimStrength ("Local Night Rim Multiplier", Range(0, 2)) = 1.0
+        _HoverOutlineColor ("Hover Outline Color", Color) = (0.98, 0.80, 0.08, 1)
+        _HoverOutlineStrength ("Hover Outline Strength", Range(0, 1)) = 0.0
 
         [HideInInspector] _SrcBlend ("SrcBlend", Float) = 1.0
         [HideInInspector] _DstBlend ("DstBlend", Float) = 0.0
@@ -72,6 +77,10 @@ Shader "Realmz/CartographyBillboard"
         float4 _HeroWorldPos;
         float4 _CartographyCamForwardXZ;
         float _CartographyTimeOffset;
+        TEXTURE2D(_FogOfWarTex);
+        SAMPLER(sampler_FogOfWarTex);
+        float _FogOfWarEnabled;
+        float _GlobalNightRimStrength;
 
         CBUFFER_START(UnityPerMaterial)
             float4 _BaseMap_ST;
@@ -100,12 +109,17 @@ Shader "Realmz/CartographyBillboard"
             float _ReceiveRootShadowOnly;
             half4 _HorizonHazeColor;
             half _HorizonHazeStrength;
+            half4 _NightRimColor;
+            half _NightRimStrength;
+            half4 _HoverOutlineColor;
+            half _HoverOutlineStrength;
         #if !defined(UNITY_INSTANCING_ENABLED)
             float _VariantIndex;
             float _WindPhase;
             float4 _TintColor;
             float _FrameCount;
             float _AnimFps;
+            float _FlipX;
         #endif
         CBUFFER_END
 
@@ -116,6 +130,7 @@ Shader "Realmz/CartographyBillboard"
                 UNITY_DEFINE_INSTANCED_PROP(float4, _TintColor)
                 UNITY_DEFINE_INSTANCED_PROP(float, _FrameCount)
                 UNITY_DEFINE_INSTANCED_PROP(float, _AnimFps)
+                UNITY_DEFINE_INSTANCED_PROP(float, _FlipX)
             UNITY_INSTANCING_BUFFER_END(Props)
             #define CARTO_INST_PROP(name) UNITY_ACCESS_INSTANCED_PROP(Props, name)
         #else
@@ -185,6 +200,11 @@ Shader "Realmz/CartographyBillboard"
             float2 texelPad = _BaseMap_TexelSize.xy * 0.5;
             float2 uvMin = float2(uMin, vMin) + texelPad;
             float2 uvMax = float2(uMin, vMin) + cellSize - texelPad;
+            float flipX = CARTO_INST_PROP(_FlipX);
+            if (flipX > 0.5)
+            {
+                localUV.x = 1.0 - localUV.x;
+            }
             return lerp(uvMin, uvMax, saturate(localUV));
         }
 
@@ -391,6 +411,10 @@ Shader "Realmz/CartographyBillboard"
                 half3 albedo = albedoAlpha.rgb * rootAO;
 
                 half3 normalTS = UnpackNormalScale(SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, input.uv), _BumpScale);
+                if (CARTO_INST_PROP(_FlipX) > 0.5)
+                {
+                    normalTS.x = -normalTS.x;
+                }
                 float3 baseN = SafeNormalize(input.normalWS);
                 float3 tang = SafeNormalize(input.tangentWS);
                 float3 bitang = SafeNormalize(cross(tang, baseN));
@@ -414,9 +438,10 @@ Shader "Realmz/CartographyBillboard"
                 #endif
 
                 half4 topDownLM = half4(1.0h, 1.0h, 1.0h, 0.0h);
-                if (_TopDownLightmapBounds.z > 0.00001 && _TopDownLightmapBounds.w > 0.00001)
+                bool hasBounds = (_TopDownLightmapBounds.z > 0.00001 && _TopDownLightmapBounds.w > 0.00001);
+                float2 lmUV = hasBounds ? saturate((input.positionWS.xz - _TopDownLightmapBounds.xy) * _TopDownLightmapBounds.zw) : float2(0.0, 0.0);
+                if (hasBounds)
                 {
-                    float2 lmUV = saturate((input.positionWS.xz - _TopDownLightmapBounds.xy) * _TopDownLightmapBounds.zw);
                     topDownLM = SAMPLE_TEXTURE2D(_TopDownLightmapTex, sampler_TopDownLightmapTex, lmUV);
                 }
 
@@ -463,12 +488,39 @@ Shader "Realmz/CartographyBillboard"
                 half3 emission = _EmissionColor.rgb * albedoAlpha.rgb * emissionMask;
 
                 half3 color = ambientColor + directLight + addLighting + lanternPool + emission;
+                half rim = pow(1.0h - saturate(dot(normalWS, (half3)viewDirWS)), 2.2h) * (half)(max(0.0, _GlobalNightRimStrength) * max(0.0, (float)_NightRimStrength));
+                color += albedo * _NightRimColor.rgb * rim;
+
+                if (_HoverOutlineStrength > 0.001h)
+                {
+                    half aL = SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_BaseMap, input.uv - float2(_BaseMap_TexelSize.x, 0.0), 0).a;
+                    half aR = SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_BaseMap, input.uv + float2(_BaseMap_TexelSize.x, 0.0), 0).a;
+                    half aD = SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_BaseMap, input.uv - float2(0.0, _BaseMap_TexelSize.y), 0).a;
+                    half aU = SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_BaseMap, input.uv + float2(0.0, _BaseMap_TexelSize.y), 0).a;
+                    half minNeighborA = min(min(aL, aR), min(aD, aU));
+                    half edgeMask = (minNeighborA < _Cutoff) ? 1.0h : 0.0h;
+                    half hoverFresnel = pow(1.0h - saturate(dot(normalWS, (half3)viewDirWS)), 1.8h) * 0.45h;
+                    half hoverMask = saturate(max(edgeMask, hoverFresnel)) * saturate(_HoverOutlineStrength);
+                    color = lerp(color, max(color, _HoverOutlineColor.rgb), hoverMask);
+                }
+
                 if (_TopDownLightmapBounds.w > 0.00001)
                 {
                     half northFrac = saturate((half)((input.positionWS.z - _TopDownLightmapBounds.y) * _TopDownLightmapBounds.w));
                     color = lerp(color, _HorizonHazeColor.rgb, smoothstep(0.76h, 1.0h, northFrac) * _HorizonHazeStrength);
                 }
                 color = clamp(color, half3(0.0h, 0.0h, 0.0h), half3(64.0h, 64.0h, 64.0h));
+                if (_FogOfWarEnabled > 0.5 && hasBounds)
+                {
+                    half fogState = (half)SAMPLE_TEXTURE2D_LOD(_FogOfWarTex, sampler_FogOfWarTex, lmUV, 0).r;
+                    half luma = dot(color, half3(0.2126h, 0.7152h, 0.0722h));
+                    half3 desat = lerp(color, half3(luma, luma, luma), 0.55h);
+                    half3 exploredColor = desat * half3(0.84h, 0.92h, 1.12h) * 0.42h;
+                    half3 unseenColor = lerp(half3(0.051h, 0.063h, 0.106h) * 0.25h, desat * half3(0.75h, 0.85h, 1.12h) * 0.08h, 0.45h);
+                    half toExplored = saturate(fogState / 0.45h);
+                    half toVisible = saturate((fogState - 0.45h) / 0.55h);
+                    color = lerp(lerp(unseenColor, exploredColor, toExplored), color, toVisible);
+                }
                 color = MixFog(color, input.fogFactor);
 
                 return half4(color, finalAlpha);

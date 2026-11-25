@@ -28,6 +28,7 @@ namespace Realmz.Game
         public static readonly Color HpFillColor = new Color(0.130f, 0.510f, 0.240f, 1.0f);
         public static readonly Color HpLowColor = new Color(0.760f, 0.190f, 0.170f, 1.0f);
         public static readonly Color SpFillColor = new Color(0.110f, 0.450f, 0.660f, 1.0f);
+        public static readonly Color ApBarFillColor = new Color(0.753f, 0.569f, 0.259f, 0.90f);
         public static readonly Color BarTrackColor = new Color(0.024f, 0.035f, 0.065f, 0.96f);
         public static readonly Color DangerRed = new Color(0.920f, 0.320f, 0.280f, 1.0f);
         public static readonly Color SuccessGreen = new Color(0.280f, 0.850f, 0.450f, 1.0f);

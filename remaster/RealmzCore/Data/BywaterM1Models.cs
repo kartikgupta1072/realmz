@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using RealmzCore.Exploration;
 using RealmzCore.Rules;
 
 namespace RealmzCore.Data
@@ -673,6 +674,7 @@ namespace RealmzCore.Data
         private readonly int[] _saves;
         private readonly bool[] _spellImmunities;
         private readonly int[] _lootItemIds;
+        private readonly string[] _specialAbilities;
 
         public MonsterDefinition(
             int index,
@@ -705,7 +707,9 @@ namespace RealmzCore.Data
             int xpReward = 0,
             int goldMin = 0,
             int goldMax = 0,
-            IReadOnlyList<int>? lootItemIds = null)
+            IReadOnlyList<int>? lootItemIds = null,
+            string role = "",
+            IReadOnlyList<string>? specialAbilities = null)
         {
             Index = index;
             Id = id ?? string.Empty;
@@ -738,6 +742,8 @@ namespace RealmzCore.Data
             GoldMin = goldMin;
             GoldMax = goldMax;
             _lootItemIds = CopyIntList(lootItemIds);
+            Role = role ?? string.Empty;
+            _specialAbilities = CopyStringList(specialAbilities);
         }
 
         public int Index { get; }
@@ -771,6 +777,45 @@ namespace RealmzCore.Data
         public int GoldMin { get; }
         public int GoldMax { get; }
         public IReadOnlyList<int> LootItemIds => _lootItemIds;
+        public string Role { get; }
+        public IReadOnlyList<string> SpecialAbilities => _specialAbilities;
+
+        public bool HasSpecialAbility(string abilityId)
+        {
+            if (string.IsNullOrWhiteSpace(abilityId))
+            {
+                return false;
+            }
+
+            for (int i = 0; i < _specialAbilities.Length; i++)
+            {
+                if (string.Equals(_specialAbilities[i], abilityId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static string[] CopyStringList(IReadOnlyList<string>? source)
+        {
+            if (source == null || source.Count == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            List<string> filtered = new List<string>(source.Count);
+            for (int i = 0; i < source.Count; i++)
+            {
+                if (!string.IsNullOrWhiteSpace(source[i]))
+                {
+                    filtered.Add(source[i].Trim());
+                }
+            }
+
+            return filtered.Count == 0 ? Array.Empty<string>() : filtered.ToArray();
+        }
 
         private static int[] CopyIntList(IReadOnlyList<int>? source)
         {
@@ -1000,6 +1045,7 @@ namespace RealmzCore.Data
         private readonly Dictionary<string, SpellDefinition> _spellsByKey;
         private readonly Dictionary<int, ItemDefinition> _items;
         private readonly Dictionary<string, ShopDefinition> _shops;
+        private readonly List<QuestDefinition> _quests;
 
         public BywaterM1Bundle(
             IReadOnlyDictionary<string, TileMapData> maps,
@@ -1010,7 +1056,9 @@ namespace RealmzCore.Data
             IReadOnlyList<SpellAreaTemplate> spellAreas,
             IReadOnlyDictionary<int, SpellDefinition> spells,
             IReadOnlyDictionary<int, ItemDefinition> items,
-            IReadOnlyDictionary<string, ShopDefinition> shops)
+            IReadOnlyDictionary<string, ShopDefinition> shops,
+            BalanceOverrides? balanceOverrides = null,
+            IReadOnlyList<QuestDefinition>? quests = null)
         {
             _maps = new Dictionary<string, TileMapData>(StringComparer.OrdinalIgnoreCase);
             foreach (KeyValuePair<string, TileMapData> kvp in maps)
@@ -1035,6 +1083,10 @@ namespace RealmzCore.Data
 
             _items = new Dictionary<int, ItemDefinition>(items);
             _shops = new Dictionary<string, ShopDefinition>(shops, StringComparer.OrdinalIgnoreCase);
+            BalanceOverrides = balanceOverrides ?? BalanceOverrides.CreateDefault();
+            _quests = quests != null
+                ? new List<QuestDefinition>(quests)
+                : new List<QuestDefinition>(BalanceOverrides.Quests);
         }
 
         public IReadOnlyDictionary<string, TileMapData> Maps => _maps;
@@ -1049,5 +1101,7 @@ namespace RealmzCore.Data
         public IReadOnlyDictionary<string, SpellDefinition> SpellsByKey => _spellsByKey;
         public IReadOnlyDictionary<int, ItemDefinition> Items => _items;
         public IReadOnlyDictionary<string, ShopDefinition> Shops => _shops;
+        public BalanceOverrides BalanceOverrides { get; }
+        public IReadOnlyList<QuestDefinition> Quests => _quests;
     }
 }

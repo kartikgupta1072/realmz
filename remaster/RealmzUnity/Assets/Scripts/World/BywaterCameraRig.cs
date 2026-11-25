@@ -4,6 +4,7 @@ using Realmz.Cartography;
 using Realmz.Game;
 using RealmzCore.Data;
 using TMPro;
+using Unity.Cinemachine;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -11,14 +12,18 @@ using UnityEngine.InputSystem;
 namespace Realmz.World
 {
     /// <summary>
-    /// Perspective HD-2D tactical/exploration camera rig with scroll zoom, right-drag / WASD panning,
-    /// C-key recenter, canonical terrain collider raycasting, world bounds clamping, safe-viewport
-    /// combat auto-framing, and impact shake via UnityEngine.InputSystem.
+    /// Perspective HD-2D tactical/exploration camera rig with Cinemachine 3 integration,
+    /// scroll zoom, right-drag / WASD panning, Home-key recenter, tactical pitch toggle,
+    /// focus beat, hit-stop, canonical terrain collider raycasting, world bounds clamping,
+    /// safe-viewport combat auto-framing, and impact impulse via UnityEngine.InputSystem.
     /// </summary>
     public sealed class BywaterCameraRig : MonoBehaviour
     {
         public static readonly Rect DefaultSafeViewportRect = new Rect(0.11f, 0.16f, 0.85f, 0.69f);
         private const float UnitHeadHeightMeters = 1.55f;
+        private const float TacticalPitchDegrees = 64f;
+        private const float PitchBlendDuration = 0.32f;
+        private const string VirtualCameraChildName = "CinemachineVirtualCamera";
 
         [Header("Framing")]
         [SerializeField] private float fieldOfView = 34f;
@@ -38,6 +43,9 @@ namespace Realmz.World
         public Vector3 TargetManualOffset => _targetManualOffset;
         public Vector3 CurrentManualOffset => _currentManualOffset;
         public bool HasManualPanOffset => _targetManualOffset.sqrMagnitude > 0.04f || _currentManualOffset.sqrMagnitude > 0.04f;
+        public CinemachineCamera ActiveCinemachineCamera => _cmCamera;
+        public bool IsTacticalPitchActive { get; private set; }
+        public float CurrentPitchDegrees => _currentPitchDegrees;
 
         [Header("Smoothing & Controls")]
         [SerializeField] private float followSmoothTime = 0.18f;
@@ -51,6 +59,10 @@ namespace Realmz.World
         [SerializeField] private float maxManualPanRadius = 60f;
 
         private Camera _cam;
+        private CinemachineBrain _cmBrain;
+        private CinemachineCamera _cmCamera;
+        private CinemachineImpulseSource _impulseSource;
+        private CinemachineImpulseListener _impulseListener;
         private Collider _terrainCollider;
         private BywaterHudController _hudController;
         private EventSystem _cachedEventSystem;
@@ -70,19 +82,35 @@ namespace Realmz.World
         private float _worldWidth;
         private float _worldHeight;
 
+        private float _currentPitchDegrees = 48f;
+        private float _pitchStartDegrees = 48f;
+        private float _pitchTargetDegrees = 48f;
+        private float _pitchBlendElapsed = PitchBlendDuration;
+        private bool _pitchInitialized;
+        private readonly List<Vector3> _lastFramedCombatants = new List<Vector3>(16);
+        private Rect _lastFramedSafeViewport = DefaultSafeViewportRect;
+
         private float _impulseStrength;
         private float _impulseDuration;
         private float _impulseRemaining;
         private float _impulsePhase;
         private Vector3 _currentShakeOffset;
 
+        private bool _focusBeatActive;
+        private float _focusBeatRemaining;
+        private Vector3 _focusBeatTargetWorld;
+        private Vector3 _focusBeatCurrentNudge;
+        private float _focusBeatZoomDelta;
+        private float _focusBeatCurrentZoomOffset;
+
+        private bool _hitStopActive;
+        private float _hitStopRemaining;
+        private float _hitStopSavedTimeScale = 1f;
+
         private void Awake()
         {
-            _cam = GetComponent<Camera>();
-            if (_cam == null)
-            {
-                _cam = GetComponentInChildren<Camera>();
-            }
+            EnsurePitchInitialized();
+            EnsureCinemachineSetup();
 
             if (_cam != null)
             {
@@ -94,6 +122,16 @@ namespace Realmz.World
             ApplyCameraTransform();
         }
 
+        private void OnDisable()
+        {
+            StopHitStopAndRestoreTimeScale();
+        }
+
+        private void OnDestroy()
+        {
+            StopHitStopAndRestoreTimeScale();
+        }
+
         private void Update()
         {
             HandleZoomInput();
@@ -103,6 +141,10 @@ namespace Realmz.World
         private void LateUpdate()
         {
             float dt = Time.unscaledDeltaTime;
+
+            UpdateHitStop(dt);
+            UpdateTacticalPitchBlend(dt);
+            UpdateFocusBeat(dt);
 
             _currentFollowPos = Vector3.SmoothDamp(
                 _currentFollowPos,
@@ -215,12 +257,14 @@ namespace Realmz.World
                 _currentFollowPos = _followTarget;
                 _followVelocity = Vector3.zero;
                 _manualOffsetResetImmediate();
+                ClearFocusBeatImmediate();
                 ApplyCameraTransform();
             }
             else if (recenterManualPan)
             {
                 _targetManualOffset = Vector3.zero;
                 _keyPanVelocity = Vector3.zero;
+                CancelFocusBeat();
             }
             else
             {
@@ -235,12 +279,14 @@ namespace Realmz.World
                 _manualOffsetResetImmediate();
                 _currentFollowPos = _followTarget;
                 _followVelocity = Vector3.zero;
+                ClearFocusBeatImmediate();
                 ApplyCameraTransform();
             }
             else
             {
                 _targetManualOffset = Vector3.zero;
                 _keyPanVelocity = Vector3.zero;
+                CancelFocusBeat();
             }
         }
 
@@ -252,9 +298,50 @@ namespace Realmz.World
             }
 
             _isCombatMode = isCombat;
+            if (!isCombat)
+            {
+                _lastFramedCombatants.Clear();
+            }
+
             float desired = isCombat ? combatDistance : exploreDistance;
             float activeMax = isCombat ? MaxCombatDistance : EffectiveExploreMaxDistance;
             _targetDistance = Mathf.Clamp(desired, minDistance, activeMax);
+        }
+
+        public void ToggleTacticalPitch()
+        {
+            SetTacticalPitch(!IsTacticalPitchActive, immediate: false);
+        }
+
+        public void SetTacticalPitch(bool tactical, bool immediate = false)
+        {
+            EnsurePitchInitialized();
+            IsTacticalPitchActive = tactical;
+            float targetPitch = tactical ? TacticalPitchDegrees : pitchDegrees;
+
+            if (immediate)
+            {
+                _pitchStartDegrees = targetPitch;
+                _pitchTargetDegrees = targetPitch;
+                _currentPitchDegrees = targetPitch;
+                _pitchBlendElapsed = PitchBlendDuration;
+
+                if (_isCombatMode && _lastFramedCombatants.Count > 0 && !HasManualPanOffset)
+                {
+                    ReframeLastCombatantsForCurrentPitch(immediate: true);
+                }
+
+                ApplyCameraTransform();
+                return;
+            }
+
+            if (Mathf.Abs(_pitchTargetDegrees - targetPitch) > 0.001f ||
+                Mathf.Abs(_currentPitchDegrees - targetPitch) > 0.001f)
+            {
+                _pitchStartDegrees = _currentPitchDegrees;
+                _pitchTargetDegrees = targetPitch;
+                _pitchBlendElapsed = 0f;
+            }
         }
 
         public static void ComputeCombatFraming(
@@ -422,6 +509,17 @@ namespace Realmz.World
 
         public void FrameCombatantsInSafeViewport(IReadOnlyList<Vector3> worldPositions, Rect safeViewportNorm, bool immediate = false)
         {
+            EnsurePitchInitialized();
+            _lastFramedCombatants.Clear();
+            if (worldPositions != null)
+            {
+                for (int i = 0; i < worldPositions.Count; i++)
+                {
+                    _lastFramedCombatants.Add(worldPositions[i]);
+                }
+            }
+            _lastFramedSafeViewport = safeViewportNorm;
+
             Camera cam = ResolveCamera();
             float aspect = cam != null && cam.aspect > 0.1f ? cam.aspect : (16f / 9f);
             float fov = cam != null && cam.fieldOfView > 5f ? cam.fieldOfView : fieldOfView;
@@ -430,7 +528,7 @@ namespace Realmz.World
             ComputeCombatFraming(
                 worldPositions,
                 fov,
-                pitchDegrees,
+                _currentPitchDegrees,
                 aspect,
                 safeViewportNorm,
                 activeMin,
@@ -454,6 +552,7 @@ namespace Realmz.World
                 _followVelocity = Vector3.zero;
                 _currentDistance = _targetDistance;
                 _manualOffsetResetImmediate();
+                ClearFocusBeatImmediate();
                 ApplyCameraTransform();
             }
             else
@@ -480,9 +579,11 @@ namespace Realmz.World
                        vp.y <= safeViewportNorm.yMax;
             }
 
-            Vector3 pivot = _currentFollowPos + _currentManualOffset;
-            Quaternion rot = Quaternion.Euler(pitchDegrees, 0f, 0f);
-            Vector3 camPos = pivot - (rot * Vector3.forward) * _currentDistance;
+            EnsurePitchInitialized();
+            Vector3 pivot = _currentFollowPos + _currentManualOffset + _focusBeatCurrentNudge;
+            Quaternion rot = Quaternion.Euler(_currentPitchDegrees, 0f, 0f);
+            float activeDistance = Mathf.Clamp(_currentDistance + _focusBeatCurrentZoomOffset, minDistance, _isCombatMode ? MaxCombatDistance : EffectiveExploreMaxDistance);
+            Vector3 camPos = pivot - (rot * Vector3.forward) * activeDistance;
             Vector3 camLocal = Quaternion.Inverse(rot) * (worldPos - camPos);
             if (camLocal.z <= 0.05f)
             {
@@ -513,6 +614,7 @@ namespace Realmz.World
                 return;
             }
 
+            EnsurePitchInitialized();
             Camera cam = ResolveCamera();
             float aspect = cam != null && cam.aspect > 0.1f ? cam.aspect : (16f / 9f);
             float fov = cam != null && cam.fieldOfView > 5f ? cam.fieldOfView : fieldOfView;
@@ -527,7 +629,7 @@ namespace Realmz.World
             ComputeCombatFraming(
                 pts,
                 fov,
-                pitchDegrees,
+                _currentPitchDegrees,
                 aspect,
                 padded,
                 _targetDistance,
@@ -548,6 +650,11 @@ namespace Realmz.World
 
         public void PlayImpactImpulse(float strength = 0.14f, float duration = 0.16f)
         {
+            PlayImpactImpulse(strength, duration, null);
+        }
+
+        public void PlayImpactImpulse(float strength, float duration, Vector3? directionWorld)
+        {
             if (strength <= 0f || duration <= 0f)
             {
                 _impulseRemaining = 0f;
@@ -555,10 +662,78 @@ namespace Realmz.World
                 return;
             }
 
+            EnsureCinemachineSetup();
+
             _impulseStrength = strength;
             _impulseDuration = duration;
             _impulseRemaining = duration;
             _impulsePhase = Time.unscaledTime * 37.3f;
+
+            if (_impulseSource != null)
+            {
+                Vector3 dir = directionWorld.HasValue && directionWorld.Value.sqrMagnitude > 0.0001f
+                    ? directionWorld.Value.normalized
+                    : Vector3.down;
+                _impulseSource.ImpulseDefinition.ImpulseDuration = duration;
+                _impulseSource.GenerateImpulseWithVelocity(dir * strength);
+            }
+        }
+
+        public void PlayFocusBeat(Vector3 worldPos, float zoomDelta = -1.6f, float holdSeconds = 0.45f)
+        {
+            if (!Application.isPlaying || Application.isBatchMode || !gameObject.activeInHierarchy || holdSeconds <= 0f)
+            {
+                return;
+            }
+
+            Vector3 clamped = new Vector3(worldPos.x, 0f, worldPos.z);
+            if (_hasWorldBounds)
+            {
+                clamped.x = Mathf.Clamp(clamped.x, 0f, _worldWidth);
+                clamped.z = Mathf.Clamp(clamped.z, -_worldHeight, 0f);
+            }
+
+            _focusBeatActive = true;
+            _focusBeatRemaining = holdSeconds;
+            _focusBeatTargetWorld = clamped;
+            _focusBeatZoomDelta = zoomDelta;
+        }
+
+        public void TriggerHitStop(float durationSeconds = 0.040f)
+        {
+            if (Application.isBatchMode || durationSeconds <= 0f)
+            {
+                return;
+            }
+
+            if (!_hitStopActive)
+            {
+                if (Time.timeScale <= 0.01f)
+                {
+                    return;
+                }
+
+                _hitStopSavedTimeScale = Time.timeScale;
+                _hitStopActive = true;
+                _hitStopRemaining = durationSeconds;
+                Time.timeScale = 0.05f;
+            }
+            else
+            {
+                _hitStopRemaining = Mathf.Max(_hitStopRemaining, durationSeconds);
+            }
+        }
+
+        public void StopHitStopAndRestoreTimeScale()
+        {
+            if (!_hitStopActive)
+            {
+                return;
+            }
+
+            _hitStopActive = false;
+            _hitStopRemaining = 0f;
+            Time.timeScale = _hitStopSavedTimeScale > 0.01f ? _hitStopSavedTimeScale : 1f;
         }
 
         public bool ScreenPointToGridCoord(Vector2 screenPos, out GridCoord coord)
@@ -639,6 +814,7 @@ namespace Realmz.World
             Vector3 dragPan = new Vector3(-screenDelta.x, 0f, -screenDelta.y) * (mouseDragPanSpeed * distanceScale);
             _targetManualOffset += dragPan;
             ClampPanTarget();
+            CancelFocusBeat();
             return _targetManualOffset - oldOffset;
         }
 
@@ -654,6 +830,7 @@ namespace Realmz.World
             Vector3 desiredVelocity = Vector3.zero;
             if (moveAxis.sqrMagnitude > 0.0001f)
             {
+                CancelFocusBeat();
                 Vector3 desiredDir = new Vector3(moveAxis.x, 0f, moveAxis.y).normalized;
                 float distanceScale = Mathf.Clamp(Mathf.Sqrt(Mathf.Max(0.4f, _currentDistance / Mathf.Max(1f, defaultDistance))), 0.7f, 1.8f);
                 float speed = keyPanSpeed * distanceScale * (shiftHeld ? keyPanShiftMultiplier : 1f);
@@ -815,25 +992,254 @@ namespace Realmz.World
             return _cam;
         }
 
+        private void EnsurePitchInitialized()
+        {
+            if (_pitchInitialized)
+            {
+                return;
+            }
+
+            _pitchInitialized = true;
+            float basePitch = IsTacticalPitchActive ? TacticalPitchDegrees : pitchDegrees;
+            _currentPitchDegrees = basePitch;
+            _pitchStartDegrees = basePitch;
+            _pitchTargetDegrees = basePitch;
+            _pitchBlendElapsed = PitchBlendDuration;
+        }
+
+        private void UpdateTacticalPitchBlend(float dt)
+        {
+            EnsurePitchInitialized();
+            if (_pitchBlendElapsed >= PitchBlendDuration)
+            {
+                return;
+            }
+
+            _pitchBlendElapsed = Mathf.Min(PitchBlendDuration, _pitchBlendElapsed + dt);
+            float t = PitchBlendDuration > 0f ? Mathf.Clamp01(_pitchBlendElapsed / PitchBlendDuration) : 1f;
+            _currentPitchDegrees = Mathf.SmoothStep(_pitchStartDegrees, _pitchTargetDegrees, t);
+
+            if (_isCombatMode && _lastFramedCombatants.Count > 0 && !HasManualPanOffset)
+            {
+                ReframeLastCombatantsForCurrentPitch(immediate: false);
+            }
+        }
+
+        private void ReframeLastCombatantsForCurrentPitch(bool immediate)
+        {
+            Camera cam = ResolveCamera();
+            float aspect = cam != null && cam.aspect > 0.1f ? cam.aspect : (16f / 9f);
+            float fov = cam != null && cam.fieldOfView > 5f ? cam.fieldOfView : fieldOfView;
+            float activeMin = Mathf.Clamp(combatDistance * 0.85f, minDistance, MaxCombatDistance);
+            Rect safeRect = _lastFramedSafeViewport.width > 0.01f && _lastFramedSafeViewport.height > 0.01f
+                ? _lastFramedSafeViewport
+                : DefaultSafeViewportRect;
+
+            ComputeCombatFraming(
+                _lastFramedCombatants,
+                fov,
+                _currentPitchDegrees,
+                aspect,
+                safeRect,
+                activeMin,
+                MaxCombatDistance,
+                out Vector3 pivotWorld,
+                out float solvedDistance);
+
+            _targetDistance = Mathf.Clamp(solvedDistance, minDistance, MaxCombatDistance);
+            _followTarget = new Vector3(pivotWorld.x, 0f, pivotWorld.z);
+            if (_hasWorldBounds)
+            {
+                _followTarget.x = Mathf.Clamp(_followTarget.x, 0f, _worldWidth);
+                _followTarget.z = Mathf.Clamp(_followTarget.z, -_worldHeight, 0f);
+            }
+
+            if (immediate)
+            {
+                _currentFollowPos = _followTarget;
+                _followVelocity = Vector3.zero;
+                _currentDistance = _targetDistance;
+            }
+        }
+
+        private void UpdateFocusBeat(float dt)
+        {
+            Vector3 desiredNudge = Vector3.zero;
+            float desiredZoomOffset = 0f;
+
+            if (_focusBeatActive)
+            {
+                _focusBeatRemaining -= dt;
+                if (_focusBeatRemaining <= 0f)
+                {
+                    _focusBeatActive = false;
+                    _focusBeatRemaining = 0f;
+                }
+                else
+                {
+                    desiredNudge = (_focusBeatTargetWorld - _followTarget) * 0.45f;
+                    desiredNudge.y = 0f;
+                    desiredZoomOffset = _focusBeatZoomDelta;
+                }
+            }
+
+            float nudgeBlend = 1f - Mathf.Exp(-14f * dt);
+            float zoomBlend = 1f - Mathf.Exp(-zoomSmoothSpeed * dt);
+            _focusBeatCurrentNudge = Vector3.Lerp(_focusBeatCurrentNudge, desiredNudge, nudgeBlend);
+            _focusBeatCurrentZoomOffset = Mathf.Lerp(_focusBeatCurrentZoomOffset, desiredZoomOffset, zoomBlend);
+
+            if (!_focusBeatActive && _focusBeatCurrentNudge.sqrMagnitude < 0.00001f)
+            {
+                _focusBeatCurrentNudge = Vector3.zero;
+            }
+            if (!_focusBeatActive && Mathf.Abs(_focusBeatCurrentZoomOffset) < 0.0001f)
+            {
+                _focusBeatCurrentZoomOffset = 0f;
+            }
+        }
+
+        private void CancelFocusBeat()
+        {
+            _focusBeatActive = false;
+            _focusBeatRemaining = 0f;
+        }
+
+        private void ClearFocusBeatImmediate()
+        {
+            _focusBeatActive = false;
+            _focusBeatRemaining = 0f;
+            _focusBeatCurrentNudge = Vector3.zero;
+            _focusBeatCurrentZoomOffset = 0f;
+        }
+
+        private void UpdateHitStop(float dt)
+        {
+            if (!_hitStopActive)
+            {
+                return;
+            }
+
+            _hitStopRemaining -= dt;
+            if (_hitStopRemaining <= 0f)
+            {
+                StopHitStopAndRestoreTimeScale();
+            }
+        }
+
+        private void EnsureCinemachineSetup()
+        {
+            Camera cam = ResolveCamera();
+            if (cam != null)
+            {
+                if (_cmBrain == null || _cmBrain.gameObject != cam.gameObject)
+                {
+                    _cmBrain = cam.GetComponent<CinemachineBrain>();
+                    if (_cmBrain == null)
+                    {
+                        _cmBrain = cam.gameObject.AddComponent<CinemachineBrain>();
+                    }
+                }
+
+                _cmBrain.IgnoreTimeScale = true;
+                _cmBrain.UpdateMethod = CinemachineBrain.UpdateMethods.LateUpdate;
+                _cmBrain.DefaultBlend = new CinemachineBlendDefinition(CinemachineBlendDefinition.Styles.EaseInOut, 0.2f);
+            }
+
+            if (_impulseSource == null)
+            {
+                _impulseSource = GetComponent<CinemachineImpulseSource>();
+                if (_impulseSource == null)
+                {
+                    _impulseSource = gameObject.AddComponent<CinemachineImpulseSource>();
+                }
+            }
+
+            _impulseSource.ImpulseDefinition.ImpulseChannel = 1;
+            _impulseSource.ImpulseDefinition.ImpulseType = CinemachineImpulseDefinition.ImpulseTypes.Uniform;
+            _impulseSource.ImpulseDefinition.ImpulseShape = CinemachineImpulseDefinition.ImpulseShapes.Explosion;
+
+            if (_cmCamera == null || (cam != null && _cmCamera.gameObject == cam.gameObject))
+            {
+                Transform vcamTf = transform.Find(VirtualCameraChildName);
+                GameObject vcamGo = (vcamTf != null && (cam == null || vcamTf.gameObject != cam.gameObject))
+                    ? vcamTf.gameObject
+                    : null;
+                if (vcamGo == null)
+                {
+                    vcamGo = new GameObject(VirtualCameraChildName);
+                    vcamGo.transform.SetParent(transform, false);
+                }
+
+                _cmCamera = vcamGo.GetComponent<CinemachineCamera>();
+                if (_cmCamera == null)
+                {
+                    _cmCamera = vcamGo.AddComponent<CinemachineCamera>();
+                }
+
+                _impulseListener = vcamGo.GetComponent<CinemachineImpulseListener>();
+                if (_impulseListener == null)
+                {
+                    _impulseListener = vcamGo.AddComponent<CinemachineImpulseListener>();
+                }
+            }
+            else if (_impulseListener == null)
+            {
+                _impulseListener = _cmCamera.GetComponent<CinemachineImpulseListener>();
+                if (_impulseListener == null)
+                {
+                    _impulseListener = _cmCamera.gameObject.AddComponent<CinemachineImpulseListener>();
+                }
+            }
+
+            if (_impulseListener != null)
+            {
+                _impulseListener.ApplyAfter = CinemachineCore.Stage.Noise;
+                _impulseListener.ChannelMask = 1;
+                _impulseListener.Gain = 1f;
+                _impulseListener.UseCameraSpace = true;
+            }
+        }
+
         private void ApplyCameraTransform()
         {
+            EnsurePitchInitialized();
+            EnsureCinemachineSetup();
+
             Camera cam = ResolveCamera();
             if (cam != null && Mathf.Abs(cam.fieldOfView - fieldOfView) > 0.01f)
             {
                 cam.fieldOfView = fieldOfView;
             }
 
-            Quaternion rot = Quaternion.Euler(pitchDegrees, 0f, 0f);
-            Vector3 pivot = _currentFollowPos + _currentManualOffset;
+            Quaternion rot = Quaternion.Euler(_currentPitchDegrees, 0f, 0f);
+            Vector3 pivot = _currentFollowPos + _currentManualOffset + _focusBeatCurrentNudge;
             if (_hasWorldBounds)
             {
                 pivot.x = Mathf.Clamp(pivot.x, 0f, _worldWidth);
                 pivot.z = Mathf.Clamp(pivot.z, -_worldHeight, 0f);
             }
 
+            float activeMax = _isCombatMode ? MaxCombatDistance : EffectiveExploreMaxDistance;
+            float activeDistance = Mathf.Clamp(_currentDistance + _focusBeatCurrentZoomOffset, minDistance, activeMax);
             Vector3 forward = rot * Vector3.forward;
-            transform.rotation = rot;
-            transform.position = pivot - forward * _currentDistance + _currentShakeOffset;
+            Vector3 pos = pivot - forward * activeDistance + _currentShakeOffset;
+
+            transform.SetPositionAndRotation(pos, rot);
+            if (cam != null && cam.transform != transform)
+            {
+                cam.transform.SetPositionAndRotation(pos, rot);
+            }
+
+            if (_cmCamera != null)
+            {
+                _cmCamera.ForceCameraPosition(pos, rot);
+                _cmCamera.Lens.FieldOfView = fieldOfView;
+                if (cam != null)
+                {
+                    _cmCamera.Lens.NearClipPlane = cam.nearClipPlane;
+                    _cmCamera.Lens.FarClipPlane = cam.farClipPlane;
+                }
+            }
         }
     }
 }

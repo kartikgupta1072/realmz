@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using RealmzCore.Combat;
 using RealmzCore.Data;
@@ -200,6 +201,15 @@ namespace Realmz.Game
         private TextMeshProUGUI _victoryLevelUpNowLabel;
         private CombatVictorySummary _cachedVictorySummary;
         private bool _outcomeInRichVictoryMode;
+        private Coroutine _victoryAnimCoroutine;
+
+        private struct VictoryHeroAnimEntry
+        {
+            public VictoryHeroCardRefs Card;
+            public float BaseFrac;
+            public float AfterFrac;
+            public bool ReadyToLevelUp;
+        }
 
         public bool IsLevelUpModalOpen => _levelUpModalRoot != null && _levelUpModalRoot.activeSelf;
 
@@ -437,6 +447,9 @@ namespace Realmz.Game
                 BywaterUiHelpers.MutedSlate,
                 TextAlignmentOptions.Center,
                 wrap: true);
+            _paperDollSummaryText.enableAutoSizing = true;
+            _paperDollSummaryText.fontSizeMin = 11f;
+            _paperDollSummaryText.fontSizeMax = 15f;
             _paperDollSummaryText.rectTransform.anchorMin = Vector2.zero;
             _paperDollSummaryText.rectTransform.anchorMax = Vector2.one;
             _paperDollSummaryText.rectTransform.offsetMin = new Vector2(6f, 4f);
@@ -577,10 +590,16 @@ namespace Realmz.Game
             tvlg.childControlHeight = true;
 
             TextMeshProUGUI slotLbl = BywaterUiHelpers.CreateLabel(textCol.transform, "SlotName", label, _font, 15f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            slotLbl.enableAutoSizing = true;
+            slotLbl.fontSizeMin = 11f;
+            slotLbl.fontSizeMax = 15f;
             slotLbl.overflowMode = TextOverflowModes.Truncate;
             slotLbl.gameObject.AddComponent<LayoutElement>().preferredHeight = 20f;
 
             TextMeshProUGUI itemLbl = BywaterUiHelpers.CreateLabel(textCol.transform, "ItemName", "Empty", _font, 15f, BywaterUiHelpers.MutedSlate, TextAlignmentOptions.TopLeft, wrap: true);
+            itemLbl.enableAutoSizing = true;
+            itemLbl.fontSizeMin = 11f;
+            itemLbl.fontSizeMax = 15f;
             itemLbl.overflowMode = TextOverflowModes.Ellipsis;
             itemLbl.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
 
@@ -621,9 +640,11 @@ namespace Realmz.Game
                     PartyMemberState hero = _cachedParty != null && _selectedHeroIndex >= 0 && _selectedHeroIndex < _cachedParty.Members.Count
                         ? _cachedParty.Members[_selectedHeroIndex]
                         : null;
+                    string setTag = FormatItemSetProgressTag(hero, slotRef.BoundDef);
+                    string titlePrefix = string.IsNullOrEmpty(setTag) ? slotRef.BoundDef.Name : $"{slotRef.BoundDef.Name} {setTag}";
                     string setInfo = FormatItemSetTooltipSection(hero, slotRef.BoundDef);
                     string setBlock = string.IsNullOrEmpty(setInfo) ? string.Empty : $"\n{setInfo}";
-                    return ($"{slotRef.BoundDef.Name} ({slotRef.DisplayTitle})",
+                    return ($"{titlePrefix} ({slotRef.DisplayTitle})",
                         $"{stats}{setBlock}\n{slotRef.BoundDef.Description}\n\n" +
                         "Left-click: Filter stash for this slot\nRight-click or Double-click: Unequip to Stash");
                 }
@@ -965,8 +986,10 @@ namespace Realmz.Game
                 bool isFilterActive = _stashSlotFilter.HasValue && _stashSlotFilter.Value == sr.Slot;
                 if (sr.BoundDef != null)
                 {
+                    string setTag = FormatItemSetProgressTag(hero, sr.BoundDef);
+                    string titleLine = string.IsNullOrEmpty(setTag) ? sr.BoundDef.Name : $"{sr.BoundDef.Name} {setTag}";
                     string stats = FormatItemStats(sr.BoundDef);
-                    sr.ItemLabel.text = string.IsNullOrEmpty(stats) ? sr.BoundDef.Name : $"{sr.BoundDef.Name}\n{stats}";
+                    sr.ItemLabel.text = string.IsNullOrEmpty(stats) ? titleLine : $"{titleLine}\n{stats}";
                     sr.ItemLabel.color = BywaterUiHelpers.ParchmentText;
                     Sprite sp = _catalog != null ? _catalog.GetItemIcon(sr.BoundDef.Id, sr.BoundDef.Name) : null;
                     sr.Icon.sprite = sp;
@@ -1263,7 +1286,7 @@ namespace Realmz.Game
                     }
                 }
 
-                string header = $"{prog.Definition.Name} ({prog.EquippedPieces}/{prog.TargetPieces} pcs)";
+                string header = $"{prog.Definition.Name} [{prog.EquippedPieces}/{prog.TargetPieces}]";
                 if (unlocked.Count > 0 && pending.Count > 0)
                 {
                     entries.Add($"{header}: {string.Join(", ", unlocked)} (Next {string.Join(" | ", pending)})");
@@ -1281,6 +1304,41 @@ namespace Realmz.Game
             return "Sets: " + string.Join(" | ", entries);
         }
 
+        private static string FormatItemSetProgressTag(PartyMemberState hero, ItemDefinition item)
+        {
+            if (item == null)
+            {
+                return string.Empty;
+            }
+
+            IReadOnlyList<EquipmentSetDefinition> itemSets = EquipmentSetCatalog.GetSetsForItem(item.Id);
+            if (itemSets == null || itemSets.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            if (itemSets.Count == 1)
+            {
+                EquipmentSetDefinition def = itemSets[0];
+                EquipmentSetProgress prog = hero != null ? hero.GetEquipmentSetProgress(def.SetId) : null;
+                int equipped = prog != null ? prog.EquippedPieces : 0;
+                int target = prog != null ? prog.TargetPieces : def.DisplayMaxPieces;
+                return $"[{equipped}/{target}]";
+            }
+
+            List<string> tags = new List<string>(itemSets.Count);
+            for (int i = 0; i < itemSets.Count; i++)
+            {
+                EquipmentSetDefinition def = itemSets[i];
+                EquipmentSetProgress prog = hero != null ? hero.GetEquipmentSetProgress(def.SetId) : null;
+                int equipped = prog != null ? prog.EquippedPieces : 0;
+                int target = prog != null ? prog.TargetPieces : def.DisplayMaxPieces;
+                tags.Add($"[{equipped}/{target}]");
+            }
+
+            return string.Join(" ", tags);
+        }
+
         private static string FormatItemSetTooltipSection(PartyMemberState hero, ItemDefinition item)
         {
             if (item == null)
@@ -1294,23 +1352,13 @@ namespace Realmz.Game
                 return string.Empty;
             }
 
-            IReadOnlyList<EquipmentSetProgress> heroSets = hero != null ? hero.GetActiveEquipmentSets() : null;
             List<string> lines = new List<string>(itemSets.Count);
             for (int i = 0; i < itemSets.Count; i++)
             {
                 EquipmentSetDefinition setDef = itemSets[i];
-                int equippedCount = 0;
-                if (heroSets != null)
-                {
-                    for (int h = 0; h < heroSets.Count; h++)
-                    {
-                        if (string.Equals(heroSets[h].Definition.SetId, setDef.SetId, StringComparison.OrdinalIgnoreCase))
-                        {
-                            equippedCount = heroSets[h].EquippedPieces;
-                            break;
-                        }
-                    }
-                }
+                EquipmentSetProgress prog = hero != null ? hero.GetEquipmentSetProgress(setDef.SetId) : null;
+                int equippedCount = prog != null ? prog.EquippedPieces : 0;
+                int targetPieces = prog != null ? prog.TargetPieces : setDef.DisplayMaxPieces;
 
                 List<string> tierParts = new List<string>(setDef.Tiers.Count);
                 for (int t = 0; t < setDef.Tiers.Count; t++)
@@ -1321,8 +1369,8 @@ namespace Realmz.Game
                 }
 
                 string progressLabel = hero != null
-                    ? $"({equippedCount}/{setDef.DisplayMaxPieces} pcs)"
-                    : $"({setDef.DisplayMaxPieces} pcs)";
+                    ? $"[{equippedCount}/{targetPieces}]"
+                    : $"[{targetPieces} pcs]";
                 lines.Add($"Set: {setDef.Name} {progressLabel}\n  {string.Join(" | ", tierParts)}");
             }
 
@@ -1871,6 +1919,8 @@ namespace Realmz.Game
                 return;
             }
 
+            StopVictoryAnimation();
+
             _cachedVictorySummary = summary;
             _cachedParty = party ?? _cachedParty;
             _cachedBundle = bundle ?? _cachedBundle;
@@ -1894,6 +1944,8 @@ namespace Realmz.Game
             if (_outcomeLevelUpBanner != null) _outcomeLevelUpBanner.SetActive(false);
 
             bool anyReady = summary.AnyReadyToLevelUp;
+            bool immediate = Application.isBatchMode || !Application.isPlaying || !gameObject.activeInHierarchy || SkipAnimations;
+            List<VictoryHeroAnimEntry> animEntries = immediate ? null : new List<VictoryHeroAnimEntry>(summary.Heroes.Count);
 
             if (_victorySubtitleText != null)
             {
@@ -1933,6 +1985,9 @@ namespace Realmz.Game
                 if (card.LvlUpIconGo != null)
                 {
                     card.LvlUpIconGo.SetActive(h.ReadyToLevelUp);
+                    card.LvlUpIconGo.transform.localScale = (!immediate && h.ReadyToLevelUp)
+                        ? new Vector3(0.4f, 0.4f, 1f)
+                        : Vector3.one;
                 }
                 if (card.ReviveIconGo != null)
                 {
@@ -1943,15 +1998,19 @@ namespace Realmz.Game
                     card.StatusTagGo.SetActive(false);
                 }
 
-                int span = Math.Max(1, h.NextLevelXp - h.CurrentLevelFloorXp);
-                float baseFrac = Mathf.Clamp01((h.XpBefore - h.CurrentLevelFloorXp) / (float)span);
-                float afterFrac = Mathf.Clamp01((h.XpAfter - h.CurrentLevelFloorXp) / (float)span);
+                int rawSpan = h.NextLevelXp - h.CurrentLevelFloorXp;
+                float baseFrac = rawSpan > 0
+                    ? Mathf.Clamp01((float)(h.XpBefore - h.CurrentLevelFloorXp) / rawSpan)
+                    : (h.XpBefore >= h.CurrentLevelFloorXp ? 1f : 0f);
+                float afterFrac = rawSpan > 0
+                    ? Mathf.Clamp01((float)(h.XpAfter - h.CurrentLevelFloorXp) / rawSpan)
+                    : (h.XpAfter >= h.CurrentLevelFloorXp ? 1f : 0f);
                 if (afterFrac < baseFrac) baseFrac = 0f;
 
                 card.XpBaseFill.rectTransform.anchorMin = Vector2.zero;
                 card.XpBaseFill.rectTransform.anchorMax = new Vector2(baseFrac, 1f);
                 card.XpGainFill.rectTransform.anchorMin = new Vector2(baseFrac, 0f);
-                card.XpGainFill.rectTransform.anchorMax = new Vector2(afterFrac, 1f);
+                card.XpGainFill.rectTransform.anchorMax = new Vector2(immediate ? afterFrac : baseFrac, 1f);
                 card.XpText.text = $"+{h.XpAwarded} XP  ({h.XpAfter}/{h.NextLevelXp})";
                 card.PerfText.text = $"Dmg: {h.DamageDealt}   Kills: {h.Kills}   Heal: {h.HealingDone}";
 
@@ -1959,6 +2018,17 @@ namespace Realmz.Game
                     ? BywaterUiHelpers.BrassHighlight
                     : (h.WasFallenRevived ? BywaterUiHelpers.InfoCyan : BywaterUiHelpers.BrassAccent);
                 BywaterUiHelpers.SetBorderColor(card.Root.transform, cardBorder);
+
+                if (!immediate)
+                {
+                    animEntries.Add(new VictoryHeroAnimEntry
+                    {
+                        Card = card,
+                        BaseFrac = baseFrac,
+                        AfterFrac = afterFrac,
+                        ReadyToLevelUp = h.ReadyToLevelUp
+                    });
+                }
             }
 
             RefreshVictoryLootGrid(summary, _cachedParty, _cachedBundle);
@@ -1979,6 +2049,114 @@ namespace Realmz.Game
 
             _outcomeModalRoot.SetActive(true);
             _outcomeModalRoot.transform.SetAsLastSibling();
+
+            if (immediate)
+            {
+                if (anyReady)
+                {
+                    OnVictoryLevelUpPopped?.Invoke();
+                }
+            }
+            else
+            {
+                _victoryAnimCoroutine = StartCoroutine(AnimateVictoryOutcomeCoroutine(animEntries, anyReady));
+            }
+        }
+
+        private IEnumerator AnimateVictoryOutcomeCoroutine(List<VictoryHeroAnimEntry> entries, bool anyReady)
+        {
+            const float xpFillDuration = 0.65f;
+            const float popDuration = 0.24f;
+
+            float elapsed = 0f;
+            while (elapsed < xpFillDuration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(elapsed / xpFillDuration));
+                for (int i = 0; i < entries.Count; i++)
+                {
+                    VictoryHeroAnimEntry e = entries[i];
+                    if (e.Card?.XpGainFill != null)
+                    {
+                        float x = Mathf.Lerp(e.BaseFrac, e.AfterFrac, t);
+                        e.Card.XpGainFill.rectTransform.anchorMax = new Vector2(x, 1f);
+                    }
+                }
+                yield return null;
+            }
+
+            for (int i = 0; i < entries.Count; i++)
+            {
+                VictoryHeroAnimEntry e = entries[i];
+                if (e.Card?.XpGainFill != null)
+                {
+                    e.Card.XpGainFill.rectTransform.anchorMax = new Vector2(e.AfterFrac, 1f);
+                }
+            }
+
+            if (anyReady)
+            {
+                elapsed = 0f;
+                float halfPop = popDuration * 0.5f;
+                while (elapsed < popDuration)
+                {
+                    elapsed += Time.unscaledDeltaTime;
+                    float scale;
+                    if (elapsed <= halfPop)
+                    {
+                        float u = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(elapsed / halfPop));
+                        scale = Mathf.Lerp(0.4f, 1.28f, u);
+                    }
+                    else
+                    {
+                        float u = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((elapsed - halfPop) / halfPop));
+                        scale = Mathf.Lerp(1.28f, 1.0f, u);
+                    }
+
+                    Vector3 vScale = new Vector3(scale, scale, 1f);
+                    for (int i = 0; i < entries.Count; i++)
+                    {
+                        VictoryHeroAnimEntry e = entries[i];
+                        if (e.ReadyToLevelUp && e.Card?.LvlUpIconGo != null)
+                        {
+                            e.Card.LvlUpIconGo.transform.localScale = vScale;
+                        }
+                    }
+                    yield return null;
+                }
+            }
+
+            for (int i = 0; i < entries.Count; i++)
+            {
+                VictoryHeroAnimEntry e = entries[i];
+                if (e.Card?.LvlUpIconGo != null)
+                {
+                    e.Card.LvlUpIconGo.transform.localScale = Vector3.one;
+                }
+            }
+
+            _victoryAnimCoroutine = null;
+            if (anyReady)
+            {
+                OnVictoryLevelUpPopped?.Invoke();
+            }
+        }
+
+        private void StopVictoryAnimation()
+        {
+            if (_victoryAnimCoroutine != null)
+            {
+                StopCoroutine(_victoryAnimCoroutine);
+                _victoryAnimCoroutine = null;
+            }
+
+            for (int i = 0; i < _victoryHeroCards.Count; i++)
+            {
+                if (_victoryHeroCards[i]?.LvlUpIconGo != null)
+                {
+                    _victoryHeroCards[i].LvlUpIconGo.transform.localScale = Vector3.one;
+                }
+            }
         }
 
         public bool ToggleVictoryLootSelection(int stackIndex)

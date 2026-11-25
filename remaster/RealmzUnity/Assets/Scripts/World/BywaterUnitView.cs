@@ -19,6 +19,9 @@ namespace Realmz.World
         private static readonly int ColorId = Shader.PropertyToID("_Color");
         private static readonly int TintColorId = Shader.PropertyToID("_TintColor");
         private static readonly int WindPhaseId = Shader.PropertyToID("_WindPhase");
+        private static readonly int FlipXId = Shader.PropertyToID("_FlipX");
+        private static readonly int HoverOutlineStrengthId = Shader.PropertyToID("_HoverOutlineStrength");
+        private static readonly int HoverOutlineColorId = Shader.PropertyToID("_HoverOutlineColor");
         private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
         private static readonly int SrcBlendId = Shader.PropertyToID("_SrcBlend");
         private static readonly int DstBlendId = Shader.PropertyToID("_DstBlend");
@@ -29,6 +32,10 @@ namespace Realmz.World
         private static readonly int WindTipSwayId = Shader.PropertyToID("_WindTipSway");
         private static readonly int TrampleStrengthId = Shader.PropertyToID("_TrampleStrength");
         private static readonly int CutoffId = Shader.PropertyToID("_Cutoff");
+        private const int MaxFloatingTextPoolSize = 10;
+        private const float FloatingTextOvershootDuration = 0.16f;
+        private const float FloatingTextOvershootStartScale = 1.35f;
+        private const float FloatingTextOvershootEndScale = 1.0f;
         private static readonly Color CurrentTurnGold = new Color(0.980f, 0.800f, 0.082f, 0.95f); // #FACC15
         private static readonly Color HitFlashGoldWhite = new Color(1.0f, 0.953f, 0.690f, 1.0f); // #FFF3B0
         private static readonly Color DeadSpriteTint = new Color(0.56f, 0.52f, 0.50f, 0.86f);
@@ -82,6 +89,8 @@ namespace Realmz.World
         private UnitAnimState _animState = UnitAnimState.Idle;
         private float _attackHoldUntil;
         private bool _facingRight = true;
+        private bool _hoverRimActive;
+        private Color _hoverRimColor = Color.clear;
         private bool _registeredDustUser;
 
         private TMP_FontAsset _font;
@@ -117,7 +126,25 @@ namespace Realmz.World
             public bool Active;
         }
 
+        private struct FloatingTextEntry
+        {
+            public GameObject Root;
+            public Canvas Canvas;
+            public TextMeshProUGUI Label;
+            public Vector3 StartPos;
+            public Vector3 HorizontalOffset;
+            public Color BaseColor;
+            public float BaseScale;
+            public float Age;
+            public float Duration;
+            public float InitialVy;
+            public float Gravity;
+            public bool Active;
+        }
+
         private readonly List<DustPuffInstance> _dustPuffs = new List<DustPuffInstance>(8);
+        private readonly List<FloatingTextEntry> _floatingTextPool = new List<FloatingTextEntry>(MaxFloatingTextPoolSize);
+        private GameObject _floatingTextPoolParent;
         private readonly List<Vector3> _pathScratch = new List<Vector3>(16);
 
         private struct StaggerEntry
@@ -185,8 +212,17 @@ namespace Realmz.World
             _facingRight = facingRight;
             if (_spriteBillboardTransform != null)
             {
-                _spriteBillboardTransform.localScale = new Vector3(_facingRight ? 1f : -1f, 1f, 1f);
+                _spriteBillboardTransform.localScale = Vector3.one;
             }
+            ApplySpritePropertyBlock(_isHitFlashing ? HitFlashGoldWhite : GetNormalSpriteTint());
+        }
+
+        public void ShowHoverRim(bool active, Color color)
+        {
+            EnsureHierarchy();
+            _hoverRimActive = active;
+            _hoverRimColor = active ? color : Color.clear;
+            ApplySpritePropertyBlock(_isHitFlashing ? HitFlashGoldWhite : GetNormalSpriteTint());
         }
 
         private void ResolveStateMaterials(Material fallback)
@@ -271,6 +307,8 @@ namespace Realmz.World
             _animState = UnitAnimState.Idle;
             _attackHoldUntil = 0f;
             _facingRight = true;
+            _hoverRimActive = false;
+            _hoverRimColor = Color.clear;
             _idlePhase = ComputeDeterministicPhase(UnitId);
             _windPhaseNorm = _idlePhase / (Mathf.PI * 2f);
 
@@ -474,6 +512,7 @@ namespace Realmz.World
         private void Update()
         {
             UpdateDustPuffs(Time.deltaTime);
+            UpdateFloatingTexts(Time.unscaledDeltaTime);
 
             if (!_isAlive)
             {
@@ -695,6 +734,8 @@ namespace Realmz.World
             else
             {
                 _isAlive = false;
+                _hoverRimActive = false;
+                _hoverRimColor = Color.clear;
                 if (_contactShadowRenderer != null)
                 {
                     _contactShadowRenderer.gameObject.SetActive(false);
@@ -887,6 +928,11 @@ namespace Realmz.World
             ShowArcingFloatingText(message, color, isCrit: false);
         }
 
+        public void ShowPopup(string text, Color color, bool isCritOrBlast = false)
+        {
+            ShowArcingFloatingText(text, color, isCritOrBlast);
+        }
+
         public void ShowArcingFloatingText(string text, Color color, bool isCrit = false)
         {
             if (string.IsNullOrEmpty(text))
@@ -894,67 +940,62 @@ namespace Realmz.World
                 return;
             }
 
-            GameObject floatGo = new GameObject("FloatingText");
-            floatGo.transform.position = transform.position + new Vector3(0f, GetVisualHeadHeight() + 0.34f, 0f);
-            float baseScale = 0.01f;
-            floatGo.transform.localScale = Vector3.one * baseScale;
-
-            Canvas canvas = floatGo.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.WorldSpace;
-            canvas.sortingOrder = isCrit ? 30 : 25;
-            RectTransform canvasRt = floatGo.GetComponent<RectTransform>();
-            canvasRt.sizeDelta = new Vector2(260f, 64f);
-
-            floatGo.AddComponent<PixelBillboard>();
-
-            GameObject textGo = new GameObject("Label");
-            textGo.transform.SetParent(floatGo.transform, false);
-            RectTransform textRt = textGo.AddComponent<RectTransform>();
-            textRt.anchorMin = Vector2.zero;
-            textRt.anchorMax = Vector2.one;
-            textRt.offsetMin = Vector2.zero;
-            textRt.offsetMax = Vector2.zero;
-
-            TextMeshProUGUI tmp = textGo.AddComponent<TextMeshProUGUI>();
-            if (_font != null)
+            int slotIndex = AcquireFloatingTextSlot();
+            if (slotIndex < 0)
             {
-                tmp.font = _font;
-            }
-            tmp.text = text;
-            tmp.fontSize = isCrit ? 30f : 26f;
-            tmp.fontStyle = FontStyles.Bold;
-            tmp.alignment = TextAlignmentOptions.Center;
-            tmp.color = color;
-            tmp.textWrappingMode = TextWrappingModes.NoWrap;
-            tmp.raycastTarget = false;
-
-            if (!Application.isPlaying)
-            {
-                DestroyImmediate(floatGo);
                 return;
             }
 
-            if (gameObject.activeInHierarchy)
-            {
-                float horizontalDrift = UnityEngine.Random.Range(-0.22f, 0.22f);
-                Camera cam = Camera.main;
-                Vector3 driftAxis = cam != null ? cam.transform.right : Vector3.right;
-                driftAxis.y = 0f;
-                if (driftAxis.sqrMagnitude < 0.0001f)
-                {
-                    driftAxis = Vector3.right;
-                }
-                else
-                {
-                    driftAxis.Normalize();
-                }
+            FloatingTextEntry entry = _floatingTextPool[slotIndex];
+            float baseScale = 0.01f;
+            Vector3 startPos = transform.position + new Vector3(0f, GetVisualHeadHeight() + 0.34f, 0f);
 
-                StartCoroutine(AnimateArcingFloatingText(floatGo, tmp, color, baseScale, driftAxis * horizontalDrift, isCrit));
+            entry.Canvas.sortingOrder = isCrit ? 30 : 25;
+            if (_font != null)
+            {
+                entry.Label.font = _font;
+            }
+            entry.Label.text = text;
+            entry.Label.fontSize = isCrit ? 30f : 26f;
+            entry.Label.color = color;
+
+            float horizontalDrift = UnityEngine.Random.Range(-0.22f, 0.22f);
+            Camera cam = Camera.main;
+            Vector3 driftAxis = cam != null ? cam.transform.right : Vector3.right;
+            driftAxis.y = 0f;
+            if (driftAxis.sqrMagnitude < 0.0001f)
+            {
+                driftAxis = Vector3.right;
             }
             else
             {
-                Destroy(floatGo, 0.9f);
+                driftAxis.Normalize();
             }
+
+            entry.StartPos = startPos;
+            entry.HorizontalOffset = driftAxis * horizontalDrift;
+            entry.BaseColor = color;
+            entry.BaseScale = baseScale;
+            entry.Age = 0f;
+            entry.Duration = isCrit ? 1.05f : 0.88f;
+            entry.InitialVy = isCrit ? 2.85f : 2.35f;
+            entry.Gravity = isCrit ? 4.4f : 3.9f;
+
+            if (!Application.isPlaying || !gameObject.activeInHierarchy)
+            {
+                entry.Active = false;
+                entry.Root.transform.position = startPos;
+                entry.Root.transform.localScale = Vector3.one * (baseScale * FloatingTextOvershootEndScale);
+                entry.Root.SetActive(false);
+                _floatingTextPool[slotIndex] = entry;
+                return;
+            }
+
+            entry.Active = true;
+            entry.Root.transform.position = startPos;
+            entry.Root.transform.localScale = Vector3.one * (baseScale * FloatingTextOvershootStartScale);
+            entry.Root.SetActive(true);
+            _floatingTextPool[slotIndex] = entry;
         }
 
         private IEnumerator MovePathRoutine(IReadOnlyList<Vector3> points, float stepDuration)
@@ -1083,60 +1124,152 @@ namespace Realmz.World
             }
         }
 
-        private static IEnumerator AnimateArcingFloatingText(
-            GameObject floatGo,
-            TextMeshProUGUI tmp,
-            Color baseColor,
-            float baseScale,
-            Vector3 horizontalOffset,
-            bool isCrit)
+        private void EnsureFloatingTextPool()
         {
-            float duration = isCrit ? 1.05f : 0.88f;
-            float initialVy = isCrit ? 2.85f : 2.35f;
-            float gravity = isCrit ? 4.4f : 3.9f;
-            float popPeak = isCrit ? 1.35f : 1.14f;
-            float settleScale = isCrit ? 1.12f : 1.0f;
-
-            Vector3 startPos = floatGo.transform.position;
-            float elapsed = 0f;
-
-            while (elapsed < duration && floatGo != null)
+            if (_floatingTextPoolParent == null)
             {
-                elapsed += Time.deltaTime;
-                float t = Mathf.Clamp01(elapsed / duration);
+                _floatingTextPoolParent = new GameObject("FloatingTextPool");
+            }
 
-                float arcY = (initialVy * elapsed) - (0.5f * gravity * elapsed * elapsed);
-                Vector3 drift = horizontalOffset * t;
-                floatGo.transform.position = startPos + drift + new Vector3(0f, arcY, 0f);
+            while (_floatingTextPool.Count < MaxFloatingTextPoolSize)
+            {
+                _floatingTextPool.Add(CreatePooledFloatingTextEntry(_floatingTextPool.Count));
+            }
+        }
+
+        private FloatingTextEntry CreatePooledFloatingTextEntry(int index)
+        {
+            GameObject floatGo = new GameObject("FloatingText_" + index);
+            floatGo.transform.SetParent(_floatingTextPoolParent.transform, false);
+            floatGo.transform.localScale = Vector3.one * 0.01f;
+
+            Canvas canvas = floatGo.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.WorldSpace;
+            canvas.sortingOrder = 25;
+            RectTransform canvasRt = floatGo.GetComponent<RectTransform>();
+            canvasRt.sizeDelta = new Vector2(260f, 64f);
+
+            floatGo.AddComponent<PixelBillboard>();
+
+            GameObject textGo = new GameObject("Label");
+            textGo.transform.SetParent(floatGo.transform, false);
+            RectTransform textRt = textGo.AddComponent<RectTransform>();
+            textRt.anchorMin = Vector2.zero;
+            textRt.anchorMax = Vector2.one;
+            textRt.offsetMin = Vector2.zero;
+            textRt.offsetMax = Vector2.zero;
+
+            TextMeshProUGUI tmp = textGo.AddComponent<TextMeshProUGUI>();
+            if (_font != null)
+            {
+                tmp.font = _font;
+            }
+            tmp.fontSize = 26f;
+            tmp.fontStyle = FontStyles.Bold;
+            tmp.alignment = TextAlignmentOptions.Center;
+            tmp.textWrappingMode = TextWrappingModes.NoWrap;
+            tmp.raycastTarget = false;
+
+            floatGo.SetActive(false);
+
+            return new FloatingTextEntry
+            {
+                Root = floatGo,
+                Canvas = canvas,
+                Label = tmp,
+                Active = false
+            };
+        }
+
+        private int AcquireFloatingTextSlot()
+        {
+            EnsureFloatingTextPool();
+
+            for (int i = 0; i < _floatingTextPool.Count; i++)
+            {
+                if (!_floatingTextPool[i].Active && _floatingTextPool[i].Root != null)
+                {
+                    return i;
+                }
+            }
+
+            int oldestIndex = 0;
+            float oldestAge = -1f;
+            for (int i = 0; i < _floatingTextPool.Count; i++)
+            {
+                if (_floatingTextPool[i].Root != null && _floatingTextPool[i].Age > oldestAge)
+                {
+                    oldestAge = _floatingTextPool[i].Age;
+                    oldestIndex = i;
+                }
+            }
+
+            if (_floatingTextPool[oldestIndex].Root == null)
+            {
+                _floatingTextPool[oldestIndex] = CreatePooledFloatingTextEntry(oldestIndex);
+            }
+            else
+            {
+                FloatingTextEntry recycled = _floatingTextPool[oldestIndex];
+                recycled.Active = false;
+                recycled.Root.SetActive(false);
+                _floatingTextPool[oldestIndex] = recycled;
+            }
+
+            return oldestIndex;
+        }
+
+        private void UpdateFloatingTexts(float dt)
+        {
+            if (_floatingTextPool.Count == 0)
+            {
+                return;
+            }
+
+            for (int i = 0; i < _floatingTextPool.Count; i++)
+            {
+                FloatingTextEntry entry = _floatingTextPool[i];
+                if (!entry.Active || entry.Root == null)
+                {
+                    continue;
+                }
+
+                entry.Age += dt;
+                if (entry.Age >= entry.Duration)
+                {
+                    entry.Active = false;
+                    entry.Root.transform.localScale = Vector3.one * (entry.BaseScale * FloatingTextOvershootEndScale);
+                    entry.Root.SetActive(false);
+                    _floatingTextPool[i] = entry;
+                    continue;
+                }
+
+                float t = Mathf.Clamp01(entry.Age / Mathf.Max(0.01f, entry.Duration));
+                float arcY = (entry.InitialVy * entry.Age) - (0.5f * entry.Gravity * entry.Age * entry.Age);
+                entry.Root.transform.position = entry.StartPos + (entry.HorizontalOffset * t) + new Vector3(0f, arcY, 0f);
 
                 float scaleMult;
-                if (elapsed < 0.09f)
+                if (entry.Age < FloatingTextOvershootDuration)
                 {
-                    float popT = elapsed / 0.09f;
-                    scaleMult = Mathf.Lerp(0.85f, popPeak, popT);
-                }
-                else if (elapsed < 0.22f)
-                {
-                    float settleT = (elapsed - 0.09f) / 0.13f;
-                    scaleMult = Mathf.Lerp(popPeak, settleScale, settleT);
+                    float popT = Mathf.Clamp01(entry.Age / FloatingTextOvershootDuration);
+                    float easedPop = 1f - ((1f - popT) * (1f - popT));
+                    scaleMult = Mathf.Lerp(FloatingTextOvershootStartScale, FloatingTextOvershootEndScale, easedPop);
                 }
                 else
                 {
-                    scaleMult = settleScale;
+                    scaleMult = FloatingTextOvershootEndScale;
                 }
-                floatGo.transform.localScale = Vector3.one * (baseScale * scaleMult);
+                entry.Root.transform.localScale = Vector3.one * (entry.BaseScale * scaleMult);
 
-                Color c = baseColor;
+                Color c = entry.BaseColor;
                 float fadeT = t > 0.55f ? (t - 0.55f) / 0.45f : 0f;
                 c.a = Mathf.Lerp(1f, 0f, fadeT * fadeT);
-                tmp.color = c;
+                if (entry.Label != null)
+                {
+                    entry.Label.color = c;
+                }
 
-                yield return null;
-            }
-
-            if (floatGo != null)
-            {
-                Destroy(floatGo);
+                _floatingTextPool[i] = entry;
             }
         }
 
@@ -1186,7 +1319,7 @@ namespace Realmz.World
             {
                 _spriteBillboardTransform.localPosition = Vector3.zero;
                 _spriteBillboardTransform.localRotation = Quaternion.identity;
-                _spriteBillboardTransform.localScale = new Vector3(_facingRight ? 1f : -1f, 1f, 1f);
+                _spriteBillboardTransform.localScale = Vector3.one;
             }
 
             if (_spriteRenderer != null)
@@ -1249,7 +1382,7 @@ namespace Realmz.World
             {
                 _spriteBillboardTransform.localPosition = Vector3.zero;
                 _spriteBillboardTransform.localRotation = Quaternion.identity;
-                _spriteBillboardTransform.localScale = new Vector3(_facingRight ? 1f : -1f, 1f, 1f);
+                _spriteBillboardTransform.localScale = Vector3.one;
             }
 
             if (_spriteRenderer != null)
@@ -1284,7 +1417,7 @@ namespace Realmz.World
             {
                 _spriteBillboardTransform.localPosition = Vector3.zero;
                 _spriteBillboardTransform.localRotation = Quaternion.identity;
-                _spriteBillboardTransform.localScale = new Vector3(_facingRight ? 1f : -1f, 1f, 1f);
+                _spriteBillboardTransform.localScale = Vector3.one;
             }
 
             if (_spriteRenderer != null)
@@ -1296,6 +1429,7 @@ namespace Realmz.World
 
             ApplyAnimStateMaterial();
             ResetSpriteIdlePose();
+            ApplySpritePropertyBlock(_isHitFlashing ? HitFlashGoldWhite : GetNormalSpriteTint());
         }
 
         private static Material GetOrCreateCorpseMaterial(Material sourceMat)
@@ -1436,21 +1570,15 @@ namespace Realmz.World
 
         private void ApplySpriteTint(Color color)
         {
-            if (_spriteRenderer == null)
-            {
-                return;
-            }
-
-            _spritePropBlock ??= new MaterialPropertyBlock();
-            _spritePropBlock.Clear();
-            _spritePropBlock.SetColor(BaseColorId, color);
-            _spritePropBlock.SetColor(ColorId, color);
-            _spritePropBlock.SetColor(TintColorId, color);
-            _spritePropBlock.SetFloat(WindPhaseId, _windPhaseNorm);
-            _spriteRenderer.SetPropertyBlock(_spritePropBlock);
+            ApplySpritePropertyBlock(color);
         }
 
         private void ApplyHitFlashTint()
+        {
+            ApplySpritePropertyBlock(HitFlashGoldWhite);
+        }
+
+        private void ApplySpritePropertyBlock(Color tint)
         {
             if (_spriteRenderer == null)
             {
@@ -1459,15 +1587,21 @@ namespace Realmz.World
 
             _spritePropBlock ??= new MaterialPropertyBlock();
             _spritePropBlock.Clear();
-            _spritePropBlock.SetColor(BaseColorId, HitFlashGoldWhite);
-            _spritePropBlock.SetColor(ColorId, HitFlashGoldWhite);
-            _spritePropBlock.SetColor(TintColorId, HitFlashGoldWhite * 1.45f);
+            _spritePropBlock.SetColor(BaseColorId, tint);
+            _spritePropBlock.SetColor(ColorId, tint);
+            _spritePropBlock.SetColor(TintColorId, _isHitFlashing ? tint * 1.45f : tint);
             _spritePropBlock.SetFloat(WindPhaseId, _windPhaseNorm);
+            _spritePropBlock.SetFloat(FlipXId, _facingRight ? 0f : 1f);
+            _spritePropBlock.SetFloat(HoverOutlineStrengthId, _hoverRimActive ? 0.8f : 0f);
+            _spritePropBlock.SetColor(HoverOutlineColorId, _hoverRimActive ? _hoverRimColor : Color.clear);
 
-            Material mat = _spriteRenderer.sharedMaterial;
-            if (mat != null && mat.HasProperty(EmissionColorId))
+            if (_isHitFlashing)
             {
-                _spritePropBlock.SetColor(EmissionColorId, new Color(1.0f, 0.92f, 0.55f, 1.0f) * 0.65f);
+                Material mat = _spriteRenderer.sharedMaterial;
+                if (mat != null && mat.HasProperty(EmissionColorId))
+                {
+                    _spritePropBlock.SetColor(EmissionColorId, new Color(1.0f, 0.92f, 0.55f, 1.0f) * 0.65f);
+                }
             }
 
             _spriteRenderer.SetPropertyBlock(_spritePropBlock);
@@ -2188,6 +2322,18 @@ namespace Realmz.World
                 puff.Active = false;
                 _dustPuffs[i] = puff;
             }
+
+            for (int i = 0; i < _floatingTextPool.Count; i++)
+            {
+                FloatingTextEntry entry = _floatingTextPool[i];
+                if (entry.Root != null)
+                {
+                    entry.Root.transform.localScale = Vector3.one * (entry.BaseScale * FloatingTextOvershootEndScale);
+                    entry.Root.SetActive(false);
+                }
+                entry.Active = false;
+                _floatingTextPool[i] = entry;
+            }
         }
 
         private void OnDestroy()
@@ -2201,6 +2347,22 @@ namespace Realmz.World
                 }
             }
             _dustPuffs.Clear();
+
+            for (int i = 0; i < _floatingTextPool.Count; i++)
+            {
+                GameObject floatGo = _floatingTextPool[i].Root;
+                if (floatGo != null)
+                {
+                    DestroyRuntimeObject(floatGo);
+                }
+            }
+            _floatingTextPool.Clear();
+
+            if (_floatingTextPoolParent != null)
+            {
+                DestroyRuntimeObject(_floatingTextPoolParent);
+                _floatingTextPoolParent = null;
+            }
 
             if (_registeredDustUser)
             {

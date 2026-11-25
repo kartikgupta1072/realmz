@@ -519,7 +519,97 @@ namespace RealmzCore.Combat
         WallSconce = 9,
         IronGrate = 10,
         BridgePlank = 11,
-        BrushThicket = 12
+        BrushThicket = 12,
+        OilKegCluster = 13,
+        HayBale = 14
+    }
+
+    public sealed class CombatDestructibleProp
+    {
+        public CombatDestructibleProp(
+            string propId,
+            GridCoord coord,
+            CombatArenaObstacleKind obstacleKind,
+            int maxHp,
+            bool isExplosiveOil = false,
+            bool isFlammable = false,
+            bool isLightSource = false)
+        {
+            PropId = propId ?? throw new ArgumentNullException(nameof(propId));
+            Coord = coord;
+            ObstacleKind = obstacleKind;
+            MaxHp = Math.Max(1, maxHp);
+            Hp = MaxHp;
+            IsExplosiveOil = isExplosiveOil;
+            IsFlammable = isFlammable;
+            IsLightSource = isLightSource;
+            IsDestroyed = false;
+        }
+
+        public string PropId { get; }
+        public GridCoord Coord { get; internal set; }
+        public CombatArenaObstacleKind ObstacleKind { get; }
+        public int Hp { get; internal set; }
+        public int MaxHp { get; }
+        public bool IsExplosiveOil { get; }
+        public bool IsFlammable { get; }
+        public bool IsLightSource { get; internal set; }
+        public bool IsDestroyed { get; internal set; }
+    }
+
+    public sealed class CombatExplosionEvent
+    {
+        public CombatExplosionEvent(
+            string propId,
+            GridCoord origin,
+            IReadOnlyList<GridCoord> affectedTiles,
+            IReadOnlyList<string> affectedUnitIds,
+            int totalDamageDealt,
+            int radius,
+            bool isChainReaction,
+            string cause)
+        {
+            PropId = propId ?? string.Empty;
+            Origin = origin;
+            AffectedTiles = affectedTiles ?? Array.Empty<GridCoord>();
+            AffectedUnitIds = affectedUnitIds ?? Array.Empty<string>();
+            TotalDamageDealt = totalDamageDealt;
+            Radius = radius;
+            IsChainReaction = isChainReaction;
+            Cause = cause ?? string.Empty;
+        }
+
+        public string PropId { get; }
+        public GridCoord Origin { get; }
+        public IReadOnlyList<GridCoord> AffectedTiles { get; }
+        public IReadOnlyList<string> AffectedUnitIds { get; }
+        public int TotalDamageDealt { get; }
+        public int Radius { get; }
+        public bool IsChainReaction { get; }
+        public string Cause { get; }
+    }
+
+    public sealed class CombatChainLightningEvent
+    {
+        public CombatChainLightningEvent(
+            GridCoord origin,
+            IReadOnlyList<GridCoord> hopCoords,
+            IReadOnlyList<string> affectedUnitIds,
+            int totalDamageDealt,
+            string cause)
+        {
+            Origin = origin;
+            HopCoords = hopCoords ?? Array.Empty<GridCoord>();
+            AffectedUnitIds = affectedUnitIds ?? Array.Empty<string>();
+            TotalDamageDealt = totalDamageDealt;
+            Cause = cause ?? string.Empty;
+        }
+
+        public GridCoord Origin { get; }
+        public IReadOnlyList<GridCoord> HopCoords { get; }
+        public IReadOnlyList<string> AffectedUnitIds { get; }
+        public int TotalDamageDealt { get; }
+        public string Cause { get; }
     }
 
     public sealed class CombatArenaFeature
@@ -589,6 +679,7 @@ namespace RealmzCore.Combat
         private readonly int[] _saves;
         private readonly bool[] _spellImmunities;
         private readonly int[] _lootItemIds;
+        private readonly List<string> _specialAbilities;
 
         public CombatantState(
             string id,
@@ -624,7 +715,9 @@ namespace RealmzCore.Combat
             int brawn = 10,
             IReadOnlyList<int>? lootItemIds = null,
             bool? prefersRanged = null,
-            bool weaponBonusIncludedInToHit = false)
+            bool weaponBonusIncludedInToHit = false,
+            string role = "",
+            IReadOnlyList<string>? specialAbilities = null)
         {
             Id = id ?? throw new ArgumentNullException(nameof(id));
             Name = name ?? string.Empty;
@@ -692,6 +785,8 @@ namespace RealmzCore.Combat
             Brawn = brawn;
             PrefersRanged = prefersRanged ?? (RangedRange > 1 && !string.IsNullOrWhiteSpace(RangedDice));
             WeaponBonusIncludedInToHit = weaponBonusIncludedInToHit;
+            Role = role ?? string.Empty;
+            _specialAbilities = specialAbilities != null ? new List<string>(specialAbilities) : new List<string>();
             Conditions = new ConditionTracker();
             Economy = new CombatActionEconomy();
         }
@@ -848,7 +943,9 @@ namespace RealmzCore.Combat
                 brawn: brawn,
                 lootItemIds: monster.LootItemIds,
                 prefersRanged: prefersRanged,
-                weaponBonusIncludedInToHit: false);
+                weaponBonusIncludedInToHit: false,
+                role: monster.Role,
+                specialAbilities: monster.SpecialAbilities);
         }
 
         public string Id { get; }
@@ -886,6 +983,32 @@ namespace RealmzCore.Combat
         public int CombatHealingDone { get; internal set; }
         public bool PrefersRanged { get; set; }
         public bool WeaponBonusIncludedInToHit { get; }
+        public string Role { get; set; } = string.Empty;
+        public IReadOnlyList<string> SpecialAbilities => _specialAbilities;
+        public bool HasSpecialAbility(string abilityId)
+        {
+            if (string.IsNullOrWhiteSpace(abilityId))
+            {
+                return false;
+            }
+
+            for (int i = 0; i < _specialAbilities.Count; i++)
+            {
+                if (string.Equals(_specialAbilities[i], abilityId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        public void AddSpecialAbility(string abilityId)
+        {
+            if (!string.IsNullOrWhiteSpace(abilityId) && !HasSpecialAbility(abilityId))
+            {
+                _specialAbilities.Add(abilityId);
+            }
+        }
         public IReadOnlyList<int> SpellIds => _spellIds;
         public int MagicResistance { get; set; }
         public IReadOnlyList<int> Saves => _saves;
@@ -1334,7 +1457,12 @@ namespace RealmzCore.Combat
             int fallElevationDrop,
             SurfaceType destinationSurface,
             bool isAllyShove,
-            int apCost = 2)
+            int apCost = 2,
+            bool triggersKegExplosion = false,
+            bool ignitesOnBrazier = false,
+            bool destroysCover = false,
+            bool entersSurface = false,
+            string? hazardBadgeText = null)
         {
             CanExecute = canExecute;
             Reason = reason ?? string.Empty;
@@ -1348,6 +1476,53 @@ namespace RealmzCore.Combat
             DestinationSurface = destinationSurface;
             IsAllyShove = isAllyShove;
             ApCost = apCost;
+            TriggersKegExplosion = triggersKegExplosion;
+            IgnitesOnBrazier = ignitesOnBrazier;
+            DestroysCover = destroysCover;
+            EntersSurface = entersSurface;
+            HazardBadgeText = hazardBadgeText ?? ComputeHazardBadgeText(
+                triggersKegExplosion,
+                ignitesOnBrazier,
+                pushesOffLedge,
+                destroysCover,
+                hitsWallOrBounds,
+                collidingUnitId,
+                entersSurface,
+                destinationSurface,
+                isAllyShove);
+        }
+
+        private static string ComputeHazardBadgeText(
+            bool triggersKegExplosion,
+            bool ignitesOnBrazier,
+            bool pushesOffLedge,
+            bool destroysCover,
+            bool hitsWallOrBounds,
+            string? collidingUnitId,
+            bool entersSurface,
+            SurfaceType destinationSurface,
+            bool isAllyShove)
+        {
+            if (triggersKegExplosion) return "KEG BLAST 2d6!";
+            if (ignitesOnBrazier) return "BRAZIER +1d6 FIRE";
+            if (pushesOffLedge) return "LEDGE FALL +1d6";
+            if (destroysCover) return "CRUSH COVER";
+            if (hitsWallOrBounds || !string.IsNullOrEmpty(collidingUnitId)) return "WALL CRUSH +1d4";
+            if (entersSurface)
+            {
+                switch (destinationSurface)
+                {
+                    case SurfaceType.ElectrifiedWater: return "WATER SHOCK!";
+                    case SurfaceType.Fire: return "FIRE +1d4";
+                    case SurfaceType.Ice: return "ICE SLIP!";
+                    case SurfaceType.Poison: return "POISON +1d4";
+                    case SurfaceType.Water: return "WATER";
+                    case SurfaceType.Oil: return "OIL SLICK";
+                    case SurfaceType.SteamCloud: return "STEAM";
+                }
+            }
+            if (isAllyShove) return "ALLY DISENGAGE";
+            return string.Empty;
         }
 
         public bool CanExecute { get; }
@@ -1362,6 +1537,11 @@ namespace RealmzCore.Combat
         public SurfaceType DestinationSurface { get; }
         public bool IsAllyShove { get; }
         public int ApCost { get; }
+        public bool TriggersKegExplosion { get; }
+        public bool IgnitesOnBrazier { get; }
+        public bool DestroysCover { get; }
+        public bool EntersSurface { get; }
+        public string HazardBadgeText { get; }
     }
 
     public sealed class EnemyIntentPrediction
@@ -1374,7 +1554,8 @@ namespace RealmzCore.Combat
             string targetId,
             GridCoord plannedMoveCoord,
             bool hasPlannedMove,
-            string spellKey = "")
+            string spellKey = "",
+            IReadOnlyList<GridCoord>? telegraphedTiles = null)
         {
             ActorId = actorId ?? string.Empty;
             TargetCoord = targetCoord;
@@ -1384,6 +1565,7 @@ namespace RealmzCore.Combat
             PlannedMoveCoord = plannedMoveCoord;
             HasPlannedMove = hasPlannedMove;
             SpellKey = spellKey ?? string.Empty;
+            TelegraphedTiles = telegraphedTiles ?? Array.Empty<GridCoord>();
         }
 
         public string ActorId { get; }
@@ -1394,6 +1576,7 @@ namespace RealmzCore.Combat
         public GridCoord PlannedMoveCoord { get; }
         public bool HasPlannedMove { get; }
         public string SpellKey { get; }
+        public IReadOnlyList<GridCoord> TelegraphedTiles { get; }
 
         public void Deconstruct(out GridCoord targetCoord, out string actionType, out string targetId)
         {

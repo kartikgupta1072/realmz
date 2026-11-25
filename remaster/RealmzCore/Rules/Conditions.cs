@@ -47,7 +47,8 @@ namespace RealmzCore.Rules
         HinderedAttacks = 36,
         HinderedDefense = 37,
         DefenseBonus = 38,
-        Silenced = 39
+        Silenced = 39,
+        Burning = 40
     }
 
     public enum RulesetMode

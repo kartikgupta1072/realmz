@@ -253,20 +253,23 @@ namespace RealmzCore.Tests
             PartyState party = PartyState.FromBundle(bundle);
             ExplorationSession session = new ExplorationSession(bundle.Maps, "land_0", party, new DeterministicDiceRoller(77UL));
 
-            // Clean campaign starts at Day 1 - Noon (Turn 18 -> Phase Day)
+            // Clean campaign starts at Day 1 - 08:00 AM (Morning) (480.0 min -> Phase Day)
             Assert.Equal(1, session.CurrentWorldClock.DayNumber);
             Assert.Equal(WorldTimePhase.Day, session.CurrentWorldClock.Phase);
-            Assert.Equal("Day 1 - Noon", session.CurrentWorldClock.DisplayLabel);
+            Assert.Equal(WorldClock.DefaultStartMinutes, session.WorldClockMinutes, 3);
+            Assert.Equal("Day 1 - 08:00 AM (Morning)", session.CurrentWorldClock.DisplayLabel);
 
-            // Full Rest in safe town adds +8 turns to both TurnCount and WorldClockTurns
+            // Full Rest in safe town adds +8 turns to TurnCount/WorldClockTurns and +480 minutes (8h) to WorldClockMinutes
             party.Members[0].Hp = 1;
             RestResult rest = session.TryCampRest(CampMode.FullRest, out _, out _);
             Assert.True(rest.Success);
             Assert.Equal(8, rest.TurnsElapsed);
             Assert.Equal(8, session.TurnCount);
             Assert.Equal(WorldClock.DefaultStartTurns + 8, session.WorldClockTurns);
+            Assert.Equal(WorldClock.DefaultStartMinutes + WorldClock.FullRestMinutes, session.WorldClockMinutes, 3);
+            Assert.Equal("Day 1 - 04:00 PM (Afternoon)", session.CurrentWorldClock.DisplayLabel);
 
-            // Advance into Dusk (+10 turns -> 36) then Night (+18 turns -> 54)
+            // Advance into Dusk (+10 turns -> +200 min -> 1160 min = 07:20 PM) then Night (+18 turns -> +360 min -> Day 2 01:20 AM)
             session.AdvanceWorldClockTurns(10);
             Assert.Equal(WorldTimePhase.Dusk, session.CurrentWorldClock.Phase);
             session.AdvanceWorldClockTurns(18);
@@ -304,11 +307,13 @@ namespace RealmzCore.Tests
             Assert.InRange(litReport.EvadeChancePct, 15, 90);
             Assert.Equal(CombatInitiativeSurpriseMode.PartyAmbush, litReport.ResolveEngageSurpriseMode());
 
-            // Evade roll + ApplyStealthEvade advances 3 turns and grants stealth grace without HP loss
+            // Evade roll + ApplyStealthEvade advances 3 turns / 15 minutes and grants stealth grace without HP loss
             Assert.True(EncounterDirector.RollEvade(litReport, new QueuedDiceRoller(5)));
             int clockBeforeEvade = session.WorldClockTurns;
+            double clockMinutesBeforeEvade = session.WorldClockMinutes;
             session.ApplyStealthEvade();
             Assert.Equal(clockBeforeEvade + 3, session.WorldClockTurns);
+            Assert.Equal(clockMinutesBeforeEvade + 15.0, session.WorldClockMinutes, 3);
             Assert.Equal(ExplorationSession.DefaultStealthEvadeGraceSteps, session.PostCombatGraceStepsRemaining);
 
             // Verify Round 1 SurpriseMode ordering + +25% Night Bonus in TacticalCombatSession
@@ -353,6 +358,88 @@ namespace RealmzCore.Tests
             Assert.Equal(CombatOutcome.Victory, ambushCombat.Outcome);
             Assert.Equal(125, ambushCombat.TotalXpEarned);
             Assert.True(ambushCombat.TotalGoldLoot >= 50);
+        }
+
+        [Fact]
+        public void WorldClock_Continuous1440MinuteClock_LabelsProgressAndSessionStepRestWorkAccurately()
+        {
+            Assert.Equal(1440, WorldClock.MinutesPerDay);
+            Assert.Equal(2, WorldClock.MinutesPerStep);
+            Assert.Equal(480, WorldClock.FullRestMinutes);
+            Assert.Equal(480.0, WorldClock.DefaultStartMinutes, 3);
+
+            WorldClock morning = WorldClock.FromMinutes(480.0);
+            Assert.Equal(1, morning.DayNumber);
+            Assert.Equal(8, morning.Hour24);
+            Assert.Equal(0, morning.MinuteOfHour);
+            Assert.Equal(WorldTimePhase.Day, morning.Phase);
+            Assert.Equal("Morning", morning.SubPhaseLabel);
+            Assert.Equal("08:00 AM", morning.FormattedTime12h);
+            Assert.Equal("Day 1 - 08:00 AM (Morning)", morning.DisplayLabel);
+            Assert.Equal(570, morning.MinutesUntilNextPhase);
+            Assert.Equal(285, morning.TurnsUntilNextPhase);
+
+            WorldClock noon = WorldClock.FromMinutes(720.0);
+            Assert.Equal("12:00 PM", noon.FormattedTime12h);
+            Assert.Equal("Noon", noon.SubPhaseLabel);
+            Assert.Equal(0.5f, noon.NormalizedTimeOfDay, 4);
+            Assert.Equal((720.0f - 450.0f) / 600.0f, noon.PhaseProgress01, 4);
+
+            WorldClock dusk = WorldClock.FromMinutes(1095.0); // 06:15 PM
+            Assert.Equal(WorldTimePhase.Dusk, dusk.Phase);
+            Assert.Equal("06:15 PM", dusk.FormattedTime12h);
+            Assert.Equal("Day 1 - 06:15 PM (Dusk)", dusk.DisplayLabel);
+            Assert.Equal(75, dusk.MinutesUntilNextPhase);
+            Assert.Equal(38, dusk.TurnsUntilNextPhase);
+
+            // Legacy 72-turn conversion preserves day & phase boundaries cleanly
+            WorldClock legacyDawn = WorldClock.FromTurns(0);
+            WorldClock legacyDay = WorldClock.FromTurns(18);
+            WorldClock legacyDusk = WorldClock.FromTurns(36);
+            WorldClock legacyNight58 = WorldClock.FromTurns(58);
+            WorldClock legacyDay2Dawn = WorldClock.FromTurns(72);
+
+            Assert.Equal(WorldTimePhase.Dawn, legacyDawn.Phase);
+            Assert.Equal(morning, legacyDay);
+            Assert.Equal(WorldTimePhase.Dusk, legacyDusk.Phase);
+            Assert.Equal(1, legacyNight58.DayNumber);
+            Assert.Equal(WorldTimePhase.Night, legacyNight58.Phase);
+            Assert.Equal(2, legacyDay2Dawn.DayNumber);
+            Assert.Equal(WorldTimePhase.Dawn, legacyDay2Dawn.Phase);
+
+            // Session step (+2 min), AdvanceWorldClockMinutes phase crossing, and persistence restore
+            int[] tiles = new int[400];
+            Array.Fill(tiles, 156);
+            Dictionary<int, TileRule> rules = new Dictionary<int, TileRule> { [156] = new TileRule(156, passable: true) };
+            EncounterZoneData wildZone = new EncounterZoneData(1, 0, 0, 19, 19, percent: 500, battleIds: new[] { 9 });
+            TileMapData wildMap = new TileMapData("wild", "Bywater", 0, false, 20, 20, tiles, new GridCoord(0, 0), rules, encounterZones: new[] { wildZone });
+
+            ExplorationSession session = new ExplorationSession(
+                new Dictionary<string, TileMapData> { ["wild"] = wildMap },
+                "wild",
+                new PartyState(new[] { new PartyMemberState(new HeroPresetData("h1", "Aldric", hp: 20, maxHp: 20)) }),
+                new DeterministicDiceRoller(99UL),
+                initialWorldClockMinutes: 1040.0); // 05:20 PM Day
+
+            Assert.Equal(WorldTimePhase.Day, session.CurrentWorldClock.Phase);
+            ExplorationStepResult step = session.StepOneTile(new GridCoord(1, 0), autoHaltOnEvents: false);
+            Assert.True(step.Moved);
+            Assert.Equal(1042.0, session.WorldClockMinutes, 3);
+
+            // Crossing into Dusk updates fog of war and clears regional zone cooldowns
+            session.CompleteEncounterZone(wildZone, graceSteps: 0);
+            Assert.True(session.IsEncounterZoneOnCooldown("wild", wildZone));
+            Assert.False(session.AdvanceWorldClockMinutes(4.0)); // 1046.0 -> still Day
+            Assert.True(session.IsEncounterZoneOnCooldown("wild", wildZone));
+            Assert.True(session.AdvanceWorldClockMinutes(5.0)); // 1051.0 -> Dusk!
+            Assert.Equal(WorldTimePhase.Dusk, session.CurrentWorldClock.Phase);
+            Assert.False(session.IsEncounterZoneOnCooldown("wild", wildZone));
+            Assert.Equal(8, session.CurrentVisionRadius);
+
+            session.RestorePersistenceState(turnCount: 4, clearedEncounterIds: null, worldClockMinutes: 1380.0);
+            Assert.Equal(1380.0, session.WorldClockMinutes, 3);
+            Assert.Equal(WorldTimePhase.Night, session.CurrentWorldClock.Phase);
+            Assert.Equal("Day 1 - 11:00 PM (Night)", session.CurrentWorldClock.DisplayLabel);
         }
 
         private static EncounterGeographyInfo MakeGeo(

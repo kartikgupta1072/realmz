@@ -59,7 +59,37 @@ namespace Realmz.Cartography
         DungeonWallSconce4f = 38,
         DungeonSarcophagus = 39,
         DungeonSpikeTrap = 40,
-        DungeonIronGrate = 41
+        DungeonIronGrate = 41,
+        BoulderMossA = 42,
+        BoulderMossB = 43,
+        BoulderMossC = 44,
+        FallenHollowLog = 45,
+        GnarledDeadTree = 46,
+        ThornBrambleThicket = 47,
+        RuinedWallCorner = 48,
+        BrokenArchway = 49,
+        RubblePileA = 50,
+        RubblePileB = 51,
+        FallenStatue = 52,
+        RuneObelisk4f = 53,
+        BonePile = 54,
+        IronCage = 55,
+        DungeonFloorGrateRusted = 56,
+        PalisadeStakes = 57,
+        CartWreck = 58,
+        HayBale = 59,
+        OilKegCluster = 60,
+        TownNoticeBoard = 61,
+        TownLanternPost4f = 62,
+        WoodenPlankBridge = 63,
+        RiverReeds4f = 64,
+        DriftwoodSnag = 65,
+        HalfSunkRowboat = 66,
+        DecalMossSkirt = 67,
+        DecalPebbles = 68,
+        DecalFallenLeaves = 69,
+        DecalCrackedStone = 70,
+        DecalShoreFoam = 71
     }
 
     public enum CartographyBiomeZone
@@ -97,6 +127,7 @@ namespace Realmz.Cartography
         public float CanopyRadius;
         public float CanopyStrength;
         public bool IsArenaObstacle;
+        public bool HasRootCollar;
     }
 
     [Serializable]
@@ -132,11 +163,12 @@ namespace Realmz.Cartography
         public const int GridHeight = 18;
 
         public const float RiverElevation = -0.60f;
+        public const float CombatRiverElevation = -0.28f;
         public const float WaterSurfaceElevation = -0.22f;
         public const float TileMapWaterSurfaceElevation = -0.18f;
         public const float MudElevation = -0.05f;
         public const float PlazaElevation = 0.00f;
-        public const float CobbleElevation = 0.04f;
+        public const float CobbleElevation = 0.025f;
         public const float BridgeElevation = 0.10f;
         public const float HighlandElevation = 0.55f;
         public const float RidgeElevation = 0.75f;
@@ -162,6 +194,11 @@ namespace Realmz.Cartography
         public IReadOnlyList<CartographyLanternSource> Lanterns => _lanterns;
         public IReadOnlyList<CartographyNpcPlacement> Npcs => _npcs;
         public IReadOnlyCollection<Vector2Int> BlockedPropTiles => _blockedPropTiles;
+
+        public void UnblockPropTile(int x, int y)
+        {
+            _blockedPropTiles.Remove(new Vector2Int(x, y));
+        }
 
         public bool IsBlockedByProp(int x, int y)
         {
@@ -640,7 +677,149 @@ namespace Realmz.Cartography
                 case CartographyPropKind.DungeonSarcophagus: return new Vector2(1.75f, 1.55f);
                 case CartographyPropKind.DungeonSpikeTrap:
                 case CartographyPropKind.DungeonIronGrate: return new Vector2(1.15f, 1.15f);
+                case CartographyPropKind.BoulderMossA: return new Vector2(1.50f, 1.50f);
+                case CartographyPropKind.BoulderMossB: return new Vector2(1.75f, 1.50f);
+                case CartographyPropKind.BoulderMossC: return new Vector2(1.25f, 1.25f);
+                case CartographyPropKind.FallenHollowLog: return new Vector2(2.50f, 1.25f);
+                case CartographyPropKind.GnarledDeadTree: return new Vector2(3.00f, 3.50f);
+                case CartographyPropKind.ThornBrambleThicket: return new Vector2(1.50f, 1.25f);
+                case CartographyPropKind.RuinedWallCorner: return new Vector2(2.00f, 2.00f);
+                case CartographyPropKind.BrokenArchway: return new Vector2(3.00f, 2.50f);
+                case CartographyPropKind.RubblePileA: return new Vector2(1.50f, 1.25f);
+                case CartographyPropKind.RubblePileB: return new Vector2(1.75f, 1.25f);
+                case CartographyPropKind.FallenStatue: return new Vector2(2.50f, 1.50f);
+                case CartographyPropKind.RuneObelisk4f: return new Vector2(2.00f, 2.00f);
+                case CartographyPropKind.BonePile: return new Vector2(1.25f, 1.00f);
+                case CartographyPropKind.IronCage: return new Vector2(1.50f, 2.00f);
+                case CartographyPropKind.DungeonFloorGrateRusted: return new Vector2(1.50f, 1.50f);
+                case CartographyPropKind.PalisadeStakes: return new Vector2(2.00f, 1.50f);
+                case CartographyPropKind.CartWreck: return new Vector2(3.00f, 2.00f);
+                case CartographyPropKind.HayBale: return new Vector2(1.50f, 1.25f);
+                case CartographyPropKind.OilKegCluster: return new Vector2(1.50f, 1.25f);
+                case CartographyPropKind.TownNoticeBoard: return new Vector2(2.00f, 2.25f);
+                case CartographyPropKind.TownLanternPost4f: return new Vector2(2.00f, 2.00f);
+                case CartographyPropKind.WoodenPlankBridge: return new Vector2(3.00f, 2.00f);
+                case CartographyPropKind.RiverReeds4f: return new Vector2(2.00f, 2.00f);
+                case CartographyPropKind.DriftwoodSnag: return new Vector2(2.00f, 1.25f);
+                case CartographyPropKind.HalfSunkRowboat: return new Vector2(2.50f, 1.50f);
+                case CartographyPropKind.DecalMossSkirt:
+                case CartographyPropKind.DecalPebbles:
+                case CartographyPropKind.DecalFallenLeaves:
+                case CartographyPropKind.DecalCrackedStone: return new Vector2(1.50f, 1.50f);
+                case CartographyPropKind.DecalShoreFoam: return new Vector2(2.00f, 1.00f);
                 default: return Vector2.one;
+            }
+        }
+
+        public static bool SupportsRootCollar(CartographyPropKind kind)
+        {
+            switch (kind)
+            {
+                case CartographyPropKind.TreeOakA:
+                case CartographyPropKind.TreeOakB:
+                case CartographyPropKind.TreePineA:
+                case CartographyPropKind.TreePineB:
+                case CartographyPropKind.TreeWillowA:
+                case CartographyPropKind.BoulderMossA:
+                case CartographyPropKind.BoulderMossB:
+                case CartographyPropKind.BoulderMossC:
+                case CartographyPropKind.FallenHollowLog:
+                case CartographyPropKind.GnarledDeadTree:
+                case CartographyPropKind.ThornBrambleThicket:
+                case CartographyPropKind.RuinedWallCorner:
+                case CartographyPropKind.BrokenArchway:
+                case CartographyPropKind.RubblePileA:
+                case CartographyPropKind.RubblePileB:
+                case CartographyPropKind.FallenStatue:
+                case CartographyPropKind.StoneRuins:
+                case CartographyPropKind.PalisadeStakes:
+                case CartographyPropKind.CartWreck:
+                case CartographyPropKind.WoodenWagon:
+                case CartographyPropKind.BarrelsCrates:
+                case CartographyPropKind.HayBale:
+                case CartographyPropKind.OilKegCluster:
+                case CartographyPropKind.ShrineStatue:
+                case CartographyPropKind.StoneWell:
+                case CartographyPropKind.StoneFenceH:
+                case CartographyPropKind.StoneFenceV:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        public static bool IsFloorDecalKind(CartographyPropKind kind)
+        {
+            switch (kind)
+            {
+                case CartographyPropKind.DecalMossSkirt:
+                case CartographyPropKind.DecalPebbles:
+                case CartographyPropKind.DecalFallenLeaves:
+                case CartographyPropKind.DecalCrackedStone:
+                case CartographyPropKind.DecalShoreFoam:
+                case CartographyPropKind.DungeonIronGrate:
+                case CartographyPropKind.DungeonFloorGrateRusted:
+                case CartographyPropKind.DungeonSpikeTrap:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        public static bool IsStage2GroundDecalKind(CartographyPropKind kind)
+        {
+            switch (kind)
+            {
+                case CartographyPropKind.DecalMossSkirt:
+                case CartographyPropKind.DecalPebbles:
+                case CartographyPropKind.DecalFallenLeaves:
+                case CartographyPropKind.DecalCrackedStone:
+                case CartographyPropKind.DecalShoreFoam:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        public static bool IsAnimated4FrameKind(CartographyPropKind kind)
+        {
+            switch (kind)
+            {
+                case CartographyPropKind.Campfire4f:
+                case CartographyPropKind.DungeonWallSconce4f:
+                case CartographyPropKind.RuneObelisk4f:
+                case CartographyPropKind.TownLanternPost4f:
+                case CartographyPropKind.RiverReeds4f:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        public static bool IsNeverFlipXKind(CartographyPropKind kind)
+        {
+            if (IsTallBuildingPropKind(kind))
+            {
+                return true;
+            }
+
+            switch (kind)
+            {
+                case CartographyPropKind.StoneBridge:
+                case CartographyPropKind.WoodenPlankBridge:
+                case CartographyPropKind.Signpost:
+                case CartographyPropKind.TownNoticeBoard:
+                case CartographyPropKind.Campfire4f:
+                case CartographyPropKind.TorchBrazier:
+                case CartographyPropKind.TownLanternPost4f:
+                case CartographyPropKind.DungeonWallSconce4f:
+                case CartographyPropKind.DungeonStairsUp:
+                case CartographyPropKind.DungeonStairsDown:
+                case CartographyPropKind.DungeonDoorClosed:
+                case CartographyPropKind.DungeonDoorOpen:
+                    return true;
+                default:
+                    return false;
             }
         }
 
@@ -1026,7 +1205,8 @@ namespace Realmz.Cartography
                     SizeMeters = fittedSz,
                     CastsCanopyShadow = true,
                     CanopyRadius = Mathf.Max(1.1f, fittedSz.x * 0.44f),
-                    CanopyStrength = 0.42f
+                    CanopyStrength = 0.42f,
+                    HasRootCollar = SupportsRootCollar(buildingKind)
                 });
                 placedOutdoorProps.Add(new Vector2Int(anchorTileX, anchorTileY));
 
@@ -1074,7 +1254,8 @@ namespace Realmz.Cartography
                         SizeMeters = fittedSz,
                         CastsCanopyShadow = true,
                         CanopyRadius = Mathf.Max(1.1f, fittedSz.x * 0.44f),
-                        CanopyStrength = 0.42f
+                        CanopyStrength = 0.42f,
+                        HasRootCollar = SupportsRootCollar(CartographyPropKind.Apothecary)
                     });
                     placedOutdoorProps.Add(new Vector2Int(fitX, fitY));
                     BlockBuildingFootprintNonRoadOnly(map, kinds, CartographyPropKind.Apothecary, pos.x, pos.z, fittedSz);
@@ -1208,7 +1389,14 @@ namespace Realmz.Cartography
                         {
                             placedVergeLanternTiles.Add(vergeCoord);
                             Vector3 vPos = GridToWorld(vx, vy, GetElevation(vx, vy));
-                            AddProp(CartographyPropKind.TorchBrazier, vPos.x, vPos.y, vPos.z, 0.80f, 1.10f);
+                            bool isTownArea = vx <= 28 && vy <= 24;
+                            CartographyPropKind lanternKind = isTownArea && (DeterministicHash(vx, vy, 509) & 1) == 0
+                                ? CartographyPropKind.TownLanternPost4f
+                                : CartographyPropKind.TorchBrazier;
+                            Vector2 lanternSz = lanternKind == CartographyPropKind.TownLanternPost4f
+                                ? new Vector2(1.45f, 1.65f)
+                                : new Vector2(0.80f, 1.10f);
+                            AddProp(lanternKind, vPos.x, vPos.y, vPos.z, lanternSz.x, lanternSz.y);
                             _lanterns.Add(new CartographyLanternSource
                             {
                                 WorldXZ = new Vector2(vPos.x, vPos.z),
@@ -1250,6 +1438,51 @@ namespace Realmz.Cartography
                         AddProp(fixedPlazaAnchors[i].pKind, fPos.x, fPos.y, fPos.z, fSz.x, fSz.y);
                         placedOutdoorProps.Add(anchorCoord);
                         BlockSolidPropFootprint(map, kinds, fixedPlazaAnchors[i].pKind, fPos.x, fPos.z, fSz);
+                    }
+                }
+            }
+
+            // Place TownNoticeBoard on a safe non-road town plaza tile (preserving (10..12,9) and (13,10))
+            bool placedNoticeBoard = false;
+            Vector2 noticeBoardSize = new Vector2(1.55f, 1.75f);
+            for (int pass = 0; pass < 2 && !placedNoticeBoard; pass++)
+            {
+                bool requireRoadNeighbor = pass == 0;
+                for (int y = 6; y <= 16 && y < h && !placedNoticeBoard; y++)
+                {
+                    for (int x = 8; x <= 22 && x < w; x++)
+                    {
+                        if ((x >= 10 && x <= 12 && y == 9) || (x == 13 && y == 10))
+                        {
+                            continue;
+                        }
+
+                        Vector2Int nbCoord = new Vector2Int(x, y);
+                        if (npcTiles.Contains(nbCoord) ||
+                            _blockedPropTiles.Contains(nbCoord) ||
+                            isBuildingTile[x, y] ||
+                            !IsCleanPlazaOrEdgeTile(map, kinds, x, y) ||
+                            IsTooCloseToList(placedOutdoorProps, x, y, 4))
+                        {
+                            continue;
+                        }
+
+                        if (requireRoadNeighbor && CountRoadNeighbors(kinds, x, y, w, h) == 0)
+                        {
+                            continue;
+                        }
+
+                        Vector3 nbPos = ComputeRoadClearPlazaWorldPosition(map, kinds, CartographyPropKind.TownNoticeBoard, x, y, noticeBoardSize);
+                        if (!IsPropVisualFootprintClearOfRoads(map, kinds, CartographyPropKind.TownNoticeBoard, nbPos.x, nbPos.z, noticeBoardSize))
+                        {
+                            continue;
+                        }
+
+                        AddProp(CartographyPropKind.TownNoticeBoard, nbPos.x, nbPos.y, nbPos.z, noticeBoardSize.x, noticeBoardSize.y);
+                        placedOutdoorProps.Add(nbCoord);
+                        BlockSolidPropFootprint(map, kinds, CartographyPropKind.TownNoticeBoard, nbPos.x, nbPos.z, noticeBoardSize);
+                        placedNoticeBoard = true;
+                        break;
                     }
                 }
             }
@@ -2523,7 +2756,8 @@ namespace Realmz.Cartography
                 SizeMeters = new Vector2(5.0f, 4.0f),
                 CastsCanopyShadow = true,
                 CanopyRadius = 2.9f,
-                CanopyStrength = 0.45f
+                CanopyStrength = 0.45f,
+                HasRootCollar = SupportsRootCollar(CartographyPropKind.BywaterInn)
             });
 
             // Stone arched bridge spanning south bank to north bank at (8.5, 0, -14.0)
@@ -2532,7 +2766,8 @@ namespace Realmz.Cartography
                 Kind = CartographyPropKind.StoneBridge,
                 WorldPosition = new Vector3(8.5f, PlazaElevation, FlipZ(4.0f)),
                 SizeMeters = new Vector2(2.2f, 2.8f),
-                CastsCanopyShadow = false
+                CastsCanopyShadow = false,
+                HasRootCollar = SupportsRootCollar(CartographyPropKind.StoneBridge)
             });
 
             // Stone fences framing inn courtyard and road
@@ -2556,7 +2791,8 @@ namespace Realmz.Cartography
                 SizeMeters = new Vector2(1.85f, 1.85f),
                 CastsCanopyShadow = true,
                 CanopyRadius = 0.68f,
-                CanopyStrength = 0.36f
+                CanopyStrength = 0.36f,
+                HasRootCollar = SupportsRootCollar(CartographyPropKind.Knight)
             });
             _props.Add(new CartographyPropPlacement
             {
@@ -2565,7 +2801,8 @@ namespace Realmz.Cartography
                 SizeMeters = new Vector2(1.55f, 1.55f),
                 CastsCanopyShadow = true,
                 CanopyRadius = 0.62f,
-                CanopyStrength = 0.36f
+                CanopyStrength = 0.36f,
+                HasRootCollar = SupportsRootCollar(CartographyPropKind.GiantFrog)
             });
 
             // Torch brazier near north bridge landing
@@ -2579,7 +2816,8 @@ namespace Realmz.Cartography
                 SizeMeters = new Vector2(2.8f, 3.2f),
                 CastsCanopyShadow = true,
                 CanopyRadius = 2.1f,
-                CanopyStrength = 0.65f
+                CanopyStrength = 0.65f,
+                HasRootCollar = SupportsRootCollar(CartographyPropKind.TreeWillowA)
             });
 
             // Northern forest ridge trees (+0.75m)
@@ -2616,7 +2854,8 @@ namespace Realmz.Cartography
                 WorldPosition = new Vector3(wx, wy, wz),
                 SizeMeters = new Vector2(w, h),
                 CastsCanopyShadow = false,
-                IsArenaObstacle = isArenaObstacle
+                IsArenaObstacle = isArenaObstacle,
+                HasRootCollar = SupportsRootCollar(kind)
             });
         }
 
@@ -2638,7 +2877,8 @@ namespace Realmz.Cartography
                 CastsCanopyShadow = true,
                 CanopyRadius = canopyRadius,
                 CanopyStrength = 0.72f,
-                IsArenaObstacle = isArenaObstacle
+                IsArenaObstacle = isArenaObstacle,
+                HasRootCollar = SupportsRootCollar(kind)
             });
         }
 
@@ -2675,6 +2915,27 @@ namespace Realmz.Cartography
                 case CartographyPropKind.DungeonChestOpen:
                 case CartographyPropKind.DungeonPillar:
                 case CartographyPropKind.DungeonSarcophagus:
+                case CartographyPropKind.BoulderMossA:
+                case CartographyPropKind.BoulderMossB:
+                case CartographyPropKind.BoulderMossC:
+                case CartographyPropKind.FallenHollowLog:
+                case CartographyPropKind.GnarledDeadTree:
+                case CartographyPropKind.ThornBrambleThicket:
+                case CartographyPropKind.RuinedWallCorner:
+                case CartographyPropKind.BrokenArchway:
+                case CartographyPropKind.RubblePileA:
+                case CartographyPropKind.RubblePileB:
+                case CartographyPropKind.FallenStatue:
+                case CartographyPropKind.RuneObelisk4f:
+                case CartographyPropKind.IronCage:
+                case CartographyPropKind.PalisadeStakes:
+                case CartographyPropKind.CartWreck:
+                case CartographyPropKind.HayBale:
+                case CartographyPropKind.OilKegCluster:
+                case CartographyPropKind.TownNoticeBoard:
+                case CartographyPropKind.TownLanternPost4f:
+                case CartographyPropKind.DriftwoodSnag:
+                case CartographyPropKind.HalfSunkRowboat:
                     return true;
                 default:
                     return false;
@@ -3318,6 +3579,344 @@ namespace Realmz.Cartography
             }
         }
 
+        public static bool ResolveStage2ObstacleProp(
+            string obstacleKey,
+            int wx,
+            int wy,
+            RealmzCore.Combat.CombatArenaArchetype archetype,
+            out CartographyPropKind propKind,
+            out Vector2 sizeMeters,
+            out bool castsCanopy,
+            out float canopyRadius,
+            out float canopyStrength,
+            out bool addsLantern,
+            out bool hasRootCollar)
+        {
+            propKind = CartographyPropKind.None;
+            sizeMeters = Vector2.one;
+            castsCanopy = false;
+            canopyRadius = 0f;
+            canopyStrength = 0f;
+            addsLantern = false;
+            hasRootCollar = false;
+
+            if (string.IsNullOrWhiteSpace(obstacleKey))
+            {
+                return false;
+            }
+
+            int hash = DeterministicHash(wx, wy, 739);
+
+            if (string.Equals(obstacleKey, "BoulderRock", StringComparison.OrdinalIgnoreCase))
+            {
+                int pick = hash % 3;
+                if (pick == 0)
+                {
+                    propKind = CartographyPropKind.BoulderMossA;
+                    sizeMeters = new Vector2(1.30f, 1.30f);
+                }
+                else if (pick == 1)
+                {
+                    propKind = CartographyPropKind.BoulderMossB;
+                    sizeMeters = new Vector2(1.45f, 1.25f);
+                }
+                else
+                {
+                    propKind = CartographyPropKind.BoulderMossC;
+                    sizeMeters = new Vector2(1.15f, 1.15f);
+                }
+            }
+            else if (string.Equals(obstacleKey, "RuinedWall", StringComparison.OrdinalIgnoreCase))
+            {
+                bool allowArchway = archetype == RealmzCore.Combat.CombatArenaArchetype.RuinsOutskirts ||
+                                    archetype == RealmzCore.Combat.CombatArenaArchetype.DungeonChamber;
+                int pick = allowArchway ? (hash % 4) : (hash % 3);
+                if (pick == 0)
+                {
+                    propKind = CartographyPropKind.RuinedWallCorner;
+                    sizeMeters = new Vector2(1.55f, 1.55f);
+                }
+                else if (pick == 1 && allowArchway)
+                {
+                    propKind = CartographyPropKind.BrokenArchway;
+                    sizeMeters = new Vector2(2.10f, 1.75f);
+                }
+                else if (pick == 1 || pick == 2)
+                {
+                    propKind = CartographyPropKind.RubblePileA;
+                    sizeMeters = new Vector2(1.28f, 1.08f);
+                }
+                else
+                {
+                    propKind = CartographyPropKind.RubblePileB;
+                    sizeMeters = new Vector2(1.42f, 1.08f);
+                }
+            }
+            else if (string.Equals(obstacleKey, "BrushThicket", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.ThornBrambleThicket;
+                sizeMeters = new Vector2(1.50f, 1.25f);
+            }
+            else if (string.Equals(obstacleKey, "TreeTrunk", StringComparison.OrdinalIgnoreCase))
+            {
+                if (archetype == RealmzCore.Combat.CombatArenaArchetype.DeepWoods)
+                {
+                    int pick = hash % 4;
+                    if (pick == 0)
+                    {
+                        propKind = CartographyPropKind.TreeOakA;
+                        sizeMeters = new Vector2(2.25f, 2.80f);
+                        castsCanopy = true;
+                        canopyRadius = 1.75f;
+                        canopyStrength = 0.72f;
+                    }
+                    else if (pick == 1)
+                    {
+                        propKind = CartographyPropKind.TreePineA;
+                        sizeMeters = new Vector2(2.25f, 2.80f);
+                        castsCanopy = true;
+                        canopyRadius = 1.75f;
+                        canopyStrength = 0.72f;
+                    }
+                    else if (pick == 2)
+                    {
+                        propKind = CartographyPropKind.GnarledDeadTree;
+                        sizeMeters = new Vector2(2.25f, 2.65f);
+                        castsCanopy = true;
+                        canopyRadius = 1.75f;
+                        canopyStrength = 0.72f;
+                    }
+                    else
+                    {
+                        propKind = CartographyPropKind.FallenHollowLog;
+                        sizeMeters = new Vector2(1.95f, 1.05f);
+                        castsCanopy = false;
+                    }
+                }
+                else
+                {
+                    propKind = ((wx + wy) & 1) == 0
+                        ? CartographyPropKind.TreeOakA
+                        : CartographyPropKind.TreePineA;
+                    sizeMeters = new Vector2(2.25f, 2.80f);
+                    castsCanopy = true;
+                    canopyRadius = 1.75f;
+                    canopyStrength = 0.72f;
+                }
+            }
+            else if (string.Equals(obstacleKey, "StonePillar", StringComparison.OrdinalIgnoreCase))
+            {
+                if (archetype == RealmzCore.Combat.CombatArenaArchetype.RuinsOutskirts && ((wx + wy) & 1) == 1)
+                {
+                    propKind = CartographyPropKind.RuneObelisk4f;
+                    sizeMeters = new Vector2(1.35f, 1.55f);
+                    addsLantern = true;
+                }
+                else
+                {
+                    propKind = CartographyPropKind.DungeonPillar;
+                    sizeMeters = new Vector2(1.05f, 2.05f);
+                }
+            }
+            else if (string.Equals(obstacleKey, "SupplyWagon", StringComparison.OrdinalIgnoreCase))
+            {
+                bool allowCartWreck = archetype == RealmzCore.Combat.CombatArenaArchetype.RoadAmbush ||
+                                      archetype == RealmzCore.Combat.CombatArenaArchetype.RiverbankCrossing;
+                if (allowCartWreck && ((wx + wy) & 1) == 0)
+                {
+                    propKind = CartographyPropKind.CartWreck;
+                    sizeMeters = new Vector2(2.10f, 1.45f);
+                }
+                else
+                {
+                    propKind = CartographyPropKind.WoodenWagon;
+                    sizeMeters = new Vector2(2.05f, 1.62f);
+                }
+            }
+            else if (string.Equals(obstacleKey, "BarrelsCrates", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.BarrelsCrates;
+                sizeMeters = new Vector2(1.32f, 1.22f);
+            }
+            else if (string.Equals(obstacleKey, "StoneFence", StringComparison.OrdinalIgnoreCase))
+            {
+                if (archetype == RealmzCore.Combat.CombatArenaArchetype.RoadAmbush && ((wx + wy) & 1) == 0)
+                {
+                    propKind = CartographyPropKind.PalisadeStakes;
+                    sizeMeters = new Vector2(1.45f, 1.15f);
+                }
+                else
+                {
+                    propKind = CartographyPropKind.StoneFenceH;
+                    sizeMeters = new Vector2(1.12f, 1.20f);
+                }
+            }
+            else if (string.Equals(obstacleKey, "LitBrazier", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.TorchBrazier;
+                sizeMeters = new Vector2(0.88f, 1.20f);
+                addsLantern = true;
+            }
+            else if (string.Equals(obstacleKey, "WallSconce", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.DungeonWallSconce4f;
+                sizeMeters = new Vector2(1.25f, 1.25f);
+                addsLantern = true;
+            }
+            else if (string.Equals(obstacleKey, "IronGrate", StringComparison.OrdinalIgnoreCase))
+            {
+                if (((wx + wy) & 1) == 0)
+                {
+                    propKind = CartographyPropKind.DungeonFloorGrateRusted;
+                    sizeMeters = new Vector2(1.15f, 1.15f);
+                }
+                else
+                {
+                    propKind = CartographyPropKind.DungeonIronGrate;
+                    sizeMeters = new Vector2(0.96f, 0.96f);
+                }
+            }
+            else if (string.Equals(obstacleKey, "BridgePlank", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(obstacleKey, "WoodenPlankBridge", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.WoodenPlankBridge;
+                sizeMeters = new Vector2(1.85f, 1.25f);
+            }
+            else if (string.Equals(obstacleKey, "OilKegCluster", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.OilKegCluster;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+            }
+            else if (string.Equals(obstacleKey, "HayBale", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.HayBale;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+            }
+            else if (string.Equals(obstacleKey, "FallenHollowLog", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.FallenHollowLog;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+            }
+            else if (string.Equals(obstacleKey, "GnarledDeadTree", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.GnarledDeadTree;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+                castsCanopy = true;
+                canopyRadius = 1.75f;
+                canopyStrength = 0.72f;
+            }
+            else if (string.Equals(obstacleKey, "FallenStatue", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.FallenStatue;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+            }
+            else if (string.Equals(obstacleKey, "RuneObelisk", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(obstacleKey, "RuneObelisk4f", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.RuneObelisk4f;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+                addsLantern = true;
+            }
+            else if (string.Equals(obstacleKey, "BonePile", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.BonePile;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+            }
+            else if (string.Equals(obstacleKey, "IronCage", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.IronCage;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+            }
+            else if (string.Equals(obstacleKey, "DungeonFloorGrateRusted", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.DungeonFloorGrateRusted;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+            }
+            else if (string.Equals(obstacleKey, "PalisadeStakes", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.PalisadeStakes;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+            }
+            else if (string.Equals(obstacleKey, "CartWreck", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.CartWreck;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+            }
+            else if (string.Equals(obstacleKey, "DriftwoodSnag", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.DriftwoodSnag;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+            }
+            else if (string.Equals(obstacleKey, "HalfSunkRowboat", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.HalfSunkRowboat;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+            }
+            else if (string.Equals(obstacleKey, "RiverReeds4f", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.RiverReeds4f;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+            }
+            else if (string.Equals(obstacleKey, "TownNoticeBoard", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.TownNoticeBoard;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+            }
+            else if (string.Equals(obstacleKey, "TownLanternPost4f", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.TownLanternPost4f;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+                addsLantern = true;
+            }
+            else if (string.Equals(obstacleKey, "BoulderMossA", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.BoulderMossA;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+            }
+            else if (string.Equals(obstacleKey, "BoulderMossB", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.BoulderMossB;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+            }
+            else if (string.Equals(obstacleKey, "BoulderMossC", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.BoulderMossC;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+            }
+            else if (string.Equals(obstacleKey, "RuinedWallCorner", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.RuinedWallCorner;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+            }
+            else if (string.Equals(obstacleKey, "BrokenArchway", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.BrokenArchway;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+            }
+            else if (string.Equals(obstacleKey, "RubblePileA", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.RubblePileA;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+            }
+            else if (string.Equals(obstacleKey, "RubblePileB", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.RubblePileB;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+            }
+            else if (string.Equals(obstacleKey, "ThornBrambleThicket", StringComparison.OrdinalIgnoreCase))
+            {
+                propKind = CartographyPropKind.ThornBrambleThicket;
+                sizeMeters = GetDefaultPropSizeMeters(propKind);
+            }
+            else
+            {
+                return false;
+            }
+
+            hasRootCollar = SupportsRootCollar(propKind);
+            return true;
+        }
+
         public void ApplyCombatArenaLayout(
             int originX,
             int originY,
@@ -3326,6 +3925,11 @@ namespace Realmz.Cartography
             if (grid == null)
             {
                 return;
+            }
+
+            if (!IsDungeon)
+            {
+                WaterSurfaceHeight = TileMapWaterSurfaceElevation;
             }
 
             int minX = originX;
@@ -3381,8 +3985,8 @@ namespace Realmz.Cartography
 
                     if (isWaterSurface)
                     {
-                        tile.IsWater = false; // Keep Elevation >= -0.05f so wading feet & animated Water/Ice decals remain crisp above ShallowWaterPlane
-                        tile.Elevation = cell.ElevationTier < 0 ? Mathf.Max(-0.35f, RiverElevation * 0.6f) : MudElevation;
+                        tile.IsWater = true;
+                        tile.Elevation = CombatRiverElevation;
                         tile.MudWeight = 0.85f;
                         tile.DirtWeight = 0.15f;
                         tile.CobbleWeight = 0f;
@@ -3445,69 +4049,70 @@ namespace Realmz.Cartography
 
                     _tiles[wx, wy] = tile;
 
+                    Vector3 propPos = GridToWorld(wx, wy, tile.Elevation);
+
+                    if (isBridge && (feat == null || feat.ObstacleKind == RealmzCore.Combat.CombatArenaObstacleKind.None ||
+                                     feat.ObstacleKind == RealmzCore.Combat.CombatArenaObstacleKind.BridgePlank))
+                    {
+                        AddProp(CartographyPropKind.WoodenPlankBridge, propPos.x, propPos.y, propPos.z, 1.85f, 1.25f, isArenaObstacle: false);
+                    }
+
+                    if (isMud && (feat == null || feat.ObstacleKind == RealmzCore.Combat.CombatArenaObstacleKind.None))
+                    {
+                        AddProp(CartographyPropKind.DecalShoreFoam, propPos.x, propPos.y, propPos.z, 1.55f, 0.80f, isArenaObstacle: false);
+                        if ((DeterministicHash(wx, wy, 709) % 3) == 0)
+                        {
+                            AddProp(CartographyPropKind.RiverReeds4f, propPos.x, propPos.y, propPos.z, 1.30f, 1.30f, isArenaObstacle: false);
+                        }
+                        else if ((ly == 0 || ly == grid.Height - 1) &&
+                                 !isBridge &&
+                                 !isRoad &&
+                                 !cell.IsBlocked &&
+                                 (feat == null || !feat.BlocksMovement) &&
+                                 (DeterministicHash(wx, wy, 719) % 7) == 0)
+                        {
+                            CartographyPropKind bankProp = (DeterministicHash(wx, wy, 727) & 1) == 0
+                                ? CartographyPropKind.DriftwoodSnag
+                                : CartographyPropKind.HalfSunkRowboat;
+                            Vector2 bankSz = bankProp == CartographyPropKind.DriftwoodSnag
+                                ? new Vector2(1.75f, 1.10f)
+                                : new Vector2(2.15f, 1.30f);
+                            AddProp(bankProp, propPos.x, propPos.y, propPos.z, bankSz.x, bankSz.y, isArenaObstacle: false);
+                        }
+                    }
+
                     if (feat == null || feat.ObstacleKind == RealmzCore.Combat.CombatArenaObstacleKind.None ||
                         feat.ObstacleKind == RealmzCore.Combat.CombatArenaObstacleKind.BridgePlank)
                     {
                         continue;
                     }
 
-                    Vector3 propPos = GridToWorld(wx, wy, tile.Elevation);
-                    switch (feat.ObstacleKind)
+                    if (ResolveStage2ObstacleProp(
+                        feat.ObstacleKind.ToString(),
+                        wx,
+                        wy,
+                        archetype,
+                        out CartographyPropKind propKind,
+                        out Vector2 sizeMeters,
+                        out bool castsCanopy,
+                        out float canopyRadius,
+                        out float _,
+                        out bool addsLantern,
+                        out bool _))
                     {
-                        case RealmzCore.Combat.CombatArenaObstacleKind.BoulderRock:
-                            AddProp(
-                                ((wx + wy) & 1) == 0 ? CartographyPropKind.StoneFenceH : CartographyPropKind.DungeonPillar,
-                                propPos.x,
-                                propPos.y,
-                                propPos.z,
-                                ((wx + wy) & 1) == 0 ? 1.25f : 1.05f,
-                                ((wx + wy) & 1) == 0 ? 1.32f : 1.40f,
-                                isArenaObstacle: true);
-                            break;
-                        case RealmzCore.Combat.CombatArenaObstacleKind.RuinedWall:
-                            AddProp(
-                                (feat.Y & 1) == 0 ? CartographyPropKind.StoneFenceH : CartographyPropKind.DungeonPillar,
-                                propPos.x,
-                                propPos.y,
-                                propPos.z,
-                                (feat.Y & 1) == 0 ? 1.32f : 1.08f,
-                                (feat.Y & 1) == 0 ? 1.48f : 1.92f,
-                                isArenaObstacle: true);
-                            break;
-                        case RealmzCore.Combat.CombatArenaObstacleKind.TreeTrunk:
+                        if (castsCanopy)
                         {
-                            CartographyPropKind treeKind = ((wx + wy) & 1) == 0
-                                ? CartographyPropKind.TreeOakA
-                                : CartographyPropKind.TreePineA;
-                            AddCanopyTree(treeKind, propPos.x, propPos.y, propPos.z, 2.25f, 2.80f, 1.75f, isArenaObstacle: true);
-                            break;
+                            AddCanopyTree(propKind, propPos.x, propPos.y, propPos.z, sizeMeters.x, sizeMeters.y, canopyRadius, isArenaObstacle: true);
                         }
-                        case RealmzCore.Combat.CombatArenaObstacleKind.StonePillar:
-                            AddProp(CartographyPropKind.DungeonPillar, propPos.x, propPos.y, propPos.z, 1.05f, 2.05f, isArenaObstacle: true);
-                            break;
-                        case RealmzCore.Combat.CombatArenaObstacleKind.SupplyWagon:
-                            AddProp(CartographyPropKind.WoodenWagon, propPos.x, propPos.y, propPos.z, 2.05f, 1.62f, isArenaObstacle: true);
-                            break;
-                        case RealmzCore.Combat.CombatArenaObstacleKind.BarrelsCrates:
-                            AddProp(CartographyPropKind.BarrelsCrates, propPos.x, propPos.y, propPos.z, 1.32f, 1.22f, isArenaObstacle: true);
-                            break;
-                        case RealmzCore.Combat.CombatArenaObstacleKind.StoneFence:
-                            AddProp(CartographyPropKind.StoneFenceH, propPos.x, propPos.y, propPos.z, 1.12f, 1.20f, isArenaObstacle: true);
-                            break;
-                        case RealmzCore.Combat.CombatArenaObstacleKind.LitBrazier:
-                            AddProp(CartographyPropKind.TorchBrazier, propPos.x, propPos.y, propPos.z, 0.88f, 1.20f, isArenaObstacle: true);
+                        else
+                        {
+                            AddProp(propKind, propPos.x, propPos.y, propPos.z, sizeMeters.x, sizeMeters.y, isArenaObstacle: true);
+                        }
+
+                        if (addsLantern)
+                        {
                             AddUniqueLantern(propPos, 3.2f, 0.65f);
-                            break;
-                        case RealmzCore.Combat.CombatArenaObstacleKind.WallSconce:
-                            AddProp(CartographyPropKind.DungeonWallSconce4f, propPos.x, propPos.y, propPos.z, 1.25f, 1.25f, isArenaObstacle: true);
-                            AddUniqueLantern(propPos, 3.2f, 0.65f);
-                            break;
-                        case RealmzCore.Combat.CombatArenaObstacleKind.IronGrate:
-                            AddProp(CartographyPropKind.DungeonIronGrate, propPos.x, propPos.y, propPos.z, 0.96f, 0.96f, isArenaObstacle: true);
-                            break;
-                        case RealmzCore.Combat.CombatArenaObstacleKind.BrushThicket:
-                            AddProp(CartographyPropKind.TreeOakB, propPos.x, propPos.y, propPos.z, 1.22f, 1.08f, isArenaObstacle: true);
-                            break;
+                        }
                     }
                 }
             }

@@ -16,6 +16,7 @@ using TMPro;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Audio;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
 using UnityEngine.Rendering;
@@ -274,7 +275,8 @@ namespace Realmz.EditorTests
                 Assert.That(sun.intensity, Is.LessThan(0.5f), "Dungeon sun intensity should be < 0.5.");
                 Assert.That(RenderSettings.ambientSkyColor.r, Is.LessThan(0.25f), "Dungeon ambientSkyColor.r should be < 0.25.");
                 Assert.That(tonemapping.mode.value, Is.EqualTo(TonemappingMode.ACES), "Dungeon tonemapping should be ACES.");
-                Assert.That(atmo.sunMoteParticles.isPlaying, Is.False, "sunMoteParticles should stop playing in dungeon.");
+                Assert.That(atmo.HasFirefliesActive, Is.False, "Dungeon should switch motes to CaveSpores, not Fireflies.");
+                Assert.That(atmo.sunMoteParticles.isPlaying, Is.True, "Dungeon should emit subterranean CaveSpores motes.");
             }
             finally
             {
@@ -2790,6 +2792,8 @@ namespace Realmz.EditorTests
                 BywaterSaveData snap = BywaterSaveService.CaptureSnapshot(session);
                 Assert.That(snap.hasWorldClock, Is.True);
                 Assert.That(snap.worldTimeTurns, Is.EqualTo(58));
+                Assert.That(snap.hasWorldClockMinutes, Is.True);
+                Assert.That(snap.worldTimeMinutes, Is.EqualTo(WorldClock.LegacyTurnsToMinutes(58)).Within(0.01));
                 Assert.That(snap.postCombatGraceSteps, Is.EqualTo(10));
                 Assert.That(snap.zoneCooldowns.Length, Is.EqualTo(1));
                 Assert.That(BywaterSaveService.TryWriteSave(tempSave, snap), Is.True);
@@ -2799,7 +2803,9 @@ namespace Realmz.EditorTests
                 BywaterSaveService.ApplySnapshot(loaded, restored, bundle.Items, out ulong _);
 
                 Assert.That(restored.WorldClockTurns, Is.EqualTo(58));
+                Assert.That(restored.WorldClockMinutes, Is.EqualTo(WorldClock.LegacyTurnsToMinutes(58)).Within(0.01));
                 Assert.That(restored.CurrentWorldClock.Phase, Is.EqualTo(WorldTimePhase.Night));
+                Assert.That(restored.CurrentWorldClock.DisplayLabel, Is.EqualTo("Day 1 - 08:29 PM (Night)"));
                 Assert.That(restored.PostCombatGraceStepsRemaining, Is.EqualTo(10));
                 Assert.That(restored.IsEncounterZoneOnCooldown("land_0", zonesAtBank[0]), Is.True);
 
@@ -2812,10 +2818,14 @@ namespace Realmz.EditorTests
                     y = 9,
                     turnCount = 7,
                     hasWorldClock = false,
-                    worldTimeTurns = -1
+                    worldTimeTurns = -1,
+                    hasWorldClockMinutes = false,
+                    worldTimeMinutes = -1.0
                 };
                 Assert.That(BywaterSaveService.ResolveRestoredWorldClockTurns(legacyData),
                     Is.EqualTo(WorldClock.DefaultStartTurns + 7));
+                Assert.That(BywaterSaveService.ResolveRestoredWorldClockMinutes(legacyData),
+                    Is.EqualTo(WorldClock.LegacyTurnsToMinutes(WorldClock.DefaultStartTurns + 7)).Within(0.01));
             }
             finally
             {
@@ -2928,7 +2938,8 @@ namespace Realmz.EditorTests
                 hud.RefreshExploreHud(session, bundle, null, null, 0, string.Empty, false);
                 TextMeshProUGUI clockTxt = FindDescendantByName(canvas.transform, "ClockText").GetComponent<TextMeshProUGUI>();
                 TextMeshProUGUI threatTxt = FindDescendantByName(canvas.transform, "ThreatText").GetComponent<TextMeshProUGUI>();
-                Assert.That(clockTxt.text, Is.EqualTo("Day 1 - Night"));
+                Assert.That(clockTxt.text, Is.EqualTo(session.CurrentWorldClock.DisplayLabel));
+                Assert.That(clockTxt.text, Is.EqualTo("Day 1 - 08:29 PM (Night)"));
                 Assert.That(threatTxt.text, Is.EqualTo("DARK DANGER!"));
 
                 // Lighting torch resolves DARK DANGER! -> HIGH / MODERATE
@@ -3027,10 +3038,12 @@ namespace Realmz.EditorTests
 
                 atmo.ApplyBiome(false, WorldTimePhase.Night, 0.5f, hasLitTorch: false, immediate: true, isCombat: true);
                 Assert.That(atmo.IsCombatActive, Is.True);
-                Assert.That(sun.intensity, Is.GreaterThanOrEqualTo(0.80f), "Night Combat sun key must stay readable (>= 0.80).");
-                Assert.That(RenderSettings.ambientIntensity, Is.GreaterThanOrEqualTo(1.30f), "Night Combat ambient floor must prevent crushed silhouettes.");
+                Assert.That(sun.intensity, Is.InRange(0.65f, 0.85f), "Night Combat sun key must stay within chiaroscuro [0.65, 0.85].");
+                Assert.That(RenderSettings.ambientIntensity, Is.InRange(0.95f, 1.12f), "Night Combat chiaroscuro ambient floor must stay within [0.95, 1.12].");
                 Assert.That(RenderSettings.ambientSkyColor.b, Is.GreaterThan(RenderSettings.ambientSkyColor.r), "Night Combat must retain cool silver-blue tone.");
-                Assert.That(tm.mode.value, Is.EqualTo(TonemappingMode.Neutral));
+                Assert.That(tm.mode.value, Is.EqualTo(TonemappingMode.ACES));
+                Assert.That(Shader.GetGlobalFloat("_GlobalNightRimStrength"), Is.GreaterThanOrEqualTo(0.50f));
+                Assert.That(atmo.CurrentNightRimStrength, Is.GreaterThanOrEqualTo(0.50f));
 
                 // 3. Combat Foreground Clear Buffer hides non-arena props in arena + 5-tile south buffer & restores cleanly
                 TileMapData landMap = bundle.Maps["land_0"];
@@ -3054,6 +3067,11 @@ namespace Realmz.EditorTests
                 foreach (Transform child in renderer.PropsRoot)
                 {
                     if (!child.gameObject.activeSelf) continue;
+                    MeshFilter mf = child.GetComponent<MeshFilter>();
+                    if (mf != null && mf.sharedMesh != null && mf.sharedMesh.name == "Cartography_RuntimeGroundQuad")
+                    {
+                        continue;
+                    }
                     CartographyWorldData.WorldToGrid(child.position, out int px, out int py);
                     bool inBuffer = px >= minClearX && px <= maxClearX && py >= minClearY && py <= maxClearY;
                     Assert.That(inBuffer, Is.False, $"Non-arena prop at ({px},{py}) remained visible inside Combat Foreground Clear Buffer.");
@@ -3176,7 +3194,7 @@ namespace Realmz.EditorTests
                 hud.RefreshPartyDrawer(party, bundle, 0);
                 Transform charExtra = FindDescendantByName(canvas.transform, "ExtraBody");
                 Assert.That(charExtra, Is.Not.Null);
-                Assert.That(charExtra.GetComponent<TextMeshProUGUI>().text, Does.Contain("Iron Vanguard (3/3 pcs)"));
+                Assert.That(charExtra.GetComponent<TextMeshProUGUI>().text, Does.Contain("Iron Vanguard [3/3]"));
 
                 FormationRank changedRank = FormationRank.Front;
                 int changedIdx = -1;
@@ -3255,6 +3273,329 @@ namespace Realmz.EditorTests
                     EventSystem created = Object.FindFirstObjectByType<EventSystem>();
                     if (created != null) Object.DestroyImmediate(created.gameObject);
                 }
+            }
+        }
+
+        [Test]
+        public void Stage2_BalanceOverrides_MonsterHp_CatalogAsset_AndShopkeeperScale_VerifyContracts()
+        {
+            string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
+
+            MonsterDefinition orcWarrior = null;
+            MonsterDefinition giantFrog = null;
+            for (int i = 0; i < bundle.Monsters.Count; i++)
+            {
+                MonsterDefinition monster = bundle.Monsters[i];
+                if (monster == null)
+                {
+                    continue;
+                }
+                if (string.Equals(monster.Name, "Orc Warrior", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    orcWarrior = monster;
+                }
+                else if (string.Equals(monster.Name, "Giant Frog", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    giantFrog = monster;
+                }
+            }
+
+            Assert.That(orcWarrior, Is.Not.Null, "Orc Warrior missing from bundle.Monsters.");
+            Assert.That(orcWarrior.HpMin, Is.EqualTo(18));
+            Assert.That(orcWarrior.HpMax, Is.EqualTo(24));
+
+            Assert.That(giantFrog, Is.Not.Null, "Giant Frog missing from bundle.Monsters.");
+            Assert.That(giantFrog.HpMin, Is.EqualTo(15));
+            Assert.That(giantFrog.HpMax, Is.EqualTo(19));
+
+            RealmzBalanceCatalog balanceCatalog = Resources.Load<RealmzBalanceCatalog>("RealmzBalanceCatalog");
+            Assert.That(balanceCatalog, Is.Not.Null, "Assets/Resources/RealmzBalanceCatalog.asset must load via Resources.Load.");
+            Assert.That(balanceCatalog.survival, Is.Not.Null);
+            Assert.That(balanceCatalog.survival.minutesPerRealSecond, Is.EqualTo(1.0f).Within(0.001f));
+
+            bool foundOrcOverride = false;
+            bool foundFrogOverride = false;
+            for (int i = 0; i < balanceCatalog.monsters.Length; i++)
+            {
+                RealmzBalanceCatalog.MonsterBalanceEntry entry = balanceCatalog.monsters[i];
+                if (string.Equals(entry.name, "Orc Warrior", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    foundOrcOverride = true;
+                    Assert.That(entry.hpMin, Is.EqualTo(18));
+                    Assert.That(entry.hpMax, Is.EqualTo(24));
+                }
+                else if (string.Equals(entry.name, "Giant Frog", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    foundFrogOverride = true;
+                    Assert.That(entry.hpMin, Is.EqualTo(15));
+                    Assert.That(entry.hpMax, Is.EqualTo(19));
+                }
+            }
+            Assert.That(foundOrcOverride, Is.True);
+            Assert.That(foundFrogOverride, Is.True);
+
+            BywaterAssetCatalog assetCatalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            Assert.That(assetCatalog, Is.Not.Null);
+
+            GameObject worldGo = new GameObject("TempStage2ShopkeeperScaleWorld");
+            try
+            {
+                BywaterWorldRenderer renderer = worldGo.AddComponent<BywaterWorldRenderer>();
+                renderer.Initialize(assetCatalog);
+                renderer.RenderMap(bundle.Land0, new GridCoord(10, 9), forceRebuild: true);
+
+                BywaterUnitView[] unitViews = worldGo.GetComponentsInChildren<BywaterUnitView>(true);
+                int checkedShopkeepers = 0;
+                for (int i = 0; i < unitViews.Length; i++)
+                {
+                    BywaterUnitView uv = unitViews[i];
+                    if (uv == null || string.IsNullOrEmpty(uv.UnitId) || !uv.UnitId.StartsWith("npc_", System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    Transform quad = uv.transform.Find("SpriteBillboard/SpriteQuad");
+                    Assert.That(quad, Is.Not.Null, $"Shopkeeper {uv.UnitId} missing SpriteQuad.");
+                    Assert.That(quad.localScale.x, Is.EqualTo(1.20f).Within(0.02f), $"Shopkeeper {uv.UnitId} width scale must be 1.20f.");
+                    Assert.That(quad.localScale.y, Is.EqualTo(1.20f).Within(0.02f), $"Shopkeeper {uv.UnitId} height scale must be 1.20f.");
+                    checkedShopkeepers++;
+                }
+
+                Assert.That(checkedShopkeepers, Is.GreaterThanOrEqualTo(1), "Expected at least 1 rendered town shopkeeper NPC view.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(worldGo);
+            }
+        }
+
+        [Test]
+        public void Stage2_ContinuousDayNightArc_SmoothKeyframes_AndDuskNightCombatCrossfade()
+        {
+            AmbientMode prevMode = RenderSettings.ambientMode;
+            Color prevSky = RenderSettings.ambientSkyColor;
+            Color prevEquator = RenderSettings.ambientEquatorColor;
+            Color prevGround = RenderSettings.ambientGroundColor;
+            float prevAmbientIntensity = RenderSettings.ambientIntensity;
+
+            GameObject camGo = new GameObject("Stage2ArcCam", typeof(Camera));
+            GameObject sunGo = new GameObject("Stage2ArcSun", typeof(Light));
+            GameObject volGo = new GameObject("Stage2ArcVol", typeof(Volume));
+            GameObject atmoGo = new GameObject("Stage2ArcAtmo");
+            VolumeProfile profile = ScriptableObject.CreateInstance<VolumeProfile>();
+            Tonemapping tm = profile.Add<Tonemapping>(true);
+            ColorAdjustments ca = profile.Add<ColorAdjustments>(true);
+
+            try
+            {
+                camGo.tag = "MainCamera";
+                Light sun = sunGo.GetComponent<Light>();
+                sun.type = LightType.Directional;
+                Volume vol = volGo.GetComponent<Volume>();
+                vol.isGlobal = true;
+                vol.sharedProfile = profile;
+
+                BywaterBiomeAtmosphere atmo = atmoGo.AddComponent<BywaterBiomeAtmosphere>();
+                atmo.targetCamera = camGo.GetComponent<Camera>();
+                atmo.directionalSun = sun;
+                atmo.globalVolume = vol;
+
+                WorldClock c0800 = WorldClock.FromMinutes(8 * 60);
+                WorldClock c1230 = WorldClock.FromMinutes(12 * 60 + 30);
+                WorldClock c1730 = WorldClock.FromMinutes(17 * 60 + 30);
+
+                atmo.ApplyBiome(false, c0800.NormalizedTimeOfDay, c0800.Phase, c0800.PhaseProgress01, hasLitTorch: false, immediate: true, isCombat: false);
+                Quaternion q0800 = atmo.CurrentSunRotation;
+                atmo.ApplyBiome(false, c1230.NormalizedTimeOfDay, c1230.Phase, c1230.PhaseProgress01, hasLitTorch: false, immediate: true, isCombat: false);
+                Quaternion q1230 = atmo.CurrentSunRotation;
+                atmo.ApplyBiome(false, c1730.NormalizedTimeOfDay, c1730.Phase, c1730.PhaseProgress01, hasLitTorch: false, immediate: true, isCombat: false);
+                Quaternion q1730 = atmo.CurrentSunRotation;
+
+                Assert.That(Quaternion.Angle(q0800, q1730), Is.GreaterThan(45f), "Sun arc from 08:00 to 17:30 must rotate > 45 deg.");
+                Assert.That(Quaternion.Angle(q0800, q1230), Is.GreaterThan(15f), "Sun arc from 08:00 to 12:30 must rotate > 15 deg.");
+
+                float firstAmbient = 0f;
+                float firstExposure = 0f;
+                float prevAmbient = 0f;
+                float prevExposure = 0f;
+
+                for (int m = 0; m < WorldClock.MinutesPerDay; m += 15)
+                {
+                    WorldClock c = WorldClock.FromMinutes(m);
+                    atmo.ApplyBiome(false, c.NormalizedTimeOfDay, c.Phase, c.PhaseProgress01, hasLitTorch: false, immediate: true, isCombat: false);
+                    float curAmbient = RenderSettings.ambientIntensity;
+                    float curExposure = ca.postExposure.value;
+
+                    if (m == 0)
+                    {
+                        firstAmbient = curAmbient;
+                        firstExposure = curExposure;
+                    }
+                    else
+                    {
+                        Assert.That(Mathf.Abs(curAmbient - prevAmbient), Is.LessThan(0.20f),
+                            $"Ambient intensity jumped >= 0.20 between {m - 15}m and {m}m.");
+                        Assert.That(Mathf.Abs(curExposure - prevExposure), Is.LessThan(0.20f),
+                            $"Post-exposure jumped >= 0.20 between {m - 15}m and {m}m.");
+                    }
+
+                    prevAmbient = curAmbient;
+                    prevExposure = curExposure;
+                }
+
+                Assert.That(Mathf.Abs(firstAmbient - prevAmbient), Is.LessThan(0.20f),
+                    "Midnight wrap ambient intensity delta must stay < 0.20.");
+                Assert.That(Mathf.Abs(firstExposure - prevExposure), Is.LessThan(0.20f),
+                    "Midnight wrap post-exposure delta must stay < 0.20.");
+
+                // Dusk (18:30) -> Night (00:00) crossfade preserves chiaroscuro Combat Night [0.95..1.12]
+                WorldClock c1830 = WorldClock.FromMinutes(18 * 60 + 30);
+                atmo.ApplyBiome(false, c1830.NormalizedTimeOfDay, c1830.Phase, c1830.PhaseProgress01, hasLitTorch: false, immediate: true, isCombat: true);
+                float duskAmbient = RenderSettings.ambientIntensity;
+                Assert.That(duskAmbient, Is.InRange(0.70f, 1.12f));
+
+                WorldClock c0000 = WorldClock.FromMinutes(0);
+                atmo.ApplyBiome(false, c0000.NormalizedTimeOfDay, c0000.Phase, c0000.PhaseProgress01, hasLitTorch: false, immediate: true, isCombat: true);
+                Assert.That(RenderSettings.ambientIntensity, Is.InRange(0.95f, 1.12f));
+                Assert.That(tm.mode.value, Is.EqualTo(TonemappingMode.ACES));
+                Assert.That(Shader.GetGlobalFloat("_GlobalNightRimStrength"), Is.GreaterThanOrEqualTo(0.50f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(atmoGo);
+                Object.DestroyImmediate(volGo);
+                Object.DestroyImmediate(sunGo);
+                Object.DestroyImmediate(camGo);
+                Object.DestroyImmediate(profile);
+                RenderSettings.ambientMode = prevMode;
+                RenderSettings.ambientSkyColor = prevSky;
+                RenderSettings.ambientEquatorColor = prevEquator;
+                RenderSettings.ambientGroundColor = prevGround;
+                RenderSettings.ambientIntensity = prevAmbientIntensity;
+            }
+        }
+
+        [Test]
+        public void Stage2_SaveV4_FogOfWar3State_WeatherStorm_AndWorldClockMinutes_RoundTrip()
+        {
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(Path.Combine(Application.streamingAssetsPath, "bywater_m1"));
+            PartyState party = PartyState.FromBundle(bundle);
+            ExplorationSession session = new ExplorationSession(
+                bundle.Maps,
+                "land_0",
+                party,
+                new DeterministicDiceRoller(1234UL),
+                startPosition: new GridCoord(10, 9));
+
+            session.MoveAlongPath(new GridCoord(15, 9), autoHaltOnEvents: false);
+            session.FogMaps["dungeon_0"].RecomputeVisibility(bundle.Dungeon0, new GridCoord(33, 72), 6);
+            session.SetWeather(WeatherState.Storm);
+            session.AdvanceWorldClockMinutes(137.5);
+
+            string tempSave = Path.Combine(Path.GetTempPath(), "realmz_stage2_v4_fog_weather_test.json");
+            try
+            {
+                BywaterSaveData snap = BywaterSaveService.CaptureSnapshot(session);
+                Assert.That(snap.version, Is.EqualTo(4));
+                Assert.That(snap.hasWorldClockMinutes, Is.True);
+                Assert.That(snap.worldTimeMinutes, Is.EqualTo(session.WorldClockMinutes).Within(0.01));
+                Assert.That(BywaterSaveService.ExtractWeatherState(snap), Is.EqualTo("Storm"));
+                Assert.That(BywaterSaveService.ExtractFogForMap(snap, "land_0"), Is.Not.Null);
+                Assert.That(BywaterSaveService.ExtractFogForMap(snap, "dungeon_0"), Is.Not.Null);
+                Assert.That(BywaterSaveService.TryWriteSave(tempSave, snap), Is.True);
+
+                Assert.That(BywaterSaveService.Load(tempSave, bundle, out ExplorationSession restored, out string loadStatus), Is.True, loadStatus);
+
+                Assert.That(restored.Weather, Is.EqualTo(WeatherState.Storm));
+                Assert.That(restored.WorldClockMinutes, Is.EqualTo(session.WorldClockMinutes).Within(0.01));
+                Assert.That(restored.FogMaps["land_0"].IsVisible(15, 9), Is.True);
+                Assert.That(restored.FogMaps["land_0"].IsExplored(10, 9), Is.True);
+                Assert.That(restored.FogMaps["land_0"].IsExplored(88, 88), Is.False);
+                Assert.That(restored.FogMaps["dungeon_0"].IsExplored(33, 72), Is.True);
+                Assert.That(restored.FogMaps["dungeon_0"].IsExplored(5, 5), Is.False);
+            }
+            finally
+            {
+                if (File.Exists(tempSave)) File.Delete(tempSave);
+            }
+        }
+
+        [Test]
+        public void Stage2_RealmzMasterMixer_GroupsParamsSnapshots_AndBindMixerWithoutWarnings()
+        {
+            List<string> warningsAndErrors = new List<string>();
+            void LogHandler(string condition, string stackTrace, LogType type)
+            {
+                if (type == LogType.Warning || type == LogType.Error || type == LogType.Exception || type == LogType.Assert)
+                {
+                    warningsAndErrors.Add($"[{type}] {condition}");
+                }
+            }
+
+            AudioMixer mixer = AssetDatabase.LoadAssetAtPath<AudioMixer>("Assets/Audio/RealmzMasterMixer.mixer");
+            Assert.That(mixer, Is.Not.Null, "Assets/Audio/RealmzMasterMixer.mixer missing.");
+
+            string[] requiredGroups = { "Master", "Music", "SFX", "Ambience", "UI" };
+            for (int i = 0; i < requiredGroups.Length; i++)
+            {
+                AudioMixerGroup[] matches = mixer.FindMatchingGroups(requiredGroups[i]);
+                Assert.That(matches != null && matches.Length > 0, Is.True, $"Missing AudioMixer group '{requiredGroups[i]}'.");
+            }
+
+            Assert.That(mixer.FindSnapshot("Overworld"), Is.Not.Null, "Missing 'Overworld' AudioMixerSnapshot.");
+            Assert.That(mixer.FindSnapshot("Dungeon"), Is.Not.Null, "Missing 'Dungeon' AudioMixerSnapshot.");
+
+            HashSet<string> serializedExposedParams = new HashSet<string>(System.StringComparer.Ordinal);
+            SerializedObject mixerSo = new SerializedObject(mixer);
+            SerializedProperty exposedProp = mixerSo.FindProperty("m_ExposedParameters");
+            if (exposedProp != null && exposedProp.isArray)
+            {
+                for (int i = 0; i < exposedProp.arraySize; i++)
+                {
+                    SerializedProperty elem = exposedProp.GetArrayElementAtIndex(i);
+                    SerializedProperty nameProp = elem.FindPropertyRelative("name");
+                    if (nameProp != null && !string.IsNullOrEmpty(nameProp.stringValue))
+                    {
+                        serializedExposedParams.Add(nameProp.stringValue);
+                    }
+                }
+            }
+
+            string[] requiredParams = { "MusicVolumeDb", "SfxVolumeDb", "AmbienceVolumeDb", "UiVolumeDb" };
+            for (int i = 0; i < requiredParams.Length; i++)
+            {
+                string param = requiredParams[i];
+                bool hasParam = mixer.GetFloat(param, out _) || serializedExposedParams.Contains(param);
+                Assert.That(hasParam, Is.True, $"Missing exposed AudioMixer parameter '{param}'.");
+            }
+
+            GameObject audioGo = new GameObject("TempStage2AudioDirector");
+            Application.logMessageReceived += LogHandler;
+            try
+            {
+                BywaterAudioDirector director = audioGo.AddComponent<BywaterAudioDirector>();
+                director.BindMixer(mixer);
+                Assert.That(director.MasterMixer, Is.EqualTo(mixer));
+
+                director.ApplyEnvironmentSnapshot(true, 0f);
+                director.ApplyEnvironmentSnapshot(false, 0f);
+
+                AudioSource[] sources = audioGo.GetComponents<AudioSource>();
+                Assert.That(sources.Length, Is.GreaterThanOrEqualTo(2));
+                for (int i = 0; i < sources.Length; i++)
+                {
+                    Assert.That(sources[i].outputAudioMixerGroup, Is.Not.Null,
+                        $"AudioSource #{i} on BywaterAudioDirector was not routed to a mixer group.");
+                }
+
+                Assert.That(warningsAndErrors, Is.Empty,
+                    "BywaterAudioDirector.BindMixer logged warnings/errors:\n" + string.Join("\n", warningsAndErrors));
+            }
+            finally
+            {
+                Application.logMessageReceived -= LogHandler;
+                Object.DestroyImmediate(audioGo);
             }
         }
     }

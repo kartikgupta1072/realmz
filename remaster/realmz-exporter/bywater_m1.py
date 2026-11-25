@@ -28,6 +28,41 @@ from rsrc import ResourceFork
 
 STARTER_MONSTER_INDICES = [0, 133, 125, 92, 130, 129, 116, 76, 70, 78, 91, 126]
 
+MONSTER_BALANCE_OVERRIDES: Dict[str, Dict[str, Any]] = {
+    "orc_warrior": {
+        "hit_dice": 3,
+        "hp_bonus": 3,
+        "hp_min": 18,
+        "hp_max": 24,
+        "hp_default": 21,
+        "xp_reward": 65,
+        "role": "Bruiser",
+        "special_abilities": ["cleave_2tile"],
+    },
+    "giant_frog": {
+        "hp_min": 15,
+        "hp_max": 19,
+        "hp_default": 17,
+        "xp_reward": 70,
+        "role": "Controller",
+        "special_abilities": ["tongue_pull"],
+    },
+    "goblin": {
+        "hp_min": 8,
+        "hp_max": 11,
+        "hp_default": 9,
+        "role": "Skirmisher",
+        "special_abilities": [],
+    },
+    "goblin_archer": {
+        "hp_min": 6,
+        "hp_max": 9,
+        "hp_default": 8,
+        "role": "Ranged",
+        "special_abilities": ["high_ground_seeker"],
+    },
+}
+
 STARTER_PARTY_SPECS = [
     {
         "id": "hero_knight",
@@ -727,41 +762,51 @@ def build_bywater_m1_payloads(realmz_base: Path) -> Dict[str, Any]:
         if mon_slug == "skeletal_warrior" and mon_gold_max == 0:
             mon_gold_min = 3
             mon_gold_max = 10
-        monsters_out.append(
-            {
-                "index": m["index"],
-                "id": mon_slug,
-                "name": m["name"],
-                "icon_id": m["icon_id"],
-                "hit_dice": hd,
-                "hp_bonus": bonus,
-                "hp_min": hp_min,
-                "hp_max": hp_max,
-                "hp_default": hp_def,
-                "ac": m["ac"],
-                "to_hit_bonus": hd * 5 + max(0, m["damage_bonus"]) * 5,
-                "dexterity": m["dx"],
-                "movement_max": max(6, m["movement_max"]),
-                "size": m["size"],
-                "num_attacks": m["num_attacks"],
-                "attack_dice": atk_dice,
-                "damage_bonus": m["damage_bonus"],
-                "missile_chance_pct": m["missile_chance_pct"],
-                "cast_chance_pct": m["cast_chance_pct"],
-                "ranged_range": ranged_range,
-                "ranged_dice": ranged_dice,
-                "spell_ids": [sid for sid in m["spell_ids"] if sid in CURATED_SPELL_CONFIG],
-                "magic_resistance": m["magic_resistance"],
-                "saves": m["saves"],
-                "spell_immunities": m["spell_immunities"],
-                "is_evil": bool(mtypes[4]) if len(mtypes) > 4 else False,
-                "is_undead": bool(mtypes[1]) if len(mtypes) > 1 else False,
-                "xp_reward": xp_val,
-                "gold_min": mon_gold_min,
-                "gold_max": mon_gold_max,
-                "loot_item_ids": [iid for iid in m["loot_item_ids"] if iid in item_price_map],
-            }
+        spell_ids = [sid for sid in m["spell_ids"] if sid in CURATED_SPELL_CONFIG]
+        inferred_role = (
+            "Caster"
+            if (m["cast_chance_pct"] > 0 or len(spell_ids) > 0)
+            else ("Ranged" if ranged_range > 0 else "Skirmisher")
         )
+        mon_entry: Dict[str, Any] = {
+            "index": m["index"],
+            "id": mon_slug,
+            "name": m["name"],
+            "icon_id": m["icon_id"],
+            "hit_dice": hd,
+            "hp_bonus": bonus,
+            "hp_min": hp_min,
+            "hp_max": hp_max,
+            "hp_default": hp_def,
+            "ac": m["ac"],
+            "to_hit_bonus": hd * 5 + max(0, m["damage_bonus"]) * 5,
+            "dexterity": m["dx"],
+            "movement_max": max(6, m["movement_max"]),
+            "size": m["size"],
+            "num_attacks": m["num_attacks"],
+            "attack_dice": atk_dice,
+            "damage_bonus": m["damage_bonus"],
+            "missile_chance_pct": m["missile_chance_pct"],
+            "cast_chance_pct": m["cast_chance_pct"],
+            "ranged_range": ranged_range,
+            "ranged_dice": ranged_dice,
+            "spell_ids": spell_ids,
+            "magic_resistance": m["magic_resistance"],
+            "saves": m["saves"],
+            "spell_immunities": m["spell_immunities"],
+            "is_evil": bool(mtypes[4]) if len(mtypes) > 4 else False,
+            "is_undead": bool(mtypes[1]) if len(mtypes) > 1 else False,
+            "xp_reward": xp_val,
+            "gold_min": mon_gold_min,
+            "gold_max": mon_gold_max,
+            "loot_item_ids": [iid for iid in m["loot_item_ids"] if iid in item_price_map],
+            "role": inferred_role,
+            "special_abilities": [],
+        }
+        if mon_slug in MONSTER_BALANCE_OVERRIDES:
+            for key, val in MONSTER_BALANCE_OVERRIDES[mon_slug].items():
+                mon_entry[key] = list(val) if isinstance(val, list) else val
+        monsters_out.append(mon_entry)
 
     monsters_json = {
         "scenario": "City of Bywater",

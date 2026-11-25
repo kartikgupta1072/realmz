@@ -838,7 +838,9 @@ namespace RealmzCore.Exploration
             int torchChargesConsumed = 0,
             int quickBandagesRemaining = 2,
             bool ambushed = false,
-            string reason = "")
+            string reason = "",
+            bool consumedRation = false,
+            int foodRationsRemaining = 0)
         {
             Mode = mode;
             TotalHpRestored = totalHpRestored;
@@ -851,6 +853,8 @@ namespace RealmzCore.Exploration
             QuickBandagesRemaining = quickBandagesRemaining;
             Ambushed = ambushed;
             Reason = reason ?? string.Empty;
+            ConsumedRation = consumedRation;
+            FoodRationsRemaining = Math.Max(0, foodRationsRemaining);
         }
 
         public CampMode Mode { get; }
@@ -864,6 +868,8 @@ namespace RealmzCore.Exploration
         public int QuickBandagesRemaining { get; }
         public bool Ambushed { get; }
         public string Reason { get; }
+        public bool ConsumedRation { get; }
+        public int FoodRationsRemaining { get; }
     }
 
     public sealed class HeroUpgradeRecommendation
@@ -893,6 +899,8 @@ namespace RealmzCore.Exploration
     {
         public const int MaxQuickBandageCharges = 2;
         public const int TorchItemId = 805;
+        public const int RationItemId = 807;
+        public const int DefaultFoodRations = 6;
 
         private readonly List<PartyMemberState> _members;
         private readonly List<InventoryItem> _stash;
@@ -904,7 +912,8 @@ namespace RealmzCore.Exploration
             bool hasBoat = false,
             int torchTurnsRemaining = 0,
             int quickBandageCharges = MaxQuickBandageCharges,
-            bool deferLevelUp = false)
+            bool deferLevelUp = false,
+            int foodRations = DefaultFoodRations)
         {
             if (members == null)
             {
@@ -922,6 +931,7 @@ namespace RealmzCore.Exploration
             TorchTurnsRemaining = Math.Max(0, torchTurnsRemaining);
             QuickBandageCharges = Math.Clamp(quickBandageCharges, 0, MaxQuickBandageCharges);
             DeferLevelUp = deferLevelUp;
+            FoodRations = Math.Max(0, foodRations);
         }
 
         public static PartyState FromBundle(BywaterM1Bundle bundle)
@@ -959,6 +969,26 @@ namespace RealmzCore.Exploration
         public int TorchTurnsRemaining { get; set; }
         public int QuickBandageCharges { get; set; }
         public bool DeferLevelUp { get; set; }
+        public int FoodRations { get; set; }
+
+        public bool TryConsumeFoodRation()
+        {
+            if (FoodRations <= 0)
+            {
+                return false;
+            }
+
+            FoodRations--;
+            return true;
+        }
+
+        public void AddFoodRations(int count)
+        {
+            if (count > 0)
+            {
+                FoodRations += count;
+            }
+        }
 
         public FormationRank GetFormationRank(int memberIndex)
         {
@@ -2154,7 +2184,9 @@ namespace RealmzCore.Exploration
                         turnsElapsed: 0,
                         torchChargesConsumed: 0,
                         quickBandagesRemaining: QuickBandageCharges,
-                        reason: "No Quick Bandage charges left. Full Rest or visit Temple to refill.");
+                        reason: "No Quick Bandage charges left. Full Rest or visit Temple to refill.",
+                        consumedRation: false,
+                        foodRationsRemaining: FoodRations);
                 }
 
                 bool anyLivingInjured = false;
@@ -2179,7 +2211,9 @@ namespace RealmzCore.Exploration
                         turnsElapsed: 0,
                         torchChargesConsumed: 0,
                         quickBandagesRemaining: QuickBandageCharges,
-                        reason: "No injured living heroes need field bandaging.");
+                        reason: "No injured living heroes need field bandaging.",
+                        consumedRation: false,
+                        foodRationsRemaining: FoodRations);
                 }
 
                 QuickBandageCharges--;
@@ -2205,7 +2239,9 @@ namespace RealmzCore.Exploration
                     success: true,
                     turnsElapsed: 1,
                     torchChargesConsumed: 0,
-                    quickBandagesRemaining: QuickBandageCharges);
+                    quickBandagesRemaining: QuickBandageCharges,
+                    consumedRation: false,
+                    foodRationsRemaining: FoodRations);
             }
 
             // CampMode.FullRest
@@ -2234,7 +2270,9 @@ namespace RealmzCore.Exploration
                         turnsElapsed: 0,
                         torchChargesConsumed: 0,
                         quickBandagesRemaining: QuickBandageCharges,
-                        reason: "Full Rest outside Bywater town requires 1 Torch charge (or >= 15 active turns).");
+                        reason: "Full Rest outside Bywater town requires 1 Torch charge (or >= 15 active turns).",
+                        consumedRation: false,
+                        foodRationsRemaining: FoodRations);
                 }
             }
 
@@ -2256,7 +2294,15 @@ namespace RealmzCore.Exploration
                     torchChargesConsumed: torchChargesConsumed,
                     quickBandagesRemaining: QuickBandageCharges,
                     ambushed: true,
-                    reason: "Camp ambushed by wandering monsters!");
+                    reason: "Camp ambushed by wandering monsters!",
+                    consumedRation: false,
+                    foodRationsRemaining: FoodRations);
+            }
+
+            bool consumedRation = false;
+            if (!isSafeZone && FoodRations > 0)
+            {
+                consumedRation = TryConsumeFoodRation();
             }
 
             int totalHp = 0;
@@ -2298,7 +2344,9 @@ namespace RealmzCore.Exploration
                 success: true,
                 turnsElapsed: 8,
                 torchChargesConsumed: torchChargesConsumed,
-                quickBandagesRemaining: QuickBandageCharges);
+                quickBandagesRemaining: QuickBandageCharges,
+                consumedRation: consumedRation,
+                foodRationsRemaining: FoodRations);
         }
     }
 

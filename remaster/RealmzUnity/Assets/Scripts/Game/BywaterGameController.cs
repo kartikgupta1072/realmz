@@ -12,6 +12,7 @@ using RealmzCore.Exploration;
 using RealmzCore.Rules;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Audio;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 
@@ -45,6 +46,21 @@ namespace Realmz.Game
         public BywaterHudController hudController;
         public BywaterBiomeAtmosphere biomeAtmosphere;
         public BywaterAudioDirector audioDirector;
+
+        [Header("Stage 2 Assets")]
+        public AudioMixer masterMixer;
+        public RealmzBalanceCatalog balanceCatalog;
+
+        private bool _isMasterMixerBound;
+        private float _lastAppliedNormalizedTime = -1f;
+        private int _lastSyncedClockMinute = -1;
+        private readonly HashSet<GridCoord> _destroyedArenaPropCoords = new HashSet<GridCoord>();
+        private string _hoveredRimUnitId;
+        private bool _hasHoverInteractable;
+        private string _cachedAmbientMapId = string.Empty;
+        private readonly List<Vector3> _cachedRiverWorldPositions = new List<Vector3>(128);
+        private readonly List<Vector3> _cachedForgeWorldPositions = new List<Vector3>(8);
+        private readonly List<Vector3> _cachedFireWorldPositions = new List<Vector3>(32);
 
         private IDiceRoller _roller;
         private readonly AStarPathfinder _explorePathfinder = new AStarPathfinder(90, 90);
@@ -224,7 +240,9 @@ namespace Realmz.Game
             Bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
 
             PartyState party = PartyState.FromBundle(Bundle);
-            ExploreSession = new ExplorationSession(Bundle.Maps, "land_0", party, _roller);
+            BalanceOverrides activeOverrides = Bundle.BalanceOverrides ??
+                                               (balanceCatalog != null ? balanceCatalog.ApplyToBalanceOverrides() : null);
+            ExploreSession = new ExplorationSession(Bundle.Maps, "land_0", party, _roller, balanceOverrides: activeOverrides);
 
             if (worldRenderer != null)
             {
@@ -239,6 +257,11 @@ namespace Realmz.Game
             }
 
             audioDirector?.EnsureInitialized();
+            if (masterMixer != null && audioDirector != null && !_isMasterMixerBound)
+            {
+                audioDirector.BindMixer(masterMixer);
+                _isMasterMixerBound = true;
+            }
             ApplyAudioSettings();
 
             if (hudController != null)
@@ -282,6 +305,7 @@ namespace Realmz.Game
 
             SyncExternalModalCloses();
             HandleKeyboardShortcuts();
+            TickContinuousOverlandClock();
 
             Mouse mouse = Mouse.current;
             bool isModalOpen = hudController != null && hudController.IsModalOpen;
@@ -312,6 +336,7 @@ namespace Realmz.Game
                 else if (isModalOpen)
                 {
                     hudController?.ClearCombatHoverPreview();
+                    ClearExploreInteractableHover();
                     if (!_isInCombat)
                     {
                         gridOverlays?.SetExplorationHoverPath(null, new GridCoord(-1, -1), false);
@@ -885,6 +910,17 @@ namespace Realmz.Game
                 }
             }
 
+            if (balanceCatalog == null)
+            {
+                balanceCatalog = Resources.Load<RealmzBalanceCatalog>("RealmzBalanceCatalog");
+            }
+
+            if (masterMixer != null && audioDirector != null && !_isMasterMixerBound)
+            {
+                audioDirector.BindMixer(masterMixer);
+                _isMasterMixerBound = true;
+            }
+
             if (_unitsContainer == null)
             {
                 Transform existing = transform.Find("Units");
@@ -1029,6 +1065,8 @@ namespace Realmz.Game
             hudController.OnEncounterEvadeRequested += HandleEncounterInterceptEvade;
             hudController.OnEncounterQuickResolveRequested += HandleEncounterInterceptQuickResolve;
             hudController.OnLightTorchFromHudRequested += HandleLightTorchFromHud;
+            hudController.OnTacticalPitchToggleRequested += HandleTacticalPitchToggle;
+            hudController.OnVictoryLevelUpPopped += () => audioDirector?.PlayLevelUpFanfare();
 
             hudController.OnVictoryTakeLootRequested += HandleTakeVictoryLoot;
             hudController.OnContinueAfterVictoryRequested += () =>
@@ -1133,6 +1171,12 @@ namespace Realmz.Game
                 {
                     audioDirector?.PlayUiClick();
                     hudController?.ToggleCombatLogDrawer();
+                    return;
+                }
+
+                if (kb.tKey.wasPressedThisFrame)
+                {
+                    HandleTacticalPitchToggle();
                     return;
                 }
 
@@ -1439,8 +1483,12 @@ namespace Realmz.Game
 
             Vector3 leaderWorldPos = GridToWorldAtElevation(ExploreSession.Position);
             worldRenderer?.UpdateHeroWorldPosition(leaderWorldPos);
+            ClearExploreInteractableHover();
+            RebuildAmbientPoiCache(force: true);
             _hasAppliedLightingState = false;
+            _lastAppliedNormalizedTime = -1f;
             ApplyAtmosphereAndTorchLighting(leaderWorldPos, forceImmediate: true);
+            SyncFogOfWarAndWeatherVisuals();
 
             if (cameraRig != null)
             {
@@ -1930,6 +1978,7 @@ namespace Realmz.Game
             worldRenderer?.UpdateFocusCenter(stepRes.Position);
             worldRenderer?.UpdateHeroWorldPosition(leaderPos);
             ApplyAtmosphereAndTorchLighting(leaderPos, forceImmediate: false);
+            SyncFogOfWarAndWeatherVisuals();
             cameraRig?.SetFollowTarget(leaderPos, immediate: !doAnimate, recenterManualPan: true);
 
             if (stepRes.TorchExpiredThisStep)
@@ -2016,10 +2065,13 @@ namespace Realmz.Game
 
             BywaterTileKind kind = BywaterTileClassifier.Classify(map, hoverCoord.X, hoverCoord.Y);
             string poiHint = string.Empty;
+            bool isInteractableHover = kind == BywaterTileKind.TownBuildingDoor ||
+                                       (worldRenderer != null && worldRenderer.TryGetNpcAtCoord(hoverCoord, out _));
 
             MapPortal portal = map.GetPortalAt(hoverCoord.X, hoverCoord.Y);
             if (portal != null)
             {
+                isInteractableHover = true;
                 poiHint = !string.IsNullOrEmpty(portal.Label) ? portal.Label : $"Portal -> {portal.DestMapId}";
             }
             else
@@ -2028,7 +2080,25 @@ namespace Realmz.Game
                 if (poi != null)
                 {
                     poiHint = !string.IsNullOrEmpty(poi.Label) ? poi.Label : poi.Kind;
+                    if (!string.IsNullOrEmpty(poi.Kind) &&
+                        (string.Equals(poi.Kind, "shop", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(poi.Kind, "temple", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(poi.Kind, "tavern", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(poi.Kind, "shrine", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        isInteractableHover = true;
+                    }
                 }
+            }
+
+            if (isInteractableHover)
+            {
+                worldRenderer?.SetHoveredInteractable(GridToWorldAtElevation(hoverCoord), BywaterUiHelpers.BrassHighlight);
+                _hasHoverInteractable = true;
+            }
+            else
+            {
+                ClearExploreInteractableHover();
             }
 
             RefreshContextualExplorePoi();
@@ -2055,6 +2125,7 @@ namespace Realmz.Game
                 case ExplorationHaltReason.Portal:
                     if (ExploreSession.UsePortalAtCurrentTile())
                     {
+                        audioDirector?.PlayDoorInteract();
                         ResetPartyTrailHistory(ExploreSession.Position, ExploreSession.CurrentMap, ExploreSession.Facing);
                         EnterExplorationView(immediateCamera: true);
                         string destName = ExploreSession.CurrentMap.IsDungeon ? "Bywater Cavern" : "City of Bywater";
@@ -2351,6 +2422,7 @@ namespace Realmz.Game
             ExploreSession.MoveAlongPath(portal.Coord, autoHaltOnEvents: false);
             if (ExploreSession.UsePortalAtCurrentTile())
             {
+                audioDirector?.PlayDoorInteract();
                 ResetPartyTrailHistory(ExploreSession.Position, ExploreSession.CurrentMap, ExploreSession.Facing);
                 EnterExplorationView(immediateCamera: true);
                 string destName = ExploreSession.CurrentMap.IsDungeon ? "Bywater Cavern (Dungeon 0)" : "City of Bywater";
@@ -2428,6 +2500,10 @@ namespace Realmz.Game
             BywaterSaveService.ApplySnapshot(data, restored, Bundle.Items, out ulong restoredSeed);
             _roller = new DeterministicDiceRoller(restoredSeed);
 
+            BalanceOverrides activeOverrides = Bundle.BalanceOverrides ??
+                                               (balanceCatalog != null ? balanceCatalog.ApplyToBalanceOverrides() : null);
+            double restoredMinutes = BywaterSaveService.ResolveRestoredWorldClockMinutes(data);
+
             ExploreSession = new ExplorationSession(
                 Bundle.Maps,
                 targetMap.MapId,
@@ -2439,8 +2515,33 @@ namespace Realmz.Game
                 clearedEncounterIds: restored.ClearedEncounterIds,
                 initialWorldClockTurns: restored.WorldClockTurns,
                 initialPostCombatGraceSteps: restored.PostCombatGraceStepsRemaining,
-                initialZoneCooldowns: restored.ZoneCooldownUntilTurns);
+                initialZoneCooldowns: restored.ZoneCooldownUntilTurns,
+                initialWeather: restored.Weather,
+                balanceOverrides: activeOverrides,
+                initialWorldClockMinutes: restoredMinutes);
+
+            if (ExploreSession.FogMaps != null)
+            {
+                foreach (KeyValuePair<string, FogOfWarMap> kvp in ExploreSession.FogMaps)
+                {
+                    SavedFogMapEntry savedFog = BywaterSaveService.ExtractFogForMap(data, kvp.Key);
+                    if (savedFog != null && !string.IsNullOrWhiteSpace(savedFog.packedExploredBase64))
+                    {
+                        kvp.Value.ImportExploredBitsetBase64(savedFog.packedExploredBase64);
+                    }
+                    else if (restored.FogMaps != null &&
+                             restored.FogMaps.TryGetValue(kvp.Key, out FogOfWarMap restoredFog) &&
+                             restoredFog != null)
+                    {
+                        kvp.Value.ImportExploredBitsetBase64(restoredFog.ExportExploredBitsetBase64());
+                    }
+                }
+            }
+            ExploreSession.RefreshFogOfWar();
+
             _hasAppliedLightingState = false;
+            _lastAppliedNormalizedTime = -1f;
+            _lastSyncedClockMinute = -1;
 
             _combatLogLines.Clear();
             if (data.combatLogLines != null)
@@ -2611,6 +2712,7 @@ namespace Realmz.Game
             audioDirector?.PlaySpell("heal");
             EnsureExploreHeroViews();
             ApplyAtmosphereAndTorchLighting(GridToWorldAtElevation(ExploreSession.Position), forceImmediate: false);
+            SyncFogOfWarAndWeatherVisuals();
             hudController?.RefreshPartyDrawer(ExploreSession.Party, Bundle, _selectedPartyHeroIndex);
             hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false);
             string label = mode == CampMode.FullRest ? "Full Rest" : "Quick Bandage";
@@ -2816,6 +2918,8 @@ namespace Realmz.Game
             StopAiCoroutine();
             UnsubscribeCombatEvents();
             ClearCombatUnitViews();
+            ClearExploreInteractableHover();
+            _destroyedArenaPropCoords.Clear();
             gridOverlays?.ClearCombatVfx();
             worldRenderer?.SetTownNpcsHiddenForCombat(true);
 
@@ -2977,9 +3081,12 @@ namespace Realmz.Game
                 resolvedRewardBonusPct,
                 isAmbientDarkness: isCombatDark,
                 deferLootDeposit: true,
-                startInDeployment: startInDeployment && !isAmbushedInDark);
+                startInDeployment: startInDeployment && !isAmbushedInDark,
+                weather: ExploreSession != null ? ExploreSession.Weather : WeatherState.Clear);
             CombatSession.SurfaceChanged += OnCombatSurfaceChanged;
             CombatSession.OnArenaIlluminationChanged += OnCombatArenaIlluminationChanged;
+            CombatSession.PropDetonated += OnCombatPropDetonated;
+            CombatSession.LightningChained += OnCombatLightningChained;
 
             _isInCombat = true;
             _outcomeShown = false;
@@ -2987,6 +3094,7 @@ namespace Realmz.Game
             _activeCombatMode = CombatActionMode.Smart;
             _selectedSpellId = -1;
             _hoveredCombatUnitId = null;
+            _hoveredRimUnitId = null;
             _selectedDeploymentHeroId = null;
             _isHoveringHotbarUi = false;
             _combatHoverDirty = true;
@@ -3012,11 +3120,18 @@ namespace Realmz.Game
             if (gridOverlays != null)
             {
                 gridOverlays.SetElevationResolver(worldRenderer != null ? (Func<int, int, float>)worldRenderer.GetTileElevation : null);
+                gridOverlays.SetWaterTileResolver((wx, wy) =>
+                    worldRenderer != null &&
+                    worldRenderer.CartographyData != null &&
+                    worldRenderer.CartographyData.GetTile(wx, wy).IsWater);
+                gridOverlays.SetWaterSurfaceHeight(CartographyWorldData.TileMapWaterSurfaceElevation);
                 gridOverlays.SetGridOpacity(_gridOpacity);
             }
 
             _hasAppliedLightingState = false;
+            _lastAppliedNormalizedTime = -1f;
             ApplyAtmosphereAndTorchLighting(GetCombatPartyTorchWorldPos(), forceImmediate: true);
+            SyncFogOfWarAndWeatherVisuals();
 
             if (cameraRig != null)
             {
@@ -3184,6 +3299,8 @@ namespace Realmz.Game
             {
                 CombatSession.SurfaceChanged -= OnCombatSurfaceChanged;
                 CombatSession.OnArenaIlluminationChanged -= OnCombatArenaIlluminationChanged;
+                CombatSession.PropDetonated -= OnCombatPropDetonated;
+                CombatSession.LightningChained -= OnCombatLightningChained;
             }
         }
 
@@ -3239,7 +3356,7 @@ namespace Realmz.Game
                 int taken = targetSession.TakeLootItems(ExploreSession.Party, selectedIndices);
                 if (taken > 0)
                 {
-                    audioDirector?.PlayCoin();
+                    audioDirector?.PlayTakeItem();
                 }
             }
             _pendingQuickResolveVictorySession = null;
@@ -3319,6 +3436,7 @@ namespace Realmz.Game
             }
 
             _combatUnitViews.Clear();
+            _hoveredRimUnitId = null;
         }
 
         private void SyncAllCombatUnitViews()
@@ -3605,6 +3723,7 @@ namespace Realmz.Game
                 }
 
                 ApplyMonsterActionJuice(monster, res, oldHps);
+                SyncDestructibleArenaProps();
                 ShowHpDeltaFloatingText(oldHps);
                 SyncAllCombatUnitViews();
                 RefreshUnitNameplates();
@@ -3699,6 +3818,7 @@ namespace Realmz.Game
                 }
 
                 ApplyHeroAutoActionJuice(hero, res, oldHps);
+                SyncDestructibleArenaProps();
                 ShowHpDeltaFloatingText(oldHps);
                 SyncAllCombatUnitViews();
                 RefreshUnitNameplates();
@@ -3802,8 +3922,8 @@ namespace Realmz.Game
                 }
 
                 audioDirector?.PlayAttack(isRanged, isCrit);
-                cameraRig?.PlayImpactImpulse(isCrit ? 0.18f : 0.12f, 0.14f);
-                TriggerHitStop(isCrit ? 0.060f : 0.045f);
+                cameraRig?.PlayImpactImpulse(isCrit ? 0.18f : 0.12f, 0.14f, targetWorld - startWorld);
+                TriggerHitStop(isCrit ? 0.055f : 0.040f);
             }
             else if (!isSpell && res.AttackOutcomes.Count > 0 && targetUnit != null && gridOverlays != null)
             {
@@ -4174,6 +4294,7 @@ namespace Realmz.Game
 
             CombatantState hoveredUnit = GetLivingUnitAt(localCoord);
             _hoveredCombatUnitId = hoveredUnit != null ? hoveredUnit.Id : null;
+            SetHoveredCombatUnitRim(hoveredUnit);
             RefreshUnitNameplates();
 
             string hoveredEnemyIntentLine = string.Empty;
@@ -4434,10 +4555,21 @@ namespace Realmz.Game
                     if (hoveredUnit != null && hoveredUnit.Id != actor.Id)
                     {
                         TacticalShovePreview preview = CombatSession.PreviewShove(actor.Id, hoveredUnit.Id);
+                        ShoveHazardVisualHint hazardHint = new ShoveHazardVisualHint
+                        {
+                            TriggersKegExplosion = preview.TriggersKegExplosion,
+                            IgnitesOnBrazier = preview.IgnitesOnBrazier,
+                            CrushesWall = preview.HitsWallOrBounds || !string.IsNullOrEmpty(preview.CollidingUnitId),
+                            PushesOffLedge = preview.PushesOffLedge,
+                            DestroysCover = preview.DestroysCover,
+                            EntersSurface = preview.DestinationSurface,
+                            HazardBadgeText = preview.HazardBadgeText
+                        };
                         gridOverlays?.ShowShovePreview(
                             LocalToWorld(actor.Position),
                             LocalToWorld(hoveredUnit.Position),
-                            OffsetShovePreview(preview));
+                            OffsetShovePreview(preview),
+                            hazardHint);
 
                         string badge = ResolveShoveBadge(preview);
                         string chanceLine = preview.IsAllyShove
@@ -4677,25 +4809,25 @@ namespace Realmz.Game
                     {
                         SpellDefinition spell = Bundle.Spells.TryGetValue(_selectedSpellId, out SpellDefinition s) ? s : null;
                         audioDirector?.PlaySpell(spell?.EffectKind);
+                        string vfxKey = ResolveSpellVfxKey(spell, out bool isProjectile);
+                        Vector3 startWorld = GridToWorldAtElevation(LocalToWorld(actor.Position));
+                        Vector3 targetWorld = GridToWorldAtElevation(LocalToWorld(localCoord));
                         if (gridOverlays != null)
                         {
-                            string vfxKey = ResolveSpellVfxKey(spell, out bool isProjectile);
-                            Vector3 startWorld = GridToWorldAtElevation(LocalToWorld(actor.Position));
-                            Vector3 targetWorld = GridToWorldAtElevation(LocalToWorld(localCoord));
                             gridOverlays.PlayCombatVfx(vfxKey, startWorld, targetWorld, isProjectile);
                         }
                         if (_combatUnitViews.TryGetValue(actor.Id, out BywaterUnitView casterView) && casterView != null)
                         {
-                            casterView.PlayAttackLunge(GridToWorldAtElevation(LocalToWorld(localCoord)), 0.28f, 0.07f);
+                            casterView.PlayAttackLunge(targetWorld, 0.28f, 0.07f);
                         }
 
-                        bool anyDamaged = false;
+                        int damagedCount = 0;
                         for (int i = 0; i < CombatSession.Combatants.Count; i++)
                         {
                             CombatantState c = CombatSession.Combatants[i];
                             if (oldHps.TryGetValue(c.Id, out int before) && c.Hp < before)
                             {
-                                anyDamaged = true;
+                                damagedCount++;
                                 if (_combatUnitViews.TryGetValue(c.Id, out BywaterUnitView v) && v != null)
                                 {
                                     v.PlayHitFlash(0.055f);
@@ -4703,10 +4835,15 @@ namespace Realmz.Game
                             }
                         }
 
-                        if (anyDamaged)
+                        if (damagedCount > 0)
                         {
-                            cameraRig?.PlayImpactImpulse(0.15f, 0.16f);
-                            TriggerHitStop(0.045f);
+                            bool isHeavyFireball = string.Equals(vfxKey, "fireball_impact", StringComparison.Ordinal) && damagedCount >= 2;
+                            if (isHeavyFireball)
+                            {
+                                cameraRig?.PlayFocusBeat(targetWorld, -1.4f, 0.35f);
+                            }
+                            cameraRig?.PlayImpactImpulse(isHeavyFireball ? 0.20f : 0.15f, 0.16f, targetWorld - startWorld);
+                            TriggerHitStop(isHeavyFireball ? 0.055f : 0.040f);
                         }
                         else if (res.Message.IndexOf("Immune:", StringComparison.OrdinalIgnoreCase) >= 0 &&
                                  clickedUnit != null &&
@@ -4801,8 +4938,10 @@ namespace Realmz.Game
                             }
                         }
 
-                        cameraRig?.PlayImpactImpulse(0.14f, 0.16f);
-                        TriggerHitStop(0.045f);
+                        Vector3 shoveDir = GridToWorldAtElevation(LocalToWorld(prevTargetPos)) -
+                                           GridToWorldAtElevation(LocalToWorld(actor.Position));
+                        cameraRig?.PlayImpactImpulse(0.14f, 0.16f, shoveDir);
+                        TriggerHitStop(0.040f);
                     }
 
                     FinishPlayerCombatAction(res, oldHps);
@@ -4845,10 +4984,10 @@ namespace Realmz.Game
                 }
             }
 
+            Vector3 startWorld = GridToWorldAtElevation(LocalToWorld(attacker.Position));
+            Vector3 targetWorld = GridToWorldAtElevation(LocalToWorld(defender.Position));
             if (gridOverlays != null)
             {
-                Vector3 startWorld = GridToWorldAtElevation(LocalToWorld(attacker.Position));
-                Vector3 targetWorld = GridToWorldAtElevation(LocalToWorld(defender.Position));
                 gridOverlays.PlayCombatVfx(
                     isRanged ? "arrow_bolt" : "slash_arc",
                     startWorld,
@@ -4870,8 +5009,8 @@ namespace Realmz.Game
                         defView.ShowArcingFloatingText($"CRIT -{delta}!", BywaterUiHelpers.BrassHighlight, isCrit: true);
                     }
 
-                    cameraRig?.PlayImpactImpulse(isCrit ? 0.20f : 0.13f, isCrit ? 0.18f : 0.14f);
-                    TriggerHitStop(isCrit ? 0.060f : 0.045f);
+                    cameraRig?.PlayImpactImpulse(isCrit ? 0.20f : 0.13f, isCrit ? 0.18f : 0.14f, targetWorld - startWorld);
+                    TriggerHitStop(isCrit ? 0.055f : 0.040f);
                 }
                 else
                 {
@@ -4891,6 +5030,7 @@ namespace Realmz.Game
             }
 
             ShowHpDeltaFloatingText(oldHps, skipCritTargetId);
+            SyncDestructibleArenaProps();
             SyncAllCombatUnitViews();
 
             if (CombatSession.Outcome != CombatOutcome.InProgress)
@@ -5232,8 +5372,11 @@ namespace Realmz.Game
             _activeCombatSurpriseMode = CombatInitiativeSurpriseMode.None;
             _activeCombatRewardBonusPct = 0;
             _hoveredCombatUnitId = null;
+            _hoveredRimUnitId = null;
+            _destroyedArenaPropCoords.Clear();
             _isHoveringHotbarUi = false;
             _hasPreCombatExplorePos = false;
+            _lastAppliedNormalizedTime = -1f;
             EnterExplorationView(immediateCamera: true);
         }
 
@@ -5322,6 +5465,11 @@ namespace Realmz.Game
                 return null;
             }
 
+            if (!string.IsNullOrEmpty(preview.HazardBadgeText))
+            {
+                return preview.HazardBadgeText;
+            }
+
             if (preview.PushesOffLedge)
             {
                 return "LEDGE FALL +1d6/tier";
@@ -5390,7 +5538,7 @@ namespace Realmz.Game
 
         private void TriggerHitStop(float durationSeconds)
         {
-            if (!Application.isPlaying || Application.isBatchMode || !gameObject.activeInHierarchy || durationSeconds <= 0.001f)
+            if (!Application.isPlaying || Application.isBatchMode || !gameObject.activeInHierarchy || _speedIndex == 2 || durationSeconds <= 0.001f)
             {
                 return;
             }
@@ -6105,9 +6253,10 @@ namespace Realmz.Game
                 }
             }
 
-            if (!string.IsNullOrEmpty(_hoveredCombatUnitId))
+            if (!string.IsNullOrEmpty(_hoveredCombatUnitId) || !string.IsNullOrEmpty(_hoveredRimUnitId))
             {
                 _hoveredCombatUnitId = null;
+                SetHoveredCombatUnitRim(null);
                 RefreshUnitNameplates();
             }
 
@@ -6454,6 +6603,7 @@ namespace Realmz.Game
 
             if (ExploreSession.UsePortalAtCurrentTile())
             {
+                audioDirector?.PlayDoorInteract();
                 ResetPartyTrailHistory(ExploreSession.Position, ExploreSession.CurrentMap, ExploreSession.Facing);
                 EnterExplorationView(immediateCamera: true);
                 string destName = ExploreSession.CurrentMap.IsDungeon ? "Bywater Cavern" : "City of Bywater";
@@ -6792,7 +6942,7 @@ namespace Realmz.Game
                 bool wasOverwatch = CombatSession.Log.Count > 0 && string.Equals(CombatSession.Log[CombatSession.Log.Count - 1].ActionType, "Overwatch", StringComparison.Ordinal);
                 hitView.PlayHitFlash(0.055f);
                 hitView.ShowArcingFloatingText(wasOverwatch ? $"OVERWATCH -{moveRes.DamageDealt}!" : $"AoO -{moveRes.DamageDealt}!", BywaterUiHelpers.DangerRed, isCrit: false);
-                cameraRig?.PlayImpactImpulse(0.12f, 0.14f);
+                cameraRig?.PlayImpactImpulse(0.12f, 0.14f, Vector3.down);
             }
 
             if (actor.IsProne && _combatUnitViews.TryGetValue(actor.Id, out BywaterUnitView proneView) && proneView != null)
@@ -6974,8 +7124,8 @@ namespace Realmz.Game
                 }
 
                 audioDirector?.PlayAttack(isRanged, isCrit);
-                cameraRig?.PlayImpactImpulse(isCrit ? 0.18f : 0.12f, 0.14f);
-                TriggerHitStop(isCrit ? 0.060f : 0.045f);
+                cameraRig?.PlayImpactImpulse(isCrit ? 0.18f : 0.12f, 0.14f, targetWorld - startWorld);
+                TriggerHitStop(isCrit ? 0.055f : 0.040f);
             }
             else if (!isSpell && res.AttackOutcomes.Count > 0 && targetUnit != null && gridOverlays != null)
             {
@@ -7040,6 +7190,19 @@ namespace Realmz.Game
                 return "heal_sparkle";
             }
 
+            if (combined.IndexOf("frost", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                combined.IndexOf("cold", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                combined.IndexOf("ice", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "frost_shatter";
+            }
+
+            if (combined.IndexOf("lightning", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                combined.IndexOf("shock", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "chain_lightning";
+            }
+
             if (combined.IndexOf("dart", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 combined.IndexOf("bolt", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 combined.IndexOf("missile", StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -7064,6 +7227,21 @@ namespace Realmz.Game
                   message.IndexOf("blade", StringComparison.OrdinalIgnoreCase) >= 0)))
             {
                 return "heal_sparkle";
+            }
+
+            if (!string.IsNullOrEmpty(message) &&
+                (message.IndexOf("frost", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 message.IndexOf("cold", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 message.IndexOf("ice", StringComparison.OrdinalIgnoreCase) >= 0))
+            {
+                return "frost_shatter";
+            }
+
+            if (!string.IsNullOrEmpty(message) &&
+                (message.IndexOf("lightning", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 message.IndexOf("shock", StringComparison.OrdinalIgnoreCase) >= 0))
+            {
+                return "chain_lightning";
             }
 
             if (!string.IsNullOrEmpty(message) &&
@@ -7234,6 +7412,7 @@ namespace Realmz.Game
                 {
                     audioDirector?.PlaySpell("fire");
                     ApplyAtmosphereAndTorchLighting(GetCombatPartyTorchWorldPos(), forceImmediate: true);
+                    SyncFogOfWarAndWeatherVisuals();
                     RefreshCombatHudState();
                 }
                 else
@@ -7258,6 +7437,7 @@ namespace Realmz.Game
             }
 
             ApplyAtmosphereAndTorchLighting(GridToWorldAtElevation(ExploreSession.Position), forceImmediate: false);
+            SyncFogOfWarAndWeatherVisuals();
             hudController?.RefreshPartyDrawer(ExploreSession.Party, Bundle, _selectedPartyHeroIndex);
             hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false, _lastContextPoiLabel);
             if (!string.IsNullOrWhiteSpace(feedback))
@@ -7266,7 +7446,7 @@ namespace Realmz.Game
             }
         }
 
-        private void ApplyAtmosphereAndTorchLighting(Vector3 focusWorldPos, bool forceImmediate)
+        private void ApplyAtmosphereAndTorchLighting(Vector3 focusWorldPos, bool forceImmediate, bool allowContinuousNormalizedUpdate = false)
         {
             if (ExploreSession == null || ExploreSession.CurrentMap == null)
             {
@@ -7286,6 +7466,12 @@ namespace Realmz.Game
                                 _lastLightingTorch != hasLitTorch ||
                                 _lastLightingCombat != isCombat;
 
+            float normalizedTime = clock.NormalizedTimeOfDay;
+            bool timeArcChanged = allowContinuousNormalizedUpdate &&
+                                  !map.IsDungeon &&
+                                  (_lastAppliedNormalizedTime < 0f ||
+                                   Mathf.Abs(normalizedTime - _lastAppliedNormalizedTime) >= 0.00025f);
+
             if (forceImmediate || stateChanged)
             {
                 _hasAppliedLightingState = true;
@@ -7293,9 +7479,16 @@ namespace Realmz.Game
                 _lastLightingDungeon = map.IsDungeon;
                 _lastLightingTorch = hasLitTorch;
                 _lastLightingCombat = isCombat;
+                _lastAppliedNormalizedTime = normalizedTime;
 
-                biomeAtmosphere?.ApplyBiome(map.IsDungeon, clock.Phase, clock.PhaseProgress01, hasLitTorch, forceImmediate, isCombat);
-                worldRenderer?.ApplyTimeOfDayLighting(clock.Phase, map.IsDungeon, hasLitTorch);
+                biomeAtmosphere?.ApplyBiome(map.IsDungeon, normalizedTime, clock.Phase, clock.PhaseProgress01, hasLitTorch, forceImmediate, isCombat);
+                worldRenderer?.ApplyTimeOfDayLighting(normalizedTime, clock.Phase, map.IsDungeon, hasLitTorch);
+            }
+            else if (timeArcChanged)
+            {
+                _lastAppliedNormalizedTime = normalizedTime;
+                biomeAtmosphere?.ApplyBiome(map.IsDungeon, normalizedTime, clock.Phase, clock.PhaseProgress01, hasLitTorch, immediate: true, isCombat);
+                worldRenderer?.ApplyTimeOfDayLighting(normalizedTime, clock.Phase, map.IsDungeon, hasLitTorch);
             }
 
             Vector3 resolvedTorchWorld = _isInCombat ? GetCombatPartyTorchWorldPos() : focusWorldPos;
@@ -7659,6 +7852,323 @@ namespace Realmz.Game
             return es != null &&
                    es.currentSelectedGameObject != null &&
                    es.currentSelectedGameObject.GetComponent<TMP_InputField>() != null;
+        }
+
+        private void TickContinuousOverlandClock()
+        {
+            if (ExploreSession == null || _isInCombat || _isCampActive || Application.isBatchMode)
+            {
+                return;
+            }
+
+            if (hudController != null && hudController.IsModalOpen)
+            {
+                return;
+            }
+
+            TileMapData map = ExploreSession.CurrentMap;
+            if (map == null || map.IsDungeon || Time.timeScale <= 0.001f)
+            {
+                return;
+            }
+
+            float minutesPerRealSecond = ExploreSession.BalanceOverrides?.Survival?.MinutesPerRealSecond
+                ?? (balanceCatalog != null && balanceCatalog.survival != null ? balanceCatalog.survival.minutesPerRealSecond : 1.0f);
+            if (minutesPerRealSecond <= 0.0001f)
+            {
+                return;
+            }
+
+            double deltaMinutes = Mathf.Min(Time.unscaledDeltaTime, 0.25f) * minutesPerRealSecond;
+            bool phaseChanged = ExploreSession.AdvanceWorldClockMinutes(deltaMinutes);
+
+            Vector3 focusPos = GridToWorldAtElevation(ExploreSession.Position);
+            ApplyAtmosphereAndTorchLighting(focusPos, forceImmediate: false, allowContinuousNormalizedUpdate: true);
+
+            int currentMinute = (int)Math.Floor(ExploreSession.CurrentWorldClock.TotalMinutes);
+            if (phaseChanged || currentMinute != _lastSyncedClockMinute)
+            {
+                _lastSyncedClockMinute = currentMinute;
+                SyncFogOfWarAndWeatherVisuals();
+                if (_exploreWalkCoroutine == null)
+                {
+                    hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false, _lastContextPoiLabel);
+                }
+            }
+        }
+
+        private void SyncFogOfWarAndWeatherVisuals()
+        {
+            if (ExploreSession == null)
+            {
+                return;
+            }
+
+            TileMapData map = ExploreSession.CurrentMap;
+            if (worldRenderer != null && ExploreSession.FogOfWar != null)
+            {
+                bool enableFog = !_isInCombat && map != null;
+                FogOfWarMap fog = ExploreSession.FogOfWar;
+                worldRenderer.SetFogOfWarData(fog.ExportVisibilityStates(), fog.Width, fog.Height, enableFog);
+            }
+
+            WeatherState weather = ExploreSession.Weather;
+            bool isRaining = weather == WeatherState.LightRain || weather == WeatherState.Storm;
+            float windScale = weather == WeatherState.Storm ? 2.2f : (weather == WeatherState.LightRain ? 1.55f : 1.0f);
+            worldRenderer?.SetWeatherVisuals(isRaining, windScale);
+
+            string weatherLabel = FormatWeatherLabel(weather);
+            hudController?.SetSurvivalBannerState(weatherLabel, ExploreSession.CurrentVisionRadius);
+
+            bool isDungeonOrIndoor = map != null && map.IsDungeon;
+            audioDirector?.ApplyEnvironmentSnapshot(isDungeonOrIndoor);
+            SyncAmbientAudioContext();
+        }
+
+        private void RebuildAmbientPoiCache(bool force)
+        {
+            TileMapData map = ExploreSession?.CurrentMap;
+            CartographyWorldData carto = worldRenderer != null ? worldRenderer.CartographyData : null;
+            string mapId = map != null ? (map.MapId ?? string.Empty) : string.Empty;
+            if (!force && string.Equals(_cachedAmbientMapId, mapId, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _cachedAmbientMapId = mapId;
+            _cachedRiverWorldPositions.Clear();
+            _cachedForgeWorldPositions.Clear();
+            _cachedFireWorldPositions.Clear();
+
+            if (map == null || carto == null)
+            {
+                return;
+            }
+
+            for (int y = 0; y < map.Height; y += 2)
+            {
+                for (int x = 0; x < map.Width; x += 2)
+                {
+                    CartographyTile tile = carto.GetTile(x, y);
+                    if (tile.IsWater)
+                    {
+                        _cachedRiverWorldPositions.Add(CartographyWorldData.GridToWorld(new GridCoord(x, y), tile.Elevation));
+                    }
+                }
+            }
+
+            IReadOnlyList<CartographyPropPlacement> props = carto.Props;
+            if (props != null)
+            {
+                for (int i = 0; i < props.Count; i++)
+                {
+                    CartographyPropPlacement prop = props[i];
+                    if (prop.Kind == CartographyPropKind.Blacksmith)
+                    {
+                        _cachedForgeWorldPositions.Add(prop.WorldPosition);
+                    }
+                    else if (prop.Kind == CartographyPropKind.Campfire4f ||
+                             prop.Kind == CartographyPropKind.TorchBrazier ||
+                             prop.Kind == CartographyPropKind.DungeonWallSconce4f)
+                    {
+                        _cachedFireWorldPositions.Add(prop.WorldPosition);
+                    }
+                }
+            }
+        }
+
+        private void SyncAmbientAudioContext()
+        {
+            if (audioDirector == null || ExploreSession == null)
+            {
+                return;
+            }
+
+            RebuildAmbientPoiCache(force: false);
+
+            TileMapData map = ExploreSession.CurrentMap;
+            Vector3 listenerWorldPos = _isInCombat
+                ? GetCombatPartyTorchWorldPos()
+                : GridToWorldAtElevation(ExploreSession.Position);
+
+            Vector3? nearestRiver = FindNearestWorldPosition(_cachedRiverWorldPositions, listenerWorldPos);
+            Vector3? nearestForge = FindNearestWorldPosition(_cachedForgeWorldPositions, listenerWorldPos);
+            Vector3? nearestFire = FindNearestWorldPosition(_cachedFireWorldPositions, listenerWorldPos);
+            bool isIndoorOrDungeon = map != null && map.IsDungeon;
+            WorldTimePhase phase = ExploreSession.CurrentWorldClock.Phase;
+            bool isDayOrDawn = phase == WorldTimePhase.Day || phase == WorldTimePhase.Dawn;
+            string weatherLabel = FormatWeatherLabel(ExploreSession.Weather);
+
+            audioDirector.UpdateAmbientContext(
+                listenerWorldPos,
+                nearestRiver,
+                nearestForge,
+                nearestFire,
+                isIndoorOrDungeon,
+                isDayOrDawn,
+                weatherLabel,
+                _isInCombat);
+        }
+
+        private static Vector3? FindNearestWorldPosition(List<Vector3> candidates, Vector3 listenerPos)
+        {
+            if (candidates == null || candidates.Count == 0)
+            {
+                return null;
+            }
+
+            Vector3 best = candidates[0];
+            float bestDistSq = (best - listenerPos).sqrMagnitude;
+            for (int i = 1; i < candidates.Count; i++)
+            {
+                float dSq = (candidates[i] - listenerPos).sqrMagnitude;
+                if (dSq < bestDistSq)
+                {
+                    bestDistSq = dSq;
+                    best = candidates[i];
+                }
+            }
+
+            return best;
+        }
+
+        private void ClearExploreInteractableHover()
+        {
+            if (_hasHoverInteractable)
+            {
+                _hasHoverInteractable = false;
+                worldRenderer?.SetHoveredInteractable(null, default);
+            }
+        }
+
+        private void SetHoveredCombatUnitRim(CombatantState hoveredUnit)
+        {
+            string nextId = hoveredUnit != null && hoveredUnit.IsAlive ? hoveredUnit.Id : null;
+            if (string.Equals(_hoveredRimUnitId, nextId, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(_hoveredRimUnitId) &&
+                _combatUnitViews.TryGetValue(_hoveredRimUnitId, out BywaterUnitView oldView) &&
+                oldView != null)
+            {
+                oldView.ShowHoverRim(false, default);
+            }
+
+            _hoveredRimUnitId = nextId;
+            if (!string.IsNullOrEmpty(_hoveredRimUnitId) &&
+                hoveredUnit != null &&
+                _combatUnitViews.TryGetValue(_hoveredRimUnitId, out BywaterUnitView newView) &&
+                newView != null)
+            {
+                Color rimColor = hoveredUnit.Side == CombatSide.Monster ? MonsterRingColor : HeroRingColor;
+                newView.ShowHoverRim(true, rimColor);
+            }
+        }
+
+        private void HandleTacticalPitchToggle()
+        {
+            if (!_isInCombat)
+            {
+                return;
+            }
+
+            audioDirector?.PlayUiClick();
+            cameraRig?.ToggleTacticalPitch();
+        }
+
+        private void OnCombatLightningChained(CombatChainLightningEvent e)
+        {
+            if (e == null)
+            {
+                return;
+            }
+
+            int count = e.HopCoords != null ? e.HopCoords.Count : 0;
+            List<Vector3> worldHops = new List<Vector3>(count + 1);
+            Vector3 originWorld = GridToWorldAtElevation(LocalToWorld(e.Origin));
+            if (count == 0 || e.HopCoords[0] != e.Origin)
+            {
+                worldHops.Add(originWorld);
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                worldHops.Add(GridToWorldAtElevation(LocalToWorld(e.HopCoords[i])));
+            }
+
+            if (worldHops.Count >= 2)
+            {
+                GetOrEnsureVfxDirector()?.PlayChainLightning(worldHops);
+            }
+            audioDirector?.PlayLightningChain();
+        }
+
+        private void OnCombatPropDetonated(CombatExplosionEvent e)
+        {
+            if (e == null)
+            {
+                return;
+            }
+
+            GridCoord worldOrigin = LocalToWorld(e.Origin);
+            _destroyedArenaPropCoords.Add(e.Origin);
+            worldRenderer?.MarkArenaObstacleDestroyed(worldOrigin, leaveScorch: true);
+
+            Vector3 blastWorld = GridToWorldAtElevation(worldOrigin);
+            GetOrEnsureVfxDirector()?.PlayKegExplosion(blastWorld, e.IsChainReaction ? 2.2f : 1.75f);
+            audioDirector?.PlayExplosion(e.IsChainReaction || (e.AffectedTiles != null && e.AffectedTiles.Count >= 9));
+            cameraRig?.PlayFocusBeat(blastWorld, -1.6f, 0.42f);
+            cameraRig?.PlayImpactImpulse(0.24f, 0.22f, Vector3.down);
+            TriggerHitStop(0.055f);
+            SyncDestructibleArenaProps();
+        }
+
+        private void SyncDestructibleArenaProps()
+        {
+            if (CombatSession == null || CombatSession.DestructibleProps == null || worldRenderer == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < CombatSession.DestructibleProps.Count; i++)
+            {
+                CombatDestructibleProp prop = CombatSession.DestructibleProps[i];
+                if (prop != null && prop.IsDestroyed && _destroyedArenaPropCoords.Add(prop.Coord))
+                {
+                    bool leaveScorch = prop.ObstacleKind == CombatArenaObstacleKind.OilKegCluster;
+                    worldRenderer.MarkArenaObstacleDestroyed(LocalToWorld(prop.Coord), leaveScorch);
+                }
+            }
+        }
+
+        private BywaterCombatVfxDirector GetOrEnsureVfxDirector()
+        {
+            if (gridOverlays == null)
+            {
+                return null;
+            }
+
+            BywaterCombatVfxDirector director = gridOverlays.GetComponent<BywaterCombatVfxDirector>();
+            if (director == null)
+            {
+                director = gridOverlays.gameObject.AddComponent<BywaterCombatVfxDirector>();
+            }
+            return director;
+        }
+
+        private static string FormatWeatherLabel(WeatherState weather)
+        {
+            switch (weather)
+            {
+                case WeatherState.Storm:
+                    return "Storm";
+                case WeatherState.LightRain:
+                    return "Light Rain";
+                default:
+                    return "Clear";
+            }
         }
     }
 }

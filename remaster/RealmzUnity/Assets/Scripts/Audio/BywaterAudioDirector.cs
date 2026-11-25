@@ -2,18 +2,21 @@ using System;
 using System.Collections.Generic;
 using RealmzCore.Serialization;
 using UnityEngine;
+using UnityEngine.Audio;
 
 namespace Realmz.Audio
 {
     /// <summary>
     /// Audio director for Realmz Remaster: loads RealmzAudio/audio_manifest.json,
-    /// manages 2 crossfading music channels across all 11 suites, and pools an 8-voice SFX ring buffer.
+    /// manages 2 crossfading music channels across all 11 suites, pools an 8-voice SFX ring buffer,
+    /// routes AudioMixer groups, and coordinates BywaterAmbientAudio beds.
     /// </summary>
     public sealed class BywaterAudioDirector : MonoBehaviour
     {
         public const string ManifestResourcePath = "RealmzAudio/audio_manifest";
         public const string AudioResourceRoot = "RealmzAudio/";
         public const int SfxVoiceCount = 8;
+        public const float DefaultMusicCrossfadeSeconds = 1.5f;
 
         private const int DefaultFootstepOverworldId = 82;
         private const int DefaultFootstepDungeonId = 83;
@@ -31,6 +34,15 @@ namespace Realmz.Audio
         private const int ShoveId = 134;
         private const int FallbackShoveId = 630;
 
+        private const int LevelUpId = 3002;
+        private const int BigExplodeId = 642;
+        private const int SmallExplodeId = 645;
+        private const int EarthShakeId = 10090;
+        private const int LightningId = 615;
+        private const int ElectricEnergizeId = 686;
+        private const int DoorSlamId = 690;
+        private const int TakeItemId = 6002;
+
         private readonly Dictionary<int, string> _sfxPathsById = new Dictionary<int, string>();
         private readonly Dictionary<string, string> _musicPathsByKey =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -42,6 +54,13 @@ namespace Realmz.Audio
         private readonly float[] _musicTargetWeights = new float[2];
         private readonly AudioSource[] _sfxVoices = new AudioSource[SfxVoiceCount];
 
+        private AudioMixer _masterMixer;
+        private AudioMixerGroup _musicMixerGroup;
+        private AudioMixerGroup _sfxMixerGroup;
+        private AudioMixerGroup _ambienceMixerGroup;
+        private AudioMixerGroup _uiMixerGroup;
+        private BywaterAmbientAudio _ambientAudio;
+
         private bool _manifestAttempted;
         private bool _hasLoadedManifest;
         private bool _sourcesInitialized;
@@ -49,6 +68,8 @@ namespace Realmz.Audio
         private float _musicFadeRate = 1f;
         private float _musicVolume = 0.55f;
         private float _sfxVolume = 0.85f;
+        private float _ambienceVolume = 0.70f;
+        private float _uiVolume = 0.85f;
         private int _sfxVoiceCursor;
         private string _currentMusicKey = string.Empty;
 
@@ -80,6 +101,9 @@ namespace Realmz.Audio
         }
 
         public string CurrentMusicKey => _currentMusicKey;
+        public AudioMixer MasterMixer => _masterMixer;
+        public float DefaultMusicFadeSeconds => DefaultMusicCrossfadeSeconds;
+        public BywaterAmbientAudio AmbientAudio => _ambientAudio;
 
         public float MusicVolume
         {
@@ -88,13 +112,43 @@ namespace Realmz.Audio
             {
                 _musicVolume = Mathf.Clamp01(value);
                 ApplyMusicVolumes();
+                ApplyMixerVolumes();
             }
         }
 
         public float SfxVolume
         {
             get => _sfxVolume;
-            set => _sfxVolume = Mathf.Clamp01(value);
+            set
+            {
+                _sfxVolume = Mathf.Clamp01(value);
+                ApplyMixerVolumes();
+            }
+        }
+
+        public float AmbienceVolume
+        {
+            get => _ambienceVolume;
+            set
+            {
+                _ambienceVolume = Mathf.Clamp01(value);
+                if (_ambientAudio != null)
+                {
+                    _ambientAudio.SetAmbienceVolume(_ambienceVolume);
+                }
+
+                ApplyMixerVolumes();
+            }
+        }
+
+        public float UiVolume
+        {
+            get => _uiVolume;
+            set
+            {
+                _uiVolume = Mathf.Clamp01(value);
+                ApplyMixerVolumes();
+            }
         }
 
         private void Awake()
@@ -166,13 +220,112 @@ namespace Realmz.Audio
             return _musicPathsByKey.TryGetValue(key.Trim(), out path);
         }
 
-        public void PlayMusic(string key, float fadeSeconds = 1.0f)
+        public void BindMixer(AudioMixer mixer)
+        {
+            EnsureInitialized();
+            _masterMixer = mixer;
+
+            if (mixer == null)
+            {
+                _musicMixerGroup = null;
+                _sfxMixerGroup = null;
+                _ambienceMixerGroup = null;
+                _uiMixerGroup = null;
+            }
+            else
+            {
+                _musicMixerGroup = ResolveMixerGroup(mixer, "Music");
+                _sfxMixerGroup = ResolveMixerGroup(mixer, "SFX");
+                _ambienceMixerGroup = ResolveMixerGroup(mixer, "Ambience");
+                _uiMixerGroup = ResolveMixerGroup(mixer, "UI");
+            }
+
+            for (int i = 0; i < 2; i++)
+            {
+                if (_musicSources[i] != null)
+                {
+                    _musicSources[i].outputAudioMixerGroup = _musicMixerGroup;
+                }
+            }
+
+            for (int i = 0; i < SfxVoiceCount; i++)
+            {
+                if (_sfxVoices[i] != null)
+                {
+                    _sfxVoices[i].outputAudioMixerGroup = _sfxMixerGroup;
+                }
+            }
+
+            BywaterAmbientAudio ambient = EnsureAmbientAudio();
+            if (ambient != null)
+            {
+                ambient.BindMixerGroup(_ambienceMixerGroup);
+            }
+
+            ApplyMixerVolumes();
+            ApplyEnvironmentSnapshot(false, 0f);
+        }
+
+        public void ApplyEnvironmentSnapshot(bool isDungeonOrIndoor, float fadeSeconds = 0.6f)
+        {
+            if (_masterMixer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                AudioMixerSnapshot snapshot = _masterMixer.FindSnapshot(isDungeonOrIndoor ? "Dungeon" : "Overworld");
+                if (snapshot == null && isDungeonOrIndoor)
+                {
+                    snapshot = _masterMixer.FindSnapshot("Indoor");
+                }
+                snapshot?.TransitionTo(Mathf.Max(0f, fadeSeconds));
+            }
+            catch (Exception)
+            {
+                // Ignore headless or uninitialized snapshot transitions safely.
+            }
+        }
+
+        public void UpdateAmbientContext(
+            Vector3 listenerWorldPos,
+            Vector3? nearestRiverWorldPos = null,
+            Vector3? nearestForgeWorldPos = null,
+            Vector3? nearestFireWorldPos = null,
+            bool isIndoorOrDungeon = false,
+            bool isDayOrDawn = true,
+            string weatherLabel = null,
+            bool isCombatActive = false)
+        {
+            EnsureInitialized();
+            BywaterAmbientAudio ambient = EnsureAmbientAudio();
+            if (ambient == null)
+            {
+                return;
+            }
+
+            ambient.SetAmbienceVolume(_ambienceVolume);
+            ambient.UpdateAmbientContext(
+                listenerWorldPos,
+                nearestRiverWorldPos,
+                nearestForgeWorldPos,
+                nearestFireWorldPos,
+                isIndoorOrDungeon,
+                isDayOrDawn,
+                weatherLabel,
+                isCombatActive);
+        }
+
+        public void PlayMusic(string key, float fadeSeconds = 1.5f)
         {
             EnsureInitialized();
 
+            float effectiveFadeSeconds = fadeSeconds > 0f ? fadeSeconds : DefaultMusicCrossfadeSeconds;
+
             if (string.IsNullOrWhiteSpace(key))
             {
-                StopMusic(fadeSeconds);
+                StopMusic(effectiveFadeSeconds);
                 return;
             }
 
@@ -189,7 +342,7 @@ namespace Realmz.Audio
             {
                 _musicTargetWeights[_activeMusicChannel] = 1f;
                 _musicTargetWeights[1 - _activeMusicChannel] = 0f;
-                _musicFadeRate = 1f / Mathf.Max(0.01f, fadeSeconds);
+                _musicFadeRate = 1f / Mathf.Max(0.01f, effectiveFadeSeconds);
                 if (!currentActive.isPlaying)
                 {
                     PlaySafe(currentActive);
@@ -220,7 +373,7 @@ namespace Realmz.Audio
             incoming.loop = true;
             incoming.time = 0f;
 
-            if (fadeSeconds <= 0.01f || !Application.isPlaying || !gameObject.activeInHierarchy)
+            if (effectiveFadeSeconds <= 0.01f || !Application.isPlaying || !gameObject.activeInHierarchy)
             {
                 _musicWeights[nextChannel] = 1f;
                 _musicTargetWeights[nextChannel] = 1f;
@@ -235,7 +388,7 @@ namespace Realmz.Audio
             _musicWeights[nextChannel] = 0f;
             _musicTargetWeights[nextChannel] = 1f;
             _musicTargetWeights[prevChannel] = 0f;
-            _musicFadeRate = 1f / Mathf.Max(0.01f, fadeSeconds);
+            _musicFadeRate = 1f / Mathf.Max(0.01f, effectiveFadeSeconds);
             ApplyMusicVolumes();
             PlaySafe(incoming);
         }
@@ -264,52 +417,12 @@ namespace Realmz.Audio
 
         public void PlaySfx(int soundId, float volume = 0.85f, float pitchJitter = 0.06f)
         {
-            EnsureInitialized();
-            if (!_sfxPathsById.TryGetValue(soundId, out string subPath))
-            {
-                return;
-            }
-
-            PlaySfxResource(subPath, volume, pitchJitter);
+            PlaySfxInternal(soundId, volume, pitchJitter, null, 0f);
         }
 
         public void PlaySfxResource(string resourceSubPath, float volume = 0.85f, float pitchJitter = 0.06f)
         {
-            EnsureInitialized();
-            if (string.IsNullOrWhiteSpace(resourceSubPath))
-            {
-                return;
-            }
-
-            float finalVolume = Mathf.Clamp01(volume * _sfxVolume);
-            if (finalVolume <= 0.0001f)
-            {
-                return;
-            }
-
-            string normalized = StripAudioExtension(resourceSubPath);
-            AudioClip clip = LoadClipCached(normalized);
-            if (clip == null)
-            {
-                return;
-            }
-
-            AudioSource voice = AcquireNextSfxVoice();
-            if (voice == null)
-            {
-                return;
-            }
-
-            float jitter = Mathf.Clamp(pitchJitter, 0f, 0.5f);
-            float pitch = jitter > 0.0001f
-                ? 1f + UnityEngine.Random.Range(-jitter, jitter)
-                : 1f;
-
-            voice.clip = clip;
-            voice.loop = false;
-            voice.volume = finalVolume;
-            voice.pitch = Mathf.Clamp(pitch, 0.5f, 1.8f);
-            PlaySafe(voice);
+            PlaySfxResourceInternal(resourceSubPath, volume, pitchJitter, null, 0f);
         }
 
         public void PlayFootstep(int soundId, bool isDungeon)
@@ -332,7 +445,8 @@ namespace Realmz.Audio
         {
             EnsureInitialized();
             int id = _sfxPathsById.ContainsKey(DefaultUiClickId) ? DefaultUiClickId : FallbackUiClickId;
-            PlaySfx(id, volume: 0.65f, pitchJitter: 0.03f);
+            AudioMixerGroup uiGroup = _uiMixerGroup != null ? _uiMixerGroup : _sfxMixerGroup;
+            PlaySfxInternal(id, volume: 0.65f, pitchJitter: 0.03f, mixerGroupOverride: uiGroup, delaySeconds: 0f);
         }
 
         public void PlayCoin()
@@ -356,7 +470,7 @@ namespace Realmz.Audio
             }
 
             float vol = isCrit ? 0.95f : 0.82f;
-            PlaySfx(id, volume: vol, pitchJitter: 0.07f);
+            PlaySfx(id, volume: vol, pitchJitter: 0.08f);
         }
 
         public void PlaySpell(string effectKind)
@@ -378,6 +492,43 @@ namespace Realmz.Audio
             EnsureInitialized();
             int id = _sfxPathsById.ContainsKey(ShoveId) ? ShoveId : FallbackShoveId;
             PlaySfx(id, volume: 0.82f, pitchJitter: 0.06f);
+        }
+
+        public void PlayLevelUpFanfare()
+        {
+            EnsureInitialized();
+            PlaySfx(LevelUpId, volume: 0.90f, pitchJitter: 0.02f);
+        }
+
+        public void PlayExplosion(bool big)
+        {
+            EnsureInitialized();
+            int primaryId = big ? BigExplodeId : SmallExplodeId;
+            float primaryVol = big ? 0.95f : 0.85f;
+            float shakeVol = big ? 0.80f : 0.62f;
+            float shakeDelay = big ? 0.06f : 0.04f;
+
+            PlaySfxInternal(primaryId, primaryVol, 0.05f, null, 0f);
+            PlaySfxInternal(EarthShakeId, shakeVol, 0.04f, null, shakeDelay);
+        }
+
+        public void PlayLightningChain()
+        {
+            EnsureInitialized();
+            PlaySfxInternal(LightningId, 0.90f, 0.06f, null, 0f);
+            PlaySfxInternal(ElectricEnergizeId, 0.78f, 0.05f, null, 0.05f);
+        }
+
+        public void PlayDoorInteract()
+        {
+            EnsureInitialized();
+            PlaySfx(DoorSlamId, volume: 0.80f, pitchJitter: 0.06f);
+        }
+
+        public void PlayTakeItem()
+        {
+            EnsureInitialized();
+            PlaySfx(TakeItemId, volume: 0.82f, pitchJitter: 0.04f);
         }
 
         private int ResolveSpellSoundId(string effectKind)
@@ -514,6 +665,7 @@ namespace Realmz.Audio
                     src.spatialBlend = 0f;
                     src.volume = 0f;
                     src.priority = 64;
+                    src.outputAudioMixerGroup = _musicMixerGroup;
                     _musicSources[i] = src;
                 }
             }
@@ -528,9 +680,37 @@ namespace Realmz.Audio
                     voice.spatialBlend = 0f;
                     voice.volume = _sfxVolume;
                     voice.priority = 128;
+                    voice.outputAudioMixerGroup = _sfxMixerGroup;
                     _sfxVoices[i] = voice;
                 }
             }
+
+            EnsureAmbientAudio();
+        }
+
+        private BywaterAmbientAudio EnsureAmbientAudio()
+        {
+            if (_ambientAudio != null)
+            {
+                return _ambientAudio;
+            }
+
+            _ambientAudio = GetComponentInChildren<BywaterAmbientAudio>(true);
+            if (_ambientAudio == null)
+            {
+                GameObject child = new GameObject("BywaterAmbientAudio");
+                child.transform.SetParent(transform, false);
+                _ambientAudio = child.AddComponent<BywaterAmbientAudio>();
+            }
+
+            _ambientAudio.Initialize(LoadClipBySfxId);
+            _ambientAudio.SetAmbienceVolume(_ambienceVolume);
+            if (_ambienceMixerGroup != null)
+            {
+                _ambientAudio.BindMixerGroup(_ambienceMixerGroup);
+            }
+
+            return _ambientAudio;
         }
 
         private AudioSource AcquireNextSfxVoice()
@@ -539,6 +719,78 @@ namespace Realmz.Audio
             AudioSource voice = _sfxVoices[_sfxVoiceCursor];
             _sfxVoiceCursor = (_sfxVoiceCursor + 1) % SfxVoiceCount;
             return voice;
+        }
+
+        private void PlaySfxInternal(
+            int soundId,
+            float volume,
+            float pitchJitter,
+            AudioMixerGroup mixerGroupOverride,
+            float delaySeconds)
+        {
+            EnsureInitialized();
+            if (!_sfxPathsById.TryGetValue(soundId, out string subPath))
+            {
+                return;
+            }
+
+            PlaySfxResourceInternal(subPath, volume, pitchJitter, mixerGroupOverride, delaySeconds);
+        }
+
+        private void PlaySfxResourceInternal(
+            string resourceSubPath,
+            float volume,
+            float pitchJitter,
+            AudioMixerGroup mixerGroupOverride,
+            float delaySeconds)
+        {
+            EnsureInitialized();
+            if (string.IsNullOrWhiteSpace(resourceSubPath))
+            {
+                return;
+            }
+
+            float finalVolume = Mathf.Clamp01(volume * _sfxVolume);
+            if (finalVolume <= 0.0001f)
+            {
+                return;
+            }
+
+            string normalized = StripAudioExtension(resourceSubPath);
+            AudioClip clip = LoadClipCached(normalized);
+            if (clip == null)
+            {
+                return;
+            }
+
+            AudioSource voice = AcquireNextSfxVoice();
+            if (voice == null)
+            {
+                return;
+            }
+
+            float jitter = Mathf.Clamp(pitchJitter, 0f, 0.5f);
+            float pitch = jitter > 0.0001f
+                ? 1f + UnityEngine.Random.Range(-jitter, jitter)
+                : 1f;
+
+            voice.outputAudioMixerGroup = mixerGroupOverride != null ? mixerGroupOverride : _sfxMixerGroup;
+            voice.clip = clip;
+            voice.loop = false;
+            voice.volume = finalVolume;
+            voice.pitch = Mathf.Clamp(pitch, 0.5f, 1.8f);
+            PlaySafe(voice, delaySeconds);
+        }
+
+        private AudioClip LoadClipBySfxId(int soundId)
+        {
+            EnsureInitialized();
+            if (!_sfxPathsById.TryGetValue(soundId, out string subPath))
+            {
+                return null;
+            }
+
+            return LoadClipCached(subPath);
         }
 
         private AudioClip LoadClipCached(string resourceSubPath)
@@ -576,7 +828,70 @@ namespace Realmz.Audio
             }
         }
 
-        private void PlaySafe(AudioSource source)
+        private void ApplyMixerVolumes()
+        {
+            if (_masterMixer == null)
+            {
+                return;
+            }
+
+            SetMixerVolumeSafe(_masterMixer, "MusicVolumeDb", _musicVolume);
+            SetMixerVolumeSafe(_masterMixer, "SfxVolumeDb", _sfxVolume);
+            SetMixerVolumeSafe(_masterMixer, "AmbienceVolumeDb", _ambienceVolume);
+            SetMixerVolumeSafe(_masterMixer, "UiVolumeDb", _uiVolume);
+        }
+
+        private static AudioMixerGroup ResolveMixerGroup(AudioMixer mixer, string groupName)
+        {
+            if (mixer == null || string.IsNullOrWhiteSpace(groupName))
+            {
+                return null;
+            }
+
+            try
+            {
+                AudioMixerGroup[] matches = mixer.FindMatchingGroups(groupName);
+                if (matches == null || matches.Length == 0)
+                {
+                    return null;
+                }
+
+                for (int i = 0; i < matches.Length; i++)
+                {
+                    if (matches[i] != null &&
+                        string.Equals(matches[i].name, groupName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return matches[i];
+                    }
+                }
+
+                return matches[0];
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        private static void SetMixerVolumeSafe(AudioMixer mixer, string paramName, float linearVolume)
+        {
+            if (mixer == null || string.IsNullOrEmpty(paramName))
+            {
+                return;
+            }
+
+            float db = Mathf.Log10(Mathf.Max(0.0001f, linearVolume)) * 20f;
+            try
+            {
+                mixer.SetFloat(paramName, db);
+            }
+            catch (Exception)
+            {
+                // Ignore unexposed parameters or headless mixer errors safely.
+            }
+        }
+
+        private void PlaySafe(AudioSource source, float delaySeconds = 0f)
         {
             if (source == null || source.clip == null)
             {
@@ -600,7 +915,14 @@ namespace Realmz.Audio
 
             try
             {
-                source.Play();
+                if (delaySeconds > 0.001f)
+                {
+                    source.PlayDelayed(delaySeconds);
+                }
+                else
+                {
+                    source.Play();
+                }
             }
             catch (Exception)
             {

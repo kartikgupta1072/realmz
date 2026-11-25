@@ -33,6 +33,9 @@ namespace RealmzCore.Combat
         private readonly List<SurfaceChangeEvent> _lastSurfaceChanges = new List<SurfaceChangeEvent>();
         private readonly List<GridCoord> _deploymentZone = new List<GridCoord>();
         private readonly HashSet<GridCoord> _deploymentZoneSet = new HashSet<GridCoord>();
+        private readonly List<CombatDestructibleProp> _destructibleProps = new List<CombatDestructibleProp>();
+        private readonly Dictionary<string, CombatDestructibleProp> _destructiblePropsById =
+            new Dictionary<string, CombatDestructibleProp>(StringComparer.Ordinal);
         private readonly AStarPathfinder _pathfinder;
         private bool _victoryRewardsGranted;
         private bool _partyRewardsApplied;
@@ -51,7 +54,8 @@ namespace RealmzCore.Combat
             bool isAmbientDarkness = false,
             bool deferLootDeposit = false,
             bool startInDeployment = false,
-            IEnumerable<GridCoord>? deploymentZone = null)
+            IEnumerable<GridCoord>? deploymentZone = null,
+            WeatherState weather = WeatherState.Clear)
         {
             Grid = grid ?? throw new ArgumentNullException(nameof(grid));
             if (combatants == null)
@@ -61,6 +65,7 @@ namespace RealmzCore.Combat
 
             IsAmbientDarkness = isAmbientDarkness;
             DeferLootDeposit = deferLootDeposit;
+            CombatWeather = weather;
 
             foreach (CombatantState c in combatants)
             {
@@ -95,6 +100,8 @@ namespace RealmzCore.Combat
             _pathfinder = new AStarPathfinder(Math.Max(grid.Width, 16), Math.Max(grid.Height, 16));
             RoundNumber = 1;
             TurnNumber = 1;
+
+            InitializeDestructiblePropsFromLayout();
 
             if (SurpriseMode == CombatInitiativeSurpriseMode.PartyAmbush)
             {
@@ -147,6 +154,8 @@ namespace RealmzCore.Combat
 
         public event Action<IReadOnlyList<SurfaceChangeEvent>>? SurfaceChanged;
         public event Action<bool>? OnArenaIlluminationChanged;
+        public event Action<CombatExplosionEvent>? PropDetonated;
+        public event Action<CombatChainLightningEvent>? LightningChained;
 
         public const int DarknessRangedHitPenaltyPct = 15;
 
@@ -158,8 +167,10 @@ namespace RealmzCore.Combat
         public int RewardBonusPercent { get; }
         public bool IsAmbientDarkness { get; }
         public bool DeferLootDeposit { get; }
+        public WeatherState CombatWeather { get; set; }
         public CombatPhase Phase { get; private set; }
         public IReadOnlyList<GridCoord> DeploymentZoneTiles => _deploymentZone;
+        public IReadOnlyList<CombatDestructibleProp> DestructibleProps => _destructibleProps;
         public bool IsCombatFireIlluminated { get; private set; }
         public bool IsArenaIlluminated => !IsAmbientDarkness || IsCombatFireIlluminated || (Party != null && Party.TorchTurnsRemaining > 0);
         public bool IsInTheDark => IsAmbientDarkness && !IsArenaIlluminated;
@@ -1196,9 +1207,14 @@ namespace RealmzCore.Combat
             bool hasAp = actor.Economy.HasApFor(apCost);
             bool isAlly = actor.Side == target.Side;
 
-            bool hitsWall = !Grid.InBounds(dest) || !Grid.IsWalkable(dest.X, dest.Y);
+            CombatDestructibleProp? destProp = Grid.InBounds(dest) ? GetDestructiblePropAt(dest) : null;
+            bool triggersKeg = destProp != null && destProp.IsExplosiveOil;
+            bool ignitesOnBrazier = destProp != null && destProp.ObstacleKind == CombatArenaObstacleKind.LitBrazier;
+            bool hitsPropObstacle = triggersKeg || ignitesOnBrazier;
+
+            bool hitsWall = !hitsPropObstacle && (!Grid.InBounds(dest) || !Grid.IsWalkable(dest.X, dest.Y));
             string? collidingUnitId = null;
-            if (!hitsWall)
+            if (!hitsWall && !hitsPropObstacle)
             {
                 CombatantState? occupant = GetLivingUnitAt(dest, excludeId: target.Id);
                 if (occupant != null)
@@ -1208,10 +1224,15 @@ namespace RealmzCore.Combat
             }
 
             int startElev = Grid.GetElevation(target.Position.X, target.Position.Y);
-            int destElev = !hitsWall && collidingUnitId == null ? Grid.GetElevation(dest.X, dest.Y) : startElev;
+            int destElev = !hitsWall && !hitsPropObstacle && collidingUnitId == null ? Grid.GetElevation(dest.X, dest.Y) : startElev;
             int elevDrop = Math.Max(0, startElev - destElev);
-            bool pushesOffLedge = !hitsWall && collidingUnitId == null && elevDrop > 0;
+            bool pushesOffLedge = !hitsWall && !hitsPropObstacle && collidingUnitId == null && elevDrop > 0;
+            bool destroysCover = !hitsWall && !hitsPropObstacle && collidingUnitId == null &&
+                                 destProp != null &&
+                                 (destProp.ObstacleKind == CombatArenaObstacleKind.BarrelsCrates ||
+                                  destProp.ObstacleKind == CombatArenaObstacleKind.HayBale);
             SurfaceType destSurface = Grid.InBounds(dest) ? Grid.GetSurface(dest.X, dest.Y) : SurfaceType.None;
+            bool entersSurface = !hitsWall && !hitsPropObstacle && collidingUnitId == null && destSurface != SurfaceType.None;
 
             int successPct = isAlly
                 ? 100
@@ -1236,7 +1257,11 @@ namespace RealmzCore.Combat
                 fallElevationDrop: elevDrop,
                 destinationSurface: destSurface,
                 isAllyShove: isAlly,
-                apCost: apCost);
+                apCost: apCost,
+                triggersKegExplosion: triggersKeg,
+                ignitesOnBrazier: ignitesOnBrazier,
+                destroysCover: destroysCover,
+                entersSurface: entersSurface);
         }
 
         public CombatActionResult TryShove(string targetId)
@@ -1277,7 +1302,41 @@ namespace RealmzCore.Combat
             List<string> notes = new List<string>();
             List<string> loggedTargets = new List<string> { target.Id };
 
-            if (preview.HitsWallOrBounds)
+            if (preview.TriggersKegExplosion)
+            {
+                CombatDestructibleProp? keg = GetDestructiblePropAt(preview.Destination);
+                if (keg != null && !keg.IsDestroyed)
+                {
+                    int kegDmg = DetonateOilKeg(keg, isChainReaction: false, cause: $"Shove:{target.Name}", attackerId: actor.Id);
+                    totalDamage += kegDmg;
+                    notes.Add($"slams into oil kegs triggering an explosion ({kegDmg} total blast dmg)");
+                }
+            }
+            else if (preview.IgnitesOnBrazier)
+            {
+                int brazierDmg = RollElementalDamage(target, "1d6", ElementKind.Heat);
+                totalDamage += brazierDmg;
+                if (brazierDmg > 0)
+                {
+                    actor.CombatDamageDealt += brazierDmg;
+                }
+                if (target.IsAlive && !IsImmuneToElement(target, ElementKind.Heat))
+                {
+                    target.Conditions.Apply(
+                        CharConditionId.Burning,
+                        magnitude: 1,
+                        turnsRemaining: 1,
+                        baseRecoveryChancePercent: 0,
+                        canRecoverBySave: false,
+                        escalationStepPercent: 15);
+                    notes.Add($"slams into LitBrazier ({brazierDmg} Heat dmg, Burning)");
+                }
+                else
+                {
+                    notes.Add($"slams into LitBrazier ({brazierDmg} Heat dmg)");
+                }
+            }
+            else if (preview.HitsWallOrBounds)
             {
                 int crush = Math.Max(1, DiceSpec.Parse("1d4").Roll(Roller));
                 target.Hp = Math.Max(0, target.Hp - crush);
@@ -1309,6 +1368,18 @@ namespace RealmzCore.Combat
                 // Forced displacement never provokes AoOs.
                 target.Position = preview.Destination;
                 notes.Add($"is shoved to {target.Position}");
+
+                if (preview.DestroysCover)
+                {
+                    CombatDestructibleProp? coverProp = GetDestructiblePropAt(preview.Destination);
+                    if (coverProp != null && !coverProp.IsDestroyed)
+                    {
+                        coverProp.Hp = 0;
+                        coverProp.IsDestroyed = true;
+                        Grid.ClearCellObstacle(preview.Destination.X, preview.Destination.Y, Grid.GetElevation(preview.Destination), moveCost: 1);
+                        notes.Add($"crushes {coverProp.ObstacleKind}");
+                    }
+                }
 
                 if (preview.PushesOffLedge && target.IsAlive)
                 {
@@ -1681,6 +1752,514 @@ namespace RealmzCore.Combat
             return new CombatActionResult(true, msg, new[] { outcome }, damageDealt: outcome.DamageDealt, apSpent: preview.ApCost);
         }
 
+        public CombatDestructibleProp AddDestructibleProp(string propId, GridCoord coord, CombatArenaObstacleKind kind)
+        {
+            return AddDestructiblePropInternal(propId, coord, kind, syncGridCell: true);
+        }
+
+        public CombatDestructibleProp? GetDestructiblePropAt(GridCoord coord)
+        {
+            for (int i = 0; i < _destructibleProps.Count; i++)
+            {
+                CombatDestructibleProp p = _destructibleProps[i];
+                if (!p.IsDestroyed && p.Coord == coord)
+                {
+                    return p;
+                }
+            }
+
+            return null;
+        }
+
+        public CombatDestructibleProp? GetDestructibleProp(string propId)
+        {
+            if (string.IsNullOrWhiteSpace(propId))
+            {
+                return null;
+            }
+
+            return _destructiblePropsById.TryGetValue(propId, out CombatDestructibleProp? prop) ? prop : null;
+        }
+
+        public CombatActionResult DamageDestructibleProp(
+            string propId,
+            int damage,
+            string damageType = "Physical",
+            string? attackerId = null)
+        {
+            CombatDestructibleProp? prop = GetDestructibleProp(propId);
+            if (prop == null || prop.IsDestroyed)
+            {
+                return new CombatActionResult(false, "Prop not found or already destroyed.");
+            }
+
+            ElementKind element = ParseElementKind(damageType);
+            if (prop.ObstacleKind == CombatArenaObstacleKind.LitBrazier)
+            {
+                if (element == ElementKind.Cold)
+                {
+                    ExtinguishLitBrazier(prop, cause: string.IsNullOrWhiteSpace(damageType) ? "Cold" : damageType);
+                    return new CombatActionResult(true, $"{prop.PropId} is extinguished, spawning a SteamCloud!");
+                }
+
+                return new CombatActionResult(true, $"{prop.PropId} is indestructible.");
+            }
+
+            if (prop.IsExplosiveOil)
+            {
+                if (damage >= 1 || element == ElementKind.Heat)
+                {
+                    int blastDmg = DetonateOilKeg(
+                        prop,
+                        isChainReaction: false,
+                        cause: string.IsNullOrWhiteSpace(damageType) ? "Physical" : damageType,
+                        attackerId: attackerId);
+                    CheckOutcome();
+                    return new CombatActionResult(true, $"{prop.PropId} detonates ({blastDmg} total damage)!", damageDealt: blastDmg);
+                }
+
+                return new CombatActionResult(true, $"{prop.PropId} is untouched.");
+            }
+
+            if (prop.IsFlammable && element == ElementKind.Heat)
+            {
+                prop.Hp = 0;
+                prop.IsDestroyed = true;
+                Grid.ClearCellObstacle(prop.Coord.X, prop.Coord.Y, Grid.GetElevation(prop.Coord), moveCost: 1);
+                List<SurfaceChangeEvent> changes = new List<SurfaceChangeEvent>();
+                if (Grid.TryGetCell(prop.Coord.X, prop.Coord.Y, out CombatGridCell? hayCell) && hayCell != null)
+                {
+                    hayCell.BaseSurface = SurfaceType.None;
+                    RecordSurfaceChange(hayCell, SurfaceType.Fire, 2, "HayIgnited", changes);
+                }
+                NotifySurfaceChanges(changes);
+                CombatantState? occupant = GetLivingUnitAt(prop.Coord);
+                int fireDmg = occupant != null ? ApplyTileSurfaceHazard(occupant, prop.Coord, isStepEnter: false) : 0;
+                AppendLog(attackerId ?? "system", "Environment", "PropIgnited",
+                    $"{prop.ObstacleKind} at {prop.Coord} catches fire and burns away!",
+                    occupant != null ? new[] { occupant.Id } : Array.Empty<string>(),
+                    damageDealt: fireDmg);
+                CheckOutcome();
+                return new CombatActionResult(true, $"{prop.ObstacleKind} ignites into Fire!", damageDealt: fireDmg);
+            }
+
+            if (damage <= 0)
+            {
+                return new CombatActionResult(true, $"{prop.PropId} takes no damage.");
+            }
+
+            prop.Hp = Math.Max(0, prop.Hp - damage);
+            if (prop.Hp <= 0)
+            {
+                prop.IsDestroyed = true;
+                Grid.ClearCellObstacle(prop.Coord.X, prop.Coord.Y, Grid.GetElevation(prop.Coord), moveCost: 1);
+                AppendLog(attackerId ?? "system", "Environment", "PropDestroyed",
+                    $"{prop.ObstacleKind} at {prop.Coord} is destroyed!");
+                return new CombatActionResult(true, $"{prop.ObstacleKind} at {prop.Coord} is destroyed!");
+            }
+
+            AppendLog(attackerId ?? "system", "Environment", "PropDamaged",
+                $"{prop.ObstacleKind} at {prop.Coord} takes {damage} damage ({prop.Hp}/{prop.MaxHp} HP).");
+            return new CombatActionResult(true, $"{prop.ObstacleKind} takes {damage} damage ({prop.Hp}/{prop.MaxHp} HP).");
+        }
+
+        public CombatActionResult TryAttackProp(string propId)
+        {
+            if (Phase != CombatPhase.Combat || Outcome != CombatOutcome.InProgress)
+            {
+                return new CombatActionResult(false, Phase == CombatPhase.Deployment ? "Finish pre-battle deployment first." : "Combat has ended.");
+            }
+
+            CombatantState? actor = CurrentActor;
+            CombatDestructibleProp? prop = GetDestructibleProp(propId);
+            if (actor == null || !actor.IsConscious || prop == null || prop.IsDestroyed)
+            {
+                return new CombatActionResult(false, "Invalid actor or destructible prop.");
+            }
+
+            if (prop.ObstacleKind == CombatArenaObstacleKind.LitBrazier)
+            {
+                return new CombatActionResult(false, "LitBrazier cannot be broken by weapon attacks.");
+            }
+
+            int dist = actor.Position.ChebyshevDistance(prop.Coord);
+            bool isAdjacent = dist == 1;
+            int apCost;
+            int rolledDmg;
+
+            if (isAdjacent)
+            {
+                apCost = Math.Max(1, actor.MeleeApCost);
+                if (!actor.Economy.HasApFor(apCost))
+                {
+                    return new CombatActionResult(false, $"Insufficient AP (needs {apCost} AP, has {actor.Economy.CurrentAp}).");
+                }
+
+                DiceSpec dice = DiceSpec.TryParse(actor.WeaponDice, out DiceSpec parsed)
+                    ? parsed
+                    : DiceSpec.Parse("1d4");
+                int strongBonus = actor.Conditions.Has(CharConditionId.Strong) ? 3 : 0;
+                rolledDmg = Math.Max(1, dice.Roll(Roller) + Math.Max(0, actor.DamageBonus) + strongBonus);
+            }
+            else if (actor.RangedRange > 0 && !string.IsNullOrWhiteSpace(actor.RangedDice))
+            {
+                int attElev = Grid.GetElevation(actor.Position.X, actor.Position.Y);
+                int propElev = Grid.GetElevation(prop.Coord.X, prop.Coord.Y);
+                int effectiveRange = actor.RangedRange + (attElev > propElev ? 1 : 0);
+                if (dist > effectiveRange)
+                {
+                    return new CombatActionResult(false, "Prop is out of ranged weapon range.");
+                }
+
+                LosResult los = CheckLineOfSight(actor.Position, prop.Coord, includeSteamObscuration: false);
+                if (los.Kind == LosKind.Blocked)
+                {
+                    return new CombatActionResult(false, "Line of sight to prop is blocked.");
+                }
+
+                apCost = Math.Max(1, actor.RangedApCost);
+                if (!actor.Economy.HasApFor(apCost))
+                {
+                    return new CombatActionResult(false, $"Insufficient AP (needs {apCost} AP, has {actor.Economy.CurrentAp}).");
+                }
+
+                DiceSpec dice = DiceSpec.TryParse(actor.RangedDice, out DiceSpec parsed)
+                    ? parsed
+                    : DiceSpec.Parse("1d4");
+                rolledDmg = Math.Max(1, dice.Roll(Roller));
+            }
+            else
+            {
+                return new CombatActionResult(false, "Prop is out of melee reach.");
+            }
+
+            actor.Economy.SpendAp(apCost, lockMoveUndo: true);
+            actor.HasTriggeredIrreversibleEvent = true;
+
+            CombatActionResult dmgRes = DamageDestructibleProp(prop.PropId, rolledDmg, "Physical", actor.Id);
+            return new CombatActionResult(dmgRes.Success, dmgRes.Message, damageDealt: dmgRes.DamageDealt, apSpent: apCost);
+        }
+
+        public CombatActionResult TryShoveProp(string propId)
+        {
+            if (Phase != CombatPhase.Combat || Outcome != CombatOutcome.InProgress)
+            {
+                return new CombatActionResult(false, Phase == CombatPhase.Deployment ? "Finish pre-battle deployment first." : "Combat has ended.");
+            }
+
+            CombatantState? actor = CurrentActor;
+            CombatDestructibleProp? prop = GetDestructibleProp(propId);
+            if (actor == null || !actor.IsConscious || prop == null || prop.IsDestroyed)
+            {
+                return new CombatActionResult(false, "Invalid actor or destructible prop.");
+            }
+
+            if (prop.ObstacleKind == CombatArenaObstacleKind.LitBrazier)
+            {
+                return new CombatActionResult(false, "LitBrazier is fixed and cannot be shoved.");
+            }
+
+            if (actor.Position.ChebyshevDistance(prop.Coord) != 1)
+            {
+                return new CombatActionResult(false, "Prop is not adjacent for Shove.");
+            }
+
+            int apCost = CombatActionEconomy.DefaultShoveApCost;
+            if (!actor.Economy.HasApFor(apCost))
+            {
+                return new CombatActionResult(false, $"Insufficient AP (Shove needs {apCost} AP, has {actor.Economy.CurrentAp}).");
+            }
+
+            actor.Economy.SpendAp(apCost, lockMoveUndo: true);
+            actor.HasTriggeredIrreversibleEvent = true;
+
+            int dx = Math.Sign(prop.Coord.X - actor.Position.X);
+            int dy = Math.Sign(prop.Coord.Y - actor.Position.Y);
+            GridCoord dest = new GridCoord(prop.Coord.X + dx, prop.Coord.Y + dy);
+            CombatDestructibleProp? destProp = Grid.InBounds(dest) ? GetDestructiblePropAt(dest) : null;
+            CombatantState? destUnit = Grid.InBounds(dest) ? GetLivingUnitAt(dest) : null;
+
+            if (prop.IsExplosiveOil)
+            {
+                bool hitsFire = Grid.InBounds(dest) && Grid.GetSurface(dest.X, dest.Y) == SurfaceType.Fire;
+                bool hitsBrazierOrKeg = destProp != null && (destProp.ObstacleKind == CombatArenaObstacleKind.LitBrazier || destProp.IsExplosiveOil);
+                bool hitsBlockedOrUnit = !Grid.InBounds(dest) || !Grid.IsWalkable(dest.X, dest.Y) || destUnit != null;
+
+                if (hitsFire && destUnit == null && Grid.IsWalkable(dest.X, dest.Y))
+                {
+                    Grid.ClearCellObstacle(prop.Coord.X, prop.Coord.Y, Grid.GetElevation(prop.Coord), moveCost: 1);
+                    prop.Coord = dest;
+                    int blastDmg = DetonateOilKeg(prop, isChainReaction: false, cause: "ShoveIntoFire", attackerId: actor.Id);
+                    CheckOutcome();
+                    return new CombatActionResult(true, $"{actor.Name} shoves {prop.PropId} into Fire, detonating it ({blastDmg} dmg)!", damageDealt: blastDmg, apSpent: apCost);
+                }
+
+                if (hitsBrazierOrKeg || hitsBlockedOrUnit)
+                {
+                    string cause = destProp?.ObstacleKind == CombatArenaObstacleKind.LitBrazier ? "ShoveIntoBrazier" : "ShoveImpact";
+                    int blastDmg = DetonateOilKeg(prop, isChainReaction: false, cause: cause, attackerId: actor.Id);
+                    CheckOutcome();
+                    return new CombatActionResult(true, $"{actor.Name} shoves {prop.PropId}, triggering an explosion ({blastDmg} dmg)!", damageDealt: blastDmg, apSpent: apCost);
+                }
+
+                Grid.ClearCellObstacle(prop.Coord.X, prop.Coord.Y, Grid.GetElevation(prop.Coord), moveCost: 1);
+                prop.Coord = dest;
+                SyncPropCellOnGrid(prop);
+                string slideMsg = $"{actor.Name} shoves {prop.PropId} to {dest}.";
+                AppendLog(actor.Id, actor.Name, "ShoveProp", slideMsg);
+                return new CombatActionResult(true, slideMsg, apSpent: apCost);
+            }
+
+            if (destUnit != null)
+            {
+                int crush = Math.Max(1, DiceSpec.Parse("1d4").Roll(Roller));
+                destUnit.Hp = Math.Max(0, destUnit.Hp - crush);
+                actor.CombatDamageDealt += crush;
+                prop.Hp = 0;
+                prop.IsDestroyed = true;
+                Grid.ClearCellObstacle(prop.Coord.X, prop.Coord.Y, Grid.GetElevation(prop.Coord), moveCost: 1);
+                string crushMsg = $"{actor.Name} shoves {prop.ObstacleKind} into {destUnit.Name} for {crush} crush damage, smashing the cover!";
+                AppendLog(actor.Id, actor.Name, "ShoveProp", crushMsg, new[] { destUnit.Id }, damageDealt: crush);
+                CheckOutcome();
+                return new CombatActionResult(true, crushMsg, damageDealt: crush, apSpent: apCost);
+            }
+
+            if (!Grid.InBounds(dest) || !Grid.IsWalkable(dest.X, dest.Y))
+            {
+                prop.Hp = 0;
+                prop.IsDestroyed = true;
+                Grid.ClearCellObstacle(prop.Coord.X, prop.Coord.Y, Grid.GetElevation(prop.Coord), moveCost: 1);
+                if (prop.IsFlammable && destProp?.ObstacleKind == CombatArenaObstacleKind.LitBrazier)
+                {
+                    List<SurfaceChangeEvent> changes = new List<SurfaceChangeEvent>();
+                    if (Grid.TryGetCell(prop.Coord.X, prop.Coord.Y, out CombatGridCell? hayCell) && hayCell != null)
+                    {
+                        hayCell.BaseSurface = SurfaceType.None;
+                        RecordSurfaceChange(hayCell, SurfaceType.Fire, 2, "HayIgnited", changes);
+                    }
+                    NotifySurfaceChanges(changes);
+                }
+
+                string smashMsg = $"{actor.Name} shoves {prop.ObstacleKind} into an obstacle, destroying it.";
+                AppendLog(actor.Id, actor.Name, "ShoveProp", smashMsg);
+                return new CombatActionResult(true, smashMsg, apSpent: apCost);
+            }
+
+            Grid.ClearCellObstacle(prop.Coord.X, prop.Coord.Y, Grid.GetElevation(prop.Coord), moveCost: 1);
+            prop.Coord = dest;
+            SyncPropCellOnGrid(prop);
+            if (prop.IsFlammable && Grid.GetSurface(dest.X, dest.Y) == SurfaceType.Fire)
+            {
+                DamageDestructibleProp(prop.PropId, prop.MaxHp, "Heat", actor.Id);
+            }
+
+            string moveMsg = $"{actor.Name} shoves {prop.ObstacleKind} to {dest}.";
+            AppendLog(actor.Id, actor.Name, "ShoveProp", moveMsg);
+            return new CombatActionResult(true, moveMsg, apSpent: apCost);
+        }
+
+        public CombatActionResult ExecuteCleaveAttack(string primaryTargetId)
+        {
+            if (Phase != CombatPhase.Combat || Outcome != CombatOutcome.InProgress)
+            {
+                return new CombatActionResult(false, Phase == CombatPhase.Deployment ? "Finish pre-battle deployment first." : "Combat has ended.");
+            }
+
+            CombatantState? actor = CurrentActor;
+            CombatantState? primary = GetCombatant(primaryTargetId);
+            if (actor == null || primary == null)
+            {
+                return new CombatActionResult(false, "Invalid attacker or primary target.");
+            }
+
+            TacticalAttackPreview preview = PreviewMeleeAttack(actor.Id, primaryTargetId);
+            if (!preview.CanExecute)
+            {
+                return new CombatActionResult(false, preview.Reason);
+            }
+
+            actor.Economy.SpendAp(preview.ApCost, lockMoveUndo: true);
+            actor.HasTriggeredIrreversibleEvent = true;
+
+            List<AttackOutcome> outcomes = new List<AttackOutcome>();
+            List<string> targetIds = new List<string> { primary.Id };
+            int totalDamage = 0;
+
+            int swings = Math.Max(1, actor.NumAttacks);
+            for (int i = 0; i < swings && primary.IsAlive; i++)
+            {
+                AttackOutcome outcome = ResolveSingleMeleeSwing(actor, primary, preview.IsFlanking);
+                outcomes.Add(outcome);
+                totalDamage += outcome.DamageDealt;
+            }
+
+            CombatantState? secondary = FindBestCleaveSecondaryTarget(actor, primary);
+            if (secondary != null)
+            {
+                targetIds.Add(secondary.Id);
+                bool secFlank = IsFlanking(actor.Id, secondary.Id);
+                AttackOutcome secOutcome = ResolveSingleMeleeSwing(actor, secondary, secFlank);
+                outcomes.Add(secOutcome);
+                totalDamage += secOutcome.DamageDealt;
+            }
+
+            string msg = secondary != null
+                ? $"{actor.Name} cleaves {primary.Name} and {secondary.Name} ({preview.ApCost} AP) for {totalDamage} total damage."
+                : $"{actor.Name} cleaves {primary.Name} ({preview.ApCost} AP) for {totalDamage} total damage.";
+            AppendLog(actor.Id, actor.Name, "Cleave", msg, targetIds, damageDealt: totalDamage);
+            CheckOutcome();
+
+            return new CombatActionResult(true, msg, outcomes, damageDealt: totalDamage, apSpent: preview.ApCost);
+        }
+
+        public CombatActionResult ExecuteTonguePull(string targetId)
+        {
+            if (Phase != CombatPhase.Combat || Outcome != CombatOutcome.InProgress)
+            {
+                return new CombatActionResult(false, Phase == CombatPhase.Deployment ? "Finish pre-battle deployment first." : "Combat has ended.");
+            }
+
+            CombatantState? actor = CurrentActor;
+            CombatantState? target = GetCombatant(targetId);
+            if (actor == null || target == null || !actor.IsConscious || !target.IsAlive || actor.Side == target.Side)
+            {
+                return new CombatActionResult(false, "Invalid actor or target for TonguePull.");
+            }
+
+            int dist = actor.Position.ChebyshevDistance(target.Position);
+            if (dist < 2 || dist > 4)
+            {
+                return new CombatActionResult(false, "Target must be at range 2 to 4 for TonguePull.");
+            }
+
+            LosResult los = CheckLineOfSight(actor.Position, target.Position, includeSteamObscuration: true);
+            if (los.Kind == LosKind.Blocked)
+            {
+                return new CombatActionResult(false, "Line of sight is blocked for TonguePull.");
+            }
+
+            int apCost = CombatActionEconomy.DefaultShoveApCost;
+            if (!actor.Economy.HasApFor(apCost))
+            {
+                return new CombatActionResult(false, $"Insufficient AP (TonguePull needs {apCost} AP, has {actor.Economy.CurrentAp}).");
+            }
+
+            GridCoord? pullDest = FindTonguePullDestination(actor.Position, target.Position);
+            if (!pullDest.HasValue || pullDest.Value == target.Position)
+            {
+                return new CombatActionResult(false, "No open walkable tile to pull target into.");
+            }
+
+            actor.Economy.SpendAp(apCost, lockMoveUndo: true);
+            actor.HasTriggeredIrreversibleEvent = true;
+
+            int pullDmg = Math.Max(1, DiceSpec.Parse("1d4").Roll(Roller));
+            bool wasAlive = target.IsAlive;
+            target.Hp = Math.Max(0, target.Hp - pullDmg);
+            actor.CombatDamageDealt += pullDmg;
+            if (wasAlive && !target.IsAlive)
+            {
+                actor.CombatKills++;
+            }
+
+            int totalDamage = pullDmg;
+            target.Position = pullDest.Value;
+            if (target.IsAlive)
+            {
+                int surfDmg = ApplyTileSurfaceHazard(target, target.Position, isStepEnter: true);
+                totalDamage += surfDmg;
+            }
+
+            string msg = $"{actor.Name} lashes {target.Name} with TonguePull to {target.Position} for {totalDamage} total damage!";
+            AppendLog(actor.Id, actor.Name, "TonguePull", msg, new[] { target.Id }, damageDealt: totalDamage);
+            CheckOutcome();
+
+            return new CombatActionResult(true, msg, damageDealt: totalDamage, apSpent: apCost);
+        }
+
+        internal CombatantState? FindBestCleaveSecondaryTarget(CombatantState actor, CombatantState primary)
+        {
+            CombatantState? best = null;
+            int bestScore = int.MinValue;
+            for (int i = 0; i < _combatants.Count; i++)
+            {
+                CombatantState c = _combatants[i];
+                if (!c.IsAlive || c.Side == actor.Side || c.Id == primary.Id)
+                {
+                    continue;
+                }
+
+                if (actor.Position.ChebyshevDistance(c.Position) != 1 ||
+                    primary.Position.ChebyshevDistance(c.Position) > 2)
+                {
+                    continue;
+                }
+
+                int score = (100 - Math.Min(99, c.Hp)) + (IsFlanking(actor.Id, c.Id) ? 20 : 0);
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    best = c;
+                }
+            }
+
+            return best;
+        }
+
+        internal GridCoord? FindTonguePullDestination(GridCoord actorPos, GridCoord targetPos)
+        {
+            GridCoord cur = targetPos;
+            for (int step = 0; step < 2; step++)
+            {
+                if (cur.ChebyshevDistance(actorPos) <= 1)
+                {
+                    break;
+                }
+
+                int dx = Math.Sign(actorPos.X - cur.X);
+                int dy = Math.Sign(actorPos.Y - cur.Y);
+                List<GridCoord> candidates = new List<GridCoord>(3)
+                {
+                    new GridCoord(cur.X + dx, cur.Y + dy)
+                };
+                if (dx != 0 && dy != 0)
+                {
+                    candidates.Add(new GridCoord(cur.X + dx, cur.Y));
+                    candidates.Add(new GridCoord(cur.X, cur.Y + dy));
+                }
+
+                GridCoord? chosen = null;
+                for (int i = 0; i < candidates.Count; i++)
+                {
+                    GridCoord c = candidates[i];
+                    if (c == actorPos || !Grid.InBounds(c) || !Grid.IsWalkable(c.X, c.Y))
+                    {
+                        continue;
+                    }
+
+                    if (IsOccupiedByLiving(c.X, c.Y))
+                    {
+                        continue;
+                    }
+
+                    if (c.ManhattanDistance(actorPos) < cur.ManhattanDistance(actorPos))
+                    {
+                        chosen = c;
+                        break;
+                    }
+                }
+
+                if (!chosen.HasValue)
+                {
+                    break;
+                }
+
+                cur = chosen.Value;
+            }
+
+            return cur != targetPos ? cur : (GridCoord?)null;
+        }
+
         public CombatActionResult CastSpell(string spellIdOrKey, GridCoord targetCenter)
         {
             if (Phase != CombatPhase.Combat || Outcome != CombatOutcome.InProgress)
@@ -1843,7 +2422,9 @@ namespace RealmzCore.Combat
                     preview.AoeFootprint.AffectedTiles,
                     spell.DamageType,
                     spell.Key,
-                    spell);
+                    spell,
+                    caster.Id,
+                    effectSpec);
                 totalDamage += surfaceComboDamage;
             }
 
@@ -2097,6 +2678,15 @@ namespace RealmzCore.Combat
                     int poisonDmg = Math.Max(1, actor.Conditions.GetMagnitude(CharConditionId.Poisoned));
                     actor.Hp = Math.Max(0, actor.Hp - poisonDmg);
                     AppendLog(actor.Id, actor.Name, "Poison", $"{actor.Name} takes {poisonDmg} poison damage.", new[] { actor.Id }, damageDealt: poisonDmg);
+                }
+
+                if (actor.IsAlive && actor.Conditions.Has(CharConditionId.Burning))
+                {
+                    int burnDmg = RollElementalDamage(actor, "1d4", ElementKind.Heat);
+                    if (burnDmg > 0)
+                    {
+                        AppendLog(actor.Id, actor.Name, "Burning", $"{actor.Name} takes {burnDmg} Heat damage from Burning.", new[] { actor.Id }, damageDealt: burnDmg);
+                    }
                 }
 
                 if (actor.IsAlive && actor.Conditions.Has(CharConditionId.Regenerating))
@@ -2706,7 +3296,9 @@ namespace RealmzCore.Combat
             IReadOnlyList<GridCoord> tiles,
             string damageType,
             string cause,
-            SpellDefinition? spell)
+            SpellDefinition? spell,
+            string? casterId = null,
+            DiceSpec? spellEffectDice = null)
         {
             ElementKind element = ParseElementKind(damageType);
             SurfaceType createdSurface = SurfaceType.None;
@@ -2720,9 +3312,18 @@ namespace RealmzCore.Combat
                 createdRounds = spell.CreatedSurfaceRounds != 0
                     ? spell.CreatedSurfaceRounds
                     : (createdSurface == SurfaceType.Water || createdSurface == SurfaceType.Oil ? -1 : 2);
+
+                bool isOutdoorsWeather = CombatWeather != WeatherState.Clear &&
+                                         (Grid.ArenaLayout != null
+                                             ? Grid.ArenaLayout.Archetype != CombatArenaArchetype.DungeonChamber
+                                             : !IsAmbientDarkness);
+                if (isOutdoorsWeather && createdSurface == SurfaceType.Fire && createdRounds > 1)
+                {
+                    createdRounds = Math.Max(1, createdRounds - 1);
+                }
             }
 
-            if (element == ElementKind.None && createdSurface == SurfaceType.None)
+            if (element == ElementKind.None && createdSurface == SurfaceType.None && !spellEffectDice.HasValue)
             {
                 return 0;
             }
@@ -2734,7 +3335,51 @@ namespace RealmzCore.Combat
             for (int i = 0; i < tiles.Count; i++)
             {
                 GridCoord tile = tiles[i];
-                if (!Grid.TryGetCell(tile.X, tile.Y, out CombatGridCell? cell) || cell == null || cell.IsBlocked)
+                if (!Grid.TryGetCell(tile.X, tile.Y, out CombatGridCell? cell) || cell == null)
+                {
+                    continue;
+                }
+
+                CombatDestructibleProp? prop = GetDestructiblePropAt(tile);
+                if (prop != null && !prop.IsDestroyed)
+                {
+                    if (element == ElementKind.Heat)
+                    {
+                        if (prop.IsExplosiveOil)
+                        {
+                            totalBonusDamage += DetonateOilKeg(prop, isChainReaction: false, cause: string.IsNullOrEmpty(cause) ? "HeatSpell" : cause, attackerId: casterId);
+                        }
+                        else if (prop.IsFlammable)
+                        {
+                            CombatActionResult hayRes = DamageDestructibleProp(prop.PropId, prop.MaxHp, "Heat", casterId);
+                            totalBonusDamage += hayRes.DamageDealt;
+                        }
+                        else if (spellEffectDice.HasValue && prop.ObstacleKind != CombatArenaObstacleKind.LitBrazier)
+                        {
+                            int pDmg = Math.Max(1, spellEffectDice.Value.Roll(Roller));
+                            DamageDestructibleProp(prop.PropId, pDmg, damageType, casterId);
+                        }
+                    }
+                    else if (element == ElementKind.Cold)
+                    {
+                        if (prop.ObstacleKind == CombatArenaObstacleKind.LitBrazier)
+                        {
+                            DamageDestructibleProp(prop.PropId, 1, "Cold", casterId);
+                        }
+                        else if (spellEffectDice.HasValue)
+                        {
+                            int pDmg = Math.Max(1, spellEffectDice.Value.Roll(Roller));
+                            totalBonusDamage += DamageDestructibleProp(prop.PropId, pDmg, damageType, casterId).DamageDealt;
+                        }
+                    }
+                    else if (spellEffectDice.HasValue && prop.ObstacleKind != CombatArenaObstacleKind.LitBrazier)
+                    {
+                        int pDmg = Math.Max(1, spellEffectDice.Value.Roll(Roller));
+                        totalBonusDamage += DamageDestructibleProp(prop.PropId, pDmg, damageType, casterId).DamageDealt;
+                    }
+                }
+
+                if (cell.IsBlocked)
                 {
                     continue;
                 }
@@ -2806,6 +3451,8 @@ namespace RealmzCore.Combat
                     if (cell.Surface == SurfaceType.Water)
                     {
                         List<GridCoord> waterCluster = CollectContiguousSurface(tile, SurfaceType.Water);
+                        List<string> chainUnitIds = new List<string>();
+                        int chainDmg = 0;
                         for (int w = 0; w < waterCluster.Count; w++)
                         {
                             GridCoord wc = waterCluster[w];
@@ -2818,6 +3465,8 @@ namespace RealmzCore.Combat
                             {
                                 int shock = RollElementalDamage(victim, "1d4", ElementKind.Electric);
                                 totalBonusDamage += shock;
+                                chainDmg += shock;
+                                chainUnitIds.Add(victim.Id);
                                 AppendLog(
                                     victim.Id,
                                     victim.Name,
@@ -2826,6 +3475,16 @@ namespace RealmzCore.Combat
                                     new[] { victim.Id },
                                     damageDealt: shock);
                             }
+                        }
+
+                        if (waterCluster.Count > 0)
+                        {
+                            LightningChained?.Invoke(new CombatChainLightningEvent(
+                                origin: tile,
+                                hopCoords: waterCluster,
+                                affectedUnitIds: chainUnitIds,
+                                totalDamageDealt: chainDmg,
+                                cause: string.IsNullOrEmpty(cause) ? "ElectricWater" : cause));
                         }
                     }
                 }
@@ -2843,6 +3502,432 @@ namespace RealmzCore.Combat
 
             NotifySurfaceChanges(changes);
             return totalBonusDamage;
+        }
+
+        private void InitializeDestructiblePropsFromLayout()
+        {
+            if (Grid.ArenaLayout == null)
+            {
+                return;
+            }
+
+            IReadOnlyList<CombatArenaFeature> features = Grid.ArenaLayout.Features;
+            for (int i = 0; i < features.Count; i++)
+            {
+                CombatArenaFeature f = features[i];
+                if (f.ObstacleKind == CombatArenaObstacleKind.OilKegCluster ||
+                    f.ObstacleKind == CombatArenaObstacleKind.BarrelsCrates ||
+                    f.ObstacleKind == CombatArenaObstacleKind.HayBale ||
+                    f.ObstacleKind == CombatArenaObstacleKind.LitBrazier)
+                {
+                    string propId = $"prop_{f.ObstacleKind}_{f.X}_{f.Y}";
+                    AddDestructiblePropInternal(propId, new GridCoord(f.X, f.Y), f.ObstacleKind, syncGridCell: false);
+                }
+            }
+        }
+
+        private CombatDestructibleProp AddDestructiblePropInternal(
+            string propId,
+            GridCoord coord,
+            CombatArenaObstacleKind kind,
+            bool syncGridCell)
+        {
+            if (string.IsNullOrWhiteSpace(propId))
+            {
+                throw new ArgumentException("Prop ID cannot be empty.", nameof(propId));
+            }
+
+            for (int i = _destructibleProps.Count - 1; i >= 0; i--)
+            {
+                CombatDestructibleProp existing = _destructibleProps[i];
+                if (string.Equals(existing.PropId, propId, StringComparison.Ordinal) ||
+                    (!existing.IsDestroyed && existing.Coord == coord))
+                {
+                    _destructiblePropsById.Remove(existing.PropId);
+                    _destructibleProps.RemoveAt(i);
+                }
+            }
+
+            int maxHp;
+            bool isExplosiveOil = false;
+            bool isFlammable = false;
+            bool isLightSource = false;
+
+            switch (kind)
+            {
+                case CombatArenaObstacleKind.OilKegCluster:
+                    maxHp = 1;
+                    isExplosiveOil = true;
+                    isFlammable = true;
+                    break;
+                case CombatArenaObstacleKind.HayBale:
+                    maxHp = 4;
+                    isFlammable = true;
+                    break;
+                case CombatArenaObstacleKind.LitBrazier:
+                    maxHp = 9999;
+                    isLightSource = true;
+                    break;
+                case CombatArenaObstacleKind.BarrelsCrates:
+                default:
+                    maxHp = 4;
+                    break;
+            }
+
+            CombatDestructibleProp prop = new CombatDestructibleProp(
+                propId,
+                coord,
+                kind,
+                maxHp,
+                isExplosiveOil,
+                isFlammable,
+                isLightSource);
+            _destructibleProps.Add(prop);
+            _destructiblePropsById[propId] = prop;
+
+            if (syncGridCell)
+            {
+                SyncPropCellOnGrid(prop);
+            }
+
+            return prop;
+        }
+
+        private void SyncPropCellOnGrid(CombatDestructibleProp prop)
+        {
+            if (!Grid.TryGetCell(prop.Coord.X, prop.Coord.Y, out CombatGridCell? cell) || cell == null)
+            {
+                return;
+            }
+
+            switch (prop.ObstacleKind)
+            {
+                case CombatArenaObstacleKind.OilKegCluster:
+                    cell.IsBlocked = true;
+                    cell.BlocksLos = false;
+                    cell.ProvidesCover = true;
+                    break;
+                case CombatArenaObstacleKind.LitBrazier:
+                    cell.IsBlocked = true;
+                    cell.BlocksLos = false;
+                    cell.ProvidesCover = false;
+                    break;
+                case CombatArenaObstacleKind.BarrelsCrates:
+                case CombatArenaObstacleKind.HayBale:
+                    cell.IsBlocked = false;
+                    cell.BlocksLos = false;
+                    cell.ProvidesCover = true;
+                    cell.MoveCost = Math.Max(cell.MoveCost, 2);
+                    break;
+            }
+        }
+
+        private void ExtinguishLitBrazier(CombatDestructibleProp brazier, string cause)
+        {
+            brazier.IsLightSource = false;
+            List<SurfaceChangeEvent> changes = new List<SurfaceChangeEvent>();
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    GridCoord tile = new GridCoord(brazier.Coord.X + dx, brazier.Coord.Y + dy);
+                    if (!Grid.TryGetCell(tile.X, tile.Y, out CombatGridCell? cell) || cell == null)
+                    {
+                        continue;
+                    }
+
+                    if (tile != brazier.Coord && cell.IsBlocked)
+                    {
+                        continue;
+                    }
+
+                    if (cell.Surface == SurfaceType.None || cell.Surface == SurfaceType.Fire)
+                    {
+                        cell.BaseSurface = SurfaceType.None;
+                        RecordSurfaceChange(cell, SurfaceType.SteamCloud, 2, "BrazierExtinguished", changes);
+                    }
+                }
+            }
+
+            NotifySurfaceChanges(changes);
+            AppendLog("system", "Environment", "BrazierExtinguished",
+                $"{brazier.PropId} at {brazier.Coord} is extinguished by {cause}, releasing a SteamCloud!");
+        }
+
+        private int DetonateOilKeg(
+            CombatDestructibleProp keg,
+            bool isChainReaction,
+            string cause,
+            string? attackerId = null,
+            HashSet<string>? visitedProps = null,
+            HashSet<GridCoord>? visitedOilTiles = null)
+        {
+            visitedProps ??= new HashSet<string>(StringComparer.Ordinal);
+            visitedOilTiles ??= new HashSet<GridCoord>();
+            if (!visitedProps.Add(keg.PropId))
+            {
+                return 0;
+            }
+
+            keg.Hp = 0;
+            keg.IsDestroyed = true;
+            Grid.ClearCellObstacle(keg.Coord.X, keg.Coord.Y, Grid.GetElevation(keg.Coord), moveCost: 1);
+
+            GridCoord origin = keg.Coord;
+            List<GridCoord> affectedTiles = new List<GridCoord>(9);
+            List<GridCoord> oilSeeds = new List<GridCoord>();
+            List<SurfaceChangeEvent> changes = new List<SurfaceChangeEvent>();
+
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    GridCoord tile = new GridCoord(origin.X + dx, origin.Y + dy);
+                    if (!Grid.InBounds(tile) || Grid.BlocksLos(tile.X, tile.Y))
+                    {
+                        continue;
+                    }
+
+                    if (tile != origin)
+                    {
+                        LosResult blastLos = CheckLineOfSight(origin, tile, includeSteamObscuration: false);
+                        if (blastLos.Kind == LosKind.Blocked)
+                        {
+                            continue;
+                        }
+                    }
+
+                    affectedTiles.Add(tile);
+                    if (Grid.TryGetCell(tile.X, tile.Y, out CombatGridCell? cell) && cell != null)
+                    {
+                        if (cell.Surface == SurfaceType.Oil)
+                        {
+                            oilSeeds.Add(tile);
+                        }
+
+                        if (!cell.IsBlocked)
+                        {
+                            cell.BaseSurface = SurfaceType.None;
+                            RecordSurfaceChange(cell, SurfaceType.Fire, 2, "OilKegExplosion", changes);
+                        }
+                    }
+                }
+            }
+
+            CombatantState? attacker = !string.IsNullOrWhiteSpace(attackerId) ? GetCombatant(attackerId!) : null;
+            List<string> affectedUnitIds = new List<string>();
+            int totalBlastDamage = 0;
+
+            for (int i = 0; i < affectedTiles.Count; i++)
+            {
+                CombatantState? unit = GetLivingUnitAt(affectedTiles[i]);
+                if (unit == null)
+                {
+                    continue;
+                }
+
+                if (IsImmuneToElement(unit, ElementKind.Heat))
+                {
+                    affectedUnitIds.Add(unit.Id);
+                    continue;
+                }
+
+                int dmg = Math.Max(1, DiceSpec.Parse("2d6").Roll(Roller));
+                int saveChance = Math.Clamp(
+                    ((unit.EffectiveDexterity - 10) * 3) + (unit.Saves.Count > 0 ? unit.Saves[0] : 0),
+                    5,
+                    75);
+                if (Roller.NextInt(1, 101) <= saveChance)
+                {
+                    dmg = Math.Max(1, dmg / 2);
+                }
+
+                if (unit.Conditions.Has(CharConditionId.FireProtection))
+                {
+                    dmg = Math.Max(1, dmg / 2);
+                }
+
+                bool wasAlive = unit.IsAlive;
+                unit.Hp = Math.Max(0, unit.Hp - dmg);
+                totalBlastDamage += dmg;
+                affectedUnitIds.Add(unit.Id);
+                if (attacker != null)
+                {
+                    attacker.CombatDamageDealt += dmg;
+                    if (wasAlive && !unit.IsAlive)
+                    {
+                        attacker.CombatKills++;
+                    }
+                }
+            }
+
+            if (!IsCombatFireIlluminated)
+            {
+                IsCombatFireIlluminated = true;
+                OnArenaIlluminationChanged?.Invoke(IsArenaIlluminated);
+            }
+
+            AppendLog(
+                attackerId ?? "system",
+                attacker?.Name ?? "Environment",
+                "OilKegExplosion",
+                $"OilKegCluster at {origin} detonates ({cause}) for {totalBlastDamage} total Heat damage!",
+                affectedUnitIds,
+                damageDealt: totalBlastDamage);
+
+            PropDetonated?.Invoke(new CombatExplosionEvent(
+                keg.PropId,
+                origin,
+                affectedTiles,
+                affectedUnitIds,
+                totalBlastDamage,
+                radius: 1,
+                isChainReaction: isChainReaction,
+                cause: cause));
+
+            // Chain contiguous Oil pools touched by the blast
+            List<GridCoord> ignitedOilCoords = new List<GridCoord>();
+            for (int s = 0; s < oilSeeds.Count; s++)
+            {
+                GridCoord seed = oilSeeds[s];
+                if (visitedOilTiles.Contains(seed))
+                {
+                    continue;
+                }
+
+                List<GridCoord> pool = CollectContiguousSurfaceWithVisited(seed, SurfaceType.Oil, visitedOilTiles);
+                for (int p = 0; p < pool.Count; p++)
+                {
+                    GridCoord oc = pool[p];
+                    ignitedOilCoords.Add(oc);
+                    CombatGridCell oilCell = Grid.GetCell(oc);
+                    oilCell.BaseSurface = SurfaceType.None;
+                    RecordSurfaceChange(oilCell, SurfaceType.Fire, 2, "OilChainIgnited", changes);
+
+                    CombatantState? victim = GetLivingUnitAt(oc);
+                    if (victim != null && !affectedUnitIds.Contains(victim.Id))
+                    {
+                        int burst = RollElementalDamage(victim, "1d6", ElementKind.Heat);
+                        totalBlastDamage += burst;
+                        if (attacker != null)
+                        {
+                            attacker.CombatDamageDealt += burst;
+                        }
+                    }
+                }
+            }
+
+            NotifySurfaceChanges(changes);
+
+            // Chain adjacent OilKegCluster and HayBale props (either adjacent to origin or adjacent to ignited oil pool)
+            List<CombatDestructibleProp> chainKegs = new List<CombatDestructibleProp>();
+            List<CombatDestructibleProp> chainHays = new List<CombatDestructibleProp>();
+            for (int i = 0; i < _destructibleProps.Count; i++)
+            {
+                CombatDestructibleProp other = _destructibleProps[i];
+                if (other.IsDestroyed || visitedProps.Contains(other.PropId))
+                {
+                    continue;
+                }
+
+                bool touched = other.Coord.ChebyshevDistance(origin) <= 1;
+                if (!touched)
+                {
+                    for (int o = 0; o < ignitedOilCoords.Count; o++)
+                    {
+                        if (other.Coord.ChebyshevDistance(ignitedOilCoords[o]) <= 1)
+                        {
+                            touched = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!touched)
+                {
+                    continue;
+                }
+
+                if (other.IsExplosiveOil)
+                {
+                    chainKegs.Add(other);
+                }
+                else if (other.IsFlammable)
+                {
+                    chainHays.Add(other);
+                }
+            }
+
+            for (int i = 0; i < chainHays.Count; i++)
+            {
+                if (!chainHays[i].IsDestroyed)
+                {
+                    DamageDestructibleProp(chainHays[i].PropId, chainHays[i].MaxHp, "Heat", attackerId);
+                }
+            }
+
+            for (int i = 0; i < chainKegs.Count; i++)
+            {
+                if (!chainKegs[i].IsDestroyed)
+                {
+                    totalBlastDamage += DetonateOilKeg(
+                        chainKegs[i],
+                        isChainReaction: true,
+                        cause: $"ChainFrom:{keg.PropId}",
+                        attackerId: attackerId,
+                        visitedProps: visitedProps,
+                        visitedOilTiles: visitedOilTiles);
+                }
+            }
+
+            return totalBlastDamage;
+        }
+
+        private List<GridCoord> CollectContiguousSurfaceWithVisited(
+            GridCoord seed,
+            SurfaceType targetSurface,
+            HashSet<GridCoord> globalVisited)
+        {
+            List<GridCoord> cluster = new List<GridCoord>();
+            if (!Grid.InBounds(seed) || !globalVisited.Add(seed))
+            {
+                return cluster;
+            }
+
+            Queue<GridCoord> queue = new Queue<GridCoord>();
+            queue.Enqueue(seed);
+
+            while (queue.Count > 0)
+            {
+                GridCoord cur = queue.Dequeue();
+                cluster.Add(cur);
+
+                for (int dy = -1; dy <= 1; dy++)
+                {
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        if (dx == 0 && dy == 0)
+                        {
+                            continue;
+                        }
+
+                        GridCoord next = new GridCoord(cur.X + dx, cur.Y + dy);
+                        if (!Grid.InBounds(next) || globalVisited.Contains(next))
+                        {
+                            continue;
+                        }
+
+                        CombatGridCell cell = Grid.GetCell(next);
+                        if (!cell.IsBlocked && cell.Surface == targetSurface)
+                        {
+                            globalVisited.Add(next);
+                            queue.Enqueue(next);
+                        }
+                    }
+                }
+            }
+
+            return cluster;
         }
 
         private List<GridCoord> CollectContiguousSurface(GridCoord seed, SurfaceType targetSurface)

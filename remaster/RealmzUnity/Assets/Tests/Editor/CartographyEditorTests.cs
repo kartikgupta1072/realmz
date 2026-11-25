@@ -1181,7 +1181,7 @@ namespace Realmz.EditorTests
                     Assert.That(verifiedObstacles, Is.GreaterThanOrEqualTo(3), $"{archetype} must render >= 3 visible 3D tactical obstacles.");
                     Assert.That(verifiedElevatedTiles, Is.GreaterThanOrEqualTo(2), $"{archetype} must render >= 2 elevated High Ground tiles.");
 
-                    // Verify active surface quads match grid active surface count and remain visible above ShallowWaterPlane
+                    // Verify active surface quads match grid active surface count and river bathymetry vs overlay height
                     IReadOnlyList<CombatGridCell> surfaces = grid.GetActiveSurfaceCells();
                     List<CombatGridCell> worldSurfaces = new List<CombatGridCell>(surfaces.Count);
                     for (int s = 0; s < surfaces.Count; s++)
@@ -1189,9 +1189,19 @@ namespace Realmz.EditorTests
                         CombatGridCell src = surfaces[s];
                         int wx = originX + src.X;
                         int wy = originY + src.Y;
-                        Assert.That(renderer.GetTileElevation(wx, wy) + 0.085f,
-                            Is.GreaterThanOrEqualTo(CartographyWorldData.TileMapWaterSurfaceElevation + 0.02f),
-                            $"{archetype} surface at ({wx},{wy}) must sit above water plane.");
+                        bool isRiverWater = src.Surface == SurfaceType.Water && cw.GetTile(wx, wy).IsWater;
+                        if (isRiverWater)
+                        {
+                            Assert.That(renderer.GetTileElevation(wx, wy), Is.LessThanOrEqualTo(-0.20f),
+                                $"{archetype} water tile at ({wx},{wy}) must preserve sunken river bathymetry <= -0.20f.");
+                        }
+                        else
+                        {
+                            float overlayElev = Mathf.Max(renderer.GetTileElevation(wx, wy), CartographyWorldData.TileMapWaterSurfaceElevation) + 0.025f;
+                            Assert.That(overlayElev,
+                                Is.GreaterThanOrEqualTo(CartographyWorldData.TileMapWaterSurfaceElevation + 0.02f),
+                                $"{archetype} surface {src.Surface} at ({wx},{wy}) must sit above water plane.");
+                        }
                         CombatGrid dummyGrid = new CombatGrid(originX + src.X + 1, originY + src.Y + 1);
                         dummyGrid.SetSurface(wx, wy, src.Surface, src.SurfaceRoundsRemaining);
                         worldSurfaces.Add(dummyGrid.GetCell(wx, wy));
@@ -1249,6 +1259,231 @@ namespace Realmz.EditorTests
         {
             int idx = shader.FindPropertyIndex(propertyName);
             Assert.That(idx, Is.GreaterThanOrEqualTo(0), $"Shader '{shader.name}' missing required property '{propertyName}'.");
+        }
+
+        [Test]
+        public void Stage2_ShaderFlipX_30PropMaterialsNormals_4fSprites_AndFlatDecalPivots_VerifyCleanly()
+        {
+            Shader billboardShader = Shader.Find("Realmz/CartographyBillboard");
+            Assert.That(billboardShader, Is.Not.Null);
+            Assert.That(ShaderUtil.ShaderHasError(billboardShader), Is.False);
+            AssertShaderHasProperty(billboardShader, "_FlipX");
+
+            string shaderText = File.ReadAllText(Path.GetFullPath("Assets/Shaders/CartographyBillboard.shader"));
+            Assert.That(shaderText, Does.Contain("localUV.x = 1.0 - localUV.x;"),
+                "CartographyBillboard.shader must flip UV X when _FlipX > 0.5.");
+            Assert.That(shaderText, Does.Contain("normalTS.x = -normalTS.x;"),
+                "CartographyBillboard.shader must negate tangent normalTS.x when _FlipX > 0.5.");
+
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            Assert.That(catalog, Is.Not.Null, "BywaterAssetCatalog missing.");
+
+            CartographyPropKind[] stage2Kinds =
+            {
+                CartographyPropKind.BoulderMossA,
+                CartographyPropKind.BoulderMossB,
+                CartographyPropKind.BoulderMossC,
+                CartographyPropKind.FallenHollowLog,
+                CartographyPropKind.GnarledDeadTree,
+                CartographyPropKind.ThornBrambleThicket,
+                CartographyPropKind.RuinedWallCorner,
+                CartographyPropKind.BrokenArchway,
+                CartographyPropKind.RubblePileA,
+                CartographyPropKind.RubblePileB,
+                CartographyPropKind.FallenStatue,
+                CartographyPropKind.RuneObelisk4f,
+                CartographyPropKind.BonePile,
+                CartographyPropKind.IronCage,
+                CartographyPropKind.DungeonFloorGrateRusted,
+                CartographyPropKind.PalisadeStakes,
+                CartographyPropKind.CartWreck,
+                CartographyPropKind.HayBale,
+                CartographyPropKind.OilKegCluster,
+                CartographyPropKind.TownNoticeBoard,
+                CartographyPropKind.TownLanternPost4f,
+                CartographyPropKind.WoodenPlankBridge,
+                CartographyPropKind.RiverReeds4f,
+                CartographyPropKind.DriftwoodSnag,
+                CartographyPropKind.HalfSunkRowboat,
+                CartographyPropKind.DecalMossSkirt,
+                CartographyPropKind.DecalPebbles,
+                CartographyPropKind.DecalFallenLeaves,
+                CartographyPropKind.DecalCrackedStone,
+                CartographyPropKind.DecalShoreFoam
+            };
+
+            Assert.That(stage2Kinds.Length, Is.EqualTo(30));
+            for (int i = 0; i < stage2Kinds.Length; i++)
+            {
+                CartographyPropKind kind = stage2Kinds[i];
+                Material mat = catalog.GetCartographyPropMaterial(kind);
+                Assert.That(mat, Is.Not.Null, $"Missing catalog prop material for Stage 2 kind {kind}.");
+
+                Texture baseTex = mat.HasProperty("_BaseMap") ? mat.GetTexture("_BaseMap") : mat.mainTexture;
+                Texture bumpTex = mat.HasProperty("_BumpMap") ? mat.GetTexture("_BumpMap") : null;
+                Assert.That(baseTex, Is.Not.Null, $"Material for {kind} is missing _BaseMap texture.");
+                Assert.That(bumpTex, Is.Not.Null, $"Material for {kind} is missing _BumpMap normal texture.");
+            }
+
+            string[] animated4fPaths =
+            {
+                "Assets/Art/Cartography/Props/rune_obelisk_4f.png",
+                "Assets/Art/Cartography/Props/town_lantern_post_4f.png",
+                "Assets/Art/Cartography/Props/river_reeds_4f.png"
+            };
+            for (int i = 0; i < animated4fPaths.Length; i++)
+            {
+                string path = animated4fPaths[i];
+                TextureImporter imp = AssetImporter.GetAtPath(path) as TextureImporter;
+                Assert.That(imp, Is.Not.Null, $"Missing TextureImporter at {path}.");
+                Assert.That(imp.spriteImportMode, Is.EqualTo(SpriteImportMode.Multiple), $"{path} must use Multiple sprite mode.");
+                Assert.That(imp.filterMode, Is.EqualTo(FilterMode.Point), $"{path} must use Point filterMode.");
+                Sprite[] frames = CartographyAssetImporter.LoadAllSpriteFrames(path);
+                Assert.That(frames.Length, Is.EqualTo(4), $"{path} must slice to exactly 4 sprite frames.");
+            }
+
+            string[] flatDecalPaths =
+            {
+                "Assets/Art/Cartography/Props/decal_moss_skirt.png",
+                "Assets/Art/Cartography/Props/decal_pebbles.png",
+                "Assets/Art/Cartography/Props/decal_fallen_leaves.png",
+                "Assets/Art/Cartography/Props/decal_cracked_stone.png",
+                "Assets/Art/Cartography/Props/decal_shore_foam.png"
+            };
+            for (int i = 0; i < flatDecalPaths.Length; i++)
+            {
+                string path = flatDecalPaths[i];
+                Sprite decalSprite = AssetDatabase.LoadAssetAtPath<Sprite>(path);
+                Assert.That(decalSprite, Is.Not.Null, $"Missing Sprite at {path}.");
+                Vector2 normPivot = new Vector2(
+                    decalSprite.pivot.x / Mathf.Max(1f, decalSprite.rect.width),
+                    decalSprite.pivot.y / Mathf.Max(1f, decalSprite.rect.height));
+                Assert.That(normPivot.x, Is.EqualTo(0.5f).Within(0.01f), $"{path} decal pivot X must be 0.5.");
+                Assert.That(normPivot.y, Is.EqualTo(0.5f).Within(0.01f), $"{path} decal pivot Y must be 0.5.");
+            }
+        }
+
+        [Test]
+        public void Stage2_FoliageScatter_BlocksInteriorsRoadsWater_AndPlacesRootCollarTufts()
+        {
+            string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            Assert.That(catalog, Is.Not.Null);
+
+            CartographyWorldData land = CartographyWorldData.BuildFromTileMap(bundle.Land0);
+            GameObject foliageGo = new GameObject("TempStage2Foliage");
+            try
+            {
+                BywaterFoliageScatter scatter = foliageGo.AddComponent<BywaterFoliageScatter>();
+                scatter.foliageMaterial = catalog.cartographyFoliageMaterial;
+                scatter.marshFoliageMaterial = catalog.cartographyMarshFoliageMaterial;
+                scatter.RebuildScatter(land);
+
+                int verifiedBlockedTiles = 0;
+                for (int y = 0; y < land.Height; y++)
+                {
+                    for (int x = 0; x < land.Width; x++)
+                    {
+                        CartographyTile tile = land.GetTile(x, y);
+                        if (tile.BlocksFoliage || tile.IsWater || tile.BiomeZone == CartographyBiomeZone.Blocked)
+                        {
+                            verifiedBlockedTiles++;
+                            Assert.That(scatter.GetTileCardCount(x, y), Is.EqualTo(0),
+                                $"Tile ({x},{y}) with BlocksFoliage/Water/Blocked must have 0 scattered foliage cards.");
+                        }
+                    }
+                }
+
+                Assert.That(verifiedBlockedTiles, Is.GreaterThan(100));
+                Assert.That(scatter.RootCollarCardCount, Is.GreaterThan(0),
+                    "Expected natural RootCollar foliage tufts placed around ForestClearing and town perimeter trees.");
+
+                int collarCapableTrees = 0;
+                for (int i = 0; i < land.Props.Count; i++)
+                {
+                    if (land.Props[i].HasRootCollar)
+                    {
+                        collarCapableTrees++;
+                    }
+                }
+                Assert.That(collarCapableTrees, Is.GreaterThan(0));
+            }
+            finally
+            {
+                Object.DestroyImmediate(foliageGo);
+            }
+        }
+
+        [Test]
+        public void Stage2_RiverbankCrossing_ContinuousBathymetry_KeepsWaterSunkenBeneathBridgePlanks()
+        {
+            string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            Assert.That(catalog, Is.Not.Null);
+
+            GridCoord[] heroSpawns = { new GridCoord(2, 4), new GridCoord(1, 5), new GridCoord(3, 5) };
+            GridCoord[] enemySpawns = { new GridCoord(7, 4), new GridCoord(8, 5), new GridCoord(7, 6) };
+            HashSet<GridCoord> reserved = new HashSet<GridCoord>(heroSpawns);
+            for (int i = 0; i < enemySpawns.Length; i++) reserved.Add(enemySpawns[i]);
+
+            CombatGrid grid = new CombatGrid(12, 10);
+            CombatArenaLayout layout = EncounterDirector.ApplyArenaArchetype(
+                grid,
+                CombatArenaArchetype.RiverbankCrossing,
+                reserved,
+                new DeterministicDiceRoller(555UL),
+                geo: null);
+
+            GameObject worldGo = new GameObject("TempRiverBathymetryWorld");
+            try
+            {
+                BywaterWorldRenderer renderer = worldGo.AddComponent<BywaterWorldRenderer>();
+                renderer.Initialize(catalog);
+                const int originX = 50;
+                const int originY = 58;
+                renderer.RenderMap(bundle.Land0, new GridCoord(originX + 6, originY + 5), forceRebuild: true);
+                renderer.ApplyCombatArenaVisuals(bundle.Land0, originX, originY, grid);
+
+                CartographyWorldData cw = renderer.CartographyData;
+                Assert.That(cw, Is.Not.Null);
+
+                int sunkenWaterTiles = 0;
+                int bridgeTiles = 0;
+                for (int ly = 0; ly < grid.Height; ly++)
+                {
+                    for (int lx = 0; lx < grid.Width; lx++)
+                    {
+                        int wx = originX + lx;
+                        int wy = originY + ly;
+                        CartographyTile tile = cw.GetTile(wx, wy);
+                        CombatArenaFeature feat = layout.GetFeatureAt(lx, ly);
+
+                        if (tile.IsWater)
+                        {
+                            sunkenWaterTiles++;
+                            Assert.That(renderer.GetTileElevation(wx, wy), Is.LessThanOrEqualTo(-0.20f),
+                                $"RiverbankCrossing water tile ({wx},{wy}) must stay sunken <= -0.20f.");
+                        }
+
+                        if (feat != null && feat.IsBridgeTile)
+                        {
+                            bridgeTiles++;
+                            Assert.That(renderer.GetTileElevation(wx, wy),
+                                Is.GreaterThanOrEqualTo(CartographyWorldData.BridgeElevation - 0.001f),
+                                $"Bridge plank tile ({wx},{wy}) must sit at BridgeElevation above sunken river channel.");
+                        }
+                    }
+                }
+
+                Assert.That(sunkenWaterTiles, Is.GreaterThanOrEqualTo(4), "Expected >= 4 sunken water channel tiles in RiverbankCrossing.");
+                Assert.That(bridgeTiles, Is.GreaterThanOrEqualTo(2), "Expected >= 2 walkable bridge tiles in RiverbankCrossing.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(worldGo);
+            }
         }
     }
 }
