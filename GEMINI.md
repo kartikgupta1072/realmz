@@ -55,3 +55,13 @@ You are working inside Kartik Gupta's dedicated gamedev workspace for **Realmz H
   - `realmz-core-sync`: Pure `RealmzCore` build, unit test, and Unity plugin DLL sync workflow.
   - `realmz-visual-qa`: In-engine proof capture (`REALMZ_CAPTURE_PROOFS=1`) and 5-pillar Art Director visual inspection.
   - `realmz-art-pipeline`: `64 px/m` Cartography and `realmz-foundry` staging, normal-map, and import verification workflow.
+  - `realmz-delegation`: Sub-worker lane routing (`invoke_subagent` / `run_workflow`) and local GPU offload (`remaster/dev.ps1 local-ai`).
+
+---
+
+## 5. Sub-Worker Delegation & Local GPU Routing
+
+- **Lead-Architect -> Fast-Worker Fan-Out:** Keep architecture, HLSL/rendering math, game-feel/UX tuning, diff review, and final Art Director sign-off on the lead model; delegate multi-track work across disjoint lanes (`Core`, `Unity`, `Exporter/Art`, `Research`) via `invoke_subagent` (`Model="flash"` or `"flash_lite"` for bounded edits/lookups) or `run_workflow` for 4+ parallel targets. Skip delegation for trivial `<= 10`-line single-file edits.
+- **Unity Single-Lock Invariant:** Only one worker owns `Unity.exe` batchmode (`unity-tests`, `proof`, `build`) at a time; run `dev.ps1 sync-core` before the Unity lane verifies.
+- **Local GPU Offload (`remaster/dev.ps1 local-ai`):** Route large log triage (`log-triage`), batch screenshot/sprite screening (`vision-qa` via `qwen2.5vl:3b`), long C90/doc summaries (`summarize`), and flavor text drafts (`draft-content`) to local Ollama (`127.0.0.1:11434`) first, and use `local-ai web-research` for Unity/URP docs.
+- **8 GB RTX 5060 Ti VRAM Discipline:** Single calls use `keep_alive: 0`; always run `remaster/dev.ps1 local-ai evict` before ComfyUI, Blender, Hunyuan3D, or Unity GPU captures, and still inspect final proof PNGs directly with `read_file`.

@@ -32,7 +32,11 @@ For isolated shader/foliage/water iteration via `CartographyCaptureTools.BatchCa
 
 ## Inspection Protocol
 
-1. List captured PNGs in `C:\Users\karti\realmz\.scratch\proofs\` and open every relevant screenshot using `read_file`.
-2. Score all 5 pillars in [art-director-rubric.md](./references/art-director-rubric.md) (`Terrain & Cliffs`, `Props & Ground Integration`, `Characters & Scale`, `Lighting & Atmosphere`, `UI Typography & Readability`).
-3. Classify any visual issue as **P0** (broken geometry, skybox cracks, unreadable water/fog, alpha holes), **P1** (text clipping, wrong role tags, noisy grid stamps, glare/tint mismatch), or **P2** (minor margin/occlusion polish).
-4. Do not claim Grade-A visual sign-off until zero P0 and zero P1 defects remain in freshly captured proofs.
+1. **(Optional Batch Pre-Screen) Local Vision QA:** For large screenshot batches, run a fast local pre-screen via `qwen2.5vl:3b` (auto-evicts VRAM when done):
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File C:\Users\karti\realmz\remaster\dev.ps1 local-ai vision-qa C:\Users\karti\realmz\.scratch\proofs --mode proof --json
+   ```
+2. List captured PNGs in `C:\Users\karti\realmz\.scratch\proofs\` and open every relevant screenshot directly using `read_file` for final Art Director sign-off.
+3. Score all 5 pillars in [art-director-rubric.md](./references/art-director-rubric.md) (`Terrain & Cliffs`, `Props & Ground Integration`, `Characters & Scale`, `Lighting & Atmosphere`, `UI Typography & Readability`).
+4. Classify any visual issue as **P0** (broken geometry, skybox cracks, unreadable water/fog, alpha holes), **P1** (text clipping, wrong role tags, noisy grid stamps, glare/tint mismatch), or **P2** (minor margin/occlusion polish).
+5. Do not claim Grade-A visual sign-off until zero P0 and zero P1 defects remain in freshly captured proofs.

@@ -1,12 +1,13 @@
-[CmdletBinding()]
 param(
     [Parameter(Position = 0)]
     [string]$Command = "help",
-    [ValidateSet("EditMode", "PlayMode", "All")]
-    [string]$Mode = "All",
-    [switch]$CaptureProofs,
-    [string]$Filter = ""
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$Rest
 )
+
+$Mode = "All"
+$CaptureProofs = $false
+$Filter = ""
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -23,6 +24,7 @@ $ScratchDir = Join-Path $RepoRoot ".scratch"
 $RunsDir = Join-Path $ScratchDir "runs"
 $ProofsDir = Join-Path $ScratchDir "proofs"
 $BuildExe = Join-Path $RemasterRoot "builds\Realmz_M1\Realmz.exe"
+$LocalAiScript = Join-Path $RemasterRoot "scripts\realmz_local_ai.py"
 
 $DotnetExe = "C:\Users\karti\AppData\Local\Microsoft\dotnet\dotnet.exe"
 $UnityExe = "C:\Unity\Editors\6000.0.85f2\Editor\Unity.exe"
@@ -329,12 +331,8 @@ function Invoke-SyncCore {
     & $DotnetExe build $CoreCsproj -c Release
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-    & $DotnetExe test $CoreTestsCsproj -c Release --no-build
-    if ($LASTEXITCODE -ne 0) {
-        # Fallback if test project needs rebuild
-        & $DotnetExe test $CoreTestsCsproj -c Release
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    }
+    & $DotnetExe test $CoreTestsCsproj -c Release
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     Ensure-Dir (Split-Path -Parent $UnityPluginDll)
     Copy-Item -Path $CoreReleaseDll -Destination $UnityPluginDll -Force
@@ -348,10 +346,16 @@ function Invoke-SyncCore {
 }
 
 function Invoke-TestPython {
-    Write-Section "Python Tests (realmz-exporter + asset-foundry)"
+    Write-Section "Python Tests (realmz-exporter + asset-foundry + local-ai)"
     $exporterDir = Join-Path $RemasterRoot "realmz-exporter"
     & python -m unittest discover -s $exporterDir -p "test_*.py" -v
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    $scriptsDir = Join-Path $RemasterRoot "scripts"
+    if (Test-Path $scriptsDir) {
+        & python -m unittest discover -s $scriptsDir -p "test_*.py" -v
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    }
 
     $foundryTestsDir = Join-Path $RemasterRoot "asset-foundry\tests"
     if (Test-Path $FoundryVenvPy) {
@@ -361,6 +365,20 @@ function Invoke-TestPython {
         & python -m unittest discover -s $foundryTestsDir -v
     }
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+
+function Invoke-LocalAi {
+    if (-not (Test-Path $LocalAiScript)) {
+        Write-Host "[FAIL] Missing $LocalAiScript" -ForegroundColor Red
+        exit 1
+    }
+    if ($null -eq $Rest -or $Rest.Count -eq 0) {
+        & python $LocalAiScript --help
+    }
+    else {
+        & python $LocalAiScript @Rest
+    }
+    exit $LASTEXITCODE
 }
 
 function Invoke-UnityRecompile {
@@ -433,7 +451,36 @@ function Invoke-SingleUnityTestSuite([string]$Platform) {
     }
 }
 
+function Parse-UnityTestArgs {
+    if ($null -eq $Rest -or $Rest.Count -eq 0) {
+        return
+    }
+    for ($i = 0; $i -lt $Rest.Count; $i++) {
+        $arg = $Rest[$i]
+        switch -Regex ($arg) {
+            '^-Mode$' {
+                if ($i + 1 -ge $Rest.Count) { throw "Missing value for -Mode" }
+                $script:Mode = $Rest[++$i]
+                if (@("EditMode", "PlayMode", "All") -notcontains $script:Mode) {
+                    throw "Invalid -Mode '$($script:Mode)'. Expected EditMode, PlayMode, or All."
+                }
+            }
+            '^-CaptureProofs$' {
+                $script:CaptureProofs = $true
+            }
+            '^-Filter$' {
+                if ($i + 1 -ge $Rest.Count) { throw "Missing value for -Filter" }
+                $script:Filter = $Rest[++$i]
+            }
+            default {
+                throw "Unknown unity-tests argument: $arg"
+            }
+        }
+    }
+}
+
 function Invoke-UnityTests {
+    Parse-UnityTestArgs
     Write-Section "Unity Test Runner ($Mode)"
     if (Test-UnityEditorRunning) {
         Write-Host "[BLOCKED] Unity Editor is currently open and holds the project lock." -ForegroundColor Red
@@ -527,6 +574,7 @@ function Invoke-Help {
     Write-Host "  build            Sync RealmzCore and build Windows Standalone Realmz.exe"
     Write-Host "  smoke            Launch Realmz.exe for 8s and verify 0 Player.log errors"
     Write-Host "  test-all         Run test-fast + unity-tests -Mode All"
+    Write-Host "  local-ai         Run local Ollama/VRAM coordinator (status, evict, vision-qa, log-triage, summarize, draft-content)"
 }
 
 switch ($Command.ToLowerInvariant()) {
@@ -541,5 +589,6 @@ switch ($Command.ToLowerInvariant()) {
     "build"           { Invoke-Build }
     "smoke"           { Invoke-Smoke }
     "test-all"        { Invoke-SyncCore; Invoke-Check; Invoke-TestPython; $Mode = "All"; Invoke-UnityTests }
+    "local-ai"        { Invoke-LocalAi }
     default           { Invoke-Help }
 }
