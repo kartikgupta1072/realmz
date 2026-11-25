@@ -2451,6 +2451,9 @@ namespace Realmz.Game
             chkIcon.rectTransform.offsetMax = Vector2.zero;
 
             TextMeshProUGUI statsLbl = BywaterUiHelpers.CreateLabel(bodyCol.transform, "Stats", string.Empty, _font, 15f, new Color(0.84f, 0.88f, 0.95f, 1f), TextAlignmentOptions.MidlineLeft, wrap: false);
+            statsLbl.enableAutoSizing = true;
+            statsLbl.fontSizeMin = 9.5f;
+            statsLbl.fontSizeMax = 15f;
             statsLbl.overflowMode = TextOverflowModes.Ellipsis;
             LayoutElement statsLe = statsLbl.gameObject.AddComponent<LayoutElement>();
             statsLe.minHeight = 20f;

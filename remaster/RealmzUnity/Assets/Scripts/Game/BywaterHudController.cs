@@ -2875,10 +2875,71 @@ namespace Realmz.Game
                 return string.Empty;
             }
 
-            if (unit.SpellIds != null && unit.SpellIds.Count > 0 && unit.MaxSp > 0 &&
-                (!unit.PrefersRanged || unit.SpellIds.Count >= 2))
+            if (!string.IsNullOrWhiteSpace(unit.Role))
+            {
+                string role = unit.Role.Trim();
+                if (role.Equals("Tank", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Bruiser", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Knight", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Paladin", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Fighter", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Warrior", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Guardian", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "Tank";
+                }
+
+                if (role.Equals("Controller", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Ctrl", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Caster", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Mage", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Sorcerer", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Wizard", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Cleric", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Priest", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Shaman", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "Ctrl";
+                }
+
+                if (role.Equals("Ranged", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Rng", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Archer", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Ranger", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Marksman", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "Rng";
+                }
+
+                if (role.Equals("Skirmisher", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Skirm", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Rogue", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Scout", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Assassin", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Thief", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "Skirm";
+                }
+            }
+
+            string id = unit.Id ?? string.Empty;
+            if (id.IndexOf("knight", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                id.IndexOf("paladin", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                id.IndexOf("orc_warrior", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                unit.HasSpecialAbility("cleave_2tile"))
+            {
+                return "Tank";
+            }
+
+            if (id.IndexOf("frog", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                unit.HasSpecialAbility("tongue_pull"))
             {
                 return "Ctrl";
+            }
+
+            if (id.IndexOf("rogue", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "Skirm";
             }
 
             if (unit.PrefersRanged)
@@ -2886,12 +2947,12 @@ namespace Realmz.Game
                 return "Rng";
             }
 
-            if (unit.SpellIds != null && unit.SpellIds.Count > 0)
+            if (unit.SpellIds != null && unit.SpellIds.Count > 0 && (unit.MaxSp > 0 || unit.SpellIds.Count >= 1))
             {
                 return "Ctrl";
             }
 
-            if (unit.Ac >= 14 || unit.MaxHp >= 28)
+            if ((unit.MaxHp >= 17 && unit.Brawn >= 15) || unit.MaxHp >= 22)
             {
                 return "Tank";
             }

@@ -168,7 +168,7 @@ namespace Realmz.Cartography
         public const float TileMapWaterSurfaceElevation = -0.18f;
         public const float MudElevation = -0.05f;
         public const float PlazaElevation = 0.00f;
-        public const float CobbleElevation = 0.025f;
+        public const float CobbleElevation = PlazaElevation;
         public const float BridgeElevation = 0.10f;
         public const float HighlandElevation = 0.55f;
         public const float RidgeElevation = 0.75f;

@@ -178,17 +178,29 @@ Shader "Realmz/CartographyWater"
                 half glint = step(0.955, sparkHash) * isRippleBar * (half)_ShimmerStrength * shadowAtten;
 
                 // Dynamic pixel-dithered shoreline foam driven by baked _WorldStaticMap.g SDF proximity
-                float wavePerturb = Hash21(floor(snappedWS * 16.0)) * 0.07 + sin(snappedWS.x * 3.5 + snappedWS.y * 2.7) * 0.04;
+                float wavePerturb = Hash21(floor(snappedWS * 32.0)) * 0.025 + sin(snappedWS.x * 3.5 + snappedWS.y * 2.7) * 0.03;
                 float distToBank = (1.0 - (float)shoreProx) * 0.55 + wavePerturb;
-                float waveEdge = 0.16 + 0.05 * sin(snappedWS.x * 5.0 + snappedWS.y * 3.0 + floor(waterTime * 4.0) * 0.45);
+                float waveEdge = 0.16 + 0.04 * sin(snappedWS.x * 5.0 + snappedWS.y * 3.0 + floor(waterTime * 4.0) * 0.45);
                 float edgeNoise = Hash21(floor(snappedWS * 64.0));
-                half foam = step(distToBank + edgeNoise * 0.06, waveEdge) * 0.55h;
+                half foam = smoothstep(waveEdge + 0.045, waveEdge - 0.035, distToBank + edgeNoise * 0.05) * 0.46h;
 
-                half3 ambient = SampleSH(nWS) * lerp(0.44h, 0.28h, 1.0h - tdLm.r);
+                half3 ambientSH = SampleSH(nWS);
+                half3 ambientCloudMod = lerp(half3(1.0h, 1.0h, 1.0h), tdLm.rgb, 0.40h);
+                half3 sceneDirect = mainLight.color * (0.45h + 0.55h * ndl) * shadowAtten * tdLm.rgb;
+                half3 sceneAmbient = ambientSH * ambientCloudMod;
+                half3 waterFloor = half3(0.012h, 0.024h, 0.044h) * ambientCloudMod;
+                half ndotv = saturate(dot(nWS, viewDirWS));
+                half fresnel = saturate(0.14h + 0.26h * pow(1.0h - ndotv, 2.0h));
+                half3 skyRefl = max(ambientSH * 1.15h + mainLight.color * (0.12h * shadowAtten), half3(0.028h, 0.046h, 0.088h)) * ambientCloudMod;
                 half3 lanternPool = col * half3(1.0h, 0.62h, 0.24h) * (tdLm.a * 1.15h);
-                half3 lit = col * (mainLight.color * (0.45h + 0.55h * ndl) * shadowAtten + ambient) * tdLm.rgb + addLighting + lanternPool;
-                lit = lerp(lit, _ShimmerColor.rgb * 0.88h * tdLm.rgb, foam);
-                lit += _ShimmerColor.rgb * glint * tdLm.rgb;
+                half3 lit = col * (sceneDirect + sceneAmbient + waterFloor) + skyRefl * fresnel + addLighting + lanternPool;
+
+                half3 foamLight = (mainLight.color * (0.45h + 0.55h * ndl) * shadowAtten * 0.65h + ambientSH * 1.15h) * ambientCloudMod;
+                half3 foamColor = _ShimmerColor.rgb * max(foamLight, half3(0.05h, 0.07h, 0.12h)) + lanternPool * 0.55h;
+                lit = lerp(lit, foamColor, foam);
+
+                half3 glintLight = (mainLight.color * shadowAtten * 0.72h + ambientSH * 0.48h) * tdLm.rgb;
+                lit += _ShimmerColor.rgb * glintLight * glint;
 
                 if (_FogOfWarEnabled > 0.5 && hasBounds)
                 {

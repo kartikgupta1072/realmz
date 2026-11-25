@@ -384,23 +384,29 @@ namespace Realmz.Cartography
                 botY = eNeighbor;
             }
 
-            if (eHere <= eNeighbor + 0.03f)
+            int hereKey = Mathf.RoundToInt(eHere * 1000f);
+            int neighborKey = Mathf.RoundToInt(eNeighbor * 1000f);
+            if (hereKey <= neighborKey)
             {
                 return;
             }
 
-            Vector3 botRight = new Vector3(topRight.x, botY, topRight.z);
-            Vector3 botLeft = new Vector3(topLeft.x, botY, topLeft.z);
+            float leftDrop = ComputeCornerRimDrop(data, topLeft.x, -topLeft.z, eHere, topRimOffset * 2f);
+            float rightDrop = ComputeCornerRimDrop(data, topRight.x, -topRight.z, eHere, topRimOffset * 2f);
+            Vector3 adjTopLeft = new Vector3(topLeft.x, eHere - leftDrop, topLeft.z);
+            Vector3 adjTopRight = new Vector3(topRight.x, eHere - rightDrop, topRight.z);
+            Vector3 botRight = new Vector3(adjTopRight.x, botY, adjTopRight.z);
+            Vector3 botLeft = new Vector3(adjTopLeft.x, botY, adjTopLeft.z);
 
             Vector3 cliffNormal = (outwardDir + new Vector3(0f, 0.14f, 0f)).normalized;
-            Vector3 tangDir = (topRight - topLeft).normalized;
+            Vector3 tangDir = (adjTopRight - adjTopLeft).normalized;
             Vector4 tangent = new Vector4(tangDir.x, tangDir.y, tangDir.z, 1f);
 
             int baseIdx = verts.Count;
             verts.Add(botLeft);
             verts.Add(botRight);
-            verts.Add(topRight);
-            verts.Add(topLeft);
+            verts.Add(adjTopRight);
+            verts.Add(adjTopLeft);
 
             for (int k = 0; k < 4; k++)
             {

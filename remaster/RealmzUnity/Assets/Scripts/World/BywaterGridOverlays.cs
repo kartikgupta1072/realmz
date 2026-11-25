@@ -50,10 +50,11 @@ namespace Realmz.World
         private static readonly Color ReachableNormalColor = new Color(0.220f, 0.741f, 0.973f, 0.20f); // #38BDF8 @ 20%
         private static readonly Color ReachableAooColor = new Color(0.980f, 0.800f, 0.082f, 0.20f);    // #FACC15 @ 20%
         private static readonly Color ThreatenedColor = new Color(0.937f, 0.267f, 0.267f, 0.20f);      // #EF4444 @ 20%
-        private static readonly Color HoverPathSafeColor = new Color(1.00f, 0.95f, 0.72f, 0.76f);
-        private static readonly Color HoverPathAooColor = new Color(0.98f, 0.25f, 0.18f, 0.80f);
-        private static readonly Color ExploreReachableColor = new Color(0.22f, 0.86f, 0.64f, 0.78f);
-        private static readonly Color ExploreBlockedColor = new Color(0.88f, 0.24f, 0.22f, 0.78f);
+        private static readonly Color HoverPathSafeColor = new Color(0.220f, 0.741f, 0.973f, 0.56f);
+        private static readonly Color HoverPathGoldColor = new Color(0.980f, 0.800f, 0.082f, 0.62f);
+        private static readonly Color HoverPathAooColor = new Color(0.98f, 0.25f, 0.18f, 0.66f);
+        private static readonly Color ExploreReachableColor = new Color(0.22f, 0.86f, 0.64f, 0.58f);
+        private static readonly Color ExploreBlockedColor = new Color(0.88f, 0.24f, 0.22f, 0.64f);
         private static readonly Color LosClearColor = new Color(0.18f, 0.85f, 0.48f, 0.72f);
         private static readonly Color LosPartialColor = new Color(0.96f, 0.72f, 0.16f, 0.74f);
         private static readonly Color LosBlockedColor = new Color(0.95f, 0.22f, 0.22f, 0.78f);
@@ -192,6 +193,8 @@ namespace Realmz.World
         private Texture2D _intentThreatRingTexture;
         private Material _bracketMaterial;
         private Texture2D _cornerBracketTexture;
+        private Material _pathDotMaterial;
+        private Texture2D _pathDotTexture;
         private Material _aoeFillMaterial;
         private Texture2D _outlineFillTexture;
         private Material _fallbackOverlayMaterial;
@@ -325,6 +328,10 @@ namespace Realmz.World
             _bracketMaterial = null;
             DestroySafe(_cornerBracketTexture);
             _cornerBracketTexture = null;
+            DestroySafe(_pathDotMaterial);
+            _pathDotMaterial = null;
+            DestroySafe(_pathDotTexture);
+            _pathDotTexture = null;
 
             DestroySafe(_aoeFillMaterial);
             _aoeFillMaterial = null;
@@ -752,7 +759,15 @@ namespace Realmz.World
                     }
 
                     float y = GetTileElevation(step.X, step.Y) + 0.025f + 0.008f;
-                    PlaceQuadWithBaseColor(_exploreHoverLayer, step.X + 0.5f, y, -(step.Y + 0.5f), 0.34f, 0.34f, baseColor, fadedColor);
+                    PlaceCustomQuadWithBaseColor(
+                        _exploreHoverLayer,
+                        new Vector3(step.X + 0.5f, y, -(step.Y + 0.5f)),
+                        0.24f,
+                        0.24f,
+                        0f,
+                        GetOrCreatePathDotMaterial(),
+                        baseColor,
+                        fadedColor);
                 }
             }
 
@@ -1028,7 +1043,8 @@ namespace Realmz.World
 
             if (path != null)
             {
-                Color color = provokesAoO ? HoverPathAooColor : HoverPathSafeColor;
+                Material dotMat = GetOrCreatePathDotMaterial();
+                Material bracketMat = GetOrCreateBracketMaterial();
                 TMPro.TMP_FontAsset font = _catalog != null ? _catalog.uiFont : null;
 
                 for (int i = 0; i < path.Count; i++)
@@ -1036,11 +1052,41 @@ namespace Realmz.World
                     GridCoord step = path[i];
                     float elev = GetTileElevation(step.X, step.Y);
                     float y = elev + 0.025f + 0.010f;
-                    PlaceQuad(_combatHoverLayer, step.X + 0.5f, y, -(step.Y + 0.5f), 0.42f, 0.42f, color);
 
                     int stepCost = (stepApCosts != null && i < stepApCosts.Count)
                         ? Mathf.Max(0, stepApCosts[i])
                         : InferStepApCost(path, i);
+
+                    bool isDestination = i == path.Count - 1;
+                    bool highCostOrAoo = stepCost >= 2 || (provokesAoO && isDestination);
+                    Color dotColor = provokesAoO
+                        ? HoverPathAooColor
+                        : (highCostOrAoo ? HoverPathGoldColor : HoverPathSafeColor);
+                    float dotSize = isDestination ? 0.30f : 0.22f;
+
+                    PlaceCustomQuadWithBaseColor(
+                        _combatHoverLayer,
+                        new Vector3(step.X + 0.5f, y, -(step.Y + 0.5f)),
+                        dotSize,
+                        dotSize,
+                        0f,
+                        dotMat,
+                        dotColor,
+                        dotColor);
+
+                    if (isDestination)
+                    {
+                        Color bracketColor = ScaleAlpha(dotColor, 0.65f);
+                        PlaceCustomQuadWithBaseColor(
+                            _combatHoverLayer,
+                            new Vector3(step.X + 0.5f, y + 0.001f, -(step.Y + 0.5f)),
+                            0.92f,
+                            0.92f,
+                            0f,
+                            bracketMat,
+                            bracketColor,
+                            bracketColor);
+                    }
 
                     if (stepCost > 0 && activePips < MaxHoverPathPips)
                     {
@@ -1052,7 +1098,6 @@ namespace Realmz.World
                         }
 
                         pip.Label.text = stepCost == 1 ? "1 AP" : (stepCost == 2 ? "2 AP" : stepCost + " AP");
-                        bool highCostOrAoo = stepCost >= 2 || (provokesAoO && i == path.Count - 1);
                         Color accent = highCostOrAoo
                             ? new Color(0.980f, 0.800f, 0.082f, 0.96f)
                             : new Color(0.220f, 0.741f, 0.973f, 0.96f);
@@ -1732,6 +1777,18 @@ namespace Realmz.World
             return _bracketMaterial;
         }
 
+        private Material GetOrCreatePathDotMaterial()
+        {
+            if (_pathDotMaterial != null)
+            {
+                return _pathDotMaterial;
+            }
+
+            _pathDotTexture = BuildPathDotTexture();
+            _pathDotMaterial = CreateTransparentOverlayMaterial("GridPathDot", _pathDotTexture, Color.white);
+            return _pathDotMaterial;
+        }
+
         private Material GetOrCreateAoeFillMaterial()
         {
             if (_aoeFillMaterial != null)
@@ -2000,6 +2057,48 @@ namespace Realmz.World
 
                     bool isBracket = (inCornerX && inEdgeBandY) || (inCornerY && inEdgeBandX);
                     pixels[y * size + x] = isBracket ? bracket : clear;
+                }
+            }
+
+            tex.SetPixels32(pixels);
+            tex.Apply(false, false);
+            return tex;
+        }
+
+        private static Texture2D BuildPathDotTexture()
+        {
+            const int size = SurfaceTextureSize;
+            Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                name = "GridPathDotTex",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave
+            };
+
+            Color32[] pixels = new Color32[size * size];
+            float half = (size - 1) * 0.5f;
+            float invRadius = 1.0f / (size * 0.44f);
+
+            for (int y = 0; y < size; y++)
+            {
+                float dy = (y - half) * invRadius;
+                for (int x = 0; x < size; x++)
+                {
+                    float dx = (x - half) * invRadius;
+                    float dist = Mathf.Sqrt(dx * dx + dy * dy);
+                    if (dist >= 1.0f)
+                    {
+                        pixels[y * size + x] = new Color32(0, 0, 0, 0);
+                        continue;
+                    }
+
+                    // Smooth alpha edge and subtle dark outer rim framing a bright tintable interior
+                    float alpha = Mathf.Clamp01((1.0f - dist) / 0.16f);
+                    float rimT = Mathf.Clamp01((dist - 0.62f) / 0.24f);
+                    byte rgb = (byte)Mathf.RoundToInt(Mathf.Lerp(255f, 52f, rimT));
+                    byte a = (byte)Mathf.RoundToInt(alpha * 255f);
+                    pixels[y * size + x] = new Color32(rgb, rgb, rgb, a);
                 }
             }
 
