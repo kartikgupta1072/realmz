@@ -49,6 +49,15 @@ function Get-FileSha256([string]$FilePath) {
     return (Get-FileHash -Path $FilePath -Algorithm SHA256).Hash
 }
 
+function Invoke-UnityAndWait([string[]]$UnityArgs) {
+    # Unity.exe is a GUI-subsystem binary, so '&' does not wait; use Start-Process -Wait.
+    $quoted = $UnityArgs | ForEach-Object {
+        if ($_ -match '[\s"]') { '"' + ($_ -replace '"', '\"') + '"' } else { $_ }
+    }
+    $proc = Start-Process -FilePath $UnityExe -ArgumentList ($quoted -join ' ') -Wait -PassThru -NoNewWindow
+    return $proc.ExitCode
+}
+
 function Test-UnityEditorRunning {
     $procs = Get-Process -Name "Unity" -ErrorAction SilentlyContinue
     if ($null -eq $procs) {
@@ -395,9 +404,8 @@ function Invoke-SingleUnityTestSuite([string]$Platform) {
             $unityArgs += @("-testFilter", $Filter)
         }
 
-        Write-Host "Running Unity $Platform tests..."
-        & $UnityExe @unityArgs
-        $exitCode = $LASTEXITCODE
+        Write-Host "Running Unity $Platform tests (log: $logPath)..."
+        $exitCode = Invoke-UnityAndWait $unityArgs
 
         if (-not (Test-Path $xmlPath)) {
             Write-Host "[FAIL] Test results XML not generated at $xmlPath. Check log: $logPath" -ForegroundColor Red
@@ -449,17 +457,18 @@ function Invoke-Build {
     }
     Ensure-Dir $RunsDir
     $logPath = Join-Path $RunsDir "standalone_build.log"
-    & $UnityExe -batchmode -quit -projectPath $UnityProject -executeMethod "Realmz.EditorTools.RealmzM1BuildMenu.BuildWindowsStandalone" -logFile $logPath
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "[FAIL] Unity standalone build failed (exit=$LASTEXITCODE). Check $logPath" -ForegroundColor Red
-        exit $LASTEXITCODE
+    $buildExit = Invoke-UnityAndWait @("-batchmode", "-quit", "-projectPath", $UnityProject, "-executeMethod", "Realmz.EditorTools.RealmzM1BuildMenu.BuildWindowsStandalone", "-logFile", $logPath)
+    if ($buildExit -ne 0) {
+        Write-Host "[FAIL] Unity standalone build failed (exit=$buildExit). Check $logPath" -ForegroundColor Red
+        exit $buildExit
     }
     if (-not (Test-Path $BuildExe)) {
         Write-Host "[FAIL] Expected build output missing: $BuildExe" -ForegroundColor Red
         exit 1
     }
-    $mb = [math]::Round((Get-Item $BuildExe).Length / 1MB, 2)
-    Write-Host "[OK] Built $BuildExe ($mb MB)" -ForegroundColor Green
+    $buildDirFiles = @(Get-ChildItem -Path (Split-Path -Parent $BuildExe) -Recurse -File)
+    $mb = [math]::Round((($buildDirFiles | Measure-Object -Property Length -Sum).Sum) / 1MB, 2)
+    Write-Host "[OK] Built $BuildExe ($mb MB across $($buildDirFiles.Count) files)" -ForegroundColor Green
 }
 
 function Invoke-Smoke {

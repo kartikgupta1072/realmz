@@ -7,6 +7,10 @@
     <AssemblyName>RealmzCore</AssemblyName>
     <RootNamespace>RealmzCore</RootNamespace>
     <Deterministic>true</Deterministic>
+    <!-- Keep the synced plugin DLL byte-stable across commits and machines:
+         no git SHA in InformationalVersion, no absolute paths in the PDB reference. -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <PathMap>$(MSBuildProjectDirectory)=/_/RealmzCore/</PathMap>
   </PropertyGroup>
 
 </Project>

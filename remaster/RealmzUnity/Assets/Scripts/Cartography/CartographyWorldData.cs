@@ -3745,6 +3745,12 @@ namespace Realmz.Cartography
                     propKind = CartographyPropKind.PalisadeStakes;
                     sizeMeters = new Vector2(1.45f, 1.15f);
                 }
+                else if (archetype == RealmzCore.Combat.CombatArenaArchetype.RoadAmbush)
+                {
+                    // Wild road ambushes never use town flower-planter fences; alternate stakes with rubble.
+                    propKind = CartographyPropKind.RubblePileA;
+                    sizeMeters = GetDefaultPropSizeMeters(propKind);
+                }
                 else
                 {
                     propKind = CartographyPropKind.StoneFenceH;

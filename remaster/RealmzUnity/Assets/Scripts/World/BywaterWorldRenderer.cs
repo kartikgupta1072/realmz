@@ -2924,6 +2924,7 @@ namespace Realmz.World
                 case CartographyPropKind.CartWreck:
                 case CartographyPropKind.PalisadeStakes:
                 case CartographyPropKind.IronCage:
+                case CartographyPropKind.FallenHollowLog:
                     return fadeCenterBuildingsInCombat;
                 default:
                     return false;
