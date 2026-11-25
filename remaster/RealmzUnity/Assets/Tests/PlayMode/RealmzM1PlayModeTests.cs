@@ -20,6 +20,16 @@ namespace Realmz.PlayModeTests
 {
     public sealed class RealmzM1PlayModeTests
     {
+        private static string ProofPath(string fileName)
+        {
+            string envDir = Environment.GetEnvironmentVariable("REALMZ_PROOF_DIR");
+            string dir = !string.IsNullOrWhiteSpace(envDir)
+                ? envDir
+                : Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "..", ".scratch", "proofs"));
+            Directory.CreateDirectory(dir);
+            return Path.Combine(dir, fileName);
+        }
+
         [UnityTest]
         public IEnumerator PlayMode_BywaterSlice_GroundedUnits_BuildingDetour_NpcTrade_AndModalScrollLock_ZeroErrors()
         {
@@ -87,7 +97,7 @@ namespace Realmz.PlayModeTests
                     yield return null;
                     yield return null;
                     CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
-                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_TownRoads_Clear_Proof.png", 1600, 900);
+                        ProofPath("M1_Bywater_TownRoads_Clear_Proof.png"), 1600, 900);
 
                     ctrl.WarpToOverworldTownShowcase();
                     yield return null;
@@ -132,7 +142,7 @@ namespace Realmz.PlayModeTests
                         ?.Invoke(ctrl, new object[] { borinCoord });
                     yield return null;
                     CaptureCameraToPng(Camera.main, ctrl.hudController,
-                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_Feet_And_Npc_Proof.png", 1600, 900);
+                        ProofPath("M1_Bywater_Feet_And_Npc_Proof.png"), 1600, 900);
                 }
 
                 // 4. Verify live pathing detours around Pack 3 building footprints without stepping on blocked interior tiles
@@ -158,7 +168,7 @@ namespace Realmz.PlayModeTests
                         ?.Invoke(ctrl, new object[] { detourTarget });
                     yield return null;
                     CaptureCameraToPng(Camera.main, ctrl.hudController,
-                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_Building_Avoid_Proof.png", 1600, 900);
+                        ProofPath("M1_Bywater_Building_Avoid_Proof.png"), 1600, 900);
                 }
 
                 typeof(BywaterGameController).GetMethod("UpdateExplorationInput", BindingFlags.Instance | BindingFlags.NonPublic)
@@ -285,7 +295,7 @@ namespace Realmz.PlayModeTests
                 if (captureProofs)
                 {
                     CaptureCameraToPng(Camera.main, ctrl.hudController,
-                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_Corpse_And_MeleeCancel_Proof.png", 1600, 900);
+                        ProofPath("M1_Bywater_Corpse_And_MeleeCancel_Proof.png"), 1600, 900);
                 }
 
                 if (smartMoveTile != currentHero.Position)
@@ -328,7 +338,7 @@ namespace Realmz.PlayModeTests
                 if (captureProofs)
                 {
                     CaptureCameraToPng(Camera.main, ctrl.hudController,
-                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_PaperDoll_Camp_Proof.png", 1600, 900);
+                        ProofPath("M1_Bywater_PaperDoll_Camp_Proof.png"), 1600, 900);
                 }
 
                 // Level-Up badge & interactive modal -> LevelUp proof
@@ -341,7 +351,7 @@ namespace Realmz.PlayModeTests
                 if (captureProofs)
                 {
                     CaptureCameraToPng(Camera.main, ctrl.hudController,
-                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_LevelUp_Proof.png", 1600, 900);
+                        ProofPath("M1_Bywater_LevelUp_Proof.png"), 1600, 900);
                 }
 
                 UnityEngine.UI.Button lvlConfirm = GameObject.Find("ConfirmLevelUpBtn")?.GetComponent<UnityEngine.UI.Button>();
@@ -432,7 +442,7 @@ namespace Realmz.PlayModeTests
                 if (captureProofs)
                 {
                     CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
-                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_Night_Torch_Proof.png", 1600, 900);
+                        ProofPath("M1_Bywater_Night_Torch_Proof.png"), 1600, 900);
                 }
 
                 // 2. Encounter Intercept Modal on East Riverbank (Giant Frog + Goblin ecology pack) + Bug #7 Scroll Lock
@@ -449,7 +459,7 @@ namespace Realmz.PlayModeTests
                 if (captureProofs)
                 {
                     CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
-                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_Scout_Intercept_Proof.png", 1600, 900);
+                        ProofPath("M1_Bywater_Scout_Intercept_Proof.png"), 1600, 900);
                 }
 
                 // Engage -> launches TacticalCombat with riverbank water tiles
@@ -470,13 +480,13 @@ namespace Realmz.PlayModeTests
                     yield return null;
                     yield return null;
                     CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
-                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_TacticalArena_River_Proof.png", 1600, 900);
+                        ProofPath("M1_Bywater_TacticalArena_River_Proof.png"), 1600, 900);
 
                     ctrl.StageCombatArenaArchetypeShowcaseForCapture(CombatArenaArchetype.RoadAmbush, new GridCoord(18, 54));
                     yield return null;
                     yield return null;
                     CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
-                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_TacticalArena_Road_Proof.png", 1600, 900);
+                        ProofPath("M1_Bywater_TacticalArena_Road_Proof.png"), 1600, 900);
                 }
 
                 Assert.That(errors, Is.Empty, "PlayMode EncounterDirector errors:\n" + string.Join("\n", errors));
@@ -585,7 +595,7 @@ namespace Realmz.PlayModeTests
                 if (captureProofs)
                 {
                     CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
-                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_NightCombat_Readable_Proof.png", 1600, 900);
+                        ProofPath("M1_Bywater_NightCombat_Readable_Proof.png"), 1600, 900);
                 }
 
                 // 3. Stage clean Option 2 Victory & Loot modal proof: fallen hero revived badge, Aldric level-up arrow badge, zero MVP, Loot title, gold coin icon, selectable cards
@@ -669,7 +679,7 @@ namespace Realmz.PlayModeTests
                 if (captureProofs)
                 {
                     CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
-                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_Victory_Loot_Proof.png", 1600, 900);
+                        ProofPath("M1_Bywater_Victory_Loot_Proof.png"), 1600, 900);
                 }
 
                 // Deselect card #1 and verify Take Selected (X) updates and deposits ONLY checked stacks
@@ -792,7 +802,7 @@ namespace Realmz.PlayModeTests
                 if (captureProofs)
                 {
                     CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
-                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_Deployment_Proof.png", 1600, 900);
+                        ProofPath("M1_Bywater_Deployment_Proof.png"), 1600, 900);
                 }
 
                 // 2. Click Start Battle -> enter Unified 6-AP Combat
@@ -844,7 +854,7 @@ namespace Realmz.PlayModeTests
                 if (captureProofs)
                 {
                     CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
-                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_ActionPoints_Combat_Proof.png", 1600, 900);
+                        ProofPath("M1_Bywater_ActionPoints_Combat_Proof.png"), 1600, 900);
                 }
 
                 // Execute Guard / Overwatch and verify exact AP deduction
@@ -1000,7 +1010,7 @@ namespace Realmz.PlayModeTests
                 if (captureProofs)
                 {
                     CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
-                        @"c:\Users\karti\LifeTwin\scratch\stage2_proof_03_biome_forest_combat.png", 1600, 900);
+                        ProofPath("stage2_proof_03_biome_forest_combat.png"), 1600, 900);
                 }
 
                 pitchBtn.onClick.Invoke();
@@ -1237,7 +1247,7 @@ namespace Realmz.PlayModeTests
                     ctrl.hudController?.HideToast();
                     yield return null;
                     CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
-                        @"c:\Users\karti\LifeTwin\scratch\stage2_proof_04_night_combat_vfx_pitch.png", 1600, 900);
+                        ProofPath("stage2_proof_04_night_combat_vfx_pitch.png"), 1600, 900);
                 }
 
                 Assert.That(errors, Is.Empty, "PlayMode Stage2 OilKeg/Shove errors:\n" + string.Join("\n", errors));
@@ -1296,7 +1306,7 @@ namespace Realmz.PlayModeTests
                 if (captureProofs)
                 {
                     CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
-                        @"c:\Users\karti\LifeTwin\scratch\stage2_proof_01_town_day.png", 1600, 900);
+                        ProofPath("stage2_proof_01_town_day.png"), 1600, 900);
                 }
 
                 MethodInfo applyAtmoMethod = typeof(BywaterGameController).GetMethod(
@@ -1359,7 +1369,7 @@ namespace Realmz.PlayModeTests
                 if (captureProofs)
                 {
                     CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
-                        @"c:\Users\karti\LifeTwin\scratch\stage2_proof_02_riverbank_dusk_fog.png", 1600, 900);
+                        ProofPath("stage2_proof_02_riverbank_dusk_fog.png"), 1600, 900);
                 }
 
                 Assert.That(errors, Is.Empty, "PlayMode Stage2 Fog/Clock/Sun errors:\n" + string.Join("\n", errors));
@@ -1470,7 +1480,7 @@ namespace Realmz.PlayModeTests
                 if (captureProofs)
                 {
                     CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
-                        @"c:\Users\karti\LifeTwin\scratch\stage2_proof_05_victory_loot_hud.png", 1600, 900);
+                        ProofPath("stage2_proof_05_victory_loot_hud.png"), 1600, 900);
                 }
 
                 // Deselect first loot card and confirm Take Selected updates count & deposits only remaining items

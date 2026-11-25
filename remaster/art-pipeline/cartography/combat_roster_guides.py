@@ -4,7 +4,7 @@ Headless Blender 4.5.9 Orthographic (26 deg pitch) Combat Roster Guide Generator
 Produces 1024x1024 ControlNet Depth (*_depth.png), Canny (*_canny.png), and
 solid #FF00FF magenta-background material-colored init guides (*_chroma_init.png)
 for all 13 Realmz combat units into:
-  c:/Users/karti/LifeTwin/scratch/realmz_combat_art_pack/guides/
+  C:/Users/karti/realmz/.scratch/realmz_combat_art_pack/guides/
 plus a 4-column contact sheet (guides_preview.png) and metadata JSON
 (guides_metadata.json) recording target_height_px (64 px/m) and camera specs.
 
@@ -14,7 +14,7 @@ Facing convention:
   - All 7 Monsters use yaw_deg = +32.0 (facing West/Left, 3/4 South-West).
 
 Usage (via asset-foundry venv Python):
-  C:/realmz/tools/asset-foundry/.venv/Scripts/python.exe combat_roster_guides.py
+  C:/Users/karti/realmz/tools/asset-foundry/.venv/Scripts/python.exe combat_roster_guides.py
 """
 
 from __future__ import annotations
@@ -31,8 +31,8 @@ from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
 CREATE_NO_WINDOW = 0x08000000
-DEFAULT_BLENDER_EXE = Path(r"C:\realmz\tools\blender\blender-4.5.9-windows-x64\blender.exe")
-DEFAULT_OUT_DIR = Path(r"c:\Users\karti\LifeTwin\scratch\realmz_combat_art_pack\guides")
+DEFAULT_BLENDER_EXE = Path(r"C:\Users\karti\realmz\tools\blender\blender-4.5.9-windows-x64\blender.exe")
+DEFAULT_OUT_DIR = Path(r"C:\Users\karti\realmz\.scratch\realmz_combat_art_pack\guides")
 RENDER_RES = 1024
 CAMERA_PITCH_DEG = 26.0
 MAGENTA_BG = (255, 0, 255)

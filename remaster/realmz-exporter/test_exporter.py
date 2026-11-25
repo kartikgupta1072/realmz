@@ -38,7 +38,7 @@ from rsrc import ResourceFork
 from scenario_exporter import export_scenario_package, slugify_scenario
 
 
-REALMZ_BASE = Path(r"C:\realmz\base\Realmz")
+REALMZ_BASE = Path(r"C:\Users\karti\realmz\base\Realmz")
 BYWATER_DIR = REALMZ_BASE / "Scenarios" / "City of Bywater"
 DATA_FILES = REALMZ_BASE / "Data Files"
 
@@ -288,7 +288,7 @@ class TestP04UnequippedStatContract(unittest.TestCase):
                 self.assertNotEqual(hero["ac"], expected_base_ac + eq_ac)
 
         # Verify on-disk extracted/bywater_m1/party_m1.json matches contract and is BOM-free.
-        disk_party_path = Path(r"C:\realmz\remaster\extracted\bywater_m1\party_m1.json")
+        disk_party_path = Path(r"C:\Users\karti\realmz\remaster\extracted\bywater_m1\party_m1.json")
         if disk_party_path.is_file():
             raw_bytes = disk_party_path.read_bytes()
             self.assertFalse(raw_bytes.startswith(b"\xef\xbb\xbf"))
@@ -368,7 +368,7 @@ class TestAudioExtraction(unittest.TestCase):
         self.assertGreater(len(mod_bytes), 50000)
 
     def test_extracted_audio_manifest_and_assets_on_disk(self) -> None:
-        audio_root = Path(r"C:\realmz\remaster\extracted\audio")
+        audio_root = Path(r"C:\Users\karti\realmz\remaster\extracted\audio")
         manifest_path = audio_root / "audio_manifest.json"
         self.assertTrue(manifest_path.is_file(), "audio_manifest.json must be extracted")
         raw_bytes = manifest_path.read_bytes()
@@ -531,13 +531,13 @@ class TestStage2MonsterAndBalanceOverrides(unittest.TestCase):
         self.assertEqual(monsters["goblin_shaman"]["role"], "Caster")
         self.assertEqual(monsters["orc_archer"]["role"], "Ranged")
 
-        extracted_dir = Path(r"C:\realmz\remaster\extracted\bywater_m1")
+        extracted_dir = Path(r"C:\Users\karti\realmz\remaster\extracted\bywater_m1")
         extracted_jsons = sorted(p.name for p in extracted_dir.glob("*.json"))
         self.assertEqual(len(extracted_jsons), 5)
 
         for disk_path in (
             extracted_dir / "monsters_bywater_m1.json",
-            Path(r"C:\realmz\remaster\RealmzUnity\Assets\StreamingAssets\bywater_m1\monsters_bywater_m1.json"),
+            Path(r"C:\Users\karti\realmz\remaster\RealmzUnity\Assets\StreamingAssets\bywater_m1\monsters_bywater_m1.json"),
         ):
             self.assertTrue(disk_path.is_file(), f"Missing {disk_path}")
             raw_bytes = disk_path.read_bytes()
@@ -548,7 +548,7 @@ class TestStage2MonsterAndBalanceOverrides(unittest.TestCase):
             self.assertEqual(json.loads(raw_text), monsters_doc)
 
     def test_streaming_balance_overrides_json(self) -> None:
-        path = Path(r"C:\realmz\remaster\RealmzUnity\Assets\StreamingAssets\bywater_m1\balance_overrides.json")
+        path = Path(r"C:\Users\karti\realmz\remaster\RealmzUnity\Assets\StreamingAssets\bywater_m1\balance_overrides.json")
         self.assertTrue(path.is_file(), f"Missing {path}")
         raw_bytes = path.read_bytes()
         self.assertFalse(raw_bytes.startswith(b"\xef\xbb\xbf"), "balance_overrides.json must be BOM-free")

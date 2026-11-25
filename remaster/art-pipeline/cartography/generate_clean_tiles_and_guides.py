@@ -24,8 +24,8 @@ from scipy import ndimage
 
 CART_DIR = Path(__file__).resolve().parent
 PIPE_DIR = CART_DIR.parent
-UNITY_TILES = Path(r"C:\realmz\remaster\RealmzUnity\Assets\Art\Cartography\tiles")
-SCRATCH_ROOT = Path(r"c:\Users\karti\LifeTwin\scratch\realmz_soc_vertical_slice")
+UNITY_TILES = Path(r"C:\Users\karti\realmz\remaster\RealmzUnity\Assets\Art\Cartography\tiles")
+SCRATCH_ROOT = Path(r"C:\Users\karti\realmz\.scratch\realmz_soc_vertical_slice")
 GUIDE_DIR = SCRATCH_ROOT / "whitebox_guides"
 PALETTE_PATH = PIPE_DIR / "palette_soc_sunlit_128.json"
 

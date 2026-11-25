@@ -32,7 +32,7 @@ namespace RealmzCore.Tests
                 current = current.Parent;
             }
 
-            return @"C:\realmz\remaster";
+            return @"C:\Users\karti\realmz\remaster";
         }
 
         private static TileMapData BuildOpenTileMap(

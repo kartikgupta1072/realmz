@@ -50,12 +50,12 @@ COMFY_PYTHON = Path(r"C:\ComfyUI\.venv\Scripts\python.exe")
 COMFY_MAIN = Path(r"C:\ComfyUI\main.py")
 COMFY_ROOT = Path(r"C:\ComfyUI")
 PALETTE_PATH = PIPE_DIR / "palette_soc_sunlit_128.json"
-MEADOW_TILE_PATH = Path(r"C:\realmz\remaster\RealmzUnity\Assets\Art\Cartography\tiles\meadow_grass.png")
+MEADOW_TILE_PATH = Path(r"C:\Users\karti\realmz\remaster\RealmzUnity\Assets\Art\Cartography\tiles\meadow_grass.png")
 ARLEON_TROOPS_REF = Path(
-    r"c:\Users\karti\LifeTwin\scratch\realmz_soc_reverse_engineering\references\grass_frames\shadows_gif\arleon_troops_f01.png"
+    r"C:\Users\karti\realmz\.scratch\realmz_soc_reverse_engineering\references\grass_frames\shadows_gif\arleon_troops_f01.png"
 )
 
-PACK_ROOT = Path(r"c:\Users\karti\LifeTwin\scratch\realmz_combat_art_pack")
+PACK_ROOT = Path(r"C:\Users\karti\realmz\.scratch\realmz_combat_art_pack")
 GUIDE_DIR = PACK_ROOT / "guides"
 RAW_DIR = PACK_ROOT / "raw"
 OUTPUT_DIR = PACK_ROOT / "output"
@@ -1237,7 +1237,7 @@ def generate_unit(
 
 def build_unified_lineup_proof() -> Path:
     """
-    Build c:/Users/karti/LifeTwin/scratch/realmz_combat_art_pack/unified_roster_lineup.png
+    Build C:/Users/karti/realmz/.scratch/realmz_combat_art_pack/unified_roster_lineup.png
     placing ALL 6 heroes on the left facing East/Right vs ALL 7 enemies on the right facing West/Left
     across tiled Cartography meadow_grass.png turf at exact 1:1 relative scale (3x nearest-neighbor zoom
     for clear inspection, keeping 100% identical relative scaling across all 13 units!).

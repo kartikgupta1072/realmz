@@ -328,7 +328,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--realmz-base",
         type=Path,
-        default=Path(r"C:\realmz\base\Realmz"),
+        default=Path(r"C:\Users\karti\realmz\base\Realmz"),
         help="Path to the base Realmz directory containing Data Files, Character Files, and Scenarios.",
     )
     parser.add_argument(
@@ -340,7 +340,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path(r"C:\realmz\remaster\extracted"),
+        default=Path(r"C:\Users\karti\realmz\remaster\extracted"),
         help="Destination directory for extracted JSON and PNG assets.",
     )
     return parser

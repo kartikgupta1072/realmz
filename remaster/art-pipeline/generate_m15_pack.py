@@ -24,10 +24,10 @@ import numpy as np
 import requests
 from PIL import Image, ImageDraw, ImageFont
 
-REPO_ROOT = Path(r"c:\Users\karti\LifeTwin")
-PIPE_DIR = REPO_ROOT / "scratch" / "realmz_pixel_pipeline"
-OUT_ROOT = REPO_ROOT / "scratch" / "realmz_m15_art"
-REALMZ_FROG_REF = Path(r"C:\realmz\remaster\extracted\monster_giant_frog_392.png")
+SCRATCH_ROOT = Path(r"C:\Users\karti\realmz\.scratch")
+PIPE_DIR = SCRATCH_ROOT / "realmz_pixel_pipeline"
+OUT_ROOT = SCRATCH_ROOT / "realmz_m15_art"
+REALMZ_FROG_REF = Path(r"C:\Users\karti\realmz\remaster\extracted\monster_giant_frog_392.png")
 
 sys.path.insert(0, str(PIPE_DIR))
 sys.path.insert(0, str(OUT_ROOT))

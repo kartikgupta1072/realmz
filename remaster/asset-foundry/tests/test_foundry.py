@@ -15,7 +15,7 @@ from unittest import mock
 import numpy as np
 from PIL import Image
 
-FOUNDRY_CODE_DIR = Path(r"C:\realmz\remaster\asset-foundry")
+FOUNDRY_CODE_DIR = Path(r"C:\Users\karti\realmz\remaster\asset-foundry")
 if str(FOUNDRY_CODE_DIR) not in sys.path:
     sys.path.insert(0, str(FOUNDRY_CODE_DIR))
 
@@ -31,7 +31,7 @@ from foundry.preprocess import prepare_reference_image
 from foundry.terrain_gen import generate_terrain_asset
 from foundry.verify_terrain_material import verify_terrain_bundle
 
-CLI_AGENT_PATH = Path(r"c:\Users\karti\LifeTwin\.agent\scripts\realmz-foundry.py")
+CLI_AGENT_PATH = Path(r"C:\Users\karti\realmz\remaster\asset-foundry\bin\realmz-foundry.py")
 CLI_LOCAL_BIN_PATH = Path(r"C:\Users\karti\.local\bin\realmz-foundry.py")
 
 
@@ -300,7 +300,7 @@ class RealmzFoundryUnitTests(unittest.TestCase):
         if CLI_AGENT_PATH.exists() and CLI_LOCAL_BIN_PATH.exists():
             h1 = hashlib.sha256(CLI_AGENT_PATH.read_bytes()).hexdigest()
             h2 = hashlib.sha256(CLI_LOCAL_BIN_PATH.read_bytes()).hexdigest()
-            self.assertEqual(h1, h2, "realmz-foundry.py SHA-256 mismatch between LifeTwin and .local/bin")
+            self.assertEqual(h1, h2, "realmz-foundry.py SHA-256 mismatch between asset-foundry/bin and .local/bin")
 
 
 if __name__ == "__main__":

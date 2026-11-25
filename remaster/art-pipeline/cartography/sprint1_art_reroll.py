@@ -1,7 +1,7 @@
 """
 Sprint 1 Phase-1 Cartography Sprite Re-Roll (4 Defective Assets).
 
-Regenerates onto C:/realmz/remaster/RealmzUnity/Assets/Art/Cartography/ on RTX 5060 Ti 8 GB:
+Regenerates onto C:/Users/karti/realmz/remaster/RealmzUnity/Assets/Art/Cartography/ on RTX 5060 Ti 8 GB:
   1. trees/tree_willow_a.png + _n.png (256x256, #FF00FF chroma, textured emerald willow drapes)
   2. trees/tree_oak_b.png + _n.png (224x224, #FF00FF chroma, lush twin-lobed oak clusters)
   3. structures/stone_fence_v.png + _n.png (128x128, #FF00FF chroma, continuous receding N-S wall)
@@ -43,7 +43,7 @@ import generate_cartography_slice as gs  # noqa: E402
 import pixel_postprocess as pp  # noqa: E402
 
 CREATE_NO_WINDOW = 0x08000000
-BLENDER_EXE = Path(r"C:\realmz\tools\blender\blender-4.5.9-windows-x64\blender.exe")
+BLENDER_EXE = Path(r"C:\Users\karti\realmz\tools\blender\blender-4.5.9-windows-x64\blender.exe")
 COMFY_PYTHON = Path(r"C:\ComfyUI\.venv\Scripts\python.exe")
 COMFY_MAIN = Path(r"C:\ComfyUI\main.py")
 COMFY_ROOT = Path(r"C:\ComfyUI")

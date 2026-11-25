@@ -19,9 +19,9 @@ from PIL import Image, ImageDraw, ImageFont
 
 CREATE_NO_WINDOW = 0x08000000
 
-PALETTE_PATH = Path(r"C:\realmz\remaster\art-pipeline\palette_soc_sunlit_128.json")
-OUT_ICONS_DIR = Path(r"c:\Users\karti\LifeTwin\scratch\realmz_combat_art_pack\output\icons")
-OUT_SHEET_PATH = Path(r"c:\Users\karti\LifeTwin\scratch\realmz_combat_art_pack\hotbar_icons_sheet.png")
+PALETTE_PATH = Path(r"C:\Users\karti\realmz\remaster\art-pipeline\palette_soc_sunlit_128.json")
+OUT_ICONS_DIR = Path(r"C:\Users\karti\realmz\.scratch\realmz_combat_art_pack\output\icons")
+OUT_SHEET_PATH = Path(r"C:\Users\karti\realmz\.scratch\realmz_combat_art_pack\hotbar_icons_sheet.png")
 
 # Named palette tokens verified directly against palette_soc_sunlit_128.json
 PAL: Dict[str, str] = {

@@ -1,6 +1,6 @@
 # Realmz Unity 6 Bootstrap
 
-This folder sets up `C:\realmz\remaster\RealmzUnity` (Unity 6 URP 3D Forward Renderer) and drops in the zero-dependency `RealmzCore.dll` simulation and data library.
+This folder sets up `C:\Users\karti\realmz\remaster\RealmzUnity` (Unity 6 URP 3D Forward Renderer) and drops in the zero-dependency `RealmzCore.dll` simulation and data library.
 
 ## Prerequisites (One-Time Setup)
 
@@ -24,18 +24,18 @@ This folder sets up `C:\realmz\remaster\RealmzUnity` (Unity 6 URP 3D Forward Ren
 
 ## 1-Click Bootstrap
 
-From `C:\realmz\remaster\unity-bootstrap`:
+From `C:\Users\karti\realmz\remaster\unity-bootstrap`:
 
 ```powershell
 .\bootstrap-unity.ps1
 ```
 
 What `bootstrap-unity.ps1` does:
-1. Creates `C:\realmz\remaster\RealmzUnity` via `unity projects create "RealmzUnity" --path "C:\realmz\remaster" --editor-version 6000.0.85f2 --template 3d --no-cloud --format json`.
+1. Creates `C:\Users\karti\realmz\remaster\RealmzUnity` via `unity projects create "RealmzUnity" --path "C:\Users\karti\realmz\remaster" --editor-version 6000.0.85f2 --template 3d --no-cloud --format json`.
 2. Installs the Pipeline package (`unity pipeline install`) before first launch.
 3. Opens the Unity Editor and waits until `unity status --until-ready` reports `ready`.
 4. Installs `com.unity.cinemachine`, `com.unity.textmeshpro`, and `com.unity.ugui` (using `unity command package add`, or copying `PackageInstaller.cs` for headless `Client.AddAndRemove` fallback).
-5. Builds `RealmzCore.csproj` (`netstandard2.1`, Release) and copies `RealmzCore.dll` to `C:\realmz\remaster\RealmzUnity\Assets\Plugins\RealmzCore\RealmzCore.dll`.
+5. Builds `RealmzCore.csproj` (`netstandard2.1`, Release) and copies `RealmzCore.dll` to `C:\Users\karti\realmz\remaster\RealmzUnity\Assets\Plugins\RealmzCore\RealmzCore.dll`.
 6. Stages the verified `knight_hero_64x64.png` + `knight_hero_64x64_n.png` sprites and extracted City of Bywater assets (`terrain_bywater_tile_grass.png`, `monster_giant_frog_392.png`, `hero_kevlar_tactical_9018.png`) plus `PixelBillboard.cs` and `M0SmokeSceneBuilder.cs`.
 
 ## Build M0 HD-2D Smoke Scene

@@ -12,7 +12,7 @@ namespace Realmz.EditorTools
     /// </summary>
     public static class RealmzM1BuildMenu
     {
-        public const string DefaultWindowsBuildExe = @"C:\realmz\remaster\builds\Realmz_M1\Realmz.exe";
+        public const string DefaultWindowsBuildExe = @"C:\Users\karti\realmz\remaster\builds\Realmz_M1\Realmz.exe";
 
         [MenuItem("Realmz/M1/Build Windows Standalone (x64)")]
         public static string BuildWindowsStandalone()

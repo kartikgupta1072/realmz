@@ -2,11 +2,11 @@
 Deterministic 512x256 (16x8 cells of 32x32) Songs-of-Conquest-style Bywater Foliage Atlas Generator.
 
 Outputs:
-  - C:/realmz/remaster/RealmzUnity/Assets/Art/Cartography/foliage/bywater_foliage_atlas.png
-  - C:/realmz/remaster/RealmzUnity/Assets/Art/Cartography/foliage/bywater_foliage_atlas_n.png
-  - C:/realmz/remaster/RealmzUnity/Assets/Art/Cartography/foliage/bywater_foliage_atlas.json
-  - c:/Users/karti/LifeTwin/scratch/realmz_soc_vertical_slice/foliage_atlas_preview_4x.png
-  - c:/Users/karti/LifeTwin/scratch/realmz_soc_vertical_slice/foliage_atlas_anim_4x.gif
+  - C:/Users/karti/realmz/remaster/RealmzUnity/Assets/Art/Cartography/foliage/bywater_foliage_atlas.png
+  - C:/Users/karti/realmz/remaster/RealmzUnity/Assets/Art/Cartography/foliage/bywater_foliage_atlas_n.png
+  - C:/Users/karti/realmz/remaster/RealmzUnity/Assets/Art/Cartography/foliage/bywater_foliage_atlas.json
+  - C:/Users/karti/realmz/.scratch/realmz_soc_vertical_slice/foliage_atlas_preview_4x.png
+  - C:/Users/karti/realmz/.scratch/realmz_soc_vertical_slice/foliage_atlas_anim_4x.gif
 
 Atlas layout (512x256, 16 cols x 8 rows of 32x32 cells):
   - Left bank  (x = 0..255,   col = frame 0..7):     Variants 0..7   at row = variant
@@ -43,8 +43,8 @@ FRAME_DURATION_MS = 155
 ANCHOR_X = 16
 ANCHOR_Y = 30  # BottomCenter inside 0..31 (leaves row 31 transparent)
 
-UNITY_FOLIAGE_DIR = Path(r"C:\realmz\remaster\RealmzUnity\Assets\Art\Cartography\foliage")
-SCRATCH_DIR = Path(r"c:\Users\karti\LifeTwin\scratch\realmz_soc_vertical_slice")
+UNITY_FOLIAGE_DIR = Path(r"C:\Users\karti\realmz\remaster\RealmzUnity\Assets\Art\Cartography\foliage")
+SCRATCH_DIR = Path(r"C:\Users\karti\realmz\.scratch\realmz_soc_vertical_slice")
 
 # Exact hex colors from palette_soc_sunlit_128.json
 EMERALD = [

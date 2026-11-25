@@ -22,7 +22,7 @@ import numpy as np
 from PIL import Image
 from scipy import ndimage
 
-DEFAULT_ART_PIPELINE_DIR = Path(r"C:\realmz\remaster\art-pipeline")
+DEFAULT_ART_PIPELINE_DIR = Path(r"C:\Users\karti\realmz\remaster\art-pipeline")
 DEFAULT_POSTPROCESS_M15_PATH = DEFAULT_ART_PIPELINE_DIR / "postprocess_m15.py"
 DEFAULT_PALETTE_PATH = DEFAULT_ART_PIPELINE_DIR / "palette_soc_sunlit_128.json"
 

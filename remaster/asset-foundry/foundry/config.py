@@ -10,7 +10,7 @@ from typing import Any
 
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
-REALMZ_ROOT = Path(os.environ.get("REALMZ_ROOT", r"C:\realmz"))
+REALMZ_ROOT = Path(os.environ.get("REALMZ_ROOT", r"C:\Users\karti\realmz"))
 FOUNDRY_CODE_DIR = REALMZ_ROOT / "remaster" / "asset-foundry"
 FOUNDRY_TOOLS_DIR = REALMZ_ROOT / "tools" / "asset-foundry"
 FOUNDRY_VENV_PY = FOUNDRY_TOOLS_DIR / ".venv" / "Scripts" / "python.exe"

@@ -14,10 +14,10 @@ Self-contained Python 3 CLI for extracting Classic Mac OS `.rsrc` graphics (`cic
 ## Usage
 
 ```powershell
-python C:\realmz\remaster\realmz-exporter\export_realmz.py `
-  --realmz-base C:\realmz\base\Realmz `
+python C:\Users\karti\realmz\remaster\realmz-exporter\export_realmz.py `
+  --realmz-base C:\Users\karti\realmz\base\Realmz `
   --scenario "City of Bywater" `
-  --out C:\realmz\remaster\extracted
+  --out C:\Users\karti\realmz\remaster\extracted
 ```
 
 ## Extracted Artifacts (`City of Bywater`)
@@ -46,18 +46,18 @@ python C:\realmz\remaster\realmz-exporter\export_realmz.py `
 
 ```powershell
 # Extract all 142 base SFX (.wav) + 11 Realmz Music suites (.ogg)
-python C:\realmz\remaster\realmz-exporter\audio.py `
-  --realmz-base C:\realmz\base\Realmz `
-  --out C:\realmz\remaster\extracted\audio
+python C:\Users\karti\realmz\remaster\realmz-exporter\audio.py `
+  --realmz-base C:\Users\karti\realmz\base\Realmz `
+  --out C:\Users\karti\realmz\remaster\extracted\audio
 
 # Export generic ScenarioPackageJson bundles
-python C:\realmz\remaster\realmz-exporter\scenario_exporter.py `
+python C:\Users\karti\realmz\remaster\realmz-exporter\scenario_exporter.py `
   --scenarios "City of Bywater" "Prelude to Pestilence" "Assault on Giant Mountain" `
-  --out C:\realmz\remaster\extracted\scenarios
+  --out C:\Users\karti\realmz\remaster\extracted\scenarios
 ```
 
 ## Tests
 
 ```powershell
-python -m unittest discover -s C:\realmz\remaster\realmz-exporter
+python -m unittest discover -s C:\Users\karti\realmz\remaster\realmz-exporter
 ```

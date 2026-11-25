@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$RemasterRoot = "C:\realmz\remaster",
+    [string]$RemasterRoot = "C:\Users\karti\realmz\remaster",
     [string]$EditorVersion = "6000.0.85f2",
     [string]$DotnetExe = "C:\Users\karti\AppData\Local\Microsoft\dotnet\dotnet.exe"
 )

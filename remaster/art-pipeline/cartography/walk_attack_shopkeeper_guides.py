@@ -4,7 +4,7 @@ Headless Blender 4.5.9 Orthographic (26 deg pitch) Walk, Attack & Shopkeeper Gui
 Produces 1024x1024 ControlNet Depth (*_depth.png), Canny (*_canny.png), and
 solid #FF00FF magenta-background material-colored init guides (*_chroma_init.png)
 into:
-  c:/Users/karti/LifeTwin/scratch/realmz_walk_attack_shopkeepers/guides/
+  C:/Users/karti/realmz/.scratch/realmz_walk_attack_shopkeepers/guides/
 
 Assets generated:
   - 13 existing combat units:
@@ -24,7 +24,7 @@ Assets generated:
 Zero Unicode em-dashes or en-dashes. Passes CREATE_NO_WINDOW = 0x08000000 in all subprocesses.
 
 Usage (via asset-foundry venv Python):
-  C:/realmz/tools/asset-foundry/.venv/Scripts/python.exe walk_attack_shopkeeper_guides.py
+  C:/Users/karti/realmz/tools/asset-foundry/.venv/Scripts/python.exe walk_attack_shopkeeper_guides.py
 """
 
 from __future__ import annotations
@@ -42,9 +42,9 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
 CREATE_NO_WINDOW = 0x08000000
-DEFAULT_BLENDER_EXE = Path(r"C:\realmz\tools\blender\blender-4.5.9-windows-x64\blender.exe")
-DEFAULT_OUT_DIR = Path(r"c:\Users\karti\LifeTwin\scratch\realmz_walk_attack_shopkeepers\guides")
-UNITY_UNITS_DIR = Path(r"C:\realmz\remaster\RealmzUnity\Assets\Art\Cartography\units")
+DEFAULT_BLENDER_EXE = Path(r"C:\Users\karti\realmz\tools\blender\blender-4.5.9-windows-x64\blender.exe")
+DEFAULT_OUT_DIR = Path(r"C:\Users\karti\realmz\.scratch\realmz_walk_attack_shopkeepers\guides")
+UNITY_UNITS_DIR = Path(r"C:\Users\karti\realmz\remaster\RealmzUnity\Assets\Art\Cartography\units")
 RENDER_RES = 1024
 CAMERA_PITCH_DEG = 26.0
 MAGENTA_BG = (255, 0, 255)

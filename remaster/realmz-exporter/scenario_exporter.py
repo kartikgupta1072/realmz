@@ -734,7 +734,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--realmz-base",
         type=Path,
-        default=Path(r"C:\realmz\base\Realmz"),
+        default=Path(r"C:\Users\karti\realmz\base\Realmz"),
         help="Path to base Realmz directory.",
     )
     parser.add_argument(
@@ -746,7 +746,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path(r"C:\realmz\remaster\extracted\scenarios"),
+        default=Path(r"C:\Users\karti\realmz\remaster\extracted\scenarios"),
         help="Root output directory for extracted scenario packages.",
     )
     parser.add_argument(

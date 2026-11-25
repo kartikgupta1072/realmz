@@ -16,7 +16,7 @@ Generates 64 px/m Songs of Conquest Sunlit-128 animations and shopkeepers:
   - Outputs anim_shopkeeper_manifest.json and 3 proof contact sheets (plus
     pilot_comparison.png in --pilot mode).
 
-Strictly writes only inside c:\\Users\\karti\\LifeTwin\\scratch\\realmz_walk_attack_shopkeepers\\.
+Strictly writes only inside C:\\Users\\karti\\realmz\\.scratch\\realmz_walk_attack_shopkeepers\\.
 Zero Unicode em-dashes or en-dashes. Passes CREATE_NO_WINDOW = 0x08000000 in all subprocesses.
 """
 
@@ -61,13 +61,13 @@ COMFY_ROOT = Path(r"C:\ComfyUI")
 PALETTE_PATH = PIPE_DIR / "palette_soc_sunlit_128.json"
 MAGENTA_EXCLUDE = {"#E8569C", "#CE9BF0", "#E6C4FA", "#AE73D6"}
 
-UNITY_UNITS_DIR = Path(r"C:\realmz\remaster\RealmzUnity\Assets\Art\Cartography\units")
-MEADOW_TILE_PATH = Path(r"C:\realmz\remaster\RealmzUnity\Assets\Art\Cartography\tiles\meadow_grass.png")
+UNITY_UNITS_DIR = Path(r"C:\Users\karti\realmz\remaster\RealmzUnity\Assets\Art\Cartography\units")
+MEADOW_TILE_PATH = Path(r"C:\Users\karti\realmz\remaster\RealmzUnity\Assets\Art\Cartography\tiles\meadow_grass.png")
 ARLEON_TROOPS_REF = Path(
-    r"c:\Users\karti\LifeTwin\scratch\realmz_soc_reverse_engineering\references\grass_frames\shadows_gif\arleon_troops_f01.png"
+    r"C:\Users\karti\realmz\.scratch\realmz_soc_reverse_engineering\references\grass_frames\shadows_gif\arleon_troops_f01.png"
 )
 
-PACK_ROOT = Path(r"c:\Users\karti\LifeTwin\scratch\realmz_walk_attack_shopkeepers")
+PACK_ROOT = Path(r"C:\Users\karti\realmz\.scratch\realmz_walk_attack_shopkeepers")
 GUIDE_DIR = PACK_ROOT / "guides"
 META_PATH = GUIDE_DIR / "guides_metadata.json"
 RAW_DIR = PACK_ROOT / "raw"

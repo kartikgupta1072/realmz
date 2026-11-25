@@ -84,3 +84,6 @@ TestResults/
 *secret*
 *token*
 *.key
+
+# Local Antigravity workspace scratch & proof artifacts
+.scratch/

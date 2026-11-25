@@ -5,7 +5,7 @@ Generates serialized on RTX 5060 Ti 8 GB via ComfyUI (:8188) + IP-Adapter Plus +
 ControlNet Union SDXL (Blender Depth/Canny & procedural flat top-down pattern guides) +
 PixelOE + exterior-only safe alpha + palette_soc_sunlit_128.json + laigter normals.
 
-Outputs directly into C:\\realmz\\remaster\\RealmzUnity\\Assets\\Art\\Cartography\\:
+Outputs directly into C:\\Users\\karti\\realmz\\remaster\\RealmzUnity\\Assets\\Art\\Cartography\\:
   - tiles/: 7 seamless 128x128 RGBA ground/water tiles + _n.png (pixel noise alpha)
   - structures/: bywater_inn (320x256), stone_bridge (256x192), stone_fence_h/v (128x128) + _n.png
   - trees/: tree_oak_a/b (224x224), tree_pine_a/b (192x256), tree_willow_a (256x256) + _n.png
@@ -34,8 +34,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 CART_DIR = Path(__file__).resolve().parent
 PIPE_DIR = CART_DIR.parent
-UNITY_CART_ROOT = Path(r"C:\realmz\remaster\RealmzUnity\Assets\Art\Cartography")
-SCRATCH_ROOT = Path(r"c:\Users\karti\LifeTwin\scratch\realmz_soc_vertical_slice")
+UNITY_CART_ROOT = Path(r"C:\Users\karti\realmz\remaster\RealmzUnity\Assets\Art\Cartography")
+SCRATCH_ROOT = Path(r"C:\Users\karti\realmz\.scratch\realmz_soc_vertical_slice")
 GUIDE_DIR = SCRATCH_ROOT / "whitebox_guides"
 STYLE_DIR = SCRATCH_ROOT / "style_refs"
 RAW_DIR = SCRATCH_ROOT / "raw_comfy"

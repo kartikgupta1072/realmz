@@ -13,7 +13,7 @@ import trimesh
 from PIL import Image
 from pygltflib import GLTF2
 
-FOUNDRY_CODE_DIR = Path(r"C:\realmz\remaster\asset-foundry")
+FOUNDRY_CODE_DIR = Path(r"C:\Users\karti\realmz\remaster\asset-foundry")
 if str(FOUNDRY_CODE_DIR) not in sys.path:
     sys.path.insert(0, str(FOUNDRY_CODE_DIR))
 

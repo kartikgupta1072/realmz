@@ -2,7 +2,7 @@
 Headless Blender 4.5.9 Orthographic (26 deg pitch) Whitebox Guide Generator.
 
 Produces crisp 1024x1024 ControlNet Depth (_depth.png) and Canny/Edge (_canny.png)
-maps inside c:/Users/karti/LifeTwin/scratch/realmz_soc_vertical_slice/whitebox_guides/ for:
+maps inside C:/Users/karti/realmz/.scratch/realmz_soc_vertical_slice/whitebox_guides/ for:
   - bywater_inn (5:4 L-shaped medieval tavern/inn w/ timber beams, dormer, chimney, awning, barrels)
   - stone_bridge (arched medieval stone footbridge with parapets and voussoir arch)
   - stone_fence_h & stone_fence_v (low mossy fieldstone wall with wooden gatepost)
@@ -10,7 +10,7 @@ maps inside c:/Users/karti/LifeTwin/scratch/realmz_soc_vertical_slice/whitebox_g
   - giant_frog (f0..f3 idle breathing/throat-sac poses)
 
 Usage (via asset-foundry venv Python):
-  C:/realmz/tools/asset-foundry/.venv/Scripts/python.exe blender_whitebox_guides.py
+  C:/Users/karti/realmz/tools/asset-foundry/.venv/Scripts/python.exe blender_whitebox_guides.py
 """
 
 from __future__ import annotations
@@ -26,8 +26,8 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 CREATE_NO_WINDOW = 0x08000000
-DEFAULT_BLENDER_EXE = Path(r"C:\realmz\tools\blender\blender-4.5.9-windows-x64\blender.exe")
-DEFAULT_OUT_DIR = Path(r"c:\Users\karti\LifeTwin\scratch\realmz_soc_vertical_slice\whitebox_guides")
+DEFAULT_BLENDER_EXE = Path(r"C:\Users\karti\realmz\tools\blender\blender-4.5.9-windows-x64\blender.exe")
+DEFAULT_OUT_DIR = Path(r"C:\Users\karti\realmz\.scratch\realmz_soc_vertical_slice\whitebox_guides")
 RENDER_RES = 1024
 CAMERA_PITCH_DEG = 26.0
 

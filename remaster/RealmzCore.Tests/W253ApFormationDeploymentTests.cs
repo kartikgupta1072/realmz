@@ -32,7 +32,7 @@ namespace RealmzCore.Tests
                 current = current.Parent;
             }
 
-            return @"C:\realmz\remaster\extracted\bywater_m1";
+            return @"C:\Users\karti\realmz\remaster\extracted\bywater_m1";
         }
 
         [Fact]

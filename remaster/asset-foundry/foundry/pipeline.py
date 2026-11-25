@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import time
@@ -45,7 +46,8 @@ from .rig_normalize import (
 )
 from .terrain_gen import generate_terrain_asset
 
-NOTIFY_SCRIPT = Path(r"C:\Users\karti\LifeTwin\.agent\scripts\notify-main-twin.py")
+_notify_env = os.environ.get("REALMZ_NOTIFY_SCRIPT", "").strip()
+NOTIFY_SCRIPT: Path | None = Path(_notify_env) if _notify_env else None
 
 
 def _iso_now() -> str:
@@ -294,7 +296,7 @@ def _deliver_notification(
     notify_result: dict[str, Any] = {"sent": False, "message": notify_msg}
     if dry_run_notify:
         notify_result["dry_run"] = True
-    elif notify and NOTIFY_SCRIPT.exists():
+    elif notify and NOTIFY_SCRIPT is not None and NOTIFY_SCRIPT.exists():
         cmd = ["python", str(NOTIFY_SCRIPT), "--stdin"]
         if notify_target:
             cmd.extend(["--target", notify_target])

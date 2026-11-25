@@ -708,13 +708,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--realmz-base",
         type=Path,
-        default=Path(r"C:\realmz\base\Realmz"),
+        default=Path(r"C:\Users\karti\realmz\base\Realmz"),
         help="Path to the base Realmz directory.",
     )
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path(r"C:\realmz\remaster\extracted\audio"),
+        default=Path(r"C:\Users\karti\realmz\remaster\extracted\audio"),
         help="Destination directory for extracted audio/sfx, audio/music, and audio_manifest.json.",
     )
     parser.add_argument(

@@ -24,9 +24,9 @@ namespace RealmzCore.Tests
                 current = current.Parent;
             }
 
-            if (Directory.Exists(@"C:\realmz\base\Realmz"))
+            if (Directory.Exists(@"C:\Users\karti\realmz\base\Realmz"))
             {
-                return @"C:\realmz\base\Realmz";
+                return @"C:\Users\karti\realmz\base\Realmz";
             }
 
             throw new DirectoryNotFoundException("Could not locate base/Realmz directory from AppContext.BaseDirectory.");

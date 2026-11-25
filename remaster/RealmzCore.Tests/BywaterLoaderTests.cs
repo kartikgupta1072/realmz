@@ -30,9 +30,9 @@ namespace RealmzCore.Tests
                 current = current.Parent;
             }
 
-            if (Directory.Exists(@"C:\realmz\remaster\extracted\bywater_m1"))
+            if (Directory.Exists(@"C:\Users\karti\realmz\remaster\extracted\bywater_m1"))
             {
-                return @"C:\realmz\remaster\extracted\bywater_m1";
+                return @"C:\Users\karti\realmz\remaster\extracted\bywater_m1";
             }
 
             return null;
