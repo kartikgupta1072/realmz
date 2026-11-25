@@ -455,6 +455,17 @@ namespace Realmz.World
 
         public int ActiveNpcCount => _activeNpcCount;
 
+        public int ActivePropCount => _activePropCount;
+
+        public float GetActivePropAlpha(int index)
+        {
+            if (index < 0 || index >= _activePropCount || index >= _propPool.Count || _propPool[index] == null)
+            {
+                return 1f;
+            }
+            return _propPool[index].CurrentAlpha;
+        }
+
         public IReadOnlyList<CartographyNpcPlacement> ActiveNpcs =>
             _cartographyData != null ? _cartographyData.Npcs : System.Array.Empty<CartographyNpcPlacement>();
 
@@ -605,7 +616,7 @@ namespace Realmz.World
                     if (checkBounds)
                     {
                         float halfWidth = Mathf.Clamp(entry.SizeMeters.x * 0.38f, 0.55f, 1.75f);
-                        float maxDepth = Mathf.Clamp(entry.SizeMeters.y * 0.72f, 0.90f, 2.75f);
+                        float maxDepth = Mathf.Clamp(entry.SizeMeters.y * 0.85f, 1.15f, 2.75f);
 
                         for (int u = 0; u < unitWorldPositions.Count; u++)
                         {
@@ -816,6 +827,65 @@ namespace Realmz.World
                 _arenaBorderLine.SetPosition(i, _arenaPointScratch[i]);
             }
             _arenaBorderLine.gameObject.SetActive(true);
+        }
+
+        public void ApplyCombatArenaVisuals(
+            TileMapData map,
+            int originX,
+            int originY,
+            RealmzCore.Combat.CombatGrid grid)
+        {
+            if (map == null || grid == null)
+            {
+                return;
+            }
+
+            EnsureSharedMeshes();
+            EnsureContainers();
+            EnsureCartographyComponents();
+            EnsurePartyLantern();
+
+            _currentMap = map;
+            if (_cartographyData == null)
+            {
+                _cartographyData = CartographyWorldData.BuildFromTileMap(map);
+            }
+
+            _cartographyData.ApplyCombatArenaLayout(originX, originY, grid);
+
+            bool isDungeon = map.IsDungeon;
+            Camera cam = ResolveActiveCamera();
+
+            Material terrainMat = ResolveRuntimeTerrainMaterial(isDungeon);
+            Material waterMat = ResolveRuntimeWaterMaterial(isDungeon);
+            _elevationBuilder.terrainMaterial = terrainMat;
+            _elevationBuilder.waterMaterial = waterMat;
+            _elevationBuilder.Rebuild(_cartographyData);
+
+            _topDownLightmap.ConfigureFromWorldData(_cartographyData);
+            _topDownLightmap.UpdateLightmap(Application.isPlaying ? Time.time : 0f);
+
+            _foliageScatter.foliageMaterial = _catalog != null ? _catalog.cartographyFoliageMaterial : null;
+            _foliageScatter.marshFoliageMaterial = _catalog != null ? _catalog.cartographyMarshFoliageMaterial : null;
+            _foliageScatter.targetCamera = cam;
+            _foliageScatter.RebuildScatter(_cartographyData);
+            _foliageScatter.gameObject.SetActive(!isDungeon);
+
+            if (_dungeonFoliageScatter != null && isDungeon)
+            {
+                Material dungeonFoliageMat = _catalog != null ? _catalog.cartographyDungeonFoliageMaterial : null;
+                _dungeonFoliageScatter.targetCamera = cam;
+                _dungeonFoliageScatter.RebuildDungeonScatter(_cartographyData, dungeonFoliageMat);
+                _dungeonFoliageScatter.gameObject.SetActive(dungeonFoliageMat != null);
+            }
+
+            RebuildCartographyProps(map);
+            CollectMapLightPositions();
+
+            GridCoord mid = new GridCoord(originX + grid.Width / 2, originY + grid.Height / 2);
+            _focusCenter = mid;
+            _hasRendered = true;
+            UpdateWindowTorches(mid, isDungeon);
         }
 
         private float SampleCornerElevation(int cornerX, int cornerY)
@@ -2306,6 +2376,13 @@ namespace Realmz.World
                 case CartographyPropKind.CottageC:
                 case CartographyPropKind.Watchtower:
                     return true;
+                case CartographyPropKind.StoneRuins:
+                case CartographyPropKind.DungeonPillar:
+                case CartographyPropKind.WoodenWagon:
+                case CartographyPropKind.BarrelsCrates:
+                case CartographyPropKind.StoneFenceH:
+                case CartographyPropKind.StoneFenceV:
+                    return fadeCenterBuildingsInCombat;
                 default:
                     return false;
             }

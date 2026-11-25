@@ -341,7 +341,9 @@ namespace Realmz.World
                     Color baseCol = _surfaceBaseColors.TryGetValue(cell.Surface, out Color cachedCol)
                         ? cachedCol
                         : GetSurfaceBaseColor(cell.Surface);
-                    float y = GetTileElevation(cell.X, cell.Y) + 0.085f;
+                    float y = Mathf.Max(
+                        GetTileElevation(cell.X, cell.Y) + 0.085f,
+                        Realmz.Cartography.CartographyWorldData.TileMapWaterSurfaceElevation + 0.045f);
                     Vector3 pos = new Vector3(cell.X + 0.5f, y, -(cell.Y + 0.5f));
                     PlaceCustomQuad(_surfaceLayer, pos, 0.96f, 0.96f, 0f, mat, baseCol);
                 }

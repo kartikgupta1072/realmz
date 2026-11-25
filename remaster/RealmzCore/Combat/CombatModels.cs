@@ -440,6 +440,140 @@ namespace RealmzCore.Combat
         {
             return InBounds(x, y) ? _cells[(y * Width) + x].MoveCost : int.MaxValue;
         }
+
+        public CombatArenaLayout? ArenaLayout { get; internal set; }
+
+        public void SetArenaLayout(CombatArenaLayout? layout)
+        {
+            ArenaLayout = layout;
+        }
+
+        public void ClearCellObstacle(int x, int y, short elevationTier = 0, int moveCost = 1)
+        {
+            if (!InBounds(x, y))
+            {
+                return;
+            }
+
+            CombatGridCell cell = _cells[(y * Width) + x];
+            cell.IsBlocked = false;
+            cell.BlocksLos = false;
+            cell.ProvidesCover = false;
+            cell.ElevationTier = elevationTier;
+            cell.MoveCost = Math.Max(1, moveCost);
+        }
+
+        public void SetFeatureCell(
+            int x,
+            int y,
+            bool isBlocked,
+            bool blocksLos,
+            bool providesCover,
+            short elevationTier,
+            int moveCost,
+            SurfaceType surface = SurfaceType.None,
+            int surfaceRounds = -1)
+        {
+            if (!InBounds(x, y))
+            {
+                return;
+            }
+
+            CombatGridCell cell = _cells[(y * Width) + x];
+            cell.IsBlocked = isBlocked;
+            cell.BlocksLos = blocksLos;
+            cell.ProvidesCover = providesCover;
+            cell.ElevationTier = elevationTier;
+            cell.MoveCost = Math.Max(1, moveCost);
+            SetSurface(x, y, surface, surfaceRounds);
+        }
+    }
+
+    public enum CombatArenaArchetype
+    {
+        RoadAmbush = 0,
+        RiverbankCrossing = 1,
+        DeepWoods = 2,
+        RuinsOutskirts = 3,
+        DungeonChamber = 4
+    }
+
+    public enum CombatArenaObstacleKind
+    {
+        None = 0,
+        BoulderRock = 1,
+        RuinedWall = 2,
+        TreeTrunk = 3,
+        StonePillar = 4,
+        SupplyWagon = 5,
+        BarrelsCrates = 6,
+        StoneFence = 7,
+        LitBrazier = 8,
+        WallSconce = 9,
+        IronGrate = 10,
+        BridgePlank = 11,
+        BrushThicket = 12
+    }
+
+    public sealed class CombatArenaFeature
+    {
+        public CombatArenaFeature(int x, int y)
+        {
+            X = x;
+            Y = y;
+            MoveCost = 1;
+        }
+
+        public int X { get; }
+        public int Y { get; }
+        public CombatArenaObstacleKind ObstacleKind { get; set; }
+        public bool BlocksMovement { get; set; }
+        public bool BlocksLos { get; set; }
+        public bool ProvidesCover { get; set; }
+        public short ElevationTier { get; set; }
+        public int MoveCost { get; set; }
+        public SurfaceType Surface { get; set; }
+        public int SurfaceRounds { get; set; } = -1;
+        public bool IsRoadTile { get; set; }
+        public bool IsMudBank { get; set; }
+        public bool IsBridgeTile { get; set; }
+        public bool BlocksFoliage { get; set; }
+    }
+
+    public sealed class CombatArenaLayout
+    {
+        private readonly Dictionary<GridCoord, CombatArenaFeature> _byCoord;
+
+        public CombatArenaLayout(
+            CombatArenaArchetype archetype,
+            ulong seed,
+            int verifiedLaneCount,
+            bool allSpawnsConnected,
+            IReadOnlyList<CombatArenaFeature> features)
+        {
+            Archetype = archetype;
+            Seed = seed;
+            VerifiedLaneCount = verifiedLaneCount;
+            AllSpawnsConnected = allSpawnsConnected;
+            Features = features ?? Array.Empty<CombatArenaFeature>();
+            _byCoord = new Dictionary<GridCoord, CombatArenaFeature>(Features.Count);
+            for (int i = 0; i < Features.Count; i++)
+            {
+                CombatArenaFeature f = Features[i];
+                _byCoord[new GridCoord(f.X, f.Y)] = f;
+            }
+        }
+
+        public CombatArenaArchetype Archetype { get; }
+        public ulong Seed { get; }
+        public int VerifiedLaneCount { get; }
+        public bool AllSpawnsConnected { get; }
+        public IReadOnlyList<CombatArenaFeature> Features { get; }
+
+        public CombatArenaFeature? GetFeatureAt(int x, int y)
+        {
+            return _byCoord.TryGetValue(new GridCoord(x, y), out CombatArenaFeature? feat) ? feat : null;
+        }
     }
 
     public sealed class CombatantState

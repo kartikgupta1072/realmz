@@ -869,14 +869,14 @@ namespace Realmz.Cartography
             int w = map.Width;
             int h = map.Height;
 
-            // 1. Cluster connected town building tiles via BFS flood fill so each building footprint emits ONE Pack 3 building.
+            // 1. Cluster connected true building tiles via BFS so each building lot emits ONE Pack 3 building
+            // cleanly fitted onto non-road/non-pathway tiles without bridging across walls or cobblestone roads.
             bool[,] isBuildingTile = new bool[w, h];
             for (int y = 0; y < h; y++)
             {
                 for (int x = 0; x < w; x++)
                 {
                     if ((x == 10 && y >= 9 && y <= 13) ||
-                        (x == 7 && y == 11) || (x == 9 && y == 13) || (x == 9 && y == 17) ||
                         (map.StartSpawn.X == x && map.StartSpawn.Y == y) ||
                         map.GetPortalAt(x, y) != null)
                     {
@@ -884,15 +884,24 @@ namespace Realmz.Cartography
                     }
 
                     BywaterTileKind k = kinds[x, y];
-                    if (k == BywaterTileKind.TownBuildingSolid || k == BywaterTileKind.TownBuildingDoor)
+                    int raw = map.GetTile(x, y);
+                    int absIdx = Mathf.Abs(raw) % 1000;
+                    if (k == BywaterTileKind.TownBuildingSolid)
                     {
-                        isBuildingTile[x, y] = true;
+                        if (absIdx >= 25)
+                        {
+                            isBuildingTile[x, y] = true;
+                        }
                         continue;
                     }
 
-                    if (x >= 2 && x <= 32 && y >= 2 && y <= 32 && k == BywaterTileKind.WallBlock)
+                    if (k == BywaterTileKind.TownBuildingDoor && raw < 0 && absIdx >= 25)
                     {
-                        if (BywaterTileClassifier.ClassifyOutdoorProp(map, x, y, out _) == BywaterOutdoorPropKind.CottageFacade)
+                        // Exclude lone wall-edge trim (such as x=5..6 at y=14..16) unless part of a doorway/temple pair.
+                        bool partOfTemplePoi = x >= 9 && x <= 10 && y == 17;
+                        bool hasSolidNeighbor = HasAdjacentKind(kinds, w, h, x, y, BywaterTileKind.TownBuildingSolid);
+                        bool hasDoorNeighbor = HasAdjacentNegativeBuildingDoor(map, kinds, w, h, x, y);
+                        if (partOfTemplePoi || hasSolidNeighbor || hasDoorNeighbor)
                         {
                             isBuildingTile[x, y] = true;
                         }
@@ -938,16 +947,23 @@ namespace Realmz.Cartography
                 }
             }
 
-            // Determine largest footprint for Guildhall (excluding Tavern/Armory/Temple direct footprints if possible)
             int residentialCounter = 0;
             bool placedGuildhall = false;
             bool placedApothecary = false;
             bool placedInn = false;
             bool placedBlacksmith = false;
             bool placedTemple = false;
+            bool placedNorthWatchtower = false;
 
-            // Sort clusters descending by size so Guildhall claims the largest main hall first
-            buildingClusters.Sort((a, b) => b.Count.CompareTo(a.Count));
+            // Process POI-anchored buildings (Tavern, Armory, Temple) and East Guildhall before residential cottages
+            // so canonical landmarks claim their exact matching lots deterministically.
+            buildingClusters.Sort((a, b) =>
+            {
+                int prioA = ScoreBuildingClusterPriority(map, a);
+                int prioB = ScoreBuildingClusterPriority(map, b);
+                int cmp = prioB.CompareTo(prioA);
+                return cmp != 0 ? cmp : b.Count.CompareTo(a.Count);
+            });
 
             List<Vector2Int> placedOutdoorProps = new List<Vector2Int>(64);
 
@@ -968,102 +984,65 @@ namespace Realmz.Cartography
                     }
                 }
 
-                // Skip isolated 1-tile wall fragments that aren't true building footprints
-                if (cluster.Count < 2 && !containsSolidBuilding)
+                bool isTemplePair = IsNearSpecificPoiKind(map, cluster, "temple", 4.0f);
+                if (cluster.Count < 2 || (!containsSolidBuilding && !isTemplePair))
                 {
                     continue;
                 }
 
                 float cx = sumX / cluster.Count;
                 float cy = sumY / cluster.Count;
-                int tx = Mathf.Clamp(Mathf.RoundToInt(cx), 0, w - 1);
-                int ty = Mathf.Clamp(Mathf.RoundToInt(cy), 0, h - 1);
+                CartographyPropKind buildingKind = ClassifyBuildingClusterKind(
+                    map,
+                    cluster,
+                    cx,
+                    cy,
+                    ref placedInn,
+                    ref placedBlacksmith,
+                    ref placedApothecary,
+                    ref placedTemple,
+                    ref placedGuildhall,
+                    ref placedNorthWatchtower,
+                    ref residentialCounter);
 
-                // If centroid landed on a protected road/doorway tile, pick the first non-protected cluster tile
-                if (IsProtectedRoadOrDoorway(map, kinds, tx, ty))
-                {
-                    for (int i = 0; i < cluster.Count; i++)
-                    {
-                        if (!IsProtectedRoadOrDoorway(map, kinds, cluster[i].x, cluster[i].y))
-                        {
-                            tx = cluster[i].x;
-                            ty = cluster[i].y;
-                            cx = tx;
-                            cy = ty;
-                            break;
-                        }
-                    }
-                }
+                Vector2 desiredSz = GetDefaultPropSizeMeters(buildingKind);
+                FitBuildingToNonRoadLot(
+                    map,
+                    kinds,
+                    cluster,
+                    desiredSz,
+                    out Vector3 pos,
+                    out Vector2 fittedSz,
+                    out int anchorTileX,
+                    out int anchorTileY);
 
-                // Single outer marker tiles (like (72,13) or (24,89)) become shrine/watchtower markers rather than full inns
-                CartographyPropKind buildingKind;
-                if (cluster.Count == 1 && (tx > 32 || ty > 32))
-                {
-                    buildingKind = CartographyPropKind.ShrineStatue;
-                }
-                else
-                {
-                    buildingKind = ClassifyBuildingClusterKind(
-                        map,
-                        cluster,
-                        cx,
-                        cy,
-                        ref placedInn,
-                        ref placedBlacksmith,
-                        ref placedApothecary,
-                        ref placedTemple,
-                        ref placedGuildhall,
-                        ref residentialCounter);
-                }
-
-                float elev = GetElevation(tx, ty);
-                Vector3 pos = new Vector3(cx + 0.5f, elev, -(cy + 0.5f));
-                Vector2 sz = GetDefaultPropSizeMeters(buildingKind);
+                float elev = GetElevation(anchorTileX, anchorTileY);
+                pos.y = elev;
                 _props.Add(new CartographyPropPlacement
                 {
                     Kind = buildingKind,
                     WorldPosition = pos,
-                    SizeMeters = sz,
+                    SizeMeters = fittedSz,
                     CastsCanopyShadow = true,
-                    CanopyRadius = Mathf.Max(1.35f, sz.x * 0.45f),
+                    CanopyRadius = Mathf.Max(1.1f, fittedSz.x * 0.44f),
                     CanopyStrength = 0.42f
                 });
-                placedOutdoorProps.Add(new Vector2Int(tx, ty));
+                placedOutdoorProps.Add(new Vector2Int(anchorTileX, anchorTileY));
+
                 if (IsSolidBlockingPropKind(buildingKind))
                 {
-                    int cMinX = int.MaxValue;
-                    int cMaxX = int.MinValue;
-                    int cMinY = int.MaxValue;
-                    int cMaxY = int.MinValue;
                     for (int i = 0; i < cluster.Count; i++)
                     {
                         Vector2Int pt = cluster[i];
-                        if (pt.x < cMinX) cMinX = pt.x;
-                        if (pt.x > cMaxX) cMaxX = pt.x;
-                        if (pt.y < cMinY) cMinY = pt.y;
-                        if (pt.y > cMaxY) cMaxY = pt.y;
-                        if (kinds[pt.x, pt.y] != BywaterTileKind.TownBuildingDoor)
+                        if (kinds[pt.x, pt.y] == BywaterTileKind.TownBuildingSolid && !IsRoadPathwayOrBridgeTile(map, kinds, pt.x, pt.y))
                         {
                             TryBlockPropTile(map, kinds, pt.x, pt.y);
                         }
                     }
 
-                    if (cluster.Count >= 2)
-                    {
-                        for (int by = cMinY; by <= cMaxY; by++)
-                        {
-                            for (int bx = cMinX; bx <= cMaxX; bx++)
-                            {
-                                if (map.InBounds(bx, by) && kinds[bx, by] != BywaterTileKind.TownBuildingDoor)
-                                {
-                                    TryBlockPropTile(map, kinds, bx, by);
-                                }
-                            }
-                        }
-                    }
-
-                    BlockSolidPropFootprint(map, kinds, buildingKind, pos.x, pos.z, sz);
+                    BlockBuildingFootprintNonRoadOnly(map, kinds, buildingKind, pos.x, pos.z, fittedSz);
                 }
+
                 _lanterns.Add(new CartographyLanternSource
                 {
                     WorldXZ = new Vector2(pos.x, pos.z),
@@ -1072,7 +1051,7 @@ namespace Realmz.Cartography
                 });
             }
 
-            // Ensure Apothecary POI has an Apothecary building if its map location had no solid tile cluster
+            // Ensure Apothecary POI has an Apothecary building placed strictly off roads/pathways
             for (int i = 0; i < map.PointsOfInterest.Count && !placedApothecary; i++)
             {
                 MapPointOfInterest poi = map.PointsOfInterest[i];
@@ -1081,21 +1060,23 @@ namespace Realmz.Cartography
                     continue;
                 }
 
-                if (TryFindCleanOutdoorSpotNear(map, kinds, poi.X, poi.Y, 3, placedOutdoorProps, out int ax, out int ay))
+                if (TryFindCleanNonRoadBuildingSpotNear(map, kinds, isBuildingTile, poi.X, poi.Y, 4, placedOutdoorProps, out int ax, out int ay))
                 {
-                    Vector3 pos = GridToWorld(ax, ay, GetElevation(ax, ay));
-                    Vector2 sz = GetDefaultPropSizeMeters(CartographyPropKind.Apothecary);
+                    List<Vector2Int> apoLot = new List<Vector2Int> { new Vector2Int(ax, ay) };
+                    Vector2 origApoSz = GetDefaultPropSizeMeters(CartographyPropKind.Apothecary);
+                    FitBuildingToNonRoadLot(map, kinds, apoLot, origApoSz, out Vector3 pos, out Vector2 fittedSz, out int fitX, out int fitY);
+                    pos.y = GetElevation(fitX, fitY);
                     _props.Add(new CartographyPropPlacement
                     {
                         Kind = CartographyPropKind.Apothecary,
                         WorldPosition = pos,
-                        SizeMeters = sz,
+                        SizeMeters = fittedSz,
                         CastsCanopyShadow = true,
-                        CanopyRadius = 2.0f,
+                        CanopyRadius = Mathf.Max(1.1f, fittedSz.x * 0.44f),
                         CanopyStrength = 0.42f
                     });
-                    placedOutdoorProps.Add(new Vector2Int(ax, ay));
-                    BlockSolidPropFootprint(map, kinds, CartographyPropKind.Apothecary, pos.x, pos.z, sz);
+                    placedOutdoorProps.Add(new Vector2Int(fitX, fitY));
+                    BlockBuildingFootprintNonRoadOnly(map, kinds, CartographyPropKind.Apothecary, pos.x, pos.z, fittedSz);
                     placedApothecary = true;
                 }
             }
@@ -1104,12 +1085,30 @@ namespace Realmz.Cartography
             EnsureTanneryMarketStall(map, kinds, placedOutdoorProps);
             HashSet<Vector2Int> npcTiles = PopulateOutdoorShopkeeperNpcs(map, kinds, isBuildingTile, placedOutdoorProps);
 
-            // 2. Natural flora, fences, ruins, and road/portal lanterns
+            // 2. Natural flora, fences, ruins, and road-side verge lanterns (zero props placed ON cobblestone/dirt paths)
+            HashSet<Vector2Int> placedVergeLanternTiles = new HashSet<Vector2Int>();
             for (int y = 0; y < h; y++)
             {
                 for (int x = 0; x < w; x++)
                 {
                     Vector2Int tileCoord = new Vector2Int(x, y);
+                    int raw = map.GetTile(x, y);
+                    int absIdx = Mathf.Abs(raw) % 1000;
+                    if (!isBuildingTile[x, y] &&
+                        raw < 0 &&
+                        absIdx == 15 &&
+                        (x > 32 || y > 32) &&
+                        !IsRoadPathwayOrBridgeTile(map, kinds, x, y) &&
+                        !npcTiles.Contains(tileCoord))
+                    {
+                        Vector3 sPos = GridToWorld(x, y, _tiles[x, y].Elevation);
+                        Vector2 sSz = GetDefaultPropSizeMeters(CartographyPropKind.ShrineStatue);
+                        AddProp(CartographyPropKind.ShrineStatue, sPos.x, sPos.y, sPos.z, sSz.x, sSz.y);
+                        placedOutdoorProps.Add(tileCoord);
+                        TryBlockPropTile(map, kinds, x, y);
+                        continue;
+                    }
+
                     if (isBuildingTile[x, y] || IsProtectedRoadOrDoorway(map, kinds, x, y) || npcTiles.Contains(tileCoord))
                     {
                         continue;
@@ -1123,12 +1122,14 @@ namespace Realmz.Cartography
                     switch (prop)
                     {
                         case BywaterOutdoorPropKind.CottageFacade:
-                            // Wilderness 181..185 outside the town cluster become stone ruins or canopy trees
-                            if (x > 32 || y > 32)
+                            if ((x > 32 || y > 32) &&
+                                (vHash % 5) == 0 &&
+                                !_blockedPropTiles.Contains(tileCoord) &&
+                                !IsTooCloseToList(placedOutdoorProps, x, y, 25))
                             {
-                                if ((vHash % 5) == 0 && !_blockedPropTiles.Contains(tileCoord) && !IsTooCloseToList(placedOutdoorProps, x, y, 25))
+                                Vector2 ruinSz = GetDefaultPropSizeMeters(CartographyPropKind.StoneRuins);
+                                if (IsPropVisualFootprintClearOfRoads(map, kinds, CartographyPropKind.StoneRuins, pos.x, pos.z, ruinSz))
                                 {
-                                    Vector2 ruinSz = GetDefaultPropSizeMeters(CartographyPropKind.StoneRuins);
                                     AddProp(CartographyPropKind.StoneRuins, pos.x, pos.y, pos.z, ruinSz.x, ruinSz.y);
                                     placedOutdoorProps.Add(tileCoord);
                                     BlockSolidPropFootprint(map, kinds, CartographyPropKind.StoneRuins, pos.x, pos.z, ruinSz);
@@ -1138,14 +1139,14 @@ namespace Realmz.Cartography
 
                         case BywaterOutdoorPropKind.StoneFence:
                         {
-                            bool verticalFence = IsFenceLike(map, kinds, x, y - 1) || IsFenceLike(map, kinds, x, y + 1);
-                            bool horizontalFence = IsFenceLike(map, kinds, x - 1, y) || IsFenceLike(map, kinds, x + 1, y);
-                            CartographyPropKind fenceKind = (verticalFence && !horizontalFence)
-                                ? CartographyPropKind.StoneFenceV
-                                : CartographyPropKind.StoneFenceH;
-                            AddProp(fenceKind, pos.x, pos.y, pos.z, 1.15f, 1.25f);
-                            if (kind != BywaterTileKind.Cobblestone && kind != BywaterTileKind.DirtPath)
+                            if (!IsRoadPathwayOrBridgeTile(map, kinds, x, y))
                             {
+                                bool verticalFence = IsFenceLike(map, kinds, x, y - 1) || IsFenceLike(map, kinds, x, y + 1);
+                                bool horizontalFence = IsFenceLike(map, kinds, x - 1, y) || IsFenceLike(map, kinds, x + 1, y);
+                                CartographyPropKind fenceKind = (verticalFence && !horizontalFence)
+                                    ? CartographyPropKind.StoneFenceV
+                                    : CartographyPropKind.StoneFenceH;
+                                AddProp(fenceKind, pos.x, pos.y, pos.z, 1.15f, 1.25f);
                                 TryBlockPropTile(map, kinds, x, y);
                             }
                             break;
@@ -1170,13 +1171,16 @@ namespace Realmz.Cartography
                         }
 
                         case BywaterOutdoorPropKind.MarketCrates:
-                            if (!IsNearPortalOrDoorway(map, kinds, x, y, 1) && !IsTooCloseToList(placedOutdoorProps, x, y, 9))
+                            if (!IsRoadPathwayOrBridgeTile(map, kinds, x, y) &&
+                                kind == BywaterTileKind.Grass &&
+                                !IsNearPortalOrDoorway(map, kinds, x, y, 1) &&
+                                !IsTooCloseToList(placedOutdoorProps, x, y, 9))
                             {
-                                Vector2 bcSz = GetDefaultPropSizeMeters(CartographyPropKind.BarrelsCrates);
-                                AddProp(CartographyPropKind.BarrelsCrates, pos.x, pos.y, pos.z, bcSz.x, bcSz.y);
-                                placedOutdoorProps.Add(tileCoord);
-                                if (kind != BywaterTileKind.Cobblestone && kind != BywaterTileKind.DirtPath)
+                                Vector2 bcSz = new Vector2(1.45f, 1.35f);
+                                if (IsPropVisualFootprintClearOfRoads(map, kinds, CartographyPropKind.BarrelsCrates, pos.x, pos.z, bcSz))
                                 {
+                                    AddProp(CartographyPropKind.BarrelsCrates, pos.x, pos.y, pos.z, bcSz.x, bcSz.y);
+                                    placedOutdoorProps.Add(tileCoord);
                                     BlockSolidPropFootprint(map, kinds, CartographyPropKind.BarrelsCrates, pos.x, pos.z, bcSz);
                                 }
                             }
@@ -1192,31 +1196,39 @@ namespace Realmz.Cartography
                             Intensity = 0.44f
                         });
                     }
-                    else if ((kind == BywaterTileKind.Cobblestone || kind == BywaterTileKind.DirtPath) &&
+                    else if (IsRoadPathwayOrBridgeTile(map, kinds, x, y) &&
                              CountRoadNeighbors(kinds, x, y, w, h) >= 3 &&
                              (DeterministicHash(x, y, 503) % 7) == 0 &&
-                             !IsNearPortalOrDoorway(map, kinds, x, y, 1))
+                             !IsNearPortalOrDoorway(map, kinds, x, y, 1) &&
+                             TryFindRoadsideGrassVerge(map, kinds, isBuildingTile, npcTiles, x, y, out int vx, out int vy))
                     {
-                        AddProp(CartographyPropKind.TorchBrazier, pos.x + 0.35f, pos.y, pos.z + 0.35f, 0.85f, 1.15f);
-                        _lanterns.Add(new CartographyLanternSource
+                        Vector2Int vergeCoord = new Vector2Int(vx, vy);
+                        if (!placedVergeLanternTiles.Contains(vergeCoord) && !_blockedPropTiles.Contains(vergeCoord))
                         {
-                            WorldXZ = new Vector2(pos.x + 0.35f, pos.z + 0.35f),
-                            Radius = 2.5f,
-                            Intensity = 0.42f
-                        });
+                            placedVergeLanternTiles.Add(vergeCoord);
+                            Vector3 vPos = GridToWorld(vx, vy, GetElevation(vx, vy));
+                            AddProp(CartographyPropKind.TorchBrazier, vPos.x, vPos.y, vPos.z, 0.80f, 1.10f);
+                            _lanterns.Add(new CartographyLanternSource
+                            {
+                                WorldXZ = new Vector2(vPos.x, vPos.z),
+                                Radius = 2.6f,
+                                Intensity = 0.44f
+                            });
+                        }
                     }
                 }
             }
 
-            // 3. Town plaza & outskirts dressing (deterministic, strictly non-portal and >1 tile from portals/doorways)
-            (int px, int py, CartographyPropKind pKind)[] fixedPlazaAnchors =
+            // 3. Town plaza & outskirts dressing (strictly on non-road grass lots with zero road overlap and leaving (10..12,9) clear)
+            (int px, int py, CartographyPropKind pKind, Vector2 customSize)[] fixedPlazaAnchors =
             {
-                (13, 10, CartographyPropKind.StoneWell),
-                (12, 8, CartographyPropKind.MarketStallA),
-                (15, 10, CartographyPropKind.MarketStallB),
-                (12, 12, CartographyPropKind.Signpost),
-                (15, 7, CartographyPropKind.WoodenWagon),
-                (14, 12, CartographyPropKind.BarrelsCrates)
+                (13, 10, CartographyPropKind.StoneWell, new Vector2(1.55f, 1.85f)),
+                (14, 8, CartographyPropKind.MarketStallA, new Vector2(1.85f, 1.75f)),
+                (21, 6, CartographyPropKind.MarketStallB, new Vector2(1.85f, 1.75f)),
+                (16, 8, CartographyPropKind.Signpost, new Vector2(1.15f, 1.55f)),
+                (22, 8, CartographyPropKind.WoodenWagon, new Vector2(2.15f, 1.75f)),
+                (14, 11, CartographyPropKind.BarrelsCrates, new Vector2(1.45f, 1.35f)),
+                (19, 11, CartographyPropKind.ShrineStatue, new Vector2(1.45f, 2.10f))
             };
             for (int i = 0; i < fixedPlazaAnchors.Length; i++)
             {
@@ -1225,14 +1237,19 @@ namespace Realmz.Cartography
                 Vector2Int anchorCoord = new Vector2Int(fx, fy);
                 if (!npcTiles.Contains(anchorCoord) &&
                     !_blockedPropTiles.Contains(anchorCoord) &&
+                    !isBuildingTile[fx, fy] &&
+                    !(fx == 12 && fy == 9) &&
                     IsCleanPlazaOrEdgeTile(map, kinds, fx, fy) &&
                     !IsTooCloseToList(placedOutdoorProps, fx, fy, 4))
                 {
-                    Vector3 fPos = GridToWorld(fx, fy, GetElevation(fx, fy));
-                    Vector2 fSz = GetDefaultPropSizeMeters(fixedPlazaAnchors[i].pKind);
-                    AddProp(fixedPlazaAnchors[i].pKind, fPos.x, fPos.y, fPos.z, fSz.x, fSz.y);
-                    placedOutdoorProps.Add(anchorCoord);
-                    BlockSolidPropFootprint(map, kinds, fixedPlazaAnchors[i].pKind, fPos.x, fPos.z, fSz);
+                    Vector2 fSz = fixedPlazaAnchors[i].customSize;
+                    Vector3 fPos = ComputeRoadClearPlazaWorldPosition(map, kinds, fixedPlazaAnchors[i].pKind, fx, fy, fSz);
+                    if (IsPropVisualFootprintClearOfRoads(map, kinds, fixedPlazaAnchors[i].pKind, fPos.x, fPos.z, fSz))
+                    {
+                        AddProp(fixedPlazaAnchors[i].pKind, fPos.x, fPos.y, fPos.z, fSz.x, fSz.y);
+                        placedOutdoorProps.Add(anchorCoord);
+                        BlockSolidPropFootprint(map, kinds, fixedPlazaAnchors[i].pKind, fPos.x, fPos.z, fSz);
+                    }
                 }
             }
 
@@ -1252,9 +1269,15 @@ namespace Realmz.Cartography
             {
                 for (int x = 3; x <= 26 && x < w; x++)
                 {
+                    if ((x == 11 || x == 12) && y == 9)
+                    {
+                        continue;
+                    }
+
                     Vector2Int plazaCoord = new Vector2Int(x, y);
                     if (npcTiles.Contains(plazaCoord) ||
                         _blockedPropTiles.Contains(plazaCoord) ||
+                        isBuildingTile[x, y] ||
                         !IsCleanPlazaOrEdgeTile(map, kinds, x, y) ||
                         IsTooCloseToList(placedOutdoorProps, x, y, 12))
                     {
@@ -1270,15 +1293,21 @@ namespace Realmz.Cartography
 
                     CartographyPropKind dressKind = townPlazaProps[townPlazaIdx % townPlazaProps.Length];
                     townPlazaIdx++;
-                    Vector3 pos = GridToWorld(x, y, GetElevation(x, y));
                     Vector2 sz = GetDefaultPropSizeMeters(dressKind);
+                    if (sz.x > 1.85f) sz *= (1.85f / sz.x);
+                    Vector3 pos = ComputeRoadClearPlazaWorldPosition(map, kinds, dressKind, x, y, sz);
+                    if (!IsPropVisualFootprintClearOfRoads(map, kinds, dressKind, pos.x, pos.z, sz))
+                    {
+                        continue;
+                    }
+
                     AddProp(dressKind, pos.x, pos.y, pos.z, sz.x, sz.y);
                     placedOutdoorProps.Add(plazaCoord);
                     BlockSolidPropFootprint(map, kinds, dressKind, pos.x, pos.z, sz);
                 }
             }
 
-            // Outskirts camps, wagons, signposts along roads
+            // Outskirts camps, wagons, signposts along roads (placed cleanly beside roads, never ON roads)
             for (int y = 4; y < h - 4; y += 3)
             {
                 for (int x = 4; x < w - 4; x += 3)
@@ -1291,6 +1320,7 @@ namespace Realmz.Cartography
                     Vector2Int outskirtCoord = new Vector2Int(x, y);
                     if (npcTiles.Contains(outskirtCoord) ||
                         _blockedPropTiles.Contains(outskirtCoord) ||
+                        isBuildingTile[x, y] ||
                         !IsCleanPlazaOrEdgeTile(map, kinds, x, y) ||
                         IsTooCloseToList(placedOutdoorProps, x, y, 64))
                     {
@@ -1314,8 +1344,13 @@ namespace Realmz.Cartography
                         outskirtKind = (hash % 3) == 0 ? CartographyPropKind.CampTent : CartographyPropKind.Campfire4f;
                     }
 
-                    Vector3 pos = GridToWorld(x, y, GetElevation(x, y));
                     Vector2 sz = GetDefaultPropSizeMeters(outskirtKind);
+                    Vector3 pos = ComputeRoadClearPlazaWorldPosition(map, kinds, outskirtKind, x, y, sz);
+                    if (!IsPropVisualFootprintClearOfRoads(map, kinds, outskirtKind, pos.x, pos.z, sz))
+                    {
+                        continue;
+                    }
+
                     AddProp(outskirtKind, pos.x, pos.y, pos.z, sz.x, sz.y);
                     placedOutdoorProps.Add(outskirtCoord);
                     BlockSolidPropFootprint(map, kinds, outskirtKind, pos.x, pos.z, sz);
@@ -1345,9 +1380,459 @@ namespace Realmz.Cartography
                 MapPortal portal = map.Portals[i];
                 float elev = GetElevation(portal.X, portal.Y);
                 Vector3 pos = GridToWorld(portal.X, portal.Y, elev);
-                AddProp(CartographyPropKind.TorchBrazier, pos.x - 0.4f, pos.y, pos.z, 0.85f, 1.15f);
+                int bx = portal.X;
+                int by = portal.Y;
+                if (TryFindRoadsideGrassVerge(map, kinds, isBuildingTile, npcTiles, portal.X, portal.Y, out int pvx, out int pvy))
+                {
+                    bx = pvx;
+                    by = pvy;
+                }
+                Vector3 bPos = GridToWorld(bx, by, GetElevation(bx, by));
+                AddProp(CartographyPropKind.TorchBrazier, bPos.x, bPos.y, bPos.z, 0.85f, 1.15f);
                 AddUniqueLantern(pos, 3.0f, 0.55f);
             }
+        }
+
+        private static bool HasAdjacentKind(BywaterTileKind[,] kinds, int w, int h, int x, int y, BywaterTileKind target)
+        {
+            for (int dir = 0; dir < 4; dir++)
+            {
+                int nx = x + (dir == 0 ? -1 : (dir == 1 ? 1 : 0));
+                int ny = y + (dir == 2 ? -1 : (dir == 3 ? 1 : 0));
+                if (nx >= 0 && nx < w && ny >= 0 && ny < h && kinds[nx, ny] == target)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool HasAdjacentNegativeBuildingDoor(TileMapData map, BywaterTileKind[,] kinds, int w, int h, int x, int y)
+        {
+            for (int dir = 0; dir < 4; dir++)
+            {
+                int nx = x + (dir == 0 ? -1 : (dir == 1 ? 1 : 0));
+                int ny = y + (dir == 2 ? -1 : (dir == 3 ? 1 : 0));
+                if (nx >= 0 && nx < w && ny >= 0 && ny < h && kinds[nx, ny] == BywaterTileKind.TownBuildingDoor)
+                {
+                    int nraw = map.GetTile(nx, ny);
+                    if (nraw < 0 && (Mathf.Abs(nraw) % 1000) >= 25)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        private static int ScoreBuildingClusterPriority(TileMapData map, List<Vector2Int> cluster)
+        {
+            for (int p = 0; p < map.PointsOfInterest.Count; p++)
+            {
+                MapPointOfInterest poi = map.PointsOfInterest[p];
+                for (int c = 0; c < cluster.Count; c++)
+                {
+                    int dx = cluster[c].x - poi.X;
+                    int dy = cluster[c].y - poi.Y;
+                    if (dx * dx + dy * dy <= 4)
+                    {
+                        string k = (poi.Kind ?? string.Empty).ToLowerInvariant();
+                        string l = (poi.Label ?? string.Empty).ToLowerInvariant();
+                        if (k == "tavern" || l.Contains("tavern") || l.Contains("armory") || k == "temple" || IsApothecaryPoi(poi))
+                        {
+                            return 1000;
+                        }
+                        if (poi.ShopId == "4")
+                        {
+                            return 800;
+                        }
+                    }
+                }
+            }
+
+            for (int c = 0; c < cluster.Count; c++)
+            {
+                if (cluster[c].x >= 23 && cluster[c].x <= 26 && cluster[c].y >= 8 && cluster[c].y <= 9)
+                {
+                    return 600;
+                }
+            }
+
+            return cluster.Count;
+        }
+
+        private static bool IsNearSpecificPoiKind(TileMapData map, List<Vector2Int> cluster, string kindMatch, float maxDistSq)
+        {
+            for (int i = 0; i < map.PointsOfInterest.Count; i++)
+            {
+                MapPointOfInterest poi = map.PointsOfInterest[i];
+                if (!string.Equals(poi.Kind, kindMatch, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                for (int c = 0; c < cluster.Count; c++)
+                {
+                    float dx = cluster[c].x - poi.X;
+                    float dy = cluster[c].y - poi.Y;
+                    if (dx * dx + dy * dy <= maxDistSq)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        public static bool IsRoadPathwayOrBridgeTile(TileMapData map, BywaterTileKind[,] kinds, int x, int y)
+        {
+            if (map == null || kinds == null || !map.InBounds(x, y))
+            {
+                return false;
+            }
+
+            BywaterTileKind k = kinds[x, y];
+            if (k == BywaterTileKind.Cobblestone || k == BywaterTileKind.DirtPath)
+            {
+                return true;
+            }
+
+            TileRule rule = map.GetTileRule(map.GetTile(x, y));
+            if (rule.IsPath)
+            {
+                return true;
+            }
+
+            if (!map.IsDungeon && x == 10 && y >= 9 && y <= 13)
+            {
+                return true;
+            }
+
+            if (map.GetPortalAt(x, y) != null || (map.StartSpawn.X == x && map.StartSpawn.Y == y))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        public static void ComputePropGroundBounds(
+            CartographyPropKind kind,
+            Vector3 worldPos,
+            Vector2 sizeMeters,
+            out float minX,
+            out float maxX,
+            out float minZ,
+            out float maxZ)
+        {
+            bool isBuilding = IsTallBuildingPropKind(kind);
+            float halfW = isBuilding
+                ? Mathf.Max(0.45f, sizeMeters.x * 0.44f)
+                : Mathf.Max(0.32f, sizeMeters.x * 0.42f);
+            float southDepth = isBuilding ? 0.36f : 0.32f;
+            float northDepth = isBuilding
+                ? Mathf.Clamp(sizeMeters.y * 0.34f, 0.72f, 1.85f)
+                : Mathf.Clamp(sizeMeters.y * 0.32f, 0.32f, 0.85f);
+
+            minX = worldPos.x - halfW;
+            maxX = worldPos.x + halfW;
+            minZ = worldPos.z - southDepth;
+            maxZ = worldPos.z + northDepth;
+        }
+
+        private bool IsTileBlockedForBuildingFootprint(TileMapData map, BywaterTileKind[,] kinds, int x, int y)
+        {
+            if (!map.InBounds(x, y))
+            {
+                return true;
+            }
+            if (_tiles[x, y].IsWater)
+            {
+                return true;
+            }
+            return IsRoadPathwayOrBridgeTile(map, kinds, x, y);
+        }
+
+        private void FitBuildingToNonRoadLot(
+            TileMapData map,
+            BywaterTileKind[,] kinds,
+            List<Vector2Int> cluster,
+            Vector2 desiredSize,
+            out Vector3 outPos,
+            out Vector2 outSize,
+            out int outTileX,
+            out int outTileY)
+        {
+            // Focus anchor lot around the cluster's solid tiles so peripheral doorway walls cannot pull the sprite onto nearby streets.
+            int solidMinX = int.MaxValue, solidMaxX = int.MinValue;
+            int solidMinY = int.MaxValue, solidMaxY = int.MinValue;
+            int fullMinX = int.MaxValue, fullMaxX = int.MinValue;
+            int fullMinY = int.MaxValue, fullMaxY = int.MinValue;
+            for (int i = 0; i < cluster.Count; i++)
+            {
+                Vector2Int c = cluster[i];
+                if (c.x < fullMinX) fullMinX = c.x;
+                if (c.x > fullMaxX) fullMaxX = c.x;
+                if (c.y < fullMinY) fullMinY = c.y;
+                if (c.y > fullMaxY) fullMaxY = c.y;
+                if (kinds[c.x, c.y] == BywaterTileKind.TownBuildingSolid)
+                {
+                    if (c.x < solidMinX) solidMinX = c.x;
+                    if (c.x > solidMaxX) solidMaxX = c.x;
+                    if (c.y < solidMinY) solidMinY = c.y;
+                    if (c.y > solidMaxY) solidMaxY = c.y;
+                }
+            }
+
+            if (solidMinX == int.MaxValue)
+            {
+                solidMinX = fullMinX;
+                solidMaxX = fullMaxX;
+                solidMinY = fullMinY;
+                solidMaxY = fullMaxY;
+            }
+
+            // Constrain horizontal lot bounds to non-road columns contiguous with the solid core (up to 1 extra wing tile each side).
+            int lotMinX = solidMinX;
+            int lotMaxX = solidMaxX;
+            int lotMinY = solidMinY;
+            int lotMaxY = Mathf.Min(fullMaxY, solidMaxY + 1);
+
+            bool ColClear(int cx, int minY, int maxY)
+            {
+                for (int ty = minY; ty <= maxY; ty++)
+                {
+                    if (IsTileBlockedForBuildingFootprint(map, kinds, cx, ty))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            bool RowClear(int ry, int minX, int maxX)
+            {
+                for (int tx = minX; tx <= maxX; tx++)
+                {
+                    if (IsTileBlockedForBuildingFootprint(map, kinds, tx, ry))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            while (lotMinY < lotMaxY && !RowClear(lotMaxY, lotMinX, lotMaxX)) lotMaxY--;
+            while (lotMinY < lotMaxY && !RowClear(lotMinY, lotMinX, lotMaxX)) lotMinY++;
+            while (lotMinX < lotMaxX && !ColClear(lotMinX, lotMinY, lotMaxY)) lotMinX++;
+            while (lotMinX < lotMaxX && !ColClear(lotMaxX, lotMinY, lotMaxY)) lotMaxX--;
+
+            // Expand up to 1 flanking clear non-road yard tile along X or Y if needed to give cramped 1x1/2x1 lots >= 2x2 room.
+            if (lotMaxY - lotMinY < 1)
+            {
+                if (RowClear(lotMaxY + 1, lotMinX, lotMaxX)) lotMaxY++;
+                if (lotMaxY - lotMinY < 1 && RowClear(lotMinY - 1, lotMinX, lotMaxX)) lotMinY--;
+            }
+
+            if (lotMaxX - lotMinX < 3)
+            {
+                if (ColClear(lotMinX - 1, lotMinY, lotMaxY)) lotMinX--;
+                if (lotMaxX - lotMinX < 3 && ColClear(lotMaxX + 1, lotMinY, lotMaxY)) lotMaxX++;
+            }
+
+            if (lotMaxY - lotMinY < 1)
+            {
+                if (RowClear(lotMaxY + 1, lotMinX, lotMaxX)) lotMaxY++;
+                else if (RowClear(lotMinY - 1, lotMinX, lotMaxX)) lotMinY--;
+            }
+
+            float allowMinX = lotMinX + 0.04f;
+            float allowMaxX = lotMaxX + 1f - 0.04f;
+            float allowMinZ = -(lotMaxY + 1f) + 0.05f;
+            float allowMaxZ = -lotMinY - 0.05f;
+
+            float lotW = Mathf.Max(1.0f, allowMaxX - allowMinX);
+            float lotD = Mathf.Max(0.90f, allowMaxZ - allowMinZ);
+
+            // Preserve visual aspect cleanly while ensuring ComputePropGroundBounds fits 100% inside [allowMin..allowMax].
+            float maxScaleX = lotW / Mathf.Max(0.5f, desiredSize.x * 0.88f);
+            float baseNorthDepthRatio = 0.34f;
+            float southMargin = 0.36f;
+            float availNorthD = Mathf.Max(0.72f, lotD - southMargin);
+            float maxScaleY = availNorthD / Mathf.Max(0.5f, desiredSize.y * baseNorthDepthRatio);
+            float scale = Mathf.Clamp(Mathf.Min(1.0f, Mathf.Min(maxScaleX, maxScaleY)), 0.36f, 1.0f);
+
+            outSize = new Vector2(
+                Mathf.Min(desiredSize.x * scale, lotW / 0.88f),
+                Mathf.Clamp(desiredSize.y * scale, 1.85f, desiredSize.y));
+            // Keep width/north-depth inside lot even after floor clamping on outSize.y
+            float finalHalfW = Mathf.Max(0.45f, outSize.x * 0.44f);
+            if (finalHalfW * 2f > lotW)
+            {
+                outSize.x = lotW / 0.88f;
+                finalHalfW = outSize.x * 0.44f;
+            }
+            float finalNorthD = Mathf.Clamp(outSize.y * 0.34f, 0.72f, 1.85f);
+            if (finalNorthD + southMargin > lotD)
+            {
+                float maxAllowedNorth = Mathf.Max(0.72f, lotD - southMargin);
+                outSize.y = Mathf.Clamp(maxAllowedNorth / 0.34f, 1.25f, desiredSize.y);
+                finalNorthD = Mathf.Clamp(outSize.y * 0.34f, 0.72f, 1.85f);
+            }
+
+            float prefX = (solidMinX + solidMaxX + 1f) * 0.5f;
+            float prefZ = -(Mathf.Max(lotMinY, solidMinY) + 1.0f) - 0.10f;
+            float clampedX = Mathf.Clamp(prefX, allowMinX + finalHalfW, allowMaxX - finalHalfW);
+            float minSafeZ = allowMinZ + southMargin;
+            float maxSafeZ = allowMaxZ - finalNorthD;
+            float clampedZ = minSafeZ <= maxSafeZ
+                ? Mathf.Clamp(prefZ, minSafeZ, maxSafeZ)
+                : (allowMinZ + allowMaxZ) * 0.5f;
+
+            outPos = new Vector3(clampedX, 0f, clampedZ);
+            outTileX = Mathf.Clamp(Mathf.FloorToInt(clampedX), 0, map.Width - 1);
+            outTileY = Mathf.Clamp(Mathf.FloorToInt(-clampedZ), 0, map.Height - 1);
+        }
+
+        private void BlockBuildingFootprintNonRoadOnly(
+            TileMapData map,
+            BywaterTileKind[,] kinds,
+            CartographyPropKind buildingKind,
+            float worldX,
+            float worldZ,
+            Vector2 sizeMeters)
+        {
+            ComputePropGroundBounds(buildingKind, new Vector3(worldX, 0f, worldZ), sizeMeters, out float minX, out float maxX, out float minZ, out float maxZ);
+            int minTileX = Mathf.FloorToInt(minX + 0.12f);
+            int maxTileX = Mathf.FloorToInt(maxX - 0.12f);
+            int minTileY = Mathf.FloorToInt(-maxZ + 0.12f);
+            int maxTileY = Mathf.FloorToInt(-minZ - 0.12f);
+            for (int y = minTileY; y <= maxTileY; y++)
+            {
+                for (int x = minTileX; x <= maxTileX; x++)
+                {
+                    if (map.InBounds(x, y) &&
+                        kinds[x, y] != BywaterTileKind.TownBuildingDoor &&
+                        !IsRoadPathwayOrBridgeTile(map, kinds, x, y))
+                    {
+                        TryBlockPropTile(map, kinds, x, y);
+                    }
+                }
+            }
+        }
+
+        private bool IsPropVisualFootprintClearOfRoads(
+            TileMapData map,
+            BywaterTileKind[,] kinds,
+            CartographyPropKind kind,
+            float worldX,
+            float worldZ,
+            Vector2 sizeMeters)
+        {
+            ComputePropGroundBounds(kind, new Vector3(worldX, 0f, worldZ), sizeMeters, out float minX, out float maxX, out float minZ, out float maxZ);
+            int minTx = Mathf.FloorToInt(minX + 0.04f);
+            int maxTx = Mathf.FloorToInt(maxX - 0.04f);
+            int minTy = Mathf.FloorToInt(-maxZ + 0.04f);
+            int maxTy = Mathf.FloorToInt(-minZ - 0.04f);
+            for (int ty = minTy; ty <= maxTy; ty++)
+            {
+                for (int tx = minTx; tx <= maxTx; tx++)
+                {
+                    if (!map.InBounds(tx, ty))
+                    {
+                        continue;
+                    }
+
+                    if (IsRoadPathwayOrBridgeTile(map, kinds, tx, ty) || _tiles[tx, ty].IsWater)
+                    {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        private Vector3 ComputeRoadClearPlazaWorldPosition(
+            TileMapData map,
+            BywaterTileKind[,] kinds,
+            CartographyPropKind kind,
+            int tx,
+            int ty,
+            Vector2 sizeMeters)
+        {
+            Vector3 center = GridToWorld(tx, ty, GetElevation(tx, ty));
+            if (IsPropVisualFootprintClearOfRoads(map, kinds, kind, center.x, center.z, sizeMeters))
+            {
+                return center;
+            }
+
+            float pushX = 0f;
+            float pushZ = 0f;
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    if (dx == 0 && dy == 0) continue;
+                    int nx = tx + dx;
+                    int ny = ty + dy;
+                    if (!map.InBounds(nx, ny)) continue;
+                    if (IsRoadPathwayOrBridgeTile(map, kinds, nx, ny) || _tiles[nx, ny].IsWater)
+                    {
+                        pushX -= dx;
+                        pushZ += dy;
+                    }
+                }
+            }
+
+            if (pushX == 0f && pushZ == 0f)
+            {
+                return center;
+            }
+
+            float len = Mathf.Sqrt(pushX * pushX + pushZ * pushZ);
+            for (float mag = 0.25f; mag <= 0.48f; mag += 0.11f)
+            {
+                Vector3 candidate = new Vector3(
+                    center.x + (pushX / len) * mag,
+                    center.y,
+                    center.z + (pushZ / len) * mag);
+                if (IsPropVisualFootprintClearOfRoads(map, kinds, kind, candidate.x, candidate.z, sizeMeters))
+                {
+                    return candidate;
+                }
+            }
+
+            return center;
+        }
+
+        private bool TryFindRoadsideGrassVerge(
+            TileMapData map,
+            BywaterTileKind[,] kinds,
+            bool[,] isBuildingTile,
+            HashSet<Vector2Int> npcTiles,
+            int rx,
+            int ry,
+            out int vx,
+            out int vy)
+        {
+            int[] dxs = { -1, 1, 0, 0, -1, 1, -1, 1 };
+            int[] dys = { 0, 0, -1, 1, -1, -1, 1, 1 };
+            for (int i = 0; i < dxs.Length; i++)
+            {
+                int cx = rx + dxs[i];
+                int cy = ry + dys[i];
+                if (!map.InBounds(cx, cy) || _tiles[cx, cy].IsWater) continue;
+                if (kinds[cx, cy] != BywaterTileKind.Grass) continue;
+                if (!map.GetTileRule(map.GetTile(cx, cy)).Passable) continue;
+                if (isBuildingTile[cx, cy] || IsProtectedTileForBlocking(map, kinds, cx, cy)) continue;
+                if (npcTiles.Contains(new Vector2Int(cx, cy)) || _blockedPropTiles.Contains(new Vector2Int(cx, cy))) continue;
+                vx = cx;
+                vy = cy;
+                return true;
+            }
+
+            vx = rx;
+            vy = ry;
+            return false;
         }
 
         private static CartographyPropKind ClassifyBuildingClusterKind(
@@ -1360,6 +1845,7 @@ namespace Realmz.Cartography
             ref bool placedApothecary,
             ref bool placedTemple,
             ref bool placedGuildhall,
+            ref bool placedNorthWatchtower,
             ref int residentialCounter)
         {
             float bestDistSq = float.MaxValue;
@@ -1380,7 +1866,7 @@ namespace Realmz.Cartography
                 }
             }
 
-            if (nearestPoi != null && bestDistSq <= 36.0f)
+            if (nearestPoi != null && bestDistSq <= 9.0f)
             {
                 string kindLower = (nearestPoi.Kind ?? string.Empty).ToLowerInvariant();
                 string labelLower = (nearestPoi.Label ?? string.Empty).ToLowerInvariant();
@@ -1411,26 +1897,22 @@ namespace Realmz.Cartography
                 }
             }
 
-            if (!placedBlacksmith && cx <= 8.5f && cy <= 7.5f)
-            {
-                placedBlacksmith = true;
-                return CartographyPropKind.Blacksmith;
-            }
-            if (!placedApothecary && cx >= 8.5f && cx <= 12.5f && cy <= 7.5f)
-            {
-                placedApothecary = true;
-                return CartographyPropKind.Apothecary;
-            }
-            if (!placedGuildhall && cluster.Count >= 4)
+            if (!placedGuildhall && cx >= 22.0f && cx <= 27.0f && cy >= 7.5f && cy <= 10.5f)
             {
                 placedGuildhall = true;
                 return CartographyPropKind.Guildhall;
             }
 
-            // Northern fortification / outer fortification check
-            if (cy <= 3.5f && cx <= 20f)
+            if (!placedNorthWatchtower && cy <= 3.5f && cx <= 20f)
             {
+                placedNorthWatchtower = true;
                 return CartographyPropKind.Watchtower;
+            }
+
+            if (!placedGuildhall && cx <= 6.5f && cy >= 15.0f && cy <= 18.0f)
+            {
+                placedGuildhall = true;
+                return CartographyPropKind.Guildhall;
             }
 
             residentialCounter++;
@@ -1448,11 +1930,9 @@ namespace Realmz.Cartography
 
         private static bool IsProtectedRoadOrDoorway(TileMapData map, BywaterTileKind[,] kinds, int x, int y)
         {
-            if (x == 10 && y >= 9 && y <= 13) return true;
+            if (IsRoadPathwayOrBridgeTile(map, kinds, x, y)) return true;
             if ((x == 7 && y == 11) || (x == 9 && y == 13) || (x == 9 && y == 17)) return true;
             if (kinds[x, y] == BywaterTileKind.TownBuildingDoor) return true;
-            if (map.StartSpawn.X == x && map.StartSpawn.Y == y) return true;
-            if (map.GetPortalAt(x, y) != null) return true;
             return false;
         }
 
@@ -1486,8 +1966,9 @@ namespace Realmz.Cartography
             if (!map.InBounds(x, y)) return false;
             if (_tiles[x, y].IsWater) return false;
             if (!map.GetTileRule(map.GetTile(x, y)).Passable) return false;
+            if (IsRoadPathwayOrBridgeTile(map, kinds, x, y)) return false;
             BywaterTileKind k = kinds[x, y];
-            if (k != BywaterTileKind.Grass && k != BywaterTileKind.Cobblestone && k != BywaterTileKind.DirtPath)
+            if (k != BywaterTileKind.Grass)
             {
                 return false;
             }
@@ -1506,9 +1987,10 @@ namespace Realmz.Cartography
             return true;
         }
 
-        private bool TryFindCleanOutdoorSpotNear(
+        private bool TryFindCleanNonRoadBuildingSpotNear(
             TileMapData map,
             BywaterTileKind[,] kinds,
+            bool[,] isBuildingTile,
             int originX,
             int originY,
             int maxRadius,
@@ -1516,28 +1998,62 @@ namespace Realmz.Cartography
             out int outX,
             out int outY)
         {
-            for (int r = 1; r <= maxRadius; r++)
+            for (int pass = 0; pass < 2; pass++)
             {
-                for (int dy = -r; dy <= r; dy++)
+                bool require2x2Clear = pass == 0;
+                for (int r = 1; r <= maxRadius; r++)
                 {
-                    for (int dx = -r; dx <= r; dx++)
+                    for (int dy = -r; dy <= r; dy++)
                     {
-                        int nx = originX + dx;
-                        int ny = originY + dy;
-                        if (!map.InBounds(nx, ny) || _tiles[nx, ny].IsWater) continue;
-                        if (!map.GetTileRule(map.GetTile(nx, ny)).Passable) continue;
-                        if (IsProtectedRoadOrDoorway(map, kinds, nx, ny)) continue;
-                        if (IsNearPortal(map, nx, ny, 1)) continue;
-                        if (IsTooCloseToList(existing, nx, ny, 4)) continue;
-                        outX = nx;
-                        outY = ny;
-                        return true;
+                        for (int dx = -r; dx <= r; dx++)
+                        {
+                            int nx = originX + dx;
+                            int ny = originY + dy;
+                            if (!IsValidNonRoadBuildingTile(map, kinds, isBuildingTile, existing, nx, ny))
+                            {
+                                continue;
+                            }
+
+                            if (require2x2Clear)
+                            {
+                                bool has2x2 =
+                                    IsValidNonRoadBuildingTile(map, kinds, isBuildingTile, existing, nx + 1, ny) &&
+                                    IsValidNonRoadBuildingTile(map, kinds, isBuildingTile, existing, nx, ny + 1) &&
+                                    IsValidNonRoadBuildingTile(map, kinds, isBuildingTile, existing, nx + 1, ny + 1);
+                                if (!has2x2)
+                                {
+                                    continue;
+                                }
+                            }
+
+                            outX = nx;
+                            outY = ny;
+                            return true;
+                        }
                     }
                 }
             }
             outX = 0;
             outY = 0;
             return false;
+        }
+
+        private bool IsValidNonRoadBuildingTile(
+            TileMapData map,
+            BywaterTileKind[,] kinds,
+            bool[,] isBuildingTile,
+            List<Vector2Int> existing,
+            int nx,
+            int ny)
+        {
+            if (!map.InBounds(nx, ny) || _tiles[nx, ny].IsWater) return false;
+            if (!map.GetTileRule(map.GetTile(nx, ny)).Passable) return false;
+            if (isBuildingTile[nx, ny]) return false;
+            if (IsProtectedRoadOrDoorway(map, kinds, nx, ny)) return false;
+            if (map.GetPointOfInterestAt(nx, ny) != null) return false;
+            if (IsNearPortal(map, nx, ny, 1)) return false;
+            if (IsTooCloseToList(existing, nx, ny, 4)) return false;
+            return true;
         }
 
         private static bool IsTooCloseToList(List<Vector2Int> points, int x, int y, int minDistSq)
@@ -2780,7 +3296,7 @@ namespace Realmz.Cartography
             return false;
         }
 
-        private static bool IsTallBuildingPropKind(CartographyPropKind kind)
+        public static bool IsTallBuildingPropKind(CartographyPropKind kind)
         {
             switch (kind)
             {
@@ -2795,6 +3311,199 @@ namespace Realmz.Cartography
                     return true;
                 default:
                     return false;
+            }
+        }
+
+        public void ApplyCombatArenaLayout(
+            int originX,
+            int originY,
+            RealmzCore.Combat.CombatGrid grid)
+        {
+            if (grid == null)
+            {
+                return;
+            }
+
+            int minX = originX;
+            int minY = originY;
+            int maxX = originX + grid.Width - 1;
+            int maxY = originY + grid.Height - 1;
+
+            // Clear conflicting exploration props and lanterns inside the active arena bounds before applying arena parity props.
+            for (int i = _props.Count - 1; i >= 0; i--)
+            {
+                WorldToGrid(_props[i].WorldPosition, out int px, out int py);
+                if (px >= minX && px <= maxX && py >= minY && py <= maxY)
+                {
+                    _props.RemoveAt(i);
+                }
+            }
+
+            for (int i = _lanterns.Count - 1; i >= 0; i--)
+            {
+                WorldToGrid(new Vector3(_lanterns[i].WorldXZ.x, 0f, _lanterns[i].WorldXZ.y), out int lx, out int ly);
+                if (lx >= minX && lx <= maxX && ly >= minY && ly <= maxY)
+                {
+                    _lanterns.RemoveAt(i);
+                }
+            }
+
+            RealmzCore.Combat.CombatArenaLayout layout = grid.ArenaLayout;
+            RealmzCore.Combat.CombatArenaArchetype archetype = layout != null
+                ? layout.Archetype
+                : RealmzCore.Combat.CombatArenaArchetype.RoadAmbush;
+
+            for (int ly = 0; ly < grid.Height; ly++)
+            {
+                for (int lx = 0; lx < grid.Width; lx++)
+                {
+                    int wx = originX + lx;
+                    int wy = originY + ly;
+                    if (!InBounds(wx, wy))
+                    {
+                        continue;
+                    }
+
+                    RealmzCore.Combat.CombatGridCell cell = grid.GetCell(lx, ly);
+                    RealmzCore.Combat.CombatArenaFeature feat = layout != null ? layout.GetFeatureAt(lx, ly) : null;
+                    CartographyTile tile = _tiles[wx, wy];
+
+                    bool isWaterSurface = cell.Surface == RealmzCore.Combat.SurfaceType.Water ||
+                                          cell.Surface == RealmzCore.Combat.SurfaceType.ElectrifiedWater ||
+                                          cell.Surface == RealmzCore.Combat.SurfaceType.Ice;
+                    bool isBridge = feat != null && feat.IsBridgeTile;
+                    bool isRoad = feat != null && feat.IsRoadTile;
+                    bool isMud = feat != null && feat.IsMudBank;
+
+                    if (isWaterSurface)
+                    {
+                        tile.IsWater = false; // Keep Elevation >= -0.05f so wading feet & animated Water/Ice decals remain crisp above ShallowWaterPlane
+                        tile.Elevation = cell.ElevationTier < 0 ? Mathf.Max(-0.35f, RiverElevation * 0.6f) : MudElevation;
+                        tile.MudWeight = 0.85f;
+                        tile.DirtWeight = 0.15f;
+                        tile.CobbleWeight = 0f;
+                        tile.MossWeight = 0f;
+                        tile.BlocksFoliage = true;
+                    }
+                    else if (cell.ElevationTier >= 1)
+                    {
+                        tile.IsWater = false;
+                        tile.Elevation = HighlandElevation + Mathf.Max(0, cell.ElevationTier - 1) * 0.25f;
+                        tile.DirtWeight = 0.45f;
+                        tile.CobbleWeight = (archetype == RealmzCore.Combat.CombatArenaArchetype.RuinsOutskirts ||
+                                             archetype == RealmzCore.Combat.CombatArenaArchetype.DungeonChamber ||
+                                             isRoad) ? 0.40f : 0.15f;
+                        tile.MossWeight = archetype == RealmzCore.Combat.CombatArenaArchetype.DeepWoods ? 0.55f : 0.18f;
+                        tile.MudWeight = 0f;
+                        tile.BlocksFoliage = true;
+                    }
+                    else if (isBridge)
+                    {
+                        tile.IsWater = false;
+                        tile.Elevation = BridgeElevation;
+                        tile.DirtWeight = 0.65f;
+                        tile.CobbleWeight = 0.35f;
+                        tile.MudWeight = 0f;
+                        tile.MossWeight = 0f;
+                        tile.BlocksFoliage = true;
+                    }
+                    else if (isRoad)
+                    {
+                        tile.IsWater = false;
+                        tile.Elevation = CobbleElevation;
+                        tile.CobbleWeight = 0.85f;
+                        tile.DirtWeight = 0.15f;
+                        tile.MudWeight = 0f;
+                        tile.MossWeight = 0f;
+                        tile.BlocksFoliage = true;
+                    }
+                    else if (isMud)
+                    {
+                        tile.IsWater = false;
+                        tile.Elevation = MudElevation;
+                        tile.MudWeight = 0.85f;
+                        tile.DirtWeight = 0.15f;
+                        tile.CobbleWeight = 0f;
+                        tile.BlocksFoliage = true;
+                    }
+                    else if (cell.ElevationTier <= -1)
+                    {
+                        tile.IsWater = false;
+                        tile.Elevation = -0.40f;
+                        tile.BlocksFoliage = true;
+                    }
+                    else
+                    {
+                        tile.IsWater = false;
+                        tile.Elevation = PlazaElevation;
+                        tile.BlocksFoliage |= cell.IsBlocked || cell.ProvidesCover || cell.Surface != RealmzCore.Combat.SurfaceType.None;
+                    }
+
+                    _tiles[wx, wy] = tile;
+
+                    if (feat == null || feat.ObstacleKind == RealmzCore.Combat.CombatArenaObstacleKind.None ||
+                        feat.ObstacleKind == RealmzCore.Combat.CombatArenaObstacleKind.BridgePlank)
+                    {
+                        continue;
+                    }
+
+                    Vector3 propPos = GridToWorld(wx, wy, tile.Elevation);
+                    switch (feat.ObstacleKind)
+                    {
+                        case RealmzCore.Combat.CombatArenaObstacleKind.BoulderRock:
+                            AddProp(
+                                ((wx + wy) & 1) == 0 ? CartographyPropKind.StoneFenceH : CartographyPropKind.DungeonPillar,
+                                propPos.x,
+                                propPos.y,
+                                propPos.z,
+                                ((wx + wy) & 1) == 0 ? 1.25f : 1.05f,
+                                ((wx + wy) & 1) == 0 ? 1.32f : 1.40f);
+                            break;
+                        case RealmzCore.Combat.CombatArenaObstacleKind.RuinedWall:
+                            AddProp(
+                                (feat.Y & 1) == 0 ? CartographyPropKind.StoneFenceH : CartographyPropKind.DungeonPillar,
+                                propPos.x,
+                                propPos.y,
+                                propPos.z,
+                                (feat.Y & 1) == 0 ? 1.32f : 1.08f,
+                                (feat.Y & 1) == 0 ? 1.48f : 1.92f);
+                            break;
+                        case RealmzCore.Combat.CombatArenaObstacleKind.TreeTrunk:
+                        {
+                            CartographyPropKind treeKind = ((wx + wy) & 1) == 0
+                                ? CartographyPropKind.TreeOakA
+                                : CartographyPropKind.TreePineA;
+                            AddCanopyTree(treeKind, propPos.x, propPos.y, propPos.z, 2.25f, 2.80f, 1.75f);
+                            break;
+                        }
+                        case RealmzCore.Combat.CombatArenaObstacleKind.StonePillar:
+                            AddProp(CartographyPropKind.DungeonPillar, propPos.x, propPos.y, propPos.z, 1.05f, 2.05f);
+                            break;
+                        case RealmzCore.Combat.CombatArenaObstacleKind.SupplyWagon:
+                            AddProp(CartographyPropKind.WoodenWagon, propPos.x, propPos.y, propPos.z, 2.05f, 1.62f);
+                            break;
+                        case RealmzCore.Combat.CombatArenaObstacleKind.BarrelsCrates:
+                            AddProp(CartographyPropKind.BarrelsCrates, propPos.x, propPos.y, propPos.z, 1.32f, 1.22f);
+                            break;
+                        case RealmzCore.Combat.CombatArenaObstacleKind.StoneFence:
+                            AddProp(CartographyPropKind.StoneFenceH, propPos.x, propPos.y, propPos.z, 1.12f, 1.20f);
+                            break;
+                        case RealmzCore.Combat.CombatArenaObstacleKind.LitBrazier:
+                            AddProp(CartographyPropKind.TorchBrazier, propPos.x, propPos.y, propPos.z, 0.88f, 1.20f);
+                            AddUniqueLantern(propPos, 3.2f, 0.65f);
+                            break;
+                        case RealmzCore.Combat.CombatArenaObstacleKind.WallSconce:
+                            AddProp(CartographyPropKind.DungeonWallSconce4f, propPos.x, propPos.y, propPos.z, 1.25f, 1.25f);
+                            AddUniqueLantern(propPos, 3.2f, 0.65f);
+                            break;
+                        case RealmzCore.Combat.CombatArenaObstacleKind.IronGrate:
+                            AddProp(CartographyPropKind.DungeonIronGrate, propPos.x, propPos.y, propPos.z, 0.96f, 0.96f);
+                            break;
+                        case RealmzCore.Combat.CombatArenaObstacleKind.BrushThicket:
+                            AddProp(CartographyPropKind.TreeOakB, propPos.x, propPos.y, propPos.z, 1.22f, 1.08f);
+                            break;
+                    }
+                }
             }
         }
 

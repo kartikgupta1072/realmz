@@ -1068,151 +1068,885 @@ namespace RealmzCore.Exploration
             return rng.NextInt(1, 101) <= report.EvadeChancePct;
         }
 
+        public static CombatArenaArchetype ResolveArenaArchetype(EncounterGeographyInfo? geo, IDiceRoller? roller = null)
+        {
+            if (geo == null)
+            {
+                return CombatArenaArchetype.RoadAmbush;
+            }
+
+            if (geo.BiomeKind == EncounterBiomeKind.Dungeon)
+            {
+                return CombatArenaArchetype.DungeonChamber;
+            }
+
+            if (geo.BiomeKind == EncounterBiomeKind.Riverbank ||
+                (geo.IsNearWater && !geo.IsOnRoad))
+            {
+                return CombatArenaArchetype.RiverbankCrossing;
+            }
+
+            if (geo.BiomeKind == EncounterBiomeKind.Road ||
+                geo.IsOnRoad ||
+                geo.BiomeKind == EncounterBiomeKind.TownSafe)
+            {
+                return CombatArenaArchetype.RoadAmbush;
+            }
+
+            if (geo.BiomeKind == EncounterBiomeKind.Ruins ||
+                geo.BiomeKind == EncounterBiomeKind.DungeonApproach)
+            {
+                return CombatArenaArchetype.RuinsOutskirts;
+            }
+
+            if (geo.BiomeKind == EncounterBiomeKind.DeepForest || geo.IsDeepForest)
+            {
+                return CombatArenaArchetype.DeepWoods;
+            }
+
+            int hash = Math.Abs((geo.LocationLabel ?? string.Empty).GetHashCode() + (geo.TileTerrainLabel ?? string.Empty).GetHashCode());
+            int pick = roller != null
+                ? Math.Abs(roller.NextInt(0, 3))
+                : (hash % 3);
+            return pick switch
+            {
+                0 => CombatArenaArchetype.DeepWoods,
+                1 => CombatArenaArchetype.RoadAmbush,
+                _ => CombatArenaArchetype.RuinsOutskirts
+            };
+        }
+
         public static void ApplyBiomeArenaFeatures(
             CombatGrid grid,
             EncounterGeographyInfo? geo,
             IReadOnlyCollection<GridCoord>? reservedCoords,
             IDiceRoller? roller)
         {
-            if (grid == null || geo == null)
+            if (grid == null)
             {
                 return;
+            }
+
+            CombatArenaArchetype archetype = ResolveArenaArchetype(geo, roller);
+            ApplyArenaArchetype(grid, archetype, reservedCoords, roller, geo);
+        }
+
+        public static CombatArenaLayout ApplyArenaArchetype(
+            CombatGrid grid,
+            CombatArenaArchetype archetype,
+            IReadOnlyCollection<GridCoord>? reservedCoords,
+            IDiceRoller? roller,
+            EncounterGeographyInfo? geo = null)
+        {
+            if (grid == null)
+            {
+                throw new ArgumentNullException(nameof(grid));
             }
 
             HashSet<GridCoord> reserved = reservedCoords != null
                 ? new HashSet<GridCoord>(reservedCoords)
                 : new HashSet<GridCoord>();
 
-            bool IsAvailableForFeature(int x, int y)
+            int w = grid.Width;
+            int h = grid.Height;
+            int midX = w / 2;
+            int midY = h / 2;
+            ulong seedVal = DeriveArenaSeed(geo, archetype, roller);
+            int variant = (int)(seedVal % 3UL);
+
+            CombatArenaFeature[,] mapFeatures = new CombatArenaFeature[w, h];
+            for (int y = 0; y < h; y++)
             {
-                if (!grid.InBounds(x, y) || !grid.IsWalkable(x, y))
+                for (int x = 0; x < w; x++)
                 {
-                    return false;
-                }
-
-                GridCoord c = new GridCoord(x, y);
-                if (reserved.Contains(c))
-                {
-                    return false;
-                }
-
-                return x >= 2 && x <= grid.Width - 3 && y >= 1 && y <= grid.Height - 2;
-            }
-
-            if (geo.IsNearWater || geo.BiomeKind == EncounterBiomeKind.Riverbank)
-            {
-                int waterCount = 0;
-                for (int y = 0; y < grid.Height; y++)
-                {
-                    for (int x = 0; x < grid.Width; x++)
+                    CombatGridCell cell = grid.GetCell(x, y);
+                    mapFeatures[x, y] = new CombatArenaFeature(x, y)
                     {
-                        if (grid.GetSurface(x, y) == SurfaceType.Water)
-                        {
-                            waterCount++;
-                        }
-                    }
-                }
-
-                if (waterCount < 4)
-                {
-                    int midX = grid.Width / 2;
-                    int midY = grid.Height / 2;
-                    GridCoord[] poolCandidates =
-                    {
-                        new GridCoord(midX - 1, midY),
-                        new GridCoord(midX, midY),
-                        new GridCoord(midX, midY - 1),
-                        new GridCoord(midX + 1, midY),
-                        new GridCoord(midX - 1, midY + 1),
-                        new GridCoord(midX, midY + 1),
-                        new GridCoord(midX + 1, midY - 1)
+                        BlocksMovement = cell.IsBlocked,
+                        BlocksLos = cell.BlocksLos,
+                        ProvidesCover = cell.ProvidesCover,
+                        ElevationTier = cell.ElevationTier,
+                        MoveCost = Math.Max(1, cell.MoveCost),
+                        Surface = cell.Surface,
+                        SurfaceRounds = cell.SurfaceRoundsRemaining
                     };
-
-                    for (int i = 0; i < poolCandidates.Length && waterCount < 5; i++)
-                    {
-                        GridCoord c = poolCandidates[i];
-                        if (IsAvailableForFeature(c.X, c.Y) && grid.GetSurface(c.X, c.Y) == SurfaceType.None)
-                        {
-                            grid.SetSurface(c.X, c.Y, SurfaceType.Water, -1);
-                            grid.SetMoveCost(c.X, c.Y, 2);
-                            waterCount++;
-                        }
-                    }
                 }
+            }
 
-                // Bias riverbank mud border tiles around water with slower footing (moveCost=2)
-                for (int y = 1; y < grid.Height - 1; y++)
+            bool IsOpenFeatureSlot(int x, int y)
+            {
+                if (!grid.InBounds(x, y))
                 {
-                    for (int x = 2; x < grid.Width - 2; x++)
-                    {
-                        if (!grid.IsWalkable(x, y) || grid.GetSurface(x, y) != SurfaceType.None)
-                        {
-                            continue;
-                        }
+                    return false;
+                }
+                if (reserved.Contains(new GridCoord(x, y)))
+                {
+                    return false;
+                }
+                return x >= 1 && x <= w - 2 && y >= 1 && y <= h - 2;
+            }
 
-                        if (grid.GetSurface(x - 1, y) == SurfaceType.Water ||
-                            grid.GetSurface(x + 1, y) == SurfaceType.Water ||
-                            grid.GetSurface(x, y - 1) == SurfaceType.Water ||
-                            grid.GetSurface(x, y + 1) == SurfaceType.Water)
-                        {
-                            grid.SetMoveCost(x, y, Math.Max(2, grid.GetMoveCost(x, y)));
-                        }
+            // Preserve perimeter corridor walls on Dungeon slices while clearing messy exploration clutter inside central lanes.
+            int clearMinX = Math.Min(3, midX - 2);
+            int clearMaxX = Math.Max(clearMinX, w - 4);
+            for (int y = 1; y < h - 1; y++)
+            {
+                for (int x = clearMinX; x <= clearMaxX; x++)
+                {
+                    if (!reserved.Contains(new GridCoord(x, y)))
+                    {
+                        ResetFeatureOpen(grid, mapFeatures, x, y, 0, 1);
                     }
                 }
             }
-            else if (geo.BiomeKind == EncounterBiomeKind.DeepForest)
+
+            switch (archetype)
             {
-                int existingCover = 0;
-                for (int y = 0; y < grid.Height; y++)
-                {
-                    for (int x = 0; x < grid.Width; x++)
-                    {
-                        if (grid.ProvidesCover(x, y))
-                        {
-                            existingCover++;
-                        }
-                    }
-                }
+                case CombatArenaArchetype.RoadAmbush:
+                    BuildRoadAmbushTemplate(grid, mapFeatures, w, h, variant, reserved, IsOpenFeatureSlot);
+                    break;
+                case CombatArenaArchetype.RiverbankCrossing:
+                    BuildRiverbankCrossingTemplate(grid, mapFeatures, w, h, variant, reserved, IsOpenFeatureSlot);
+                    break;
+                case CombatArenaArchetype.DeepWoods:
+                    BuildDeepWoodsTemplate(grid, mapFeatures, w, h, variant, reserved, IsOpenFeatureSlot);
+                    break;
+                case CombatArenaArchetype.RuinsOutskirts:
+                    BuildRuinsOutskirtsTemplate(grid, mapFeatures, w, h, variant, reserved, IsOpenFeatureSlot);
+                    break;
+                case CombatArenaArchetype.DungeonChamber:
+                    BuildDungeonChamberTemplate(grid, mapFeatures, w, h, variant, reserved, IsOpenFeatureSlot);
+                    break;
+            }
 
-                int midX = grid.Width / 2;
-                int midY = grid.Height / 2;
-                GridCoord[] thicketSpots =
-                {
-                    new GridCoord(midX - 1, 2),
-                    new GridCoord(midX + 1, 3),
-                    new GridCoord(midX - 2, midY + 1),
-                    new GridCoord(midX + 1, grid.Height - 3),
-                    new GridCoord(midX, midY - 1),
-                    new GridCoord(midX - 1, grid.Height - 2)
-                };
+            EnforceSpawnsAndMultiLaneBfs(grid, mapFeatures, w, h, reserved, out int verifiedLanes, out bool allConnected);
 
-                for (int i = 0; i < thicketSpots.Length && existingCover < 5; i++)
+            List<CombatArenaFeature> featureList = new List<CombatArenaFeature>(w * h);
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
                 {
-                    GridCoord c = thicketSpots[i];
-                    if (IsAvailableForFeature(c.X, c.Y) && !grid.ProvidesCover(c.X, c.Y))
+                    CombatArenaFeature f = mapFeatures[x, y];
+                    grid.SetFeatureCell(
+                        x,
+                        y,
+                        f.BlocksMovement,
+                        f.BlocksLos,
+                        f.ProvidesCover,
+                        f.ElevationTier,
+                        f.MoveCost,
+                        f.Surface,
+                        f.SurfaceRounds);
+                    if (f.ObstacleKind != CombatArenaObstacleKind.None ||
+                        f.ElevationTier != 0 ||
+                        f.Surface != SurfaceType.None ||
+                        f.MoveCost > 1 ||
+                        f.ProvidesCover ||
+                        f.IsRoadTile ||
+                        f.IsMudBank ||
+                        f.IsBridgeTile ||
+                        f.BlocksMovement)
                     {
-                        grid.SetCover(c.X, c.Y, moveCost: 2, blocksLos: false);
-                        existingCover++;
+                        featureList.Add(f);
                     }
                 }
             }
-            else if (geo.BiomeKind == EncounterBiomeKind.Ruins || geo.BiomeKind == EncounterBiomeKind.DungeonApproach)
-            {
-                int midX = grid.Width / 2;
-                GridCoord[] ruinPillars =
-                {
-                    new GridCoord(midX - 1, 2),
-                    new GridCoord(midX + 1, grid.Height - 3)
-                };
 
-                for (int i = 0; i < ruinPillars.Length; i++)
+            CombatArenaLayout layout = new CombatArenaLayout(archetype, seedVal, verifiedLanes, allConnected, featureList);
+            grid.SetArenaLayout(layout);
+            return layout;
+        }
+
+        private static ulong DeriveArenaSeed(EncounterGeographyInfo? geo, CombatArenaArchetype archetype, IDiceRoller? roller)
+        {
+            ulong h = ((ulong)((int)archetype + 1)) * 0x9E3779B97F4A7C15UL;
+            if (geo != null)
+            {
+                int labelHash = (geo.LocationLabel ?? string.Empty).GetHashCode() ^
+                                ((geo.TileTerrainLabel ?? string.Empty).GetHashCode() * 31) ^
+                                ((int)geo.BiomeKind * 397);
+                h ^= unchecked((ulong)(uint)labelHash) * 73856093UL;
+            }
+            if (roller != null)
+            {
+                ulong rVal = (ulong)(uint)Math.Abs(roller.NextInt(1, 100000));
+                h ^= rVal * 2654435761UL;
+            }
+            return h;
+        }
+
+        private static void ResetFeatureOpen(CombatGrid grid, CombatArenaFeature[,] map, int x, int y, short elev, int moveCost)
+        {
+            if (!grid.InBounds(x, y)) return;
+            CombatArenaFeature f = map[x, y];
+            f.ObstacleKind = CombatArenaObstacleKind.None;
+            f.BlocksMovement = false;
+            f.BlocksLos = false;
+            f.ProvidesCover = false;
+            f.ElevationTier = elev;
+            f.MoveCost = Math.Max(1, moveCost);
+            f.Surface = SurfaceType.None;
+            f.SurfaceRounds = -1;
+            f.IsMudBank = false;
+        }
+
+        private static void SetObstacleFeature(
+            CombatGrid grid,
+            CombatArenaFeature[,] map,
+            int x,
+            int y,
+            CombatArenaObstacleKind kind,
+            bool blocksMove,
+            bool blocksLos,
+            bool providesCover,
+            int moveCost = 1,
+            short elevationTier = 0,
+            SurfaceType surface = SurfaceType.None)
+        {
+            if (!grid.InBounds(x, y)) return;
+            CombatArenaFeature f = map[x, y];
+            f.ObstacleKind = kind;
+            f.BlocksMovement = blocksMove;
+            f.BlocksLos = blocksLos;
+            f.ProvidesCover = providesCover;
+            f.MoveCost = Math.Max(1, moveCost);
+            f.ElevationTier = elevationTier;
+            f.Surface = surface;
+            f.SurfaceRounds = surface == SurfaceType.None ? 0 : -1;
+            f.BlocksFoliage = blocksMove || providesCover;
+        }
+
+        private static void BuildRoadAmbushTemplate(
+            CombatGrid grid,
+            CombatArenaFeature[,] map,
+            int w,
+            int h,
+            int variant,
+            HashSet<GridCoord> reserved,
+            Func<int, int, bool> isOpen)
+        {
+            int midX = w / 2;
+            int roadY0 = Math.Clamp((h / 2) - 1 + (variant == 1 ? -1 : 0), 2, Math.Max(2, h - 4));
+            int roadY1 = Math.Min(h - 3, roadY0 + 1);
+
+            for (int x = 0; x < w; x++)
+            {
+                for (int ry = roadY0; ry <= roadY1; ry++)
                 {
-                    GridCoord c = ruinPillars[i];
-                    if (IsAvailableForFeature(c.X, c.Y) && !grid.ProvidesCover(c.X, c.Y))
+                    if (!reserved.Contains(new GridCoord(x, ry)))
                     {
-                        grid.SetCover(c.X, c.Y, moveCost: 2, blocksLos: false);
+                        ResetFeatureOpen(grid, map, x, ry, 0, 1);
+                    }
+                    map[x, ry].IsRoadTile = true;
+                    map[x, ry].BlocksFoliage = true;
+                }
+            }
+
+            // Hedgerow / stone fence + roadside boulders flanking road while keeping side-trail openings at flanks
+            int northShoulderY = Math.Max(1, roadY0 - 1);
+            int southShoulderY = Math.Min(h - 2, roadY1 + 1);
+            (int x, int y, CombatArenaObstacleKind kind)[] shoulders =
+            {
+                (Math.Max(2, midX - 2), northShoulderY, CombatArenaObstacleKind.StoneFence),
+                (Math.Min(w - 3, midX + 2), northShoulderY, CombatArenaObstacleKind.BoulderRock),
+                (Math.Max(2, midX - 2), southShoulderY, CombatArenaObstacleKind.BoulderRock),
+                (Math.Min(w - 3, midX + 2), southShoulderY, CombatArenaObstacleKind.StoneFence)
+            };
+            for (int i = 0; i < shoulders.Length; i++)
+            {
+                var (ox, oy, okind) = shoulders[i];
+                if (isOpen(ox, oy))
+                {
+                    SetObstacleFeature(grid, map, ox, oy, okind, blocksMove: true, blocksLos: true, providesCover: false, moveCost: 1);
+                }
+            }
+
+            // Overturned Supply Wagon & Crate Cover creating central road bottleneck
+            int wagonX = Math.Clamp(midX - (variant == 2 ? 0 : 1), 3, w - 4);
+            if (isOpen(wagonX, roadY0))
+            {
+                SetObstacleFeature(grid, map, wagonX, roadY0, CombatArenaObstacleKind.SupplyWagon, blocksMove: true, blocksLos: true, providesCover: false, moveCost: 1);
+            }
+
+            int crateX = Math.Clamp(midX + 1, 3, w - 4);
+            if (isOpen(crateX, roadY1))
+            {
+                SetObstacleFeature(grid, map, crateX, roadY1, CombatArenaObstacleKind.BarrelsCrates, blocksMove: false, blocksLos: false, providesCover: true, moveCost: 2);
+            }
+            if (isOpen(Math.Max(3, wagonX - 1), roadY1))
+            {
+                SetObstacleFeature(grid, map, Math.Max(3, wagonX - 1), roadY1, CombatArenaObstacleKind.BarrelsCrates, blocksMove: false, blocksLos: false, providesCover: true, moveCost: 2);
+            }
+
+            // Elevated roadside embankment ridges (north and south flanks)
+            for (int x = Math.Max(3, midX - 2); x <= Math.Min(w - 4, midX); x++)
+            {
+                int ridgeY = 1;
+                if (isOpen(x, ridgeY) && !map[x, ridgeY].BlocksMovement)
+                {
+                    map[x, ridgeY].ElevationTier = 1;
+                }
+            }
+            for (int x = Math.Min(w - 4, midX); x <= Math.Min(w - 3, midX + 2); x++)
+            {
+                int ridgeY = Math.Max(southShoulderY + 1, h - 2);
+                if (isOpen(x, ridgeY) && !map[x, ridgeY].BlocksMovement)
+                {
+                    map[x, ridgeY].ElevationTier = 1;
+                }
+            }
+
+            // Lit Brazier + spilled Oil slick near the road bottleneck for Fire combos
+            int brazierX = Math.Clamp(midX, 3, w - 4);
+            int brazierY = northShoulderY;
+            if (isOpen(brazierX, brazierY) && !map[brazierX, brazierY].BlocksMovement)
+            {
+                SetObstacleFeature(grid, map, brazierX, brazierY, CombatArenaObstacleKind.LitBrazier, blocksMove: true, blocksLos: false, providesCover: false, moveCost: 1);
+            }
+
+            GridCoord[] oilSpots =
+            {
+                new GridCoord(Math.Clamp(brazierX, 3, w - 4), roadY1),
+                new GridCoord(Math.Clamp(brazierX + 1, 3, w - 4), roadY0)
+            };
+            for (int i = 0; i < oilSpots.Length; i++)
+            {
+                GridCoord c = oilSpots[i];
+                if (isOpen(c.X, c.Y) && !map[c.X, c.Y].BlocksMovement && map[c.X, c.Y].Surface == SurfaceType.None)
+                {
+                    map[c.X, c.Y].Surface = SurfaceType.Oil;
+                    map[c.X, c.Y].SurfaceRounds = -1;
+                }
+            }
+        }
+
+        private static void BuildRiverbankCrossingTemplate(
+            CombatGrid grid,
+            CombatArenaFeature[,] map,
+            int w,
+            int h,
+            int variant,
+            HashSet<GridCoord> reserved,
+            Func<int, int, bool> isOpen)
+        {
+            int midX = w / 2;
+            int upperBridgeY = Math.Clamp(2 + (variant == 1 ? 1 : 0), 1, Math.Max(2, (h / 2) - 1));
+            int lowerFordY = Math.Clamp(h - 3 - (variant == 2 ? 1 : 0), upperBridgeY + 3, h - 2);
+
+            for (int y = 0; y < h; y++)
+            {
+                int meander = ((y + variant) % 4 == 1) ? 0 : (((y + variant) % 4 == 2) ? -1 : 0);
+                int streamStartX = Math.Clamp(midX - 1 + meander, 3, Math.Max(3, w - 5));
+                int streamEndX = Math.Min(w - 3, streamStartX + 1);
+                bool isCrossingRow = (y == upperBridgeY || y == lowerFordY);
+
+                for (int x = streamStartX; x <= streamEndX; x++)
+                {
+                    if (reserved.Contains(new GridCoord(x, y)))
+                    {
+                        continue;
+                    }
+
+                    ResetFeatureOpen(grid, map, x, y, 0, isCrossingRow ? 1 : 2);
+                    if (isCrossingRow)
+                    {
+                        map[x, y].ObstacleKind = CombatArenaObstacleKind.BridgePlank;
+                        map[x, y].IsBridgeTile = true;
+                        map[x, y].Surface = SurfaceType.None;
+                        map[x, y].MoveCost = 1;
+                    }
+                    else
+                    {
+                        map[x, y].Surface = SurfaceType.Water;
+                        map[x, y].SurfaceRounds = -1;
+                        map[x, y].MoveCost = 2;
+                    }
+                    map[x, y].BlocksFoliage = true;
+                }
+            }
+
+            // Ensure mud / reed slow zones immediately bordering water banks (leaving bridge approach tips clean)
+            for (int y = 1; y < h - 1; y++)
+            {
+                for (int x = 2; x < w - 2; x++)
+                {
+                    CombatArenaFeature f = map[x, y];
+                    if (f.BlocksMovement || f.Surface == SurfaceType.Water || f.IsBridgeTile || reserved.Contains(new GridCoord(x, y)))
+                    {
+                        continue;
+                    }
+
+                    bool adjWater =
+                        (x > 0 && map[x - 1, y].Surface == SurfaceType.Water) ||
+                        (x + 1 < w && map[x + 1, y].Surface == SurfaceType.Water);
+                    bool adjBridge =
+                        (x > 0 && map[x - 1, y].IsBridgeTile) ||
+                        (x + 1 < w && map[x + 1, y].IsBridgeTile);
+                    if (adjWater && !adjBridge)
+                    {
+                        f.IsMudBank = true;
+                        f.MoveCost = 2;
                     }
                 }
+            }
+
+            // Raised High-Ground rocky banks overlooking the stream on both sides
+            GridCoord[] bluffs =
+            {
+                new GridCoord(2, 1), new GridCoord(3, 1), new GridCoord(3, 2),
+                new GridCoord(w - 4, h - 3), new GridCoord(w - 3, h - 2), new GridCoord(w - 4, h - 2)
+            };
+            for (int i = 0; i < bluffs.Length; i++)
+            {
+                GridCoord b = bluffs[i];
+                if (isOpen(b.X, b.Y) && map[b.X, b.Y].Surface == SurfaceType.None && !map[b.X, b.Y].IsBridgeTile && !map[b.X, b.Y].BlocksMovement)
+                {
+                    map[b.X, b.Y].ElevationTier = 1;
+                    map[b.X, b.Y].IsMudBank = false;
+                    map[b.X, b.Y].MoveCost = 1;
+                }
+            }
+
+            // Flanking bank boulders & brush thickets
+            (int x, int y, CombatArenaObstacleKind kind)[] covers =
+            {
+                (midX - 2, Math.Max(1, upperBridgeY - 1), CombatArenaObstacleKind.BoulderRock),
+                (midX + 2, Math.Min(h - 2, lowerFordY + 1), CombatArenaObstacleKind.BoulderRock),
+                (midX - 2, lowerFordY - 1, CombatArenaObstacleKind.BrushThicket),
+                (midX + 2, upperBridgeY + 1, CombatArenaObstacleKind.BrushThicket)
+            };
+            for (int i = 0; i < covers.Length; i++)
+            {
+                var (cx, cy, okind) = covers[i];
+                if (isOpen(cx, cy) && map[cx, cy].Surface == SurfaceType.None && !map[cx, cy].IsBridgeTile && !map[cx, cy].BlocksMovement)
+                {
+                    bool blocks = okind == CombatArenaObstacleKind.BoulderRock;
+                    SetObstacleFeature(grid, map, cx, cy, okind, blocksMove: blocks, blocksLos: blocks, providesCover: !blocks, moveCost: blocks ? 1 : 2, elevationTier: map[cx, cy].ElevationTier);
+                }
+            }
+        }
+
+        private static void BuildDeepWoodsTemplate(
+            CombatGrid grid,
+            CombatArenaFeature[,] map,
+            int w,
+            int h,
+            int variant,
+            HashSet<GridCoord> reserved,
+            Func<int, int, bool> isOpen)
+        {
+            int midX = w / 2;
+            int midY = h / 2;
+
+            // Staggered ancient tree trunks & forest boulders blocking straight ranged LOS
+            (int x, int y, CombatArenaObstacleKind kind)[] pillars =
+            {
+                (midX - 2, 2, CombatArenaObstacleKind.TreeTrunk),
+                (midX - 1, midY + (variant == 1 ? 0 : 1), CombatArenaObstacleKind.BoulderRock),
+                (midX + 1, 2 + (variant == 2 ? 1 : 0), CombatArenaObstacleKind.TreeTrunk),
+                (midX + 2, midY + 1, CombatArenaObstacleKind.TreeTrunk),
+                (midX - 2, h - 2, CombatArenaObstacleKind.TreeTrunk),
+                (midX + 1, h - 3, CombatArenaObstacleKind.BoulderRock)
+            };
+            for (int i = 0; i < pillars.Length; i++)
+            {
+                var (px, py, pkind) = pillars[i];
+                if (isOpen(px, py))
+                {
+                    SetObstacleFeature(grid, map, px, py, pkind, blocksMove: true, blocksLos: true, providesCover: false, moveCost: 1);
+                }
+            }
+
+            // Mossy elevated root / cliff ridge in north-central & south flanks
+            GridCoord[] ridges =
+            {
+                new GridCoord(midX - 1, 1), new GridCoord(midX, 1), new GridCoord(midX, 2),
+                new GridCoord(midX - 1, h - 2), new GridCoord(midX, h - 2)
+            };
+            for (int i = 0; i < ridges.Length; i++)
+            {
+                GridCoord r = ridges[i];
+                if (isOpen(r.X, r.Y) && !map[r.X, r.Y].BlocksMovement)
+                {
+                    map[r.X, r.Y].ElevationTier = 1;
+                }
+            }
+
+            // Flanking brush cover pockets along twisting ambush trails
+            GridCoord[] thickets =
+            {
+                new GridCoord(midX - 2, midY - 1),
+                new GridCoord(midX, midY),
+                new GridCoord(midX + 2, midY - 1),
+                new GridCoord(midX - 1, 3),
+                new GridCoord(midX + 2, h - 3)
+            };
+            for (int i = 0; i < thickets.Length; i++)
+            {
+                GridCoord c = thickets[i];
+                if (isOpen(c.X, c.Y) && !map[c.X, c.Y].BlocksMovement)
+                {
+                    SetObstacleFeature(grid, map, c.X, c.Y, CombatArenaObstacleKind.BrushThicket, blocksMove: false, blocksLos: false, providesCover: true, moveCost: 2, elevationTier: map[c.X, c.Y].ElevationTier);
+                }
+            }
+        }
+
+        private static void BuildRuinsOutskirtsTemplate(
+            CombatGrid grid,
+            CombatArenaFeature[,] map,
+            int w,
+            int h,
+            int variant,
+            HashSet<GridCoord> reserved,
+            Func<int, int, bool> isOpen)
+        {
+            int midX = w / 2;
+            int midY = h / 2;
+
+            // Angled crumbled ruined wall segments framing doorway choke & defensive bays
+            (int x, int y, CombatArenaObstacleKind kind)[] walls =
+            {
+                (midX - 2, 2, CombatArenaObstacleKind.RuinedWall),
+                (midX - 2, 3, CombatArenaObstacleKind.RuinedWall),
+                (midX - 2, h - 3, CombatArenaObstacleKind.RuinedWall),
+                (midX + 2, 2 + (variant == 1 ? 1 : 0), CombatArenaObstacleKind.RuinedWall),
+                (midX + 2, h - 4, CombatArenaObstacleKind.RuinedWall),
+                (midX + 2, h - 3, CombatArenaObstacleKind.RuinedWall)
+            };
+            for (int i = 0; i < walls.Length; i++)
+            {
+                var (wx, wy, wkind) = walls[i];
+                if (isOpen(wx, wy))
+                {
+                    SetObstacleFeature(grid, map, wx, wy, wkind, blocksMove: true, blocksLos: true, providesCover: false, moveCost: 1);
+                }
+            }
+
+            // Stepped ruined courtyard dais overlooking central breach
+            GridCoord[] dais =
+            {
+                new GridCoord(midX - 1, midY - 1),
+                new GridCoord(midX, midY - 1),
+                new GridCoord(midX, midY),
+                new GridCoord(midX - 1, 1)
+            };
+            for (int i = 0; i < dais.Length; i++)
+            {
+                GridCoord d = dais[i];
+                if (isOpen(d.X, d.Y) && !map[d.X, d.Y].BlocksMovement)
+                {
+                    map[d.X, d.Y].ElevationTier = 1;
+                    map[d.X, d.Y].IsRoadTile = true;
+                }
+            }
+
+            // Standing braziers & ruined pillar cover
+            if (isOpen(midX - 1, 2) && !map[midX - 1, 2].BlocksMovement)
+            {
+                SetObstacleFeature(grid, map, midX - 1, 2, CombatArenaObstacleKind.LitBrazier, blocksMove: true, blocksLos: false, providesCover: false);
+            }
+            if (isOpen(midX + 1, h - 3) && !map[midX + 1, h - 3].BlocksMovement)
+            {
+                SetObstacleFeature(grid, map, midX + 1, h - 3, CombatArenaObstacleKind.LitBrazier, blocksMove: true, blocksLos: false, providesCover: false);
+            }
+            if (isOpen(midX + 1, midY + 1) && !map[midX + 1, midY + 1].BlocksMovement)
+            {
+                SetObstacleFeature(grid, map, midX + 1, midY + 1, CombatArenaObstacleKind.BarrelsCrates, blocksMove: false, blocksLos: false, providesCover: true, moveCost: 2);
+            }
+
+            // Courtyard Oil and Poison puddles near doorway choke & flank bay
+            GridCoord[] oilTiles = { new GridCoord(midX - 1, 3), new GridCoord(midX, 2) };
+            for (int i = 0; i < oilTiles.Length; i++)
+            {
+                GridCoord o = oilTiles[i];
+                if (isOpen(o.X, o.Y) && !map[o.X, o.Y].BlocksMovement && map[o.X, o.Y].Surface == SurfaceType.None)
+                {
+                    map[o.X, o.Y].Surface = SurfaceType.Oil;
+                    map[o.X, o.Y].SurfaceRounds = -1;
+                }
+            }
+
+            GridCoord[] poisonTiles = { new GridCoord(midX, h - 2), new GridCoord(midX + 1, h - 2) };
+            for (int i = 0; i < poisonTiles.Length; i++)
+            {
+                GridCoord p = poisonTiles[i];
+                if (isOpen(p.X, p.Y) && !map[p.X, p.Y].BlocksMovement && map[p.X, p.Y].Surface == SurfaceType.None)
+                {
+                    map[p.X, p.Y].Surface = SurfaceType.Poison;
+                    map[p.X, p.Y].SurfaceRounds = -1;
+                }
+            }
+        }
+
+        private static void BuildDungeonChamberTemplate(
+            CombatGrid grid,
+            CombatArenaFeature[,] map,
+            int w,
+            int h,
+            int variant,
+            HashSet<GridCoord> reserved,
+            Func<int, int, bool> isOpen)
+        {
+            int midX = w / 2;
+            int midY = h / 2;
+
+            // Vaulted entry arch walls + symmetric stone pillar colonnade blocking straight ranged sightlines
+            (int x, int y, CombatArenaObstacleKind kind)[] structures =
+            {
+                (midX - 3, 2, CombatArenaObstacleKind.RuinedWall),
+                (midX - 3, h - 3, CombatArenaObstacleKind.RuinedWall),
+                (midX - 1, 2, CombatArenaObstacleKind.StonePillar),
+                (midX - 1, h - 3, CombatArenaObstacleKind.StonePillar),
+                (midX + 2, 2, CombatArenaObstacleKind.StonePillar),
+                (midX + 2, h - 3, CombatArenaObstacleKind.StonePillar)
+            };
+            for (int i = 0; i < structures.Length; i++)
+            {
+                var (sx, sy, skind) = structures[i];
+                if (isOpen(sx, sy))
+                {
+                    SetObstacleFeature(grid, map, sx, sy, skind, blocksMove: true, blocksLos: true, providesCover: false);
+                }
+            }
+
+            // Raised stone altar dais overlooking chamber nave
+            GridCoord[] altar =
+            {
+                new GridCoord(midX + 1, midY - 1),
+                new GridCoord(midX + 2, midY - 1),
+                new GridCoord(midX + 1, midY),
+                new GridCoord(midX + 2, midY)
+            };
+            for (int i = 0; i < altar.Length; i++)
+            {
+                GridCoord a = altar[i];
+                if (isOpen(a.X, a.Y) && !map[a.X, a.Y].BlocksMovement)
+                {
+                    map[a.X, a.Y].ElevationTier = 1;
+                }
+            }
+
+            // Wall sconces / braziers flanking nave & altar steps
+            GridCoord[] sconces =
+            {
+                new GridCoord(midX, 1),
+                new GridCoord(midX, h - 2)
+            };
+            for (int i = 0; i < sconces.Length; i++)
+            {
+                GridCoord s = sconces[i];
+                if (isOpen(s.X, s.Y) && !map[s.X, s.Y].BlocksMovement)
+                {
+                    SetObstacleFeature(grid, map, s.X, s.Y, i == 0 ? CombatArenaObstacleKind.WallSconce : CombatArenaObstacleKind.LitBrazier, blocksMove: true, blocksLos: false, providesCover: false);
+                }
+            }
+
+            // Hazardous IronGrate drainage floor tiles carrying Oil / Water / Ice
+            (int x, int y, SurfaceType surf)[] grates =
+            {
+                (midX - 2, midY - 1, SurfaceType.Oil),
+                (midX - 2, midY, SurfaceType.Oil),
+                (midX, midY - 1, SurfaceType.Water),
+                (midX, midY + 1, variant == 2 ? SurfaceType.Ice : SurfaceType.Water)
+            };
+            for (int i = 0; i < grates.Length; i++)
+            {
+                var (gx, gy, gsurf) = grates[i];
+                if (isOpen(gx, gy) && !map[gx, gy].BlocksMovement)
+                {
+                    map[gx, gy].ObstacleKind = CombatArenaObstacleKind.IronGrate;
+                    map[gx, gy].Surface = gsurf;
+                    map[gx, gy].SurfaceRounds = -1;
+                    map[gx, gy].MoveCost = gsurf == SurfaceType.Ice ? 1 : 2;
+                    map[gx, gy].BlocksFoliage = true;
+                }
+            }
+        }
+
+        private static void EnforceSpawnsAndMultiLaneBfs(
+            CombatGrid grid,
+            CombatArenaFeature[,] map,
+            int w,
+            int h,
+            HashSet<GridCoord> reserved,
+            out int verifiedLaneCount,
+            out bool allConnected)
+        {
+            // Ensure all reserved spawn tiles are strictly walkable
+            foreach (GridCoord rc in reserved)
+            {
+                if (grid.InBounds(rc.X, rc.Y) && map[rc.X, rc.Y].BlocksMovement)
+                {
+                    ResetFeatureOpen(grid, map, rc.X, rc.Y, 0, 1);
+                }
+            }
+
+            List<GridCoord> westAnchors = new List<GridCoord>();
+            List<GridCoord> eastAnchors = new List<GridCoord>();
+            int midX = w / 2;
+            foreach (GridCoord rc in reserved)
+            {
+                if (rc.X < midX) westAnchors.Add(rc);
+                else eastAnchors.Add(rc);
+            }
+            if (westAnchors.Count == 0) westAnchors.Add(new GridCoord(Math.Min(1, w - 1), h / 2));
+            if (eastAnchors.Count == 0) eastAnchors.Add(new GridCoord(Math.Max(0, w - 2), h / 2));
+
+            // 1. Connect any isolated reserved spawn or east/west groups
+            for (int i = 0; i < westAnchors.Count; i++)
+            {
+                GridCoord wa = westAnchors[i];
+                if (!HasBfsPath(map, w, h, wa, eastAnchors[0], null))
+                {
+                    CarveWalkableCorridor(grid, map, w, h, wa, eastAnchors[0]);
+                }
+            }
+            for (int i = 0; i < eastAnchors.Count; i++)
+            {
+                GridCoord ea = eastAnchors[i];
+                if (!HasBfsPath(map, w, h, westAnchors[0], ea, null))
+                {
+                    CarveWalkableCorridor(grid, map, w, h, westAnchors[0], ea);
+                }
+            }
+
+            // 2. Verify >= 2 distinct central crossing lanes (disjoint on interior cols x in [2..w-3])
+            allConnected = true;
+            verifiedLaneCount = 1;
+            if (TryFindBfsPath(map, w, h, westAnchors[0], eastAnchors[0], null, out List<GridCoord> laneA))
+            {
+                HashSet<GridCoord> blockedFirstLane = new HashSet<GridCoord>();
+                for (int i = 0; i < laneA.Count; i++)
+                {
+                    GridCoord step = laneA[i];
+                    if (step.X >= 2 && step.X <= w - 3 && !reserved.Contains(step))
+                    {
+                        blockedFirstLane.Add(step);
+                    }
+                }
+
+                if (TryFindBfsPath(map, w, h, westAnchors[0], eastAnchors[0], blockedFirstLane, out _))
+                {
+                    verifiedLaneCount = 2;
+                }
+                else
+                {
+                    // Carve a guaranteed secondary flank lane at alternate row (top or bottom row inside arena)
+                    int laneRowA = laneA[laneA.Count / 2].Y;
+                    int altY = laneRowA < h / 2 ? Math.Max(1, h - 2) : 1;
+                    GridCoord startAlt = new GridCoord(westAnchors[0].X, altY);
+                    GridCoord endAlt = new GridCoord(eastAnchors[0].X, altY);
+                    CarveWalkableCorridor(grid, map, w, h, westAnchors[0], startAlt);
+                    CarveWalkableCorridor(grid, map, w, h, startAlt, endAlt);
+                    CarveWalkableCorridor(grid, map, w, h, endAlt, eastAnchors[0]);
+
+                    if (TryFindBfsPath(map, w, h, westAnchors[0], eastAnchors[0], blockedFirstLane, out _))
+                    {
+                        verifiedLaneCount = 2;
+                    }
+                }
+            }
+            else
+            {
+                allConnected = false;
+            }
+        }
+
+        private static bool HasBfsPath(
+            CombatArenaFeature[,] map,
+            int w,
+            int h,
+            GridCoord start,
+            GridCoord goal,
+            HashSet<GridCoord>? extraForbidden)
+        {
+            return TryFindBfsPath(map, w, h, start, goal, extraForbidden, out _);
+        }
+
+        private static bool TryFindBfsPath(
+            CombatArenaFeature[,] map,
+            int w,
+            int h,
+            GridCoord start,
+            GridCoord goal,
+            HashSet<GridCoord>? extraForbidden,
+            out List<GridCoord> path)
+        {
+            path = new List<GridCoord>();
+            if (start.X < 0 || start.X >= w || start.Y < 0 || start.Y >= h ||
+                goal.X < 0 || goal.X >= w || goal.Y < 0 || goal.Y >= h ||
+                map[start.X, start.Y].BlocksMovement || map[goal.X, goal.Y].BlocksMovement)
+            {
+                return false;
+            }
+
+            Dictionary<GridCoord, GridCoord> parent = new Dictionary<GridCoord, GridCoord>();
+            Queue<GridCoord> q = new Queue<GridCoord>();
+            parent[start] = start;
+            q.Enqueue(start);
+
+            int[] dxs = { 1, -1, 0, 0, 1, 1, -1, -1 };
+            int[] dys = { 0, 0, 1, -1, 1, -1, 1, -1 };
+
+            while (q.Count > 0)
+            {
+                GridCoord cur = q.Dequeue();
+                if (cur.Equals(goal))
+                {
+                    GridCoord p = cur;
+                    while (!p.Equals(start))
+                    {
+                        path.Add(p);
+                        p = parent[p];
+                    }
+                    path.Add(start);
+                    path.Reverse();
+                    return true;
+                }
+
+                for (int d = 0; d < 8; d++)
+                {
+                    int nx = cur.X + dxs[d];
+                    int ny = cur.Y + dys[d];
+                    if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+                    GridCoord next = new GridCoord(nx, ny);
+                    if (parent.ContainsKey(next)) continue;
+                    if (map[nx, ny].BlocksMovement) continue;
+                    if (extraForbidden != null && extraForbidden.Contains(next)) continue;
+                    if (Math.Abs(map[nx, ny].ElevationTier - map[cur.X, cur.Y].ElevationTier) > 1) continue;
+                    if (d >= 4 && (map[cur.X + dxs[d], cur.Y].BlocksMovement || map[cur.X, cur.Y + dys[d]].BlocksMovement)) continue;
+
+                    parent[next] = cur;
+                    q.Enqueue(next);
+                }
+            }
+
+            return false;
+        }
+
+        private static void CarveWalkableCorridor(
+            CombatGrid grid,
+            CombatArenaFeature[,] map,
+            int w,
+            int h,
+            GridCoord from,
+            GridCoord to)
+        {
+            int cx = from.X;
+            int cy = from.Y;
+            int guard = w * h * 2;
+            while ((cx != to.X || cy != to.Y) && guard-- > 0)
+            {
+                if (map[cx, cy].BlocksMovement)
+                {
+                    ResetFeatureOpen(grid, map, cx, cy, 0, 1);
+                }
+                if (cx != to.X) cx += cx < to.X ? 1 : -1;
+                else if (cy != to.Y) cy += cy < to.Y ? 1 : -1;
+            }
+            if (map[to.X, to.Y].BlocksMovement)
+            {
+                ResetFeatureOpen(grid, map, to.X, to.Y, 0, 1);
             }
         }
 

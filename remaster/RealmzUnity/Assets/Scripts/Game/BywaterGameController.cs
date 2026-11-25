@@ -118,6 +118,7 @@ namespace Realmz.Game
         private GridCoord _preCombatExplorePos = new GridCoord(-1, -1);
         private bool _hasPreCombatExplorePos;
         private List<MonsterDefinition> _pendingQuickResolveMonsters;
+        private CombatArenaArchetype? _forcedCombatArenaArchetype;
         private string _pendingQuickResolveTitle = string.Empty;
         private string _pendingQuickResolveZoneKey = string.Empty;
         private EncounterZoneData _pendingQuickResolveZone;
@@ -450,6 +451,15 @@ namespace Realmz.Game
 
         public void StageCombatOverlayShowcaseForCapture()
         {
+            StageCombatArenaArchetypeShowcaseForCapture(
+                CombatArenaArchetype.RuinsOutskirts,
+                new GridCoord(18, 54));
+        }
+
+        public void StageCombatArenaArchetypeShowcaseForCapture(
+            CombatArenaArchetype archetype,
+            GridCoord partyPos)
+        {
             if (ExploreSession == null || Bundle == null)
             {
                 return;
@@ -460,21 +470,25 @@ namespace Realmz.Game
                 ExitCombatToExploration(syncPartyFromCombat: false);
             }
 
-            // Stage combat showcase in Bywater's clean southern meadow clearing (arena origin ~(13, 49), zero trees/roof overlap).
-            if (ExploreSession.CurrentMap.IsDungeon)
-            {
-                WarpToOverworldTownShowcase();
-            }
-
+            string targetMap = archetype == CombatArenaArchetype.DungeonChamber ? "dungeon_0" : "land_0";
             ExploreSession = new ExplorationSession(
                 Bundle.Maps,
-                "land_0",
+                targetMap,
                 ExploreSession.Party,
                 _roller,
-                new GridCoord(18, 54));
+                partyPos);
             _hasAppliedLightingState = false;
+            worldRenderer?.RenderMap(ExploreSession.CurrentMap, ExploreSession.Position, forceRebuild: true);
 
-            TriggerDemoSkirmish();
+            _forcedCombatArenaArchetype = archetype;
+            try
+            {
+                TriggerDemoSkirmish();
+            }
+            finally
+            {
+                _forcedCombatArenaArchetype = null;
+            }
 
             if (CombatSession == null)
             {
@@ -483,25 +497,7 @@ namespace Realmz.Game
 
             StopAiCoroutine();
 
-            // Ensure showcased combat always demonstrates active surface tiles away from spawn edges.
-            if (CombatSession.GetActiveSurfaceCells().Count == 0 && CombatSession.Grid != null)
-            {
-                int placed = 0;
-                for (int sy = 4; sy < _arenaHeight - 2 && placed < 2; sy++)
-                {
-                    for (int sx = 4; sx < _arenaWidth - 3 && placed < 2; sx++)
-                    {
-                        GridCoord sc = new GridCoord(sx, sy);
-                        if (CombatSession.Grid.IsWalkable(sx, sy) &&
-                            GetLivingUnitAt(sc) == null &&
-                            CombatSession.Grid.GetSurface(sx, sy) == SurfaceType.None)
-                        {
-                            CombatSession.Grid.SetSurface(sx, sy, placed == 0 ? SurfaceType.Water : SurfaceType.Fire, -1);
-                            placed++;
-                        }
-                    }
-                }
-            }
+            RefreshCombatStaticOverlays(CombatSession.CurrentActor);
 
             int guard = 0;
             while (CombatSession.Outcome == CombatOutcome.InProgress && guard < 16)
@@ -2851,7 +2847,14 @@ namespace Realmz.Game
             }
 
             EncounterGeographyInfo combatGeo = ExploreSession.GetCurrentGeography();
-            EncounterDirector.ApplyBiomeArenaFeatures(grid, combatGeo, occupied, _roller);
+            if (_forcedCombatArenaArchetype.HasValue)
+            {
+                EncounterDirector.ApplyArenaArchetype(grid, _forcedCombatArenaArchetype.Value, occupied, _roller, combatGeo);
+            }
+            else
+            {
+                EncounterDirector.ApplyBiomeArenaFeatures(grid, combatGeo, occupied, _roller);
+            }
 
             CombatSession = new TacticalCombatSession(
                 grid,
@@ -2877,13 +2880,17 @@ namespace Realmz.Game
             HideExploreHeroViews();
 
             GridCoord mid = new GridCoord(_arenaOriginX + _arenaWidth / 2, _arenaOriginY + _arenaHeight / 2);
-            Vector3 midWorld = GridToWorldAtElevation(mid);
 
             if (worldRenderer != null)
             {
-                worldRenderer.UpdateFocusCenter(mid);
+                worldRenderer.ApplyCombatArenaVisuals(map, _arenaOriginX, _arenaOriginY, grid);
                 worldRenderer.SetCombatArenaFrame(_arenaOriginX, _arenaOriginY, _arenaWidth, _arenaHeight, true);
                 worldRenderer.SetTerrainGridHint(0.08f);
+            }
+
+            Vector3 midWorld = GridToWorldAtElevation(mid);
+            if (worldRenderer != null)
+            {
                 worldRenderer.UpdateHeroWorldPosition(midWorld);
             }
 

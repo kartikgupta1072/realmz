@@ -947,6 +947,304 @@ namespace Realmz.EditorTests
             Assert.That(dungeonPortal.Found, Is.True, "Dungeon portal (89,48) must remain reachable from town.");
         }
 
+        [Test]
+        public void TownBuildings_HaveZeroOverlapWithCobblestonePathwaysAndPreserveBfsConnectivity()
+        {
+            string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
+            CartographyWorldData landWorld = CartographyWorldData.BuildFromTileMap(bundle.Land0);
+            bundle.Land0.SetBlockedPropFootprints(landWorld.ExportBlockedPropGridCoords());
+
+            int w = bundle.Land0.Width;
+            int h = bundle.Land0.Height;
+            BywaterTileKind[,] kinds = new BywaterTileKind[w, h];
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    kinds[x, y] = BywaterTileClassifier.Classify(bundle.Land0, x, y);
+                }
+            }
+
+            // 1. Assert ZERO placed building solid footprints and ZERO building visual bases sit on any road/pathway/bridge/doorway tile
+            int auditedBuildings = 0;
+            IReadOnlyList<CartographyPropPlacement> props = landWorld.Props;
+            for (int i = 0; i < props.Count; i++)
+            {
+                CartographyPropPlacement pr = props[i];
+                if (!CartographyWorldData.IsTallBuildingPropKind(pr.Kind))
+                {
+                    continue;
+                }
+
+                auditedBuildings++;
+                CartographyWorldData.ComputePropGroundBounds(pr.Kind, pr.WorldPosition, pr.SizeMeters,
+                    out float minX, out float maxX, out float minZ, out float maxZ);
+
+                int minTx = Mathf.FloorToInt(minX + 0.04f);
+                int maxTx = Mathf.FloorToInt(maxX - 0.04f);
+                int minTy = Mathf.FloorToInt(-maxZ + 0.04f);
+                int maxTy = Mathf.FloorToInt(-minZ - 0.04f);
+
+                for (int ty = minTy; ty <= maxTy; ty++)
+                {
+                    for (int tx = minTx; tx <= maxTx; tx++)
+                    {
+                        if (!bundle.Land0.InBounds(tx, ty)) continue;
+                        bool isRoadOrBridge = CartographyWorldData.IsRoadPathwayOrBridgeTile(bundle.Land0, kinds, tx, ty) ||
+                                              landWorld.GetTile(tx, ty).IsWater;
+                        Assert.That(isRoadOrBridge, Is.False,
+                            $"Building {pr.Kind} at {pr.WorldPosition} (size {pr.SizeMeters}) visual base overlaps road/pathway/bridge tile ({tx}, {ty}).");
+                    }
+                }
+            }
+            Assert.That(auditedBuildings, Is.GreaterThanOrEqualTo(10), "Expected all Bywater Pack 3 buildings to be placed.");
+
+            // Also verify zero plaza props or blocked tiles sit directly on Cobblestone/DirtPath/Doorway/Bridge tiles
+            foreach (Vector2Int blocked in landWorld.BlockedPropTiles)
+            {
+                if (landWorld.IsNpcBlockedTile(blocked.x, blocked.y)) continue;
+                bool blockedOnRoad = CartographyWorldData.IsRoadPathwayOrBridgeTile(bundle.Land0, kinds, blocked.x, blocked.y) ||
+                                     kinds[blocked.x, blocked.y] == BywaterTileKind.TownBuildingDoor;
+                Assert.That(blockedOnRoad, Is.False, $"Blocked prop tile {blocked} must never obstruct road/pathway/doorway.");
+            }
+
+            // 2. Assert 100% BFS reachability across all main town roads, doorways, all 4 Shopkeeper NPC approaches, and Dungeon portal (89, 48)
+            PartyState party = PartyState.FromBundle(bundle);
+            ExplorationSession session = new ExplorationSession(bundle.Maps, "land_0", party, new DeterministicDiceRoller(123UL), new GridCoord(10, 9));
+
+            // Check main cobblestone walkways (y=7 E-W avenue x=4..28, x=8 N-S y=4..11, plaza south x=12..21 y=14/16)
+            for (int x = 4; x <= 28; x++)
+            {
+                if (bundle.Land0.IsPassable(x, 7, false))
+                {
+                    PathResult roadPath = session.PlanPath(new GridCoord(x, 7), allowDiagonal: true);
+                    Assert.That(roadPath.Found, Is.True, $"Main cobblestone avenue tile ({x}, 7) must remain BFS reachable.");
+                }
+            }
+            for (int y = 4; y <= 11; y++)
+            {
+                if (bundle.Land0.IsPassable(8, y, false))
+                {
+                    PathResult lanePath = session.PlanPath(new GridCoord(8, y), allowDiagonal: true);
+                    Assert.That(lanePath.Found, Is.True, $"North-south cobblestone lane (8, {y}) must remain BFS reachable.");
+                }
+            }
+
+            // Check all 4 Shopkeeper/Priestess NPCs have >= 1 BFS-reachable adjacent tile
+            Assert.That(landWorld.Npcs.Count, Is.EqualTo(4), "All 4 Shopkeeper/Priestess NPCs must be placed.");
+            for (int n = 0; n < landWorld.Npcs.Count; n++)
+            {
+                CartographyNpcPlacement npc = landWorld.Npcs[n];
+                bool reachedAdjacent = false;
+                for (int dy = -1; dy <= 1 && !reachedAdjacent; dy++)
+                {
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        if (dx == 0 && dy == 0) continue;
+                        int ax = npc.TileX + dx;
+                        int ay = npc.TileY + dy;
+                        if (bundle.Land0.InBounds(ax, ay) && bundle.Land0.IsPassable(ax, ay, false))
+                        {
+                            if (session.PlanPath(new GridCoord(ax, ay), allowDiagonal: true).Found)
+                            {
+                                reachedAdjacent = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                Assert.That(reachedAdjacent, Is.True, $"Shopkeeper NPC {npc.DisplayName} at ({npc.TileX}, {npc.TileY}) must have BFS-reachable approach.");
+            }
+
+            // Check town POIs (Armory (7,11), Tavern (9,13), Temple (9,17), Tannery (38,13), Apothecary (88,12)) & key town doorways
+            GridCoord[] keyDoorsAndPois =
+            {
+                new GridCoord(7, 11),
+                new GridCoord(9, 13),
+                new GridCoord(9, 17),
+                new GridCoord(38, 13),
+                new GridCoord(88, 12),
+                new GridCoord(6, 6),
+                new GridCoord(9, 6),
+                new GridCoord(24, 6),
+                new GridCoord(17, 9),
+                new GridCoord(89, 48)
+            };
+            for (int k = 0; k < keyDoorsAndPois.Length; k++)
+            {
+                GridCoord dest = keyDoorsAndPois[k];
+                PathResult res = session.PlanPath(dest, allowDiagonal: true);
+                Assert.That(res.Found, Is.True, $"Town doorway/POI/portal {dest} must remain 100% BFS reachable.");
+            }
+        }
+
+        [Test]
+        public void CombatArena_AllFiveArchetypes_HaveVisualToLogicParityAndMultiLaneBfs()
+        {
+            string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            Assert.That(catalog, Is.Not.Null);
+
+            CombatArenaArchetype[] allArchetypes =
+            {
+                CombatArenaArchetype.RoadAmbush,
+                CombatArenaArchetype.RiverbankCrossing,
+                CombatArenaArchetype.DeepWoods,
+                CombatArenaArchetype.RuinsOutskirts,
+                CombatArenaArchetype.DungeonChamber
+            };
+
+            GridCoord[] heroSpawns = { new GridCoord(2, 4), new GridCoord(1, 5), new GridCoord(3, 5) };
+            GridCoord[] enemySpawns = { new GridCoord(7, 4), new GridCoord(8, 5), new GridCoord(7, 6) };
+            HashSet<GridCoord> reserved = new HashSet<GridCoord>(heroSpawns);
+            for (int i = 0; i < enemySpawns.Length; i++) reserved.Add(enemySpawns[i]);
+
+            GameObject worldGo = new GameObject("TempArenaParityWorld");
+            GameObject ovGo = new GameObject("TempArenaParityOverlays");
+            try
+            {
+                BywaterWorldRenderer renderer = worldGo.AddComponent<BywaterWorldRenderer>();
+                renderer.Initialize(catalog);
+                BywaterGridOverlays overlays = ovGo.AddComponent<BywaterGridOverlays>();
+                overlays.Initialize(catalog);
+                overlays.SetElevationResolver(renderer.GetTileElevation);
+
+                for (int a = 0; a < allArchetypes.Length; a++)
+                {
+                    CombatArenaArchetype archetype = allArchetypes[a];
+                    TileMapData map = archetype == CombatArenaArchetype.DungeonChamber ? bundle.Dungeon0 : bundle.Land0;
+                    int originX = archetype == CombatArenaArchetype.DungeonChamber ? 16 : 20;
+                    int originY = archetype == CombatArenaArchetype.DungeonChamber ? 12 : 48;
+
+                    CombatGrid grid = new CombatGrid(12, 10);
+                    CombatArenaLayout layout = EncounterDirector.ApplyArenaArchetype(
+                        grid,
+                        archetype,
+                        reserved,
+                        new DeterministicDiceRoller(777UL),
+                        geo: null);
+
+                    Assert.That(layout, Is.Not.Null);
+                    Assert.That(layout.Archetype, Is.EqualTo(archetype));
+                    Assert.That(layout.AllSpawnsConnected, Is.True, $"{archetype} must connect all spawns cleanly.");
+                    Assert.That(layout.VerifiedLaneCount, Is.GreaterThanOrEqualTo(2), $"{archetype} must preserve >= 2 crossing lanes.");
+
+                    renderer.RenderMap(map, new GridCoord(originX + 6, originY + 5), forceRebuild: true);
+                    renderer.ApplyCombatArenaVisuals(map, originX, originY, grid);
+
+                    CartographyWorldData cw = renderer.CartographyData;
+                    Assert.That(cw, Is.Not.Null);
+
+                    int verifiedObstacles = 0;
+                    int verifiedElevatedTiles = 0;
+                    for (int ly = 0; ly < grid.Height; ly++)
+                    {
+                        for (int lx = 0; lx < grid.Width; lx++)
+                        {
+                            int wx = originX + lx;
+                            int wy = originY + ly;
+                            CombatArenaFeature feat = layout.GetFeatureAt(lx, ly);
+                            float terrainElev = renderer.GetTileElevation(wx, wy);
+
+                            if (grid.GetElevation(lx, ly) >= 1)
+                            {
+                                verifiedElevatedTiles++;
+                                Assert.That(terrainElev, Is.GreaterThanOrEqualTo(0.35f),
+                                    $"{archetype} tile ({lx},{ly}) with ElevationTier>=1 must elevate Cartography terrain >=0.35m.");
+                            }
+
+                            if (feat != null &&
+                                feat.ObstacleKind != CombatArenaObstacleKind.None &&
+                                feat.ObstacleKind != CombatArenaObstacleKind.BridgePlank)
+                            {
+                                verifiedObstacles++;
+                                Vector3 expectedCenter = CartographyWorldData.GridToWorld(wx, wy, terrainElev);
+                                bool foundMatchingProp = false;
+                                for (int p = 0; p < cw.Props.Count; p++)
+                                {
+                                    CartographyPropPlacement prop = cw.Props[p];
+                                    if (Mathf.Abs(prop.WorldPosition.x - expectedCenter.x) <= 0.15f &&
+                                        Mathf.Abs(prop.WorldPosition.z - expectedCenter.z) <= 0.15f)
+                                    {
+                                        foundMatchingProp = true;
+                                        break;
+                                    }
+                                }
+                                Assert.That(foundMatchingProp, Is.True,
+                                    $"{archetype} feature {feat.ObstacleKind} at ({lx},{ly}) -> world ({wx},{wy}) missing matching Cartography prop.");
+                            }
+                        }
+                    }
+
+                    Assert.That(verifiedObstacles, Is.GreaterThanOrEqualTo(3), $"{archetype} must render >= 3 visible 3D tactical obstacles.");
+                    Assert.That(verifiedElevatedTiles, Is.GreaterThanOrEqualTo(2), $"{archetype} must render >= 2 elevated High Ground tiles.");
+
+                    // Verify active surface quads match grid active surface count and remain visible above ShallowWaterPlane
+                    IReadOnlyList<CombatGridCell> surfaces = grid.GetActiveSurfaceCells();
+                    List<CombatGridCell> worldSurfaces = new List<CombatGridCell>(surfaces.Count);
+                    for (int s = 0; s < surfaces.Count; s++)
+                    {
+                        CombatGridCell src = surfaces[s];
+                        int wx = originX + src.X;
+                        int wy = originY + src.Y;
+                        Assert.That(renderer.GetTileElevation(wx, wy) + 0.085f,
+                            Is.GreaterThanOrEqualTo(CartographyWorldData.TileMapWaterSurfaceElevation + 0.02f),
+                            $"{archetype} surface at ({wx},{wy}) must sit above water plane.");
+                        CombatGrid dummyGrid = new CombatGrid(originX + src.X + 1, originY + src.Y + 1);
+                        dummyGrid.SetSurface(wx, wy, src.Surface, src.SurfaceRoundsRemaining);
+                        worldSurfaces.Add(dummyGrid.GetCell(wx, wy));
+                    }
+                    overlays.SetSurfaceCells(worldSurfaces);
+                }
+
+                // Verify combat obstacle occlusion fade triggers cleanly for tall cover props in combat mode
+                CombatGrid roadGrid = new CombatGrid(12, 10);
+                CombatArenaLayout roadLayout = EncounterDirector.ApplyArenaArchetype(
+                    roadGrid,
+                    CombatArenaArchetype.RoadAmbush,
+                    reserved,
+                    new DeterministicDiceRoller(91UL),
+                    null);
+                renderer.RenderMap(bundle.Land0, new GridCoord(26, 53), forceRebuild: true);
+                renderer.ApplyCombatArenaVisuals(bundle.Land0, 20, 48, roadGrid);
+
+                CombatArenaFeature wagon = null;
+                for (int i = 0; i < roadLayout.Features.Count; i++)
+                {
+                    if (roadLayout.Features[i].ObstacleKind == CombatArenaObstacleKind.SupplyWagon ||
+                        roadLayout.Features[i].ObstacleKind == CombatArenaObstacleKind.RuinedWall ||
+                        roadLayout.Features[i].ObstacleKind == CombatArenaObstacleKind.BoulderRock)
+                    {
+                        wagon = roadLayout.Features[i];
+                        break;
+                    }
+                }
+                Assert.That(wagon, Is.Not.Null);
+                Vector3 unitBehindCover = CartographyWorldData.GridToWorld(20 + wagon.X, 48 + Mathf.Max(0, wagon.Y - 1), 0f);
+                List<Vector3> unitPositions = new List<Vector3> { unitBehindCover };
+                for (int step = 0; step < 12; step++)
+                {
+                    renderer.UpdateTreeOcclusionFade(unitPositions, fadeCenterBuildingsInCombat: true);
+                }
+                int fadedCount = 0;
+                for (int p = 0; p < renderer.ActivePropCount; p++)
+                {
+                    if (renderer.GetActivePropAlpha(p) < 0.90f)
+                    {
+                        fadedCount++;
+                    }
+                }
+                Assert.That(fadedCount, Is.GreaterThanOrEqualTo(1), "Combat cover props must fade cleanly when units stand immediately north behind cover.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(ovGo);
+                Object.DestroyImmediate(worldGo);
+            }
+        }
+
         private static void AssertShaderHasProperty(Shader shader, string propertyName)
         {
             int idx = shader.FindPropertyIndex(propertyName);

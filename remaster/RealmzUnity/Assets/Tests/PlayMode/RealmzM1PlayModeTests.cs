@@ -74,6 +74,23 @@ namespace Realmz.PlayModeTests
                 {
                     CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
                         Path.GetFullPath("M1_Bywater_Explore_Preview.png"), 1600, 900);
+
+                    // Additional clear cobblestone town avenues proof centered on NW avenue / Market plaza
+                    ctrl.ExploreSession.MoveAlongPath(new GridCoord(11, 7), autoHaltOnEvents: false);
+                    typeof(BywaterGameController).GetMethod("SyncExploreHeroViewsToTrail", BindingFlags.Instance | BindingFlags.NonPublic)
+                        ?.Invoke(ctrl, new object[] { true });
+                    ctrl.cameraRig?.FocusWorld(
+                        CartographyWorldData.GridToWorld(new GridCoord(12, 8), ctrl.worldRenderer.GetTileElevation(12, 8)),
+                        immediate: true,
+                        recenterManualPan: true);
+                    yield return null;
+                    yield return null;
+                    CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
+                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_TownRoads_Clear_Proof.png", 1600, 900);
+
+                    ctrl.WarpToOverworldTownShowcase();
+                    yield return null;
+                    yield return null;
                 }
 
                 // 2. Verify Party/Stash modal locks scroll zoom (0.0f delta) across live PlayMode frames
@@ -451,6 +468,21 @@ namespace Realmz.PlayModeTests
                 Assert.That(ctrl.hudController.AreExploreButtonsHiddenInCombat, Is.True);
                 Assert.That(ctrl.CombatSession.GetActiveSurfaceCells().Count, Is.GreaterThan(0),
                     "Riverbank combat arena should seed water/mud surface tiles.");
+
+                if (captureProofs)
+                {
+                    ctrl.StageCombatArenaArchetypeShowcaseForCapture(CombatArenaArchetype.RiverbankCrossing, new GridCoord(53, 62));
+                    yield return null;
+                    yield return null;
+                    CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
+                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_TacticalArena_River_Proof.png", 1600, 900);
+
+                    ctrl.StageCombatArenaArchetypeShowcaseForCapture(CombatArenaArchetype.RoadAmbush, new GridCoord(18, 54));
+                    yield return null;
+                    yield return null;
+                    CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
+                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_TacticalArena_Road_Proof.png", 1600, 900);
+                }
 
                 Assert.That(errors, Is.Empty, "PlayMode EncounterDirector errors:\n" + string.Join("\n", errors));
             }
