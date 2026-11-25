@@ -10,6 +10,8 @@
     <!-- Keep the synced plugin DLL byte-stable across commits and machines:
          no git SHA in InformationalVersion, no absolute paths in the PDB reference. -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>
+    <EnableSourceLink>false</EnableSourceLink>
     <PathMap>$(MSBuildProjectDirectory)=/_/RealmzCore/</PathMap>
   </PropertyGroup>
 
