@@ -17,7 +17,13 @@ namespace Realmz.EditorTools
         [MenuItem("Realmz/M1/Build Windows Standalone (x64)")]
         public static string BuildWindowsStandalone()
         {
-            M1BywaterSceneBuilder.BuildBywaterScene();
+            // Ship the committed scene that the PlayMode suite tests. Regenerating it here would
+            // reshuffle fileIDs and could ship a scene that differs from the tested one.
+            // After changing M1BywaterSceneBuilder, run Realmz/M1/Build City of Bywater Scene and commit the scene.
+            if (!File.Exists(Path.GetFullPath(M1BywaterSceneBuilder.ScenePath)))
+            {
+                M1BywaterSceneBuilder.BuildBywaterScene();
+            }
 
             string outExe = Path.GetFullPath(DefaultWindowsBuildExe);
             string outDir = Path.GetDirectoryName(outExe);

@@ -1418,6 +1418,9 @@ namespace Realmz.PlayModeTests
                 int preStashTotal = 0;
                 for (int i = 0; i < party.Stash.Count; i++) preStashTotal += party.Stash[i].Quantity;
 
+                // Seed combat dice: the kill swing below has a 95% cap (5% always misses by rule),
+                // so an unseeded roller made this test fail about 1 run in 20.
+                ctrl.SetRollerSeedForTest(20261125UL);
                 ctrl.TriggerDemoSkirmish(enterDeployment: false);
                 yield return null;
                 yield return null;

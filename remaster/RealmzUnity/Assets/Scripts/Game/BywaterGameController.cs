@@ -221,6 +221,26 @@ namespace Realmz.Game
 
         private string SaveFilePath => Path.Combine(Application.persistentDataPath, "bywater_save.json");
 
+        /// <summary>
+        /// Uses REALMZ_RNG_SEED when set (reproducible playtests and bug repros); otherwise a clock-based seed.
+        /// </summary>
+        private static ulong ResolveStartupSeed()
+        {
+            string raw = Environment.GetEnvironmentVariable("REALMZ_RNG_SEED");
+            if (!string.IsNullOrWhiteSpace(raw) && ulong.TryParse(raw.Trim(), out ulong envSeed))
+            {
+                Debug.Log($"[BywaterGameController] Using REALMZ_RNG_SEED={envSeed}");
+                return envSeed == 0UL ? 1UL : envSeed;
+            }
+            return (ulong)(DateTime.UtcNow.Ticks & 0x7FFFFFFFFFFFFFFFL) | 1UL;
+        }
+
+        /// <summary>Replaces the dice roller used by subsequently created sessions (tests only).</summary>
+        public void SetRollerSeedForTest(ulong seed)
+        {
+            _roller = new DeterministicDiceRoller(seed == 0UL ? 1UL : seed);
+        }
+
         private void Awake()
         {
             ResolveSceneReferences();
@@ -234,7 +254,7 @@ namespace Realmz.Game
         {
             ResolveSceneReferences();
 
-            _roller = new DeterministicDiceRoller((ulong)(DateTime.UtcNow.Ticks & 0x7FFFFFFFFFFFFFFFL) | 1UL);
+            _roller = new DeterministicDiceRoller(ResolveStartupSeed());
 
             string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
             Bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);

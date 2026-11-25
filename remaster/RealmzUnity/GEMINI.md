@@ -24,3 +24,5 @@ Scope: `C:\Users\karti\realmz\remaster\RealmzUnity\`
 ## 5. Verification
 - Do not run Unity batchmode while the Unity Editor GUI holds the project lock; use `unity.exe recompile --strict` when the Editor is open, or `remaster/dev.ps1 unity-tests` / `remaster/dev.ps1 proof` when idle.
 - Save visual proof PNGs to `C:\Users\karti\realmz\.scratch\proofs\` (`REALMZ_PROOF_DIR`).
+- `Realmz/M1/Build Windows Standalone (x64)` ships the committed `M1_Bywater_Slice.unity` (the scene PlayMode tests run against). After changing `M1BywaterSceneBuilder`, run `Realmz/M1/Build City of Bywater Scene` and commit the regenerated scene. The scene builder loads the committed `RealmzMasterMixer.mixer` and only rebuilds it when missing, because rebuilding appends hidden effect sub-assets.
+- Set `REALMZ_RNG_SEED=<ulong>` to make a playtest or bug repro deterministic; PlayMode tests that depend on dice outcomes call `BywaterGameController.SetRollerSeedForTest`.

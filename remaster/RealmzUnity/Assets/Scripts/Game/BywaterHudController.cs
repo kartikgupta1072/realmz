@@ -4931,7 +4931,7 @@ namespace Realmz.Game
             tickerPanel.anchorMax = new Vector2(1f, 0f);
             tickerPanel.pivot = new Vector2(1f, 0f);
             tickerPanel.anchoredPosition = new Vector2(-12f, 10f);
-            tickerPanel.sizeDelta = new Vector2(360f, 136f);
+            tickerPanel.sizeDelta = new Vector2(330f, 136f);
             _combatTickerRoot = tickerPanel.gameObject;
 
             VerticalLayoutGroup tkVlg = tickerPanel.gameObject.AddComponent<VerticalLayoutGroup>();
@@ -4966,7 +4966,9 @@ namespace Realmz.Game
             _tickerLines.Clear();
             for (int i = 0; i < 3; i++)
             {
-                TextMeshProUGUI line = BywaterUiHelpers.CreateLabel(tickerPanel, $"TickerLine_{i}", string.Empty, _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, wrap: true);
+                // Single-line rows: wrapped two-line entries overflowed their ~30px row and clipped
+                // the first glyph. Full text stays available in the [L] history drawer.
+                TextMeshProUGUI line = BywaterUiHelpers.CreateLabel(tickerPanel, $"TickerLine_{i}", string.Empty, _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, wrap: false);
                 line.overflowMode = TextOverflowModes.Ellipsis;
                 LayoutElement lineLe = line.gameObject.AddComponent<LayoutElement>();
                 lineLe.minHeight = 20f;
@@ -5107,7 +5109,9 @@ namespace Realmz.Game
             actionBar.anchorMin = new Vector2(0.5f, 0f);
             actionBar.anchorMax = new Vector2(0.5f, 0f);
             actionBar.pivot = new Vector2(0.5f, 0f);
-            actionBar.anchoredPosition = new Vector2(-180f, 10f);
+            // Width is content-fitted; a full caster hotbar (6 spells + Potion/Shove/Guard/End Turn) is ~1554px.
+            // Center at x=791 (960-169) spans ~14..1568, clearing the 330px Combat Log ticker that starts at 1578.
+            actionBar.anchoredPosition = new Vector2(-169f, 10f);
             actionBar.sizeDelta = new Vector2(1240f, 90f);
 
             HorizontalLayoutGroup abHlg = actionBar.gameObject.AddComponent<HorizontalLayoutGroup>();

@@ -40,8 +40,11 @@ namespace Realmz.EditorTools
                 return;
             }
 
-            AudioMixer mixer = RealmzAudioMixerBuilder.BuildMasterMixer()
-                ?? AssetDatabase.LoadAssetAtPath<AudioMixer>(RealmzAudioMixerBuilder.MixerAssetPath);
+            // Load the committed mixer first. Re-running BuildMasterMixer through Unity's internal
+            // AudioMixerController API appends hidden Attenuation effect sub-assets on every call,
+            // so only build it when the asset is missing (use Realmz/Audio/Build Master AudioMixer to rebuild).
+            AudioMixer mixer = AssetDatabase.LoadAssetAtPath<AudioMixer>(RealmzAudioMixerBuilder.MixerAssetPath)
+                ?? RealmzAudioMixerBuilder.BuildMasterMixer();
             if (mixer == null)
             {
                 Debug.LogWarning("[M1BywaterSceneBuilder] Failed to load or build RealmzMasterMixer.mixer.");
