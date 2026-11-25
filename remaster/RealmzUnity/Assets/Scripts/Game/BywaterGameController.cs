@@ -100,6 +100,8 @@ namespace Realmz.Game
         private WorldTimePhase _lastLightingPhase;
         private bool _lastLightingDungeon;
         private bool _lastLightingTorch;
+        private bool _lastLightingCombat;
+        private TacticalCombatSession _pendingQuickResolveVictorySession;
 
         private bool _autoCombatEnabled;
         private bool _autoEndTurn;
@@ -1014,10 +1016,28 @@ namespace Realmz.Game
             hudController.OnEncounterQuickResolveRequested += HandleEncounterInterceptQuickResolve;
             hudController.OnLightTorchFromHudRequested += HandleLightTorchFromHud;
 
+            hudController.OnVictoryTakeLootRequested += HandleTakeVictoryLoot;
             hudController.OnContinueAfterVictoryRequested += () =>
             {
                 audioDirector?.PlayUiClick();
-                ExitCombatToExploration(syncPartyFromCombat: true);
+                if (CombatSession != null && CombatSession.HasPendingLootDeposit)
+                {
+                    CombatSession.TakeLootItems(ExploreSession?.Party, null);
+                }
+                if (_pendingQuickResolveVictorySession != null && _pendingQuickResolveVictorySession.HasPendingLootDeposit)
+                {
+                    _pendingQuickResolveVictorySession.TakeLootItems(ExploreSession?.Party, null);
+                }
+                _pendingQuickResolveVictorySession = null;
+                if (_isInCombat)
+                {
+                    ExitCombatToExploration(syncPartyFromCombat: true);
+                }
+                else
+                {
+                    hudController?.HideOutcomeModal();
+                    hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false, _lastContextPoiLabel);
+                }
             };
             hudController.OnRetrySkirmishRequested += HandleRetrySkirmish;
             hudController.OnReviveAtShrineRequested += HandleReviveAtShrine;
@@ -2425,11 +2445,15 @@ namespace Realmz.Game
         private void HandleEquipFromStash(int heroIdx, int stashIdx)
         {
             audioDirector?.PlayUiClick();
-            if (ExploreSession.Party.EquipFromStash(heroIdx, stashIdx, Bundle.Items))
+            if (ExploreSession.Party.EquipFromStash(heroIdx, stashIdx, Bundle.Items, null, out string reason))
             {
                 hudController?.RefreshPartyDrawer(ExploreSession.Party, Bundle, heroIdx);
                 hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false);
                 hudController?.ShowToast("Equipped item.", 1.6f);
+            }
+            else if (!string.IsNullOrWhiteSpace(reason))
+            {
+                hudController?.ShowToast(reason, 2.5f);
             }
         }
 
@@ -2500,6 +2524,11 @@ namespace Realmz.Game
 
                 hudController?.RefreshPartyDrawer(party, Bundle, heroIdx);
                 hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false);
+                TacticalCombatSession activeVic = CombatSession ?? _pendingQuickResolveVictorySession;
+                if (hudController != null && hudController.IsOutcomeOpen && activeVic?.LastVictorySummary != null)
+                {
+                    hudController.ShowVictoryOutcome(activeVic.LastVictorySummary, party, Bundle);
+                }
             }
         }
 
@@ -2856,6 +2885,8 @@ namespace Realmz.Game
                 EncounterDirector.ApplyBiomeArenaFeatures(grid, combatGeo, occupied, _roller);
             }
 
+            bool isCombatDark = map.IsDungeon || (ExploreSession != null && ExploreSession.CurrentWorldClock.IsNight);
+
             CombatSession = new TacticalCombatSession(
                 grid,
                 combatants,
@@ -2865,11 +2896,15 @@ namespace Realmz.Game
                 RulesetMode.ModernBalanced,
                 ExploreSession.Party,
                 _activeCombatSurpriseMode,
-                resolvedRewardBonusPct);
+                resolvedRewardBonusPct,
+                isAmbientDarkness: isCombatDark,
+                deferLootDeposit: true);
             CombatSession.SurfaceChanged += OnCombatSurfaceChanged;
+            CombatSession.OnArenaIlluminationChanged += OnCombatArenaIlluminationChanged;
 
             _isInCombat = true;
             _outcomeShown = false;
+            _pendingQuickResolveVictorySession = null;
             _activeCombatMode = CombatActionMode.Smart;
             _selectedSpellId = -1;
             _hoveredCombatUnitId = null;
@@ -2901,7 +2936,7 @@ namespace Realmz.Game
             }
 
             _hasAppliedLightingState = false;
-            ApplyAtmosphereAndTorchLighting(midWorld, forceImmediate: true);
+            ApplyAtmosphereAndTorchLighting(GetCombatPartyTorchWorldPos(), forceImmediate: true);
 
             if (cameraRig != null)
             {
@@ -2960,6 +2995,75 @@ namespace Realmz.Game
             if (CombatSession != null)
             {
                 CombatSession.SurfaceChanged -= OnCombatSurfaceChanged;
+                CombatSession.OnArenaIlluminationChanged -= OnCombatArenaIlluminationChanged;
+            }
+        }
+
+        private void OnCombatArenaIlluminationChanged(bool illuminated)
+        {
+            ApplyAtmosphereAndTorchLighting(GetCombatPartyTorchWorldPos(), forceImmediate: true);
+            RefreshCombatHudState();
+            if (illuminated && _isInCombat)
+            {
+                hudController?.ShowToast("Firelight illuminates the battlefield! In the Dark lifted.", 2.4f);
+            }
+        }
+
+        private Vector3 GetCombatPartyTorchWorldPos()
+        {
+            if (CombatSession != null)
+            {
+                float sumX = 0f;
+                float sumY = 0f;
+                int count = 0;
+                for (int i = 0; i < CombatSession.Combatants.Count; i++)
+                {
+                    CombatantState c = CombatSession.Combatants[i];
+                    if (c.Side == CombatSide.Hero && c.IsAlive)
+                    {
+                        GridCoord world = LocalToWorld(c.Position);
+                        sumX += world.X + 0.5f;
+                        sumY += world.Y + 0.5f;
+                        count++;
+                    }
+                }
+                if (count > 0)
+                {
+                    float avgX = sumX / count;
+                    float avgY = sumY / count;
+                    float elev = worldRenderer != null
+                        ? worldRenderer.GetTileElevation(Mathf.RoundToInt(avgX), Mathf.RoundToInt(avgY))
+                        : 0f;
+                    return new Vector3(avgX, elev, -avgY);
+                }
+            }
+
+            GridCoord fallbackPartySide = new GridCoord(_arenaOriginX + 2, _arenaOriginY + _arenaHeight / 2);
+            return GridToWorldAtElevation(fallbackPartySide);
+        }
+
+        private void HandleTakeVictoryLoot(int[] selectedIndices)
+        {
+            audioDirector?.PlayUiClick();
+            TacticalCombatSession targetSession = CombatSession ?? _pendingQuickResolveVictorySession;
+            if (targetSession != null && ExploreSession?.Party != null)
+            {
+                int taken = targetSession.TakeLootItems(ExploreSession.Party, selectedIndices);
+                if (taken > 0)
+                {
+                    audioDirector?.PlayCoin();
+                }
+            }
+            _pendingQuickResolveVictorySession = null;
+
+            if (_isInCombat)
+            {
+                ExitCombatToExploration(syncPartyFromCombat: true);
+            }
+            else
+            {
+                hudController?.HideOutcomeModal();
+                hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false, _lastContextPoiLabel);
             }
         }
 
@@ -3144,7 +3248,14 @@ namespace Realmz.Game
             {
                 cameraRig.EnsureWorldPointVisible(actorWorld);
             }
-            worldRenderer?.UpdateHeroWorldPosition(actorWorld);
+            if (!_isInCombat)
+            {
+                worldRenderer?.UpdateHeroWorldPosition(actorWorld);
+            }
+            else
+            {
+                ApplyAtmosphereAndTorchLighting(GetCombatPartyTorchWorldPos(), forceImmediate: false);
+            }
 
             if (actor.Side == CombatSide.Monster)
             {
@@ -6836,8 +6947,28 @@ namespace Realmz.Game
 
         private void HandleLightTorchFromHud()
         {
-            if (_isInCombat || ExploreSession?.Party == null)
+            if (ExploreSession?.Party == null)
             {
+                return;
+            }
+
+            if (_isInCombat && CombatSession != null)
+            {
+                CombatActionResult combatRes = CombatSession.TryLightTorchInCombat();
+                if (combatRes.Success)
+                {
+                    audioDirector?.PlaySpell("fire");
+                    ApplyAtmosphereAndTorchLighting(GetCombatPartyTorchWorldPos(), forceImmediate: true);
+                    RefreshCombatHudState();
+                }
+                else
+                {
+                    audioDirector?.PlayUiClick();
+                }
+                if (!string.IsNullOrWhiteSpace(combatRes.Message))
+                {
+                    hudController?.ShowToast(combatRes.Message, 2.4f);
+                }
                 return;
             }
 
@@ -6869,13 +7000,16 @@ namespace Realmz.Game
 
             TileMapData map = ExploreSession.CurrentMap;
             WorldClock clock = ExploreSession.CurrentWorldClock;
-            bool hasLitTorch = ExploreSession.Party != null && ExploreSession.Party.TorchTurnsRemaining > 0;
+            bool combatFireLit = _isInCombat && CombatSession != null && CombatSession.IsCombatFireIlluminated;
+            bool hasLitTorch = (ExploreSession.Party != null && ExploreSession.Party.TorchTurnsRemaining > 0) || combatFireLit;
             bool isNightOrDark = map.IsDungeon || clock.IsNight;
+            bool isCombat = _isInCombat;
 
             bool stateChanged = !_hasAppliedLightingState ||
                                 _lastLightingPhase != clock.Phase ||
                                 _lastLightingDungeon != map.IsDungeon ||
-                                _lastLightingTorch != hasLitTorch;
+                                _lastLightingTorch != hasLitTorch ||
+                                _lastLightingCombat != isCombat;
 
             if (forceImmediate || stateChanged)
             {
@@ -6883,13 +7017,15 @@ namespace Realmz.Game
                 _lastLightingPhase = clock.Phase;
                 _lastLightingDungeon = map.IsDungeon;
                 _lastLightingTorch = hasLitTorch;
+                _lastLightingCombat = isCombat;
 
-                biomeAtmosphere?.ApplyBiome(map.IsDungeon, clock.Phase, clock.PhaseProgress01, hasLitTorch, forceImmediate);
+                biomeAtmosphere?.ApplyBiome(map.IsDungeon, clock.Phase, clock.PhaseProgress01, hasLitTorch, forceImmediate, isCombat);
                 worldRenderer?.ApplyTimeOfDayLighting(clock.Phase, map.IsDungeon, hasLitTorch);
             }
 
-            biomeAtmosphere?.UpdateFocusPosition(focusWorldPos);
-            worldRenderer?.SetPartyTorchPosition(focusWorldPos, map.IsDungeon, isNightOrDark, hasLitTorch);
+            Vector3 resolvedTorchWorld = _isInCombat ? GetCombatPartyTorchWorldPos() : focusWorldPos;
+            biomeAtmosphere?.UpdateFocusPosition(resolvedTorchWorld);
+            worldRenderer?.SetPartyTorchPosition(resolvedTorchWorld, map.IsDungeon, isNightOrDark, hasLitTorch);
         }
 
         private void HandleQuickResolveFight()
@@ -6987,6 +7123,7 @@ namespace Realmz.Game
                 ? report.RewardBonusPct
                 : (ExploreSession.CurrentWorldClock.IsNight ? EncounterDirector.NightRewardBonusPercent : 0);
 
+            bool qrDark = ExploreSession.CurrentMap.IsDungeon || ExploreSession.CurrentWorldClock.IsNight;
             TacticalCombatSession qrSession = new TacticalCombatSession(
                 grid,
                 combatants,
@@ -6996,11 +7133,14 @@ namespace Realmz.Game
                 RulesetMode.ModernBalanced,
                 ExploreSession.Party,
                 CombatInitiativeSurpriseMode.None,
-                rewardBonusPct);
+                rewardBonusPct,
+                isAmbientDarkness: qrDark,
+                deferLootDeposit: true);
 
             CombatOutcome outcome = qrSession.QuickResolveCombat();
             if (outcome == CombatOutcome.Victory)
             {
+                _pendingQuickResolveVictorySession = qrSession;
                 if (zone != null)
                 {
                     ExploreSession.CompleteEncounterZone(zone);

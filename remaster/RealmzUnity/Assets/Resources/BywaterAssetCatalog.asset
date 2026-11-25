@@ -2316,7 +2316,7 @@ MonoBehaviour:
   - key: gnarled_staff
     sprite: {fileID: 21300000, guid: 2909b05e24956d944b4b67ddb327bd53, type: 3}
   - key: gold_coins
-    sprite: {fileID: 21300000, guid: 891f1462e23970441b78acb31f45dadf, type: 3}
+    sprite: {fileID: 21300000, guid: 4e03aed4b3cc46c4bb7f1bfd298b6dae, type: 3}
   - key: greatsword
     sprite: {fileID: 21300000, guid: b80e9fe30843f174b86d89877232ce62, type: 3}
   - key: grid

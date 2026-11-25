@@ -350,7 +350,7 @@ namespace Realmz.PlayModeTests
                 Assert.That(party.Members[0].Level, Is.EqualTo(2));
                 Assert.That(ctrl.hudController.IsLevelUpModalOpen, Is.False);
 
-                // Rich 980x690 Victory Screen -> Victory Loot proof
+                // Rich 980x690 Option 2 Victory Screen contract check
                 party.Members[1].AwardXp(250);
                 List<HeroVictorySummary> hv = new List<HeroVictorySummary>();
                 for (int i = 0; i < party.Members.Count; i++)
@@ -376,12 +376,6 @@ namespace Realmz.PlayModeTests
                 ctrl.hudController.ShowVictoryOutcome(summary, party, ctrl.Bundle);
                 yield return null;
                 Assert.That(ctrl.hudController.IsOutcomeOpen, Is.True);
-
-                if (captureProofs)
-                {
-                    CaptureCameraToPng(Camera.main, ctrl.hudController,
-                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_Victory_Loot_Proof.png", 1600, 900);
-                }
 
                 ctrl.hudController.CloseAllModals();
                 yield return null;
@@ -492,6 +486,229 @@ namespace Realmz.PlayModeTests
             }
         }
 
+        [UnityTest]
+        public IEnumerator PlayMode_W249_NightCombatReadability_ForegroundClear_And_Option2VictoryLoot()
+        {
+            var errors = new List<string>();
+            void LogHandler(string condition, string stackTrace, LogType type)
+            {
+                if (type == LogType.Error || type == LogType.Exception || type == LogType.Assert || type == LogType.Warning)
+                {
+                    if (!condition.Contains("Curl error") && !condition.Contains("LicenseClient"))
+                    {
+                        errors.Add($"[{type}] {condition}");
+                    }
+                }
+            }
+
+            Application.logMessageReceived += LogHandler;
+            try
+            {
+                AsyncOperation loadOp = SceneManager.LoadSceneAsync("M1_Bywater_Slice", LoadSceneMode.Single);
+                while (loadOp != null && !loadOp.isDone)
+                {
+                    yield return null;
+                }
+                yield return null;
+                yield return null;
+
+                BywaterGameController ctrl = Object.FindFirstObjectByType<BywaterGameController>();
+                Assert.That(ctrl, Is.Not.Null);
+                bool captureProofs = string.Equals(Environment.GetEnvironmentVariable("REALMZ_CAPTURE_PROOFS"), "1", StringComparison.Ordinal);
+
+                // 1. Night Exploration with 0 torch -> engage Combat -> verify In the Dark & Combat Foreground Clear Buffer
+                PartyState party = ctrl.ExploreSession.Party;
+                party.AddItemToStash(805, 1, isIdentified: true, charges: 6);
+                ctrl.StageScoutInterceptShowcaseForCapture(new GridCoord(18, 54), worldClockTurns: 58, torchTurnsRemaining: 0);
+                yield return null;
+                yield return null;
+
+                UnityEngine.UI.Button engageBtn = GameObject.Find("InterceptEngageBtn")?.GetComponent<UnityEngine.UI.Button>();
+                Assert.That(engageBtn, Is.Not.Null);
+                engageBtn.onClick.Invoke();
+                yield return null;
+                yield return null;
+
+                Assert.That(ctrl.IsInCombat, Is.True);
+                Assert.That(ctrl.biomeAtmosphere.IsCombatActive, Is.True);
+                Assert.That(ctrl.biomeAtmosphere.CurrentTimePhase, Is.EqualTo(WorldTimePhase.Night));
+                Assert.That(RenderSettings.ambientIntensity, Is.GreaterThanOrEqualTo(1.30f));
+                Assert.That(ctrl.worldRenderer.IsCombatForegroundClearActive, Is.True);
+                Assert.That(ctrl.CombatSession.IsInTheDark, Is.True);
+
+                GameObject darkBadge = GameObject.Find("CombatDarknessBadge");
+                Assert.That(darkBadge, Is.Not.Null);
+                Assert.That(darkBadge.activeInHierarchy, Is.True);
+
+                // Wait for a conscious Hero turn with HUD action bar enabled (waiting out any EnemySurprisedParty monster turn animations)
+                float waitElapsed = 0f;
+                UnityEngine.UI.Button torchBtn = null;
+                while (ctrl.CombatSession != null &&
+                       ctrl.CombatSession.Outcome == CombatOutcome.InProgress &&
+                       waitElapsed < 12f)
+                {
+                    torchBtn = GameObject.Find("CombatTorchBtn")?.GetComponent<UnityEngine.UI.Button>();
+                    if (ctrl.CombatSession.CurrentActor != null &&
+                        ctrl.CombatSession.CurrentActor.Side == CombatSide.Hero &&
+                        ctrl.CombatSession.CurrentActor.Economy.HasSwiftAction &&
+                        torchBtn != null &&
+                        torchBtn.interactable)
+                    {
+                        break;
+                    }
+                    waitElapsed += Time.unscaledDeltaTime;
+                    yield return null;
+                }
+                Assert.That(ctrl.CombatSession.Outcome, Is.EqualTo(CombatOutcome.InProgress));
+                Assert.That(ctrl.CombatSession.CurrentActor?.Side, Is.EqualTo(CombatSide.Hero));
+                Assert.That(ctrl.CombatSession.CurrentActor.Economy.HasSwiftAction, Is.True,
+                    $"Actor {ctrl.CombatSession.CurrentActor?.Name} missing Swift action for torch.");
+
+                // 2. Light Torch inside Combat -> lifts In the Dark debuff and casts warm party-side Torchlight pool
+                Assert.That(torchBtn, Is.Not.Null, "CombatTorchBtn should be active in dark combat.");
+                Assert.That(torchBtn.interactable, Is.True,
+                    $"CombatTorchBtn not interactable on turn of {ctrl.CombatSession.CurrentActor?.Name}.");
+                torchBtn.onClick.Invoke();
+                yield return null;
+                yield return null;
+
+                Assert.That(ctrl.CombatSession.IsInTheDark, Is.False, "Lighting a Torch in Combat must lift In the Dark.");
+                Assert.That(ctrl.worldRenderer.IsPartyLanternEnabled, Is.True);
+                Assert.That(ctrl.worldRenderer.PartyLanternIntensity, Is.GreaterThan(10f));
+                Assert.That(darkBadge.activeInHierarchy, Is.False);
+
+                // Ensure combat cover & units are clean for Night Combat readable proof capture
+                ctrl.hudController?.HideToast();
+                yield return null;
+                if (captureProofs)
+                {
+                    CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
+                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_NightCombat_Readable_Proof.png", 1600, 900);
+                }
+
+                // 3. Stage clean Option 2 Victory & Loot modal proof: fallen hero revived badge, Aldric level-up arrow badge, zero MVP, Loot title, gold coin icon, selectable cards
+                int preVictoryStashTotal = 0;
+                for (int i = 0; i < party.Stash.Count; i++)
+                {
+                    preVictoryStashTotal += party.Stash[i].Quantity;
+                }
+
+                party.Members[0].AwardXp(250);
+                var lootField = typeof(TacticalCombatSession).GetField("_collectedLootItemIds", BindingFlags.Instance | BindingFlags.NonPublic);
+                var lootList = lootField?.GetValue(ctrl.CombatSession) as List<int>;
+                Assert.That(lootList, Is.Not.Null);
+                lootList.Clear();
+                lootList.AddRange(new[] { 10, 418, 622, 611, 250, 108 });
+
+                CombatantState currentHero = ctrl.CombatSession.CurrentActor;
+                Assert.That(currentHero, Is.Not.Null);
+                Assert.That(currentHero.IsConscious, Is.True);
+                CombatantState finalMob = null;
+                bool markedRevivedHero = false;
+                for (int i = 0; i < ctrl.CombatSession.Combatants.Count; i++)
+                {
+                    CombatantState u = ctrl.CombatSession.Combatants[i];
+                    if (u.Side == CombatSide.Monster && u.IsAlive)
+                    {
+                        if (finalMob == null)
+                        {
+                            finalMob = u;
+                        }
+                        else
+                        {
+                            u.Hp = 0;
+                        }
+                    }
+                    else if (u.Side == CombatSide.Hero && !markedRevivedHero &&
+                             !string.Equals(u.Id, currentHero.Id, StringComparison.OrdinalIgnoreCase) &&
+                             !string.Equals(u.Id, party.Members[0].Id, StringComparison.OrdinalIgnoreCase))
+                    {
+                        u.Hp = 0; // Mark a non-Aldric ally fallen -> cleanly separate Gold LvUp on Aldric from Revive badge on ally
+                        markedRevivedHero = true;
+                    }
+                }
+
+                Assert.That(finalMob, Is.Not.Null);
+                finalMob.Hp = 1;
+                finalMob.Ac = 0;
+                // Place actor adjacent to finalMob in bounds (avoiding same-tile distance 0)
+                int adjX = finalMob.Position.X > 0 ? finalMob.Position.X - 1 : finalMob.Position.X + 1;
+                currentHero.Position = new GridCoord(adjX, finalMob.Position.Y);
+                currentHero.ToHit = 95;
+                currentHero.WeaponDice = "2d6+6";
+                CombatActionResult killRes = ctrl.CombatSession.ExecuteMeleeAttack(finalMob.Id);
+                Assert.That(killRes.Success, Is.True, "Killing blow failed: " + killRes.Message);
+                Assert.That(ctrl.CombatSession.Outcome, Is.EqualTo(CombatOutcome.Victory));
+
+                typeof(BywaterGameController).GetMethod("HandleCombatOutcome", BindingFlags.Instance | BindingFlags.NonPublic)?.Invoke(ctrl, null);
+                yield return null;
+                yield return null;
+
+                Assert.That(ctrl.hudController.IsOutcomeOpen, Is.True);
+                Assert.That(GameObject.Find("TakeAndEquipBtn"), Is.Null);
+                Assert.That(GameObject.Find("VictoryLootHeader")?.GetComponent<TMPro.TextMeshProUGUI>()?.text, Is.EqualTo("Loot"));
+                Assert.That(GameObject.Find("VictoryHero_0/Right/Top/LvlUpArrowBadge")?.activeInHierarchy, Is.True);
+                bool hasRevivedIcon = false;
+                for (int h = 0; h < party.Members.Count; h++)
+                {
+                    GameObject revGo = GameObject.Find($"VictoryHero_{h}/Right/Top/ReviveBadgeIcon");
+                    if (revGo != null && revGo.activeInHierarchy)
+                    {
+                        hasRevivedIcon = true;
+                        break;
+                    }
+                }
+                Assert.That(hasRevivedIcon, Is.True, "At least one fallen hero must display ReviveBadgeIcon.");
+
+                int duringVictoryStashTotal = 0;
+                for (int i = 0; i < party.Stash.Count; i++) duringVictoryStashTotal += party.Stash[i].Quantity;
+                Assert.That(duringVictoryStashTotal, Is.EqualTo(preVictoryStashTotal), "Victory loot must wait for Take Selected (X).");
+
+                if (captureProofs)
+                {
+                    CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
+                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_Victory_Loot_Proof.png", 1600, 900);
+                }
+
+                // Deselect card #1 and verify Take Selected (X) updates and deposits ONLY checked stacks
+                CombatVictorySummary vSummary = ctrl.CombatSession.LastVictorySummary;
+                Assert.That(vSummary, Is.Not.Null);
+                int totalLootQty = 0;
+                for (int i = 0; i < vSummary.LootStacks.Count; i++)
+                {
+                    totalLootQty += vSummary.LootStacks[i].Quantity;
+                }
+                int skippedQty = vSummary.LootStacks[1].Quantity;
+                int expectedTakenQty = totalLootQty - skippedQty;
+
+                UnityEngine.UI.Button tile1Btn = GameObject.Find("LootTile_1")?.GetComponent<UnityEngine.UI.Button>();
+                Assert.That(tile1Btn, Is.Not.Null);
+                tile1Btn.onClick.Invoke();
+                yield return null;
+
+                UnityEngine.UI.Button continueBtn = GameObject.Find("ContinueBtn")?.GetComponent<UnityEngine.UI.Button>();
+                Assert.That(continueBtn, Is.Not.Null);
+                Assert.That(continueBtn.GetComponentInChildren<TMPro.TextMeshProUGUI>()?.text, Is.EqualTo($"Take Selected ({expectedTakenQty})"));
+                continueBtn.onClick.Invoke();
+                yield return null;
+                yield return null;
+
+                Assert.That(ctrl.IsInCombat, Is.False);
+                Assert.That(ctrl.hudController.IsOutcomeOpen, Is.False);
+                Assert.That(ctrl.worldRenderer.IsCombatForegroundClearActive, Is.False);
+
+                int postVictoryStashTotal = 0;
+                for (int i = 0; i < party.Stash.Count; i++) postVictoryStashTotal += party.Stash[i].Quantity;
+                Assert.That(postVictoryStashTotal, Is.EqualTo(preVictoryStashTotal + expectedTakenQty));
+
+                Assert.That(errors, Is.Empty, "PlayMode W-249 errors:\n" + string.Join("\n", errors));
+            }
+            finally
+            {
+                Application.logMessageReceived -= LogHandler;
+            }
+        }
+
         private static void CaptureCameraToPng(Camera cam, BywaterHudController hud, string outPngPath, int width, int height)
         {
             if (cam == null) return;
@@ -501,12 +718,14 @@ namespace Realmz.PlayModeTests
             RenderMode prevMode = hudCanvas != null ? hudCanvas.renderMode : RenderMode.ScreenSpaceOverlay;
             Camera prevWorldCam = hudCanvas != null ? hudCanvas.worldCamera : null;
             float prevPlaneDist = hudCanvas != null ? hudCanvas.planeDistance : 100f;
+            int prevOrder = hudCanvas != null ? hudCanvas.sortingOrder : 0;
 
             if (hudCanvas != null)
             {
                 hudCanvas.renderMode = RenderMode.ScreenSpaceCamera;
                 hudCanvas.worldCamera = cam;
-                hudCanvas.planeDistance = 0.45f;
+                hudCanvas.planeDistance = 0.35f;
+                hudCanvas.sortingOrder = 200;
             }
 
             RenderTexture rt = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
@@ -536,6 +755,7 @@ namespace Realmz.PlayModeTests
                     hudCanvas.renderMode = prevMode;
                     hudCanvas.worldCamera = prevWorldCam;
                     hudCanvas.planeDistance = prevPlaneDist;
+                    hudCanvas.sortingOrder = prevOrder;
                 }
             }
         }

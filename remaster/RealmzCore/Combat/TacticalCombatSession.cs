@@ -34,6 +34,7 @@ namespace RealmzCore.Combat
         private readonly AStarPathfinder _pathfinder;
         private bool _victoryRewardsGranted;
         private bool _partyRewardsApplied;
+        private bool _lootDepositPending;
 
         public TacticalCombatSession(
             CombatGrid grid,
@@ -44,13 +45,18 @@ namespace RealmzCore.Combat
             RulesetMode mode = RulesetMode.ModernBalanced,
             PartyState? party = null,
             CombatInitiativeSurpriseMode surpriseMode = CombatInitiativeSurpriseMode.None,
-            int rewardBonusPercent = 0)
+            int rewardBonusPercent = 0,
+            bool isAmbientDarkness = false,
+            bool deferLootDeposit = false)
         {
             Grid = grid ?? throw new ArgumentNullException(nameof(grid));
             if (combatants == null)
             {
                 throw new ArgumentNullException(nameof(combatants));
             }
+
+            IsAmbientDarkness = isAmbientDarkness;
+            DeferLootDeposit = deferLootDeposit;
 
             foreach (CombatantState c in combatants)
             {
@@ -103,6 +109,9 @@ namespace RealmzCore.Combat
         }
 
         public event Action<IReadOnlyList<SurfaceChangeEvent>>? SurfaceChanged;
+        public event Action<bool>? OnArenaIlluminationChanged;
+
+        public const int DarknessRangedHitPenaltyPct = 15;
 
         public CombatGrid Grid { get; }
         public IDiceRoller Roller { get; }
@@ -110,6 +119,12 @@ namespace RealmzCore.Combat
         public PartyState? Party { get; }
         public CombatInitiativeSurpriseMode SurpriseMode { get; }
         public int RewardBonusPercent { get; }
+        public bool IsAmbientDarkness { get; }
+        public bool DeferLootDeposit { get; }
+        public bool IsCombatFireIlluminated { get; private set; }
+        public bool IsArenaIlluminated => !IsAmbientDarkness || IsCombatFireIlluminated || (Party != null && Party.TorchTurnsRemaining > 0);
+        public bool IsInTheDark => IsAmbientDarkness && !IsArenaIlluminated;
+        public bool HasPendingLootDeposit => _lootDepositPending;
         public IReadOnlyList<CombatantState> Combatants => _combatants;
         public IReadOnlyDictionary<int, SpellDefinition> Spells => _spells;
         public IReadOnlyDictionary<int, ItemDefinition> Items => _items;
@@ -756,7 +771,8 @@ namespace RealmzCore.Combat
 
             LosResult los = CheckLineOfSight(pos, defender.Position, includeSteamObscuration: true);
 
-            int missileToHit = attacker.EffectiveMissileSkill - los.CoverPenaltyPct;
+            int darknessPenalty = IsInTheDark ? DarknessRangedHitPenaltyPct : 0;
+            int missileToHit = attacker.EffectiveMissileSkill - los.CoverPenaltyPct - darknessPenalty;
             if (defender.Conditions.Has(CharConditionId.ShieldFromProjectiles))
             {
                 missileToHit -= 15;
@@ -781,6 +797,10 @@ namespace RealmzCore.Combat
             string diceStr = hasRanged ? attacker.RangedDice : "1d4";
             ComputeDamageRange(diceStr, 0, null, out int minDmg, out int maxDmg);
             List<string> tags = CollectConditionTags(attacker, defender, isFlanking: false, los, hit.Modifiers);
+            if (darknessPenalty > 0)
+            {
+                tags.Add($"In the Dark -{darknessPenalty}% Ranged");
+            }
 
             bool inRange = hasRanged && dist > 0 && dist <= effectiveRange;
             bool losClear = los.Kind != LosKind.Blocked;
@@ -1329,7 +1349,8 @@ namespace RealmzCore.Combat
             actor.HasTriggeredIrreversibleEvent = true;
 
             int coverPenalty = preview.LosResult != null ? preview.LosResult.CoverPenaltyPct : 0;
-            int missileToHit = actor.EffectiveMissileSkill - coverPenalty;
+            int darknessPenalty = IsInTheDark ? DarknessRangedHitPenaltyPct : 0;
+            int missileToHit = actor.EffectiveMissileSkill - coverPenalty - darknessPenalty;
             if (target.Conditions.Has(CharConditionId.ShieldFromProjectiles))
             {
                 missileToHit -= 15;
@@ -1545,6 +1566,21 @@ namespace RealmzCore.Combat
                 totalDamage += surfaceComboDamage;
             }
 
+            bool isFireSpell = string.Equals(spell.DamageType, "Heat", StringComparison.OrdinalIgnoreCase) ||
+                               string.Equals(spell.DamageType, "Fire", StringComparison.OrdinalIgnoreCase);
+            if (isFireSpell && !IsCombatFireIlluminated)
+            {
+                bool wasDark = IsInTheDark;
+                IsCombatFireIlluminated = true;
+                if (wasDark)
+                {
+                    AppendLog(caster.Id, caster.Name, "Illumination",
+                        $"{spell.Name} illuminates the battlefield with warm firelight, lifting the In the Dark penalty!",
+                        Array.Empty<string>());
+                }
+                OnArenaIlluminationChanged?.Invoke(IsArenaIlluminated);
+            }
+
             string immuneSuffix = immuneTargetNames.Count > 0
                 ? $" [Immune: {string.Join(", ", immuneTargetNames)}]"
                 : string.Empty;
@@ -1593,6 +1629,47 @@ namespace RealmzCore.Combat
             string msg = $"{actor.Name} takes a defensive guard stance (+4 AC).";
             AppendLog(actor.Id, actor.Name, "Guard", msg);
 
+            return new CombatActionResult(true, msg);
+        }
+
+        public CombatActionResult TryLightTorchInCombat(string? actorId = null)
+        {
+            if (Outcome != CombatOutcome.InProgress)
+            {
+                return new CombatActionResult(false, "Combat has ended.");
+            }
+
+            if (Party == null)
+            {
+                return new CombatActionResult(false, "No party stash available for torches.");
+            }
+
+            CombatantState? actor = !string.IsNullOrWhiteSpace(actorId) ? GetCombatant(actorId!) : CurrentActor;
+            if (actor == null || actor.Side != CombatSide.Hero || !actor.IsConscious)
+            {
+                actor = CurrentActor;
+            }
+            if (actor == null || actor.Side != CombatSide.Hero || !actor.IsConscious)
+            {
+                return new CombatActionResult(false, "Requires an active conscious hero turn to light a torch.");
+            }
+
+            if (!actor.Economy.HasSwiftAction)
+            {
+                return new CombatActionResult(false, "No swift action remaining this turn.");
+            }
+
+            if (!Party.TryLightTorchFromStash(out string feedback, _items))
+            {
+                return new CombatActionResult(false, feedback);
+            }
+
+            actor.Economy.CommitSwiftAction();
+            actor.HasTriggeredIrreversibleEvent = true;
+
+            string msg = $"{actor.Name} lights a Torch! {feedback}";
+            AppendLog(actor.Id, actor.Name, "LightTorch", msg);
+            OnArenaIlluminationChanged?.Invoke(IsArenaIlluminated);
             return new CombatActionResult(true, msg);
         }
 
@@ -2006,12 +2083,16 @@ namespace RealmzCore.Combat
             }
 
             List<LootStackSummary> lootStacks = new List<LootStackSummary>();
+            bool depositImmediately = !DeferLootDeposit;
             for (int i = 0; i < _collectedLootItemIds.Count; i++)
             {
                 int itemId = _collectedLootItemIds[i];
                 ItemDefinition? def = _items.TryGetValue(itemId, out ItemDefinition? foundDef) ? foundDef : null;
                 int charges = def != null ? def.Charges : 0;
-                party.AddItemToStash(itemId, 1, isIdentified: true, charges: charges);
+                if (depositImmediately)
+                {
+                    party.AddItemToStash(itemId, 1, isIdentified: true, charges: charges);
+                }
 
                 int normalizedChg = Math.Max(0, charges);
                 bool stacked = false;
@@ -2047,6 +2128,8 @@ namespace RealmzCore.Combat
                         def != null && def.IsJunk));
                 }
             }
+
+            _lootDepositPending = !depositImmediately && lootStacks.Count > 0;
 
             List<HeroVictorySummary> heroSummaries = new List<HeroVictorySummary>(party.Members.Count);
             if (party.Members.Count > 0)
@@ -2184,6 +2267,36 @@ namespace RealmzCore.Combat
                 RoundNumber,
                 heroSummaries,
                 lootStacks);
+        }
+
+        public int TakeLootItems(PartyState? party, IReadOnlyCollection<int>? selectedStackIndices)
+        {
+            if (!_lootDepositPending || party == null || LastVictorySummary == null)
+            {
+                return 0;
+            }
+
+            HashSet<int>? selected = selectedStackIndices != null ? new HashSet<int>(selectedStackIndices) : null;
+            _lootDepositPending = false;
+            int totalTaken = 0;
+            for (int i = 0; i < LastVictorySummary.LootStacks.Count; i++)
+            {
+                if (selected != null && !selected.Contains(i))
+                {
+                    continue;
+                }
+
+                LootStackSummary stack = LastVictorySummary.LootStacks[i];
+                if (stack.Quantity <= 0)
+                {
+                    continue;
+                }
+
+                party.AddItemToStash(stack.ItemId, stack.Quantity, isIdentified: true, charges: stack.RemainingCharges);
+                totalTaken += stack.Quantity;
+            }
+
+            return totalTaken;
         }
 
         internal void AppendLog(

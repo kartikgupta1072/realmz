@@ -648,6 +648,25 @@ namespace Realmz.Game
                 case "spell":
                     DrawStar(pixels, size, new Color(0.42f, 0.86f, 1f, 1f));
                     break;
+                case "gold":
+                case "gold_coins":
+                    DrawGoldCoins(pixels, size);
+                    break;
+                case "level_up":
+                case "upgrade_arrow":
+                    DrawUpArrow(pixels, size);
+                    break;
+                case "revive":
+                case "revived":
+                    DrawReviveHeart(pixels, size);
+                    break;
+                case "check":
+                case "checkmark":
+                    DrawCheckmark(pixels, size);
+                    break;
+                case "torch":
+                    DrawTorch(pixels, size);
+                    break;
                 default:
                     DrawSword(pixels, size);
                     break;
@@ -936,6 +955,120 @@ namespace Realmz.Game
                 SetPx(px, s, 8 + d, 8 - d, col);
             }
             SetPx(px, s, 8, 8, Color.white);
+        }
+
+        private static void DrawGoldCoins(Color[] px, int s)
+        {
+            Color outline = new Color(0.26f, 0.16f, 0.06f, 1f);
+            Color shade = new Color(0.62f, 0.42f, 0.10f, 1f);
+            Color gold = new Color(0.90f, 0.70f, 0.22f, 1f);
+            Color glint = new Color(1.00f, 0.94f, 0.58f, 1f);
+            // Back stack + front coin
+            for (int y = 3; y <= 12; y++)
+            {
+                for (int x = 3; x <= 12; x++)
+                {
+                    bool edge = (x == 3 || x == 12 || y == 3 || y == 12);
+                    if (edge && (x == 3 || x == 12) && (y == 3 || y == 12)) continue;
+                    if (y >= 4 && y <= 11 && x >= 4 && x <= 11)
+                    {
+                        SetPx(px, s, x, y, (y % 2 == 0) ? shade : gold);
+                    }
+                    else
+                    {
+                        SetPx(px, s, x, y, outline);
+                    }
+                }
+            }
+            for (int dy = -3; dy <= 3; dy++)
+            {
+                for (int dx = -3; dx <= 3; dx++)
+                {
+                    int d2 = dx * dx + dy * dy;
+                    if (d2 <= 9)
+                    {
+                        Color c = d2 >= 7 ? outline : (dx + dy <= -2 ? glint : (dx + dy >= 2 ? shade : gold));
+                        SetPx(px, s, 10 + dx, 6 + dy, c);
+                    }
+                }
+            }
+        }
+
+        private static void DrawUpArrow(Color[] px, int s)
+        {
+            Color c = Color.white;
+            for (int y = 3; y <= 12; y++)
+            {
+                SetPx(px, s, 7, y, c);
+                SetPx(px, s, 8, y, c);
+            }
+            for (int d = 1; d <= 4; d++)
+            {
+                for (int x = 7 - d; x <= 8 + d; x++)
+                {
+                    SetPx(px, s, x, 13 - d, c);
+                }
+            }
+        }
+
+        private static void DrawReviveHeart(Color[] px, int s)
+        {
+            Color heart = new Color(0.92f, 0.30f, 0.36f, 1f);
+            Color cross = Color.white;
+            for (int y = 4; y <= 12; y++)
+            {
+                for (int x = 3; x <= 12; x++)
+                {
+                    bool topLobes = y >= 10 && ((x >= 4 && x <= 6) || (x >= 9 && x <= 11));
+                    bool midBody = y >= 7 && y <= 9 && x >= 3 && x <= 12;
+                    bool taper = (y == 6 && x >= 4 && x <= 11) || (y == 5 && x >= 5 && x <= 10) || (y == 4 && x >= 6 && x <= 9);
+                    if (topLobes || midBody || taper)
+                    {
+                        SetPx(px, s, x, y, heart);
+                    }
+                }
+            }
+            for (int i = 6; i <= 10; i++)
+            {
+                SetPx(px, s, 7, i, cross);
+                SetPx(px, s, 8, i, cross);
+            }
+            for (int x = 5; x <= 10; x++)
+            {
+                SetPx(px, s, x, 8, cross);
+            }
+        }
+
+        private static void DrawCheckmark(Color[] px, int s)
+        {
+            Color c = Color.white;
+            int[] xs = { 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
+            int[] ys = { 7, 6, 5, 6, 7, 8, 9, 10, 11, 12 };
+            for (int i = 0; i < xs.Length; i++)
+            {
+                SetPx(px, s, xs[i], ys[i], c);
+                SetPx(px, s, xs[i], ys[i] + 1, c);
+            }
+        }
+
+        private static void DrawTorch(Color[] px, int s)
+        {
+            Color wood = new Color(0.56f, 0.34f, 0.16f, 1f);
+            Color ember = new Color(1.0f, 0.52f, 0.12f, 1f);
+            Color flame = new Color(1.0f, 0.90f, 0.34f, 1f);
+            for (int y = 2; y <= 8; y++)
+            {
+                SetPx(px, s, 7, y, wood);
+                SetPx(px, s, 8, y, wood);
+            }
+            for (int y = 9; y <= 14; y++)
+            {
+                int hw = y <= 11 ? 2 : 1;
+                for (int x = 8 - hw; x <= 7 + hw; x++)
+                {
+                    SetPx(px, s, x, y, (y >= 11 && x >= 7 && x <= 8) ? flame : ember);
+                }
+            }
         }
     }
 }

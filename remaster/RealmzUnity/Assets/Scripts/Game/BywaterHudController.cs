@@ -289,6 +289,8 @@ namespace Realmz.Game
         private Image _combatUndoBtnIcon;
         private Button _combatPotionBtn;
         private Image _combatPotionBtnIcon;
+        private Button _combatTorchBtn;
+        private Image _combatTorchBtnIcon;
         private Button _combatShoveBtn;
         private Image _combatShoveBtnIcon;
         private Image _combatShoveSwiftBadgeBg;
@@ -298,6 +300,8 @@ namespace Realmz.Game
         private Button _combatEndTurnBtn;
         private Image _combatEndTurnBtnIcon;
         private bool _pulseEndTurn;
+        private GameObject _combatDarknessBadge;
+        private TextMeshProUGUI _combatDarknessText;
         private GameObject _spellPickerBar;
         private readonly List<SpellRowRefs> _spellRowPool = new List<SpellRowRefs>(12);
         private GameObject _targetingBannerRoot;
@@ -603,6 +607,12 @@ namespace Realmz.Game
 
             _toastText.text = message;
             _toastTimer = Mathf.Max(0.8f, duration);
+            RectTransform toastRt = _toastRoot.GetComponent<RectTransform>();
+            if (toastRt != null)
+            {
+                bool hasDarkBadge = _isCombatHudActive && _combatDarknessBadge != null && _combatDarknessBadge.activeSelf;
+                toastRt.anchoredPosition = new Vector2(0f, _isCombatHudActive ? (hasDarkBadge ? -178f : -142f) : -60f);
+            }
             if (_toastCanvasGroup != null)
             {
                 _toastCanvasGroup.alpha = 1f;
@@ -1410,12 +1420,14 @@ namespace Realmz.Game
                 string stats = def != null ? FormatItemStats(def) : string.Empty;
                 int sellPrice = def != null ? TownShopService.GetSellPrice(def) : 1;
                 bool canEquip = def != null && PartyMemberState.TryParseSlot(def.Slot, out _);
+                string restrictReason = string.Empty;
+                bool heroCanEquip = canEquip && PartyState.CanHeroEquip(hero, def, out restrictReason);
                 bool canUse = def != null && (!string.IsNullOrWhiteSpace(def.HealDice) ||
                     string.Equals(def.Category, "Potion", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(def.Slot, "Consumable", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(def.Name, "Torch", StringComparison.OrdinalIgnoreCase) ||
                     entry.ItemId == PartyState.TorchItemId);
-                bool isUpgrade = def != null && IsStashEntryUpgradeForHero(hero, def, items);
+                bool isUpgrade = heroCanEquip && IsStashEntryUpgradeForHero(hero, def, items);
 
                 string chgTag = entry.RemainingCharges > 0 ? $" ({entry.RemainingCharges} chg)" : string.Empty;
                 StashRowRefs rowRef = GetOrCreateStashRow(rowIdx);
@@ -1435,6 +1447,15 @@ namespace Realmz.Game
                 }
                 rowRef.InfoText.text = $"{itemName} x{entry.Quantity}{chgTag} [{sellPrice}g]{(string.IsNullOrEmpty(stats) ? "" : " - " + stats)}";
                 rowRef.EquipBtn.gameObject.SetActive(canEquip);
+                if (canEquip)
+                {
+                    BywaterUiHelpers.SetButtonColors(rowRef.EquipBtn, false);
+                    TextMeshProUGUI eqLbl = rowRef.EquipBtn.GetComponentInChildren<TextMeshProUGUI>();
+                    if (eqLbl != null)
+                    {
+                        eqLbl.color = heroCanEquip ? BywaterUiHelpers.ParchmentText : BywaterUiHelpers.MutedSlate;
+                    }
+                }
                 rowRef.UseBtn.gameObject.SetActive(canUse);
 
                 ItemDefinition capturedDef = def;
@@ -2047,6 +2068,16 @@ namespace Realmz.Game
 
             RefreshContextualHotbar(combat, bundle, actor, isHeroTurn, activeMode, selectedSpellId);
 
+            if (_combatDarknessBadge != null)
+            {
+                bool inTheDark = combat.Outcome == CombatOutcome.InProgress && combat.IsInTheDark;
+                _combatDarknessBadge.SetActive(inTheDark);
+                if (inTheDark && _combatDarknessText != null)
+                {
+                    _combatDarknessText.text = $"In the Dark (-{TacticalCombatSession.DarknessRangedHitPenaltyPct}% Ranged)";
+                }
+            }
+
             if (_combatSpeedLabel != null)
             {
                 string compactSpeed = string.Equals(speedLabel, "Instant", StringComparison.OrdinalIgnoreCase)
@@ -2534,6 +2565,16 @@ namespace Realmz.Game
                 if (_combatPotionBtnIcon != null) _combatPotionBtnIcon.color = (hasPotion && hasSwift) ? enabledIconTint : disabledIconTint;
                 BywaterUiHelpers.SetButtonColors(_combatPotionBtn, isHeroTurn && activeMode == CombatActionMode.Potion);
                 if (hasPotion) _visibleHotbarActionIds.Add("potion");
+            }
+
+            bool showCombatTorch = combat.IsAmbientDarkness && !combat.IsArenaIlluminated &&
+                                   combat.Party != null && combat.Party.GetTotalTorchCharges() > 0;
+            if (_combatTorchBtn != null)
+            {
+                _combatTorchBtn.gameObject.SetActive(showCombatTorch);
+                _combatTorchBtn.interactable = showCombatTorch && hasSwift;
+                if (_combatTorchBtnIcon != null) _combatTorchBtnIcon.color = (showCombatTorch && hasSwift) ? enabledIconTint : disabledIconTint;
+                if (showCombatTorch) _visibleHotbarActionIds.Add("torch");
             }
 
             if (_combatShoveBtn != null)
@@ -3062,8 +3103,10 @@ namespace Realmz.Game
             }
             if (_outcomeRichVictoryRoot != null) _outcomeRichVictoryRoot.SetActive(false);
             if (_outcomeSummary != null) _outcomeSummary.gameObject.SetActive(true);
-            if (_victoryEquipUpgradesBtn != null) _victoryEquipUpgradesBtn.gameObject.SetActive(false);
+            _outcomeInRichVictoryMode = false;
             if (_victoryLevelUpNowBtn != null) _victoryLevelUpNowBtn.gameObject.SetActive(false);
+            TextMeshProUGUI contLbl = _outcomeContinueBtn != null ? _outcomeContinueBtn.GetComponentInChildren<TextMeshProUGUI>() : null;
+            if (contLbl != null) contLbl.text = "Continue Exploring";
 
             bool isVictory = outcome == CombatOutcome.Victory;
             _outcomeTitle.text = isVictory ? "VICTORY!" : "DEFEAT";
@@ -4456,6 +4499,35 @@ namespace Realmz.Game
                 });
             }
 
+            // 1b. Mechanical Night/Dungeon Darkness Indicator Pill (below InitiativeRibbon)
+            RectTransform darkPill = BywaterUiHelpers.CreatePanel(_combatRoot.transform, "CombatDarknessBadge", new Color(0.07f, 0.09f, 0.20f, 0.94f), withBrassOutline: true, outlinePx: 1.4f);
+            darkPill.anchorMin = new Vector2(0.5f, 1f);
+            darkPill.anchorMax = new Vector2(0.5f, 1f);
+            darkPill.pivot = new Vector2(0.5f, 1f);
+            darkPill.anchoredPosition = new Vector2(0f, -140f);
+            darkPill.sizeDelta = new Vector2(286f, 32f);
+            BywaterUiHelpers.SetBorderColor(darkPill, BywaterUiHelpers.InfoCyan);
+            HorizontalLayoutGroup darkHlg = darkPill.gameObject.AddComponent<HorizontalLayoutGroup>();
+            darkHlg.padding = new RectOffset(10, 10, 4, 4);
+            darkHlg.spacing = 6f;
+            darkHlg.childControlWidth = true;
+            darkHlg.childControlHeight = true;
+            darkHlg.childForceExpandWidth = false;
+            darkHlg.childAlignment = TextAnchor.MiddleCenter;
+
+            Image darkTorchIcon = BywaterUiHelpers.CreateImage(darkPill, "DarkIcon", ResolveUiOrCatalogTorchSprite(), new Color(1.0f, 0.72f, 0.30f, 1f), preserveAspect: true);
+            darkTorchIcon.raycastTarget = false;
+            LayoutElement dtLe = darkTorchIcon.gameObject.AddComponent<LayoutElement>();
+            dtLe.preferredWidth = 20f;
+            dtLe.preferredHeight = 20f;
+
+            _combatDarknessText = BywaterUiHelpers.CreateLabel(darkPill, "DarknessText", "In the Dark (-15% Ranged)", _font, 15f, BywaterUiHelpers.InfoCyan, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            _combatDarknessText.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+            AttachHoverTooltip(darkPill.gameObject, "torch", "In the Dark (-15% Ranged Hit)",
+                "Unlit darkness impairs ranged accuracy (-15% Ranged Hit).\nLight a Torch [Swift] or cast a Fire spell (Flame Hands / Fireball) to illuminate the battlefield!");
+            _combatDarknessBadge = darkPill.gameObject;
+            _combatDarknessBadge.SetActive(false);
+
             // 2. Left-Edge Compact Party Mini-Portraits
             RectTransform partyStrip = BywaterUiHelpers.CreatePanel(_combatRoot.transform, "CombatPartyStrip", new Color(0.04f, 0.06f, 0.11f, 0.88f), withBrassOutline: true, outlinePx: 1.4f);
             partyStrip.anchorMin = new Vector2(0f, 0.5f);
@@ -4809,6 +4881,10 @@ namespace Realmz.Game
 
             _combatPotionBtn = AddCombatSkillButton(actionBar, "PotionBtn", "potion", "Potion", 84f, () => OnCombatModeSelected?.Invoke(CombatActionMode.Potion), out _combatPotionBtnIcon);
             AttachHoverTooltip(_combatPotionBtn.gameObject, "potion", "Healing Potion [Swift]", "Drink or throw a healing potion. Uses Swift action.");
+
+            _combatTorchBtn = AddCombatSkillButton(actionBar, "CombatTorchBtn", "torch", "Torch", 82f, () => OnLightTorchFromHudRequested?.Invoke(), out _combatTorchBtnIcon);
+            AttachHoverTooltip(_combatTorchBtn.gameObject, "torch", "Light Torch [Swift]", "Ignite a Torch from party stash (+30 turns) to illuminate darkness and lift the -15% Ranged penalty.");
+            _combatTorchBtn.gameObject.SetActive(false);
 
             _combatShoveBtn = AddShoveCombatButton(actionBar, "ShoveBtn", 124f, () => OnCombatModeSelected?.Invoke(CombatActionMode.Shove), out _combatShoveBtnIcon);
             AttachHoverTooltip(_combatShoveBtn.gameObject, "shove", "Shove [V] [Swift]", "Push an adjacent enemy 1 tile (off ledges or into walls). Uses Swift action.");
@@ -5586,7 +5662,17 @@ namespace Realmz.Game
             bHlg.childControlHeight = true;
             bHlg.childForceExpandWidth = true;
 
-            _outcomeContinueBtn = BywaterUiHelpers.CreateButton(btnRow.transform, "ContinueBtn", "Continue Exploring", _font, () => OnContinueAfterVictoryRequested?.Invoke(), 16f);
+            _outcomeContinueBtn = BywaterUiHelpers.CreateButton(btnRow.transform, "ContinueBtn", "Continue Exploring", _font, () =>
+            {
+                if (_outcomeInRichVictoryMode)
+                {
+                    OnVictoryTakeLootRequested?.Invoke(GetSelectedVictoryLootIndices());
+                }
+                else
+                {
+                    OnContinueAfterVictoryRequested?.Invoke();
+                }
+            }, 16f);
             _outcomeRetryBtn = BywaterUiHelpers.CreateButton(btnRow.transform, "RetryBtn", "Retry Skirmish", _font, () => OnRetrySkirmishRequested?.Invoke(), 16f);
             _outcomeReviveBtn = BywaterUiHelpers.CreateButton(btnRow.transform, "ReviveBtn", "Revive at Shrine", _font, () => OnReviveAtShrineRequested?.Invoke(), 16f);
 
@@ -5719,36 +5805,18 @@ namespace Realmz.Game
             }
         }
 
+        private Sprite ResolveUiOrCatalogTorchSprite()
+        {
+            Sprite sp = _catalog != null ? (_catalog.GetItemIcon(805, "Torch") ?? _catalog.GetHotbarIcon("torch")) : null;
+            return sp ?? BywaterUiHelpers.GetProceduralIconSprite("torch");
+        }
+
         private static bool IsShopItemUpgrade(
             PartyState party,
             ItemDefinition candidate,
             IReadOnlyDictionary<int, ItemDefinition> items)
         {
-            if (party == null || candidate == null || items == null)
-            {
-                return false;
-            }
-
-            if (!PartyMemberState.TryParseSlot(candidate.Slot, out _))
-            {
-                return false;
-            }
-
-            for (int i = 0; i < party.Members.Count; i++)
-            {
-                PartyMemberState member = party.Members[i];
-                if (member == null || !member.IsAlive)
-                {
-                    continue;
-                }
-
-                if (IsStashEntryUpgradeForHero(member, candidate, items))
-                {
-                    return true;
-                }
-            }
-
-            return false;
+            return PartyState.FindBestUpgradeRecipient(party, candidate, items) != null;
         }
     }
 }

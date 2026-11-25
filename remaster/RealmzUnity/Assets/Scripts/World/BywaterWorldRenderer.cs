@@ -56,6 +56,7 @@ namespace Realmz.World
             public float LastAppliedAlpha = 1f;
             public bool IsAnimated4Frame;
             public bool IsFloorDecal;
+            public bool IsArenaObstacle;
             public bool WasTransparentFaded;
             public bool HasInitialPropertyBlock;
             public int LastAnimFrame = -1;
@@ -171,11 +172,19 @@ namespace Realmz.World
         private int _lastAnimatedPropFrame = -1;
         private float _terrainGridHintStrength;
         private bool _townNpcsHiddenForCombat;
+        private bool _combatForegroundClearActive;
+        private int _combatClearMinX;
+        private int _combatClearMaxX;
+        private int _combatClearMinY;
+        private int _combatClearMaxY;
+        private int _hiddenCombatForegroundPropCount;
 
         public CartographyWorldData CartographyData => _cartographyData;
         public Collider TerrainCollider => _elevationBuilder != null ? _elevationBuilder.terrainMeshCollider : null;
         public Transform PropsRoot => _propsContainer;
         public bool AreTownNpcsHiddenForCombat => _townNpcsHiddenForCombat;
+        public bool IsCombatForegroundClearActive => _combatForegroundClearActive;
+        public int HiddenCombatForegroundPropCount => _hiddenCombatForegroundPropCount;
         public bool IsPartyLanternEnabled => _partyLantern != null && _partyLantern.enabled;
         public float PartyLanternIntensity => _partyLantern != null ? _partyLantern.intensity : 0f;
 
@@ -306,8 +315,8 @@ namespace Realmz.World
             bool enableTorch = (isDungeon || isNightOrDark) && hasLitTorch;
             if (enableTorch)
             {
-                float targetIntensity = isDungeon ? 8.5f : 12.0f;
-                float targetRange = isDungeon ? 14.0f : 16.5f;
+                float targetIntensity = isDungeon ? 10.5f : (_combatForegroundClearActive ? 14.0f : 12.0f);
+                float targetRange = isDungeon ? 15.5f : (_combatForegroundClearActive ? 18.5f : 16.5f);
                 _partyLantern.enabled = true;
                 _partyLantern.intensity = targetIntensity;
                 _partyLantern.range = targetRange;
@@ -780,6 +789,7 @@ namespace Realmz.World
 
             if (!active || width <= 0 || height <= 0)
             {
+                RestoreCombatForegroundProps();
                 if (_arenaBorderLine != null)
                 {
                     _arenaBorderLine.gameObject.SetActive(false);
@@ -787,6 +797,7 @@ namespace Realmz.World
                 return;
             }
 
+            ClearCombatForegroundProps(originX, originY, width, height);
             EnsureArenaBorderLine();
             _arenaPointScratch.Clear();
 
@@ -829,6 +840,98 @@ namespace Realmz.World
             _arenaBorderLine.gameObject.SetActive(true);
         }
 
+        public void ClearCombatForegroundProps(int originX, int originY, int width, int height)
+        {
+            if (width <= 0 || height <= 0)
+            {
+                return;
+            }
+
+            // Cover combat arena bounds + 2-tile east/west rim buffer + 5-tile southern camera-occlusion buffer
+            _combatForegroundClearActive = true;
+            _combatClearMinX = originX - 2;
+            _combatClearMaxX = originX + width - 1 + 2;
+            _combatClearMinY = originY;
+            _combatClearMaxY = originY + height - 1 + 5;
+            ApplyCombatForegroundClearIfActive();
+        }
+
+        public void RestoreCombatForegroundProps()
+        {
+            _combatForegroundClearActive = false;
+            _hiddenCombatForegroundPropCount = 0;
+
+            int limit = Mathf.Min(_activePropCount, _propPool.Count);
+            for (int i = 0; i < limit; i++)
+            {
+                PropBillboardEntry entry = _propPool[i];
+                if (entry != null && entry.Root != null && !entry.Root.activeSelf)
+                {
+                    entry.Root.SetActive(true);
+                }
+            }
+        }
+
+        private bool IsInsideCombatForegroundClearBuffer(PropBillboardEntry entry)
+        {
+            if (!_combatForegroundClearActive || entry == null || entry.IsArenaObstacle || entry.IsFloorDecal)
+            {
+                return false;
+            }
+
+            if (!IsCombatForegroundClearPropKind(entry.Kind))
+            {
+                return false;
+            }
+
+            CartographyWorldData.WorldToGrid(entry.WorldPosition, out int px, out int py);
+            return px >= _combatClearMinX &&
+                   px <= _combatClearMaxX &&
+                   py >= _combatClearMinY &&
+                   py <= _combatClearMaxY;
+        }
+
+        private static bool IsCombatForegroundClearPropKind(CartographyPropKind kind)
+        {
+            return kind != CartographyPropKind.None && kind != CartographyPropKind.StoneBridge;
+        }
+
+        private void ApplyCombatForegroundClearIfActive()
+        {
+            if (!_combatForegroundClearActive)
+            {
+                _hiddenCombatForegroundPropCount = 0;
+                return;
+            }
+
+            int hidden = 0;
+            int limit = Mathf.Min(_activePropCount, _propPool.Count);
+            for (int i = 0; i < limit; i++)
+            {
+                PropBillboardEntry entry = _propPool[i];
+                if (entry == null || entry.Root == null)
+                {
+                    continue;
+                }
+
+                bool shouldHide = IsInsideCombatForegroundClearBuffer(entry);
+                if (shouldHide)
+                {
+                    if (entry.Root.activeSelf)
+                    {
+                        entry.Root.SetActive(false);
+                    }
+                    hidden++;
+                }
+                else if (!entry.Root.activeSelf)
+                {
+                    entry.Root.SetActive(true);
+                }
+            }
+
+            _hiddenCombatForegroundPropCount = hidden;
+        }
+
         public void ApplyCombatArenaVisuals(
             TileMapData map,
             int originX,
@@ -852,6 +955,11 @@ namespace Realmz.World
             }
 
             _cartographyData.ApplyCombatArenaLayout(originX, originY, grid);
+            _combatForegroundClearActive = true;
+            _combatClearMinX = originX - 2;
+            _combatClearMaxX = originX + grid.Width - 1 + 2;
+            _combatClearMinY = originY;
+            _combatClearMaxY = originY + grid.Height - 1 + 5;
 
             bool isDungeon = map.IsDungeon;
             Camera cam = ResolveActiveCamera();
@@ -1021,6 +1129,7 @@ namespace Realmz.World
 
                     entry.Kind = prop.Kind;
                     entry.IsFloorDecal = isFloorDecal;
+                    entry.IsArenaObstacle = prop.IsArenaObstacle;
                     entry.IsAnimated4Frame = isAnimated4f;
                     entry.SizeMeters = new Vector2(sizeX, sizeY);
                     entry.CurrentAlpha = 1f;
@@ -1081,6 +1190,8 @@ namespace Realmz.World
             {
                 _propPool[i].Root.SetActive(false);
             }
+
+            ApplyCombatForegroundClearIfActive();
 
             for (int i = bridgeIdx; i < _bridgePool.Count; i++)
             {
@@ -1311,12 +1422,22 @@ namespace Realmz.World
             IReadOnlyList<CartographyPropPlacement> props = _cartographyData.Props;
             for (int i = 0; i < props.Count; i++)
             {
-                CartographyPropKind k = props[i].Kind;
+                CartographyPropPlacement p = props[i];
+                if (_combatForegroundClearActive && !p.IsArenaObstacle && !IsFloorDecalPropKind(p.Kind))
+                {
+                    CartographyWorldData.WorldToGrid(p.WorldPosition, out int px, out int py);
+                    if (px >= _combatClearMinX && px <= _combatClearMaxX && py >= _combatClearMinY && py <= _combatClearMaxY)
+                    {
+                        continue;
+                    }
+                }
+
+                CartographyPropKind k = p.Kind;
                 if (k == CartographyPropKind.TorchBrazier ||
                     k == CartographyPropKind.Campfire4f ||
                     k == CartographyPropKind.DungeonWallSconce4f)
                 {
-                    _allLightPositions.Add(props[i].WorldPosition);
+                    _allLightPositions.Add(p.WorldPosition);
                 }
             }
 
@@ -1401,8 +1522,8 @@ namespace Realmz.World
             }
             else if (_activeTimePhase == WorldTimePhase.Night)
             {
-                targetIntensity = 2.4f;
-                targetRange = 7.5f;
+                targetIntensity = _combatForegroundClearActive ? 3.8f : 2.4f;
+                targetRange = _combatForegroundClearActive ? 9.5f : 7.5f;
                 targetFlickerAmp = 0.28f;
             }
             else if (_activeTimePhase == WorldTimePhase.Dusk)

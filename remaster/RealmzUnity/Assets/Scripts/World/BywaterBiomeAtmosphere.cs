@@ -62,6 +62,7 @@ namespace Realmz.World
         public bool IsDungeonActive { get; private set; }
         public WorldTimePhase CurrentTimePhase { get; private set; } = WorldTimePhase.Day;
         public bool HasLitTorch { get; private set; }
+        public bool IsCombatActive { get; private set; }
 
         private void Awake()
         {
@@ -121,7 +122,7 @@ namespace Realmz.World
 
         public void ApplyBiome(bool isDungeon, bool immediate = true)
         {
-            ApplyBiome(isDungeon, WorldTimePhase.Day, 0.5f, isDungeon, immediate);
+            ApplyBiome(isDungeon, WorldTimePhase.Day, 0.5f, isDungeon, immediate, isCombat: false);
         }
 
         public void ApplyBiome(
@@ -129,14 +130,16 @@ namespace Realmz.World
             WorldTimePhase timePhase,
             float phaseProgress01 = 0.5f,
             bool hasLitTorch = false,
-            bool immediate = true)
+            bool immediate = true,
+            bool isCombat = false)
         {
             ResolveReferences();
             IsDungeonActive = isDungeon;
             CurrentTimePhase = timePhase;
             HasLitTorch = hasLitTorch;
+            IsCombatActive = isCombat;
 
-            AtmosphereState desired = BuildTargetState(isDungeon, timePhase, phaseProgress01, hasLitTorch);
+            AtmosphereState desired = BuildTargetState(isDungeon, timePhase, phaseProgress01, hasLitTorch, isCombat);
 
             if (immediate || !Application.isPlaying || !_hasInitializedState)
             {
@@ -169,7 +172,8 @@ namespace Realmz.World
             bool isDungeon,
             WorldTimePhase timePhase,
             float phaseProgress01,
-            bool hasLitTorch)
+            bool hasLitTorch,
+            bool isCombat = false)
         {
             if (isDungeon)
             {
@@ -183,7 +187,7 @@ namespace Realmz.World
                 case WorldTimePhase.Dusk:
                     return BuildDuskState(phaseProgress01);
                 case WorldTimePhase.Night:
-                    return BuildNightState(hasLitTorch);
+                    return isCombat ? BuildCombatNightState(hasLitTorch) : BuildNightState(hasLitTorch);
                 default:
                     return BuildSunlitDaylightState();
             }
@@ -320,6 +324,40 @@ namespace Realmz.World
                 bloomScatter = 0.58f,
                 vignetteIntensity = hasLitTorch ? 0.22f : 0.34f,
                 vignetteSmoothness = 0.50f,
+                playSunMotes = false
+            };
+        }
+
+        private static AtmosphereState BuildCombatNightState(bool hasLitTorch)
+        {
+            // Cool silver-blue nocturnal combat floor: preserves night mood while keeping heroes, enemies, grid brackets, and cover crisp.
+            return new AtmosphereState
+            {
+                sunColor = new Color(0.68f, 0.80f, 1.00f, 1f),
+                sunIntensity = hasLitTorch ? 0.98f : 0.88f,
+                sunRotation = Quaternion.Euler(50f, -26f, 0f),
+                shadowStrength = 0.30f,
+                ambientSky = new Color(0.30f, 0.42f, 0.70f, 1f),
+                ambientEquator = new Color(0.24f, 0.34f, 0.58f, 1f),
+                ambientGround = new Color(0.16f, 0.22f, 0.40f, 1f),
+                ambientIntensity = hasLitTorch ? 1.50f : 1.40f,
+                fogEnabled = true,
+                fogColor = new Color(0.085f, 0.125f, 0.250f, 1f),
+                fogStart = 60f,
+                fogEnd = 138f,
+                cameraBg = new Color(0.065f, 0.100f, 0.215f, 1f),
+                tonemapping = TonemappingMode.Neutral,
+                postExposure = hasLitTorch ? 0.28f : 0.22f,
+                contrast = 6f,
+                saturation = 10f,
+                splitHighlights = new Color(0.88f, 0.94f, 1.0f, 1f),
+                splitShadows = new Color(0.48f, 0.60f, 0.94f, 1f),
+                splitBalance = -10f,
+                bloomThreshold = 1.24f,
+                bloomIntensity = 0.28f,
+                bloomScatter = 0.56f,
+                vignetteIntensity = hasLitTorch ? 0.12f : 0.16f,
+                vignetteSmoothness = 0.52f,
                 playSunMotes = false
             };
         }

@@ -73,6 +73,10 @@ namespace Realmz.Game
             public Image Portrait;
             public TextMeshProUGUI NameText;
             public TextMeshProUGUI LevelBadgeText;
+            public GameObject LvlUpIconGo;
+            public Image LvlUpIcon;
+            public GameObject ReviveIconGo;
+            public Image ReviveIcon;
             public TextMeshProUGUI StatusTagText;
             public GameObject StatusTagGo;
             public Image XpBaseFill;
@@ -84,12 +88,18 @@ namespace Realmz.Game
         private sealed class VictoryLootTileRefs
         {
             public GameObject Root;
+            public Button CardButton;
             public Image FrameBg;
+            public Image SelectBoxBg;
+            public Image CheckmarkIcon;
             public Image Icon;
             public TextMeshProUGUI QtyText;
             public GameObject QtyBadge;
             public GameObject UpgradeBadge;
+            public TextMeshProUGUI UpgradeHeroText;
             public TextMeshProUGUI NameText;
+            public TextMeshProUGUI StatsText;
+            public int BoundStackIndex;
         }
 
         private sealed class LevelUpStatRowRefs
@@ -185,18 +195,18 @@ namespace Realmz.Game
         private ScrollRect _victoryLootScroll;
         private GameObject _victoryLootEmptyLabel;
         private readonly List<VictoryLootTileRefs> _victoryLootTiles = new List<VictoryLootTileRefs>(16);
-        private Button _victoryEquipUpgradesBtn;
-        private TextMeshProUGUI _victoryEquipUpgradesLabel;
+        private readonly HashSet<int> _selectedVictoryLootIndices = new HashSet<int>();
         private Button _victoryLevelUpNowBtn;
         private TextMeshProUGUI _victoryLevelUpNowLabel;
         private CombatVictorySummary _cachedVictorySummary;
-        private readonly List<int> _victoryUpgradeStashIndices = new List<int>(8);
+        private bool _outcomeInRichVictoryMode;
 
         public bool IsLevelUpModalOpen => _levelUpModalRoot != null && _levelUpModalRoot.activeSelf;
 
         public event Action<int> OnEquipBestHeroRequested;
         public event Action OnEquipBestPartyRequested;
         public event Action<int, AttributeAllocation, int?> OnConfirmLevelUpRequested;
+        public event Action<int[]> OnVictoryTakeLootRequested;
 
         private void BuildHeaderCampPills(Transform headerTransform)
         {
@@ -1161,6 +1171,10 @@ namespace Realmz.Game
             {
                 return false;
             }
+            if (!PartyState.CanHeroEquip(hero, candidate, out _))
+            {
+                return false;
+            }
 
             EquipmentSlot targetSlot = slot;
             if (PartyMemberState.IsAccessorySlot(slot) && hero.GetEquipped(slot) != null)
@@ -1202,6 +1216,11 @@ namespace Realmz.Game
             if (!PartyMemberState.TryParseSlot(candidate.Slot, out EquipmentSlot slot))
             {
                 return $"{stats}\n{candidate.Description}";
+            }
+
+            if (!PartyState.CanHeroEquip(hero, candidate, out string restrictReason))
+            {
+                return $"{stats}\n[{restrictReason}]\n\n{candidate.Description}";
             }
 
             InventoryItem eq = hero.GetEquipped(slot);
@@ -1532,7 +1551,7 @@ namespace Realmz.Game
             ibLe.preferredHeight = 28f;
             ibLe.flexibleHeight = 0f;
             HorizontalLayoutGroup ibHlg = infoBar.GetComponent<HorizontalLayoutGroup>();
-            ibHlg.spacing = 12f;
+            ibHlg.spacing = 6f;
             ibHlg.childControlWidth = true;
             ibHlg.childControlHeight = true;
             ibHlg.childForceExpandWidth = false;
@@ -1541,15 +1560,17 @@ namespace Realmz.Game
             _victorySubtitleText.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
 
             Sprite goldSprite = _catalog != null ? (_catalog.GetHotbarIcon("gold_coins") ?? _catalog.GetHotbarIcon("gold")) : null;
-            _victoryGoldIcon = BywaterUiHelpers.CreateImage(infoBar.transform, "GoldIcon", goldSprite ?? BywaterUiHelpers.GetProceduralIconSprite("gold"), Color.white, preserveAspect: true);
+            _victoryGoldIcon = BywaterUiHelpers.CreateImage(infoBar.transform, "GoldIcon", goldSprite ?? BywaterUiHelpers.GetProceduralIconSprite("gold_coins"), Color.white, preserveAspect: true);
             _victoryGoldIcon.raycastTarget = false;
             LayoutElement giLe = _victoryGoldIcon.gameObject.AddComponent<LayoutElement>();
-            giLe.preferredWidth = 26f;
-            giLe.preferredHeight = 26f;
+            giLe.preferredWidth = 28f;
+            giLe.preferredHeight = 28f;
 
-            _victoryGoldText = BywaterUiHelpers.CreateLabel(infoBar.transform, "GoldText", "+0g", _font, 16.5f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineRight, FontStyles.Bold, wrap: false);
+            _victoryGoldText = BywaterUiHelpers.CreateLabel(infoBar.transform, "GoldText", "+0g", _font, 16.5f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
             BywaterUiHelpers.AddTextDropShadow(_victoryGoldText);
-            _victoryGoldText.gameObject.AddComponent<LayoutElement>().preferredWidth = 280f;
+            ContentSizeFitter goldCsf = _victoryGoldText.gameObject.AddComponent<ContentSizeFitter>();
+            goldCsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            goldCsf.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
 
             // 6-Hero Portrait & Dual-Segment XP Grid (3 rows x 2 cols)
             GameObject heroGrid = new GameObject("VictoryHeroGrid", typeof(RectTransform), typeof(GridLayoutGroup));
@@ -1596,11 +1617,31 @@ namespace Realmz.Game
                 TextMeshProUGUI nameLbl = BywaterUiHelpers.CreateLabel(topRow.transform, "Name", $"Hero {i + 1}", _font, 15.5f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
                 nameLbl.gameObject.AddComponent<LayoutElement>().preferredWidth = 108f;
 
-                TextMeshProUGUI lvlLbl = BywaterUiHelpers.CreateLabel(topRow.transform, "Lv", "Lv1", _font, 15f, BywaterUiHelpers.MutedSlate, TextAlignmentOptions.MidlineLeft, wrap: false);
-                lvlLbl.gameObject.AddComponent<LayoutElement>().preferredWidth = 46f;
+                TextMeshProUGUI lvlLbl = BywaterUiHelpers.CreateLabel(topRow.transform, "Lv", "Lv1", _font, 15f, BywaterUiHelpers.MutedSlate, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+                lvlLbl.gameObject.AddComponent<LayoutElement>().preferredWidth = 42f;
+
+                Image lvlUpIcon = BywaterUiHelpers.CreateImage(topRow.transform, "LvlUpArrowBadge", BywaterUiHelpers.GetProceduralIconSprite("level_up"), BywaterUiHelpers.BrassHighlight, preserveAspect: true);
+                lvlUpIcon.raycastTarget = true;
+                LayoutElement lvlUpLe = lvlUpIcon.gameObject.AddComponent<LayoutElement>();
+                lvlUpLe.preferredWidth = 20f;
+                lvlUpLe.preferredHeight = 20f;
+                AttachTooltipCallbacks(lvlUpIcon.gameObject, () => ("Level Up Ready!", "This hero earned enough XP to advance a level."));
+                lvlUpIcon.gameObject.SetActive(false);
+
+                Image reviveIcon = BywaterUiHelpers.CreateImage(topRow.transform, "ReviveBadgeIcon", BywaterUiHelpers.GetProceduralIconSprite("revive"), Color.white, preserveAspect: true);
+                reviveIcon.raycastTarget = true;
+                LayoutElement revLe = reviveIcon.gameObject.AddComponent<LayoutElement>();
+                revLe.preferredWidth = 20f;
+                revLe.preferredHeight = 20f;
+                AttachTooltipCallbacks(reviveIcon.gameObject, () => ("Revived After Battle", "Fallen in battle - revived at 1 HP (50% XP)"));
+                reviveIcon.gameObject.SetActive(false);
+
+                GameObject topSpacer = new GameObject("TopSpacer", typeof(RectTransform), typeof(LayoutElement));
+                topSpacer.transform.SetParent(topRow.transform, false);
+                topSpacer.GetComponent<LayoutElement>().flexibleWidth = 1f;
 
                 RectTransform tagRt = BywaterUiHelpers.CreatePanel(topRow.transform, "StatusTag", new Color(0.28f, 0.21f, 0.05f, 0.96f), withBrassOutline: true, outlinePx: 1f);
-                tagRt.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+                tagRt.gameObject.AddComponent<LayoutElement>().preferredWidth = 1f;
                 TextMeshProUGUI tagLbl = BywaterUiHelpers.CreateLabel(tagRt, "TagText", string.Empty, _font, 15f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
                 tagLbl.rectTransform.anchorMin = Vector2.zero;
                 tagLbl.rectTransform.anchorMax = Vector2.one;
@@ -1641,6 +1682,10 @@ namespace Realmz.Game
                     Portrait = pImg,
                     NameText = nameLbl,
                     LevelBadgeText = lvlLbl,
+                    LvlUpIconGo = lvlUpIcon.gameObject,
+                    LvlUpIcon = lvlUpIcon,
+                    ReviveIconGo = reviveIcon.gameObject,
+                    ReviveIcon = reviveIcon,
                     StatusTagText = tagLbl,
                     StatusTagGo = tagRt.gameObject,
                     XpBaseFill = baseFill,
@@ -1650,19 +1695,19 @@ namespace Realmz.Game
                 });
             }
 
-            // Loot Header + Scrollable Stacked Icon Grid
-            TextMeshProUGUI lootHdr = BywaterUiHelpers.CreateLabel(richRoot.transform, "VictoryLootHeader", "Spoils of Battle (Hover icons for stats & upgrade comparisons)", _font, 15.5f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            // Loot Header + Scrollable Self-Contained Selectable Cards
+            TextMeshProUGUI lootHdr = BywaterUiHelpers.CreateLabel(richRoot.transform, "VictoryLootHeader", "Loot", _font, 16f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
             LayoutElement lhLe = lootHdr.gameObject.AddComponent<LayoutElement>();
-            lhLe.preferredHeight = 22f;
+            lhLe.preferredHeight = 24f;
             lhLe.flexibleHeight = 0f;
 
             RectTransform lootBox = BywaterUiHelpers.CreatePanel(richRoot.transform, "VictoryLootTray", BywaterUiHelpers.PanelBg, withBrassOutline: true, outlinePx: 1f);
             LayoutElement lootBoxLe = lootBox.gameObject.AddComponent<LayoutElement>();
-            lootBoxLe.minHeight = 190f;
-            lootBoxLe.preferredHeight = 208f;
+            lootBoxLe.minHeight = 200f;
+            lootBoxLe.preferredHeight = 224f;
             lootBoxLe.flexibleHeight = 1f;
 
-            _victoryLootScroll = BywaterUiHelpers.CreateScrollView(lootBox, "VictoryLootScroll", _font, spacing: 6f);
+            _victoryLootScroll = BywaterUiHelpers.CreateScrollView(lootBox, "VictoryLootScroll", _font, spacing: 8f);
             RectTransform lootScrollRt = _victoryLootScroll.GetComponent<RectTransform>();
             lootScrollRt.anchorMin = Vector2.zero;
             lootScrollRt.anchorMax = Vector2.one;
@@ -1672,11 +1717,11 @@ namespace Realmz.Game
             VerticalLayoutGroup oldVlg = _victoryLootScroll.content.GetComponent<VerticalLayoutGroup>();
             if (oldVlg != null) DestroyImmediate(oldVlg);
             GridLayoutGroup lootGrid = _victoryLootScroll.content.gameObject.AddComponent<GridLayoutGroup>();
-            lootGrid.cellSize = new Vector2(142f, 84f);
-            lootGrid.spacing = new Vector2(8f, 8f);
+            lootGrid.cellSize = new Vector2(296f, 108f);
+            lootGrid.spacing = new Vector2(10f, 10f);
             lootGrid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-            lootGrid.constraintCount = 6;
-            lootGrid.padding = new RectOffset(4, 4, 4, 4);
+            lootGrid.constraintCount = 3;
+            lootGrid.padding = new RectOffset(6, 6, 4, 4);
 
             _victoryLootEmptyLabel = BywaterUiHelpers.CreateLabel(lootBox, "EmptyLootLabel", "No physical item drops from this skirmish.", _font, 15.5f, BywaterUiHelpers.MutedSlate, TextAlignmentOptions.Center, wrap: false).gameObject;
             RectTransform elRt = _victoryLootEmptyLabel.GetComponent<RectTransform>();
@@ -1685,10 +1730,7 @@ namespace Realmz.Game
             elRt.offsetMin = Vector2.zero;
             elRt.offsetMax = Vector2.zero;
 
-            // Extra Footer Action Buttons
-            _victoryEquipUpgradesBtn = BywaterUiHelpers.CreateButton(buttonsRow, "TakeAndEquipBtn", "Equip Upgrades", _font, HandleVictoryEquipUpgradesClick, 15.5f);
-            _victoryEquipUpgradesLabel = _victoryEquipUpgradesBtn.GetComponentInChildren<TextMeshProUGUI>();
-
+            // Extra Footer Action Button (Option 2: only Level Up Now + Take Selected)
             _victoryLevelUpNowBtn = BywaterUiHelpers.CreateButton(buttonsRow, "LevelUpNowBtn", "Level Up Now!", _font, HandleVictoryLevelUpNowClick, 15.5f);
             BywaterUiHelpers.SetButtonColors(_victoryLevelUpNowBtn, true);
             _victoryLevelUpNowLabel = _victoryLevelUpNowBtn.GetComponentInChildren<TextMeshProUGUI>();
@@ -1706,6 +1748,13 @@ namespace Realmz.Game
             _cachedVictorySummary = summary;
             _cachedParty = party ?? _cachedParty;
             _cachedBundle = bundle ?? _cachedBundle;
+            _outcomeInRichVictoryMode = true;
+
+            _selectedVictoryLootIndices.Clear();
+            for (int i = 0; i < summary.LootStacks.Count; i++)
+            {
+                _selectedVictoryLootIndices.Add(i);
+            }
 
             if (_outcomeModalRect != null)
             {
@@ -1716,18 +1765,9 @@ namespace Realmz.Game
             _outcomeTitle.color = BywaterUiHelpers.BrassHighlight;
             if (_outcomeSummary != null) _outcomeSummary.gameObject.SetActive(false);
             if (_outcomeRichVictoryRoot != null) _outcomeRichVictoryRoot.SetActive(true);
+            if (_outcomeLevelUpBanner != null) _outcomeLevelUpBanner.SetActive(false);
 
             bool anyReady = summary.AnyReadyToLevelUp;
-            if (_outcomeLevelUpBanner != null)
-            {
-                _outcomeLevelUpBanner.SetActive(anyReady);
-                if (anyReady && _outcomeLevelUpText != null)
-                {
-                    _outcomeLevelUpText.text = summary.ReadyToLevelUpCount == 1
-                        ? "LEVEL UP READY! 1 Hero crossed an XP threshold."
-                        : $"LEVEL UP READY! {summary.ReadyToLevelUpCount} Heroes crossed XP thresholds.";
-                }
-            }
 
             if (_victorySubtitleText != null)
             {
@@ -1738,6 +1778,13 @@ namespace Realmz.Game
                 _victoryGoldText.text = summary.LuckBonusGold > 0
                     ? $"+{summary.TotalGoldLoot}g (+{summary.LuckBonusGold}g Luck)  |  Total: {summary.PartyGoldAfter}g"
                     : $"+{summary.TotalGoldLoot}g  |  Total: {summary.PartyGoldAfter}g";
+            }
+
+            Sprite goldCoinSprite = _catalog != null ? (_catalog.GetHotbarIcon("gold_coins") ?? _catalog.GetHotbarIcon("gold")) : null;
+            if (_victoryGoldIcon != null)
+            {
+                _victoryGoldIcon.sprite = goldCoinSprite ?? BywaterUiHelpers.GetProceduralIconSprite("gold_coins");
+                _victoryGoldIcon.color = Color.white;
             }
 
             for (int i = 0; i < _victoryHeroCards.Count; i++)
@@ -1755,6 +1802,20 @@ namespace Realmz.Game
                 card.Portrait.preserveAspect = true;
                 card.NameText.text = h.Name;
                 card.LevelBadgeText.text = $"Lv{h.LevelAfter}";
+                card.LevelBadgeText.color = h.ReadyToLevelUp ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.MutedSlate;
+
+                if (card.LvlUpIconGo != null)
+                {
+                    card.LvlUpIconGo.SetActive(h.ReadyToLevelUp);
+                }
+                if (card.ReviveIconGo != null)
+                {
+                    card.ReviveIconGo.SetActive(h.WasFallenRevived);
+                }
+                if (card.StatusTagGo != null)
+                {
+                    card.StatusTagGo.SetActive(false);
+                }
 
                 int span = Math.Max(1, h.NextLevelXp - h.CurrentLevelFloorXp);
                 float baseFrac = Mathf.Clamp01((h.XpBefore - h.CurrentLevelFloorXp) / (float)span);
@@ -1768,39 +1829,16 @@ namespace Realmz.Game
                 card.XpText.text = $"+{h.XpAwarded} XP  ({h.XpAfter}/{h.NextLevelXp})";
                 card.PerfText.text = $"Dmg: {h.DamageDealt}   Kills: {h.Kills}   Heal: {h.HealingDone}";
 
-                if (h.ReadyToLevelUp)
-                {
-                    card.StatusTagGo.SetActive(true);
-                    card.StatusTagText.text = "LEVEL UP!";
-                    card.StatusTagText.color = BywaterUiHelpers.BrassHighlight;
-                    BywaterUiHelpers.SetBorderColor(card.Root.transform, BywaterUiHelpers.BrassHighlight);
-                }
-                else if (h.WasFallenRevived)
-                {
-                    card.StatusTagGo.SetActive(true);
-                    card.StatusTagText.text = "Revived @ 1 HP";
-                    card.StatusTagText.color = BywaterUiHelpers.InfoCyan;
-                    BywaterUiHelpers.SetBorderColor(card.Root.transform, BywaterUiHelpers.InfoCyan);
-                }
-                else if (h.IsMvp)
-                {
-                    card.StatusTagGo.SetActive(true);
-                    card.StatusTagText.text = "MVP";
-                    card.StatusTagText.color = BywaterUiHelpers.SuccessGreen;
-                    BywaterUiHelpers.SetBorderColor(card.Root.transform, BywaterUiHelpers.BrassAccent);
-                }
-                else
-                {
-                    card.StatusTagGo.SetActive(false);
-                    BywaterUiHelpers.SetBorderColor(card.Root.transform, BywaterUiHelpers.BrassAccent);
-                }
+                Color cardBorder = h.ReadyToLevelUp
+                    ? BywaterUiHelpers.BrassHighlight
+                    : (h.WasFallenRevived ? BywaterUiHelpers.InfoCyan : BywaterUiHelpers.BrassAccent);
+                BywaterUiHelpers.SetBorderColor(card.Root.transform, cardBorder);
             }
 
             RefreshVictoryLootGrid(summary, _cachedParty, _cachedBundle);
 
             _outcomeContinueBtn.gameObject.SetActive(true);
-            TextMeshProUGUI contLbl = _outcomeContinueBtn.GetComponentInChildren<TextMeshProUGUI>();
-            if (contLbl != null) contLbl.text = "Take All & Continue";
+            RefreshVictoryTakeSelectedButtonLabel();
             _outcomeRetryBtn.gameObject.SetActive(false);
             _outcomeReviveBtn.gameObject.SetActive(false);
 
@@ -1817,11 +1855,129 @@ namespace Realmz.Game
             _outcomeModalRoot.transform.SetAsLastSibling();
         }
 
+        public bool ToggleVictoryLootSelection(int stackIndex)
+        {
+            if (_cachedVictorySummary == null || stackIndex < 0 || stackIndex >= _cachedVictorySummary.LootStacks.Count)
+            {
+                return false;
+            }
+
+            bool isSelected;
+            if (_selectedVictoryLootIndices.Contains(stackIndex))
+            {
+                _selectedVictoryLootIndices.Remove(stackIndex);
+                isSelected = false;
+            }
+            else
+            {
+                _selectedVictoryLootIndices.Add(stackIndex);
+                isSelected = true;
+            }
+
+            if (stackIndex < _victoryLootTiles.Count)
+            {
+                UpdateVictoryLootTileSelectionVisual(_victoryLootTiles[stackIndex], isSelected,
+                    _cachedVictorySummary.LootStacks[stackIndex].BasePrice >= 500,
+                    _victoryLootTiles[stackIndex].UpgradeBadge != null && _victoryLootTiles[stackIndex].UpgradeBadge.activeSelf);
+            }
+
+            RefreshVictoryTakeSelectedButtonLabel();
+            return isSelected;
+        }
+
+        public int[] GetSelectedVictoryLootIndices()
+        {
+            int[] arr = new int[_selectedVictoryLootIndices.Count];
+            int idx = 0;
+            foreach (int i in _selectedVictoryLootIndices)
+            {
+                arr[idx++] = i;
+            }
+            Array.Sort(arr);
+            return arr;
+        }
+
+        private void RefreshVictoryTakeSelectedButtonLabel()
+        {
+            if (_outcomeContinueBtn == null)
+            {
+                return;
+            }
+
+            TextMeshProUGUI contLbl = _outcomeContinueBtn.GetComponentInChildren<TextMeshProUGUI>();
+            if (contLbl == null)
+            {
+                return;
+            }
+
+            int selectedCount = 0;
+            if (_cachedVictorySummary != null)
+            {
+                for (int i = 0; i < _cachedVictorySummary.LootStacks.Count; i++)
+                {
+                    if (_selectedVictoryLootIndices.Contains(i))
+                    {
+                        selectedCount += Math.Max(1, _cachedVictorySummary.LootStacks[i].Quantity);
+                    }
+                }
+            }
+
+            contLbl.text = (_cachedVictorySummary != null && _cachedVictorySummary.LootStacks.Count > 0)
+                ? $"Take Selected ({selectedCount})"
+                : "Continue";
+        }
+
+        private static string FormatCompactVictoryStats(ItemDefinition def)
+        {
+            if (def == null)
+            {
+                return string.Empty;
+            }
+
+            List<string> parts = new List<string>(4);
+            if (!string.IsNullOrWhiteSpace(def.DamageDice)) parts.Add($"{def.DamageDice} Dmg");
+            if (def.WeaponBonus != 0) parts.Add($"+{def.WeaponBonus} Hit");
+            if (def.ArmorClassBonus != 0) parts.Add($"+{def.ArmorClassBonus} AC");
+            if (def.Range > 1) parts.Add($"Rng {def.Range}");
+            if (!string.IsNullOrWhiteSpace(def.HealDice)) parts.Add($"Heal {def.HealDice}");
+            if (def.Charges > 0 && parts.Count < 3) parts.Add($"{def.Charges} chg");
+            if (def.Weight > 0) parts.Add($"Wt {def.Weight}");
+            return parts.Count > 0 ? string.Join(" | ", parts) : (def.Category ?? "Item");
+        }
+
+        private void UpdateVictoryLootTileSelectionVisual(VictoryLootTileRefs tile, bool isSelected, bool isHighValue, bool isUpgrade)
+        {
+            if (tile == null)
+            {
+                return;
+            }
+
+            if (tile.CheckmarkIcon != null)
+            {
+                tile.CheckmarkIcon.enabled = isSelected;
+            }
+            if (tile.SelectBoxBg != null)
+            {
+                tile.SelectBoxBg.color = isSelected
+                    ? new Color(0.14f, 0.38f, 0.20f, 0.98f)
+                    : new Color(0.06f, 0.08f, 0.13f, 0.94f);
+                BywaterUiHelpers.SetBorderColor(tile.SelectBoxBg.transform, isSelected ? BywaterUiHelpers.SuccessGreen : BywaterUiHelpers.MutedSlate);
+            }
+            if (tile.FrameBg != null)
+            {
+                tile.FrameBg.color = isSelected
+                    ? new Color(0.085f, 0.145f, 0.110f, 0.96f)
+                    : new Color(0.050f, 0.060f, 0.090f, 0.85f);
+            }
+            Color border = !isSelected
+                ? new Color(0.28f, 0.32f, 0.40f, 0.85f)
+                : (isHighValue ? BywaterUiHelpers.BrassHighlight : (isUpgrade ? BywaterUiHelpers.SuccessGreen : BywaterUiHelpers.BrassAccent));
+            BywaterUiHelpers.SetBorderColor(tile.Root.transform, border);
+        }
+
         private void RefreshVictoryLootGrid(CombatVictorySummary summary, PartyState party, BywaterM1Bundle bundle)
         {
-            _victoryUpgradeStashIndices.Clear();
             IReadOnlyDictionary<int, ItemDefinition> items = bundle != null ? bundle.Items : null;
-            int upgradeCount = 0;
 
             if (_victoryLootEmptyLabel != null)
             {
@@ -1832,6 +1988,7 @@ namespace Realmz.Game
             {
                 LootStackSummary ls = summary.LootStacks[i];
                 VictoryLootTileRefs tile = GetOrCreateVictoryLootTile(i);
+                tile.BoundStackIndex = i;
                 tile.Root.SetActive(true);
 
                 ItemDefinition def = items != null && items.TryGetValue(ls.ItemId, out ItemDefinition found) ? found : null;
@@ -1850,32 +2007,32 @@ namespace Realmz.Game
                     tile.QtyBadge.SetActive(false);
                 }
 
-                string bestHeroName = null;
-                bool isUpgrade = false;
-                if (party != null && def != null && items != null)
+                if (tile.StatsText != null)
                 {
-                    for (int h = 0; h < party.Members.Count; h++)
+                    tile.StatsText.text = def != null ? FormatCompactVictoryStats(def) : ls.Category;
+                }
+
+                HeroUpgradeRecommendation rec = (party != null && def != null)
+                    ? PartyState.FindBestUpgradeRecipient(party, def, items)
+                    : null;
+                bool isUpgrade = rec != null;
+                string bestHeroName = rec != null ? rec.Hero.Name : null;
+
+                if (tile.UpgradeBadge != null)
+                {
+                    tile.UpgradeBadge.SetActive(isUpgrade);
+                    if (isUpgrade && tile.UpgradeHeroText != null)
                     {
-                        if (IsStashEntryUpgradeForHero(party.Members[h], def, items))
-                        {
-                            isUpgrade = true;
-                            bestHeroName = party.Members[h].Name;
-                            break;
-                        }
+                        tile.UpgradeHeroText.text = bestHeroName;
                     }
                 }
 
-                if (isUpgrade) upgradeCount++;
-                tile.UpgradeBadge.SetActive(isUpgrade);
-
-                Color border = ls.BasePrice >= 500
-                    ? BywaterUiHelpers.BrassHighlight
-                    : (isUpgrade ? BywaterUiHelpers.SuccessGreen : (ls.IsJunk ? BywaterUiHelpers.MutedSlate : BywaterUiHelpers.BrassAccent));
-                BywaterUiHelpers.SetBorderColor(tile.Root.transform, border);
+                bool isSelected = _selectedVictoryLootIndices.Contains(i);
+                UpdateVictoryLootTileSelectionVisual(tile, isSelected, ls.BasePrice >= 500, isUpgrade);
 
                 string tipTitle = ls.Name + (ls.Quantity > 1 ? $" x{ls.Quantity}" : string.Empty);
                 string tipBody = def != null
-                    ? $"{FormatItemStats(def)}\nValue: {ls.BasePrice}g" + (bestHeroName != null ? $"\n[UPGRADE for {bestHeroName}]" : string.Empty) + $"\n{def.Description}"
+                    ? $"{FormatItemStats(def)}\nValue: {ls.BasePrice}g" + (bestHeroName != null ? $"\nUpgrade for {bestHeroName}" : string.Empty) + $"\n{def.Description}\n(Click card to toggle loot pickup)"
                     : $"Item #{ls.ItemId}";
                 AttachTooltipCallbacks(tile.Root, () => (tipTitle, tipBody));
             }
@@ -1885,14 +2042,7 @@ namespace Realmz.Game
                 _victoryLootTiles[i].Root.SetActive(false);
             }
 
-            if (_victoryEquipUpgradesBtn != null)
-            {
-                _victoryEquipUpgradesBtn.gameObject.SetActive(upgradeCount > 0);
-                if (_victoryEquipUpgradesLabel != null)
-                {
-                    _victoryEquipUpgradesLabel.text = $"Equip Upgrades ({upgradeCount})";
-                }
-            }
+            RefreshVictoryTakeSelectedButtonLabel();
         }
 
         private VictoryLootTileRefs GetOrCreateVictoryLootTile(int idx)
@@ -1902,65 +2052,134 @@ namespace Realmz.Game
                 return _victoryLootTiles[idx];
             }
 
-            RectTransform tile = BywaterUiHelpers.CreatePanel(_victoryLootScroll.content, $"LootTile_{idx}", BywaterUiHelpers.CardBg, withBrassOutline: true, outlinePx: 1.4f);
-            VerticalLayoutGroup vlg = tile.gameObject.AddComponent<VerticalLayoutGroup>();
-            vlg.padding = new RectOffset(6, 6, 6, 4);
-            vlg.spacing = 2f;
-            vlg.childControlWidth = true;
-            vlg.childControlHeight = true;
-            vlg.childForceExpandHeight = false;
+            RectTransform tile = BywaterUiHelpers.CreatePanel(_victoryLootScroll.content, $"LootTile_{idx}", BywaterUiHelpers.CardBg, withBrassOutline: true, outlinePx: 1.5f);
+            Button btn = tile.gameObject.AddComponent<Button>();
+            btn.targetGraphic = tile.GetComponent<Image>();
 
-            GameObject topRow = new GameObject("TopRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
-            topRow.transform.SetParent(tile, false);
-            topRow.AddComponent<LayoutElement>().preferredHeight = 40f;
-            HorizontalLayoutGroup th = topRow.GetComponent<HorizontalLayoutGroup>();
-            th.spacing = 4f;
-            th.childControlWidth = true;
-            th.childControlHeight = true;
-            th.childForceExpandWidth = false;
+            HorizontalLayoutGroup hlg = tile.gameObject.AddComponent<HorizontalLayoutGroup>();
+            hlg.padding = new RectOffset(8, 8, 6, 6);
+            hlg.spacing = 8f;
+            hlg.childControlWidth = true;
+            hlg.childControlHeight = true;
+            hlg.childForceExpandWidth = false;
 
-            Image iconImg = BywaterUiHelpers.CreateImage(topRow.transform, "Icon", null, Color.white, preserveAspect: true);
+            // Left Column: Icon + Optional xQty (locked exact 46px width, flexibleWidth = 0)
+            GameObject leftCol = new GameObject("LeftCol", typeof(RectTransform), typeof(VerticalLayoutGroup));
+            leftCol.transform.SetParent(tile, false);
+            LayoutElement leftLe = leftCol.AddComponent<LayoutElement>();
+            leftLe.minWidth = 46f;
+            leftLe.preferredWidth = 46f;
+            leftLe.flexibleWidth = 0f;
+            VerticalLayoutGroup lVlg = leftCol.GetComponent<VerticalLayoutGroup>();
+            lVlg.spacing = 3f;
+            lVlg.childAlignment = TextAnchor.UpperCenter;
+            lVlg.childControlWidth = true;
+            lVlg.childControlHeight = true;
+            lVlg.childForceExpandHeight = false;
+
+            Image iconImg = BywaterUiHelpers.CreateImage(leftCol.transform, "Icon", null, Color.white, preserveAspect: true);
             iconImg.raycastTarget = false;
             LayoutElement iLe = iconImg.gameObject.AddComponent<LayoutElement>();
-            iLe.preferredWidth = 36f;
-            iLe.preferredHeight = 36f;
+            iLe.preferredWidth = 42f;
+            iLe.preferredHeight = 42f;
+            iLe.flexibleWidth = 0f;
 
-            GameObject badgesCol = new GameObject("Badges", typeof(RectTransform), typeof(VerticalLayoutGroup));
-            badgesCol.transform.SetParent(topRow.transform, false);
-            badgesCol.AddComponent<LayoutElement>().flexibleWidth = 1f;
-            VerticalLayoutGroup bv = badgesCol.GetComponent<VerticalLayoutGroup>();
-            bv.spacing = 2f;
-            bv.childControlWidth = true;
-            bv.childControlHeight = true;
+            TextMeshProUGUI qtyLbl = BywaterUiHelpers.CreateLabel(leftCol.transform, "Qty", "x1", _font, 15f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
+            LayoutElement qLe = qtyLbl.gameObject.AddComponent<LayoutElement>();
+            qLe.preferredWidth = 44f;
+            qLe.preferredHeight = 20f;
+            qLe.flexibleWidth = 0f;
 
-            TextMeshProUGUI qtyLbl = BywaterUiHelpers.CreateLabel(badgesCol.transform, "Qty", "x1", _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineRight, FontStyles.Bold, wrap: false);
-            TextMeshProUGUI upgLbl = BywaterUiHelpers.CreateLabel(badgesCol.transform, "Upg", "UPG", _font, 15f, BywaterUiHelpers.SuccessGreen, TextAlignmentOptions.MidlineRight, FontStyles.Bold, wrap: false);
+            // Right Body: Wrapped Full Name + Checkbox | Inline Stats | Upgrade Tag (Green ▲ Hero)
+            GameObject bodyCol = new GameObject("BodyCol", typeof(RectTransform), typeof(VerticalLayoutGroup));
+            bodyCol.transform.SetParent(tile, false);
+            LayoutElement bodyLe = bodyCol.AddComponent<LayoutElement>();
+            bodyLe.minWidth = 180f;
+            bodyLe.preferredWidth = 226f;
+            bodyLe.flexibleWidth = 1f;
+            VerticalLayoutGroup bVlg = bodyCol.GetComponent<VerticalLayoutGroup>();
+            bVlg.spacing = 3f;
+            bVlg.childAlignment = TextAnchor.UpperLeft;
+            bVlg.childControlWidth = true;
+            bVlg.childControlHeight = true;
+            bVlg.childForceExpandWidth = true;
+            bVlg.childForceExpandHeight = false;
 
-            TextMeshProUGUI nameLbl = BywaterUiHelpers.CreateLabel(tile, "Name", string.Empty, _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, wrap: false);
-            nameLbl.overflowMode = TextOverflowModes.Truncate;
-            nameLbl.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
+            GameObject titleRow = new GameObject("TitleRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+            titleRow.transform.SetParent(bodyCol.transform, false);
+            LayoutElement trLe = titleRow.AddComponent<LayoutElement>();
+            trLe.minHeight = 24f;
+            trLe.preferredHeight = 38f;
+            trLe.flexibleWidth = 1f;
+            HorizontalLayoutGroup trHlg = titleRow.GetComponent<HorizontalLayoutGroup>();
+            trHlg.spacing = 6f;
+            trHlg.childAlignment = TextAnchor.UpperLeft;
+            trHlg.childControlWidth = true;
+            trHlg.childControlHeight = true;
+            trHlg.childForceExpandWidth = false;
+
+            TextMeshProUGUI nameLbl = BywaterUiHelpers.CreateLabel(titleRow.transform, "Name", string.Empty, _font, 15.5f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.TopLeft, FontStyles.Bold, wrap: true);
+            nameLbl.overflowMode = TextOverflowModes.Overflow;
+            LayoutElement nameLe = nameLbl.gameObject.AddComponent<LayoutElement>();
+            nameLe.minWidth = 120f;
+            nameLe.flexibleWidth = 1f;
+            nameLe.preferredHeight = 38f;
+
+            RectTransform checkFrame = BywaterUiHelpers.CreatePanel(titleRow.transform, "SelectBox", new Color(0.14f, 0.38f, 0.20f, 0.98f), withBrassOutline: true, outlinePx: 1.2f);
+            LayoutElement chkLe = checkFrame.gameObject.AddComponent<LayoutElement>();
+            chkLe.minWidth = 22f;
+            chkLe.preferredWidth = 22f;
+            chkLe.flexibleWidth = 0f;
+            chkLe.preferredHeight = 22f;
+
+            Image chkIcon = BywaterUiHelpers.CreateImage(checkFrame, "Checkmark", BywaterUiHelpers.GetProceduralIconSprite("checkmark"), Color.white, preserveAspect: true);
+            chkIcon.raycastTarget = false;
+            chkIcon.rectTransform.anchorMin = new Vector2(0.12f, 0.12f);
+            chkIcon.rectTransform.anchorMax = new Vector2(0.88f, 0.88f);
+            chkIcon.rectTransform.offsetMin = Vector2.zero;
+            chkIcon.rectTransform.offsetMax = Vector2.zero;
+
+            TextMeshProUGUI statsLbl = BywaterUiHelpers.CreateLabel(bodyCol.transform, "Stats", string.Empty, _font, 15f, new Color(0.84f, 0.88f, 0.95f, 1f), TextAlignmentOptions.MidlineLeft, wrap: false);
+            statsLbl.overflowMode = TextOverflowModes.Ellipsis;
+            statsLbl.gameObject.AddComponent<LayoutElement>().preferredHeight = 22f;
+
+            GameObject upgRow = new GameObject("UpgRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+            upgRow.transform.SetParent(bodyCol.transform, false);
+            upgRow.AddComponent<LayoutElement>().preferredHeight = 22f;
+            HorizontalLayoutGroup uHlg = upgRow.GetComponent<HorizontalLayoutGroup>();
+            uHlg.spacing = 4f;
+            uHlg.childControlWidth = true;
+            uHlg.childControlHeight = true;
+            uHlg.childForceExpandWidth = false;
+
+            Image upgArrow = BywaterUiHelpers.CreateImage(upgRow.transform, "UpgArrow", BywaterUiHelpers.GetProceduralIconSprite("level_up"), BywaterUiHelpers.SuccessGreen, preserveAspect: true);
+            upgArrow.raycastTarget = false;
+            LayoutElement uaLe = upgArrow.gameObject.AddComponent<LayoutElement>();
+            uaLe.preferredWidth = 16f;
+            uaLe.preferredHeight = 16f;
+
+            TextMeshProUGUI upgLbl = BywaterUiHelpers.CreateLabel(upgRow.transform, "UpgHero", string.Empty, _font, 15f, BywaterUiHelpers.SuccessGreen, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            upgLbl.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
 
             VictoryLootTileRefs tRef = new VictoryLootTileRefs
             {
                 Root = tile.gameObject,
+                CardButton = btn,
                 FrameBg = tile.GetComponent<Image>(),
+                SelectBoxBg = checkFrame.GetComponent<Image>(),
+                CheckmarkIcon = chkIcon,
                 Icon = iconImg,
                 QtyText = qtyLbl,
                 QtyBadge = qtyLbl.gameObject,
-                UpgradeBadge = upgLbl.gameObject,
-                NameText = nameLbl
+                UpgradeBadge = upgRow,
+                UpgradeHeroText = upgLbl,
+                NameText = nameLbl,
+                StatsText = statsLbl,
+                BoundStackIndex = idx
             };
+            btn.onClick.AddListener(() => ToggleVictoryLootSelection(tRef.BoundStackIndex));
             _victoryLootTiles.Add(tRef);
             return tRef;
-        }
-
-        private void HandleVictoryEquipUpgradesClick()
-        {
-            OnEquipBestPartyRequested?.Invoke();
-            if (_cachedVictorySummary != null)
-            {
-                RefreshVictoryLootGrid(_cachedVictorySummary, _cachedParty, _cachedBundle);
-            }
         }
 
         private void HandleVictoryLevelUpNowClick()

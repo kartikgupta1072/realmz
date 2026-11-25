@@ -2974,5 +2974,182 @@ namespace Realmz.EditorTests
                 }
             }
         }
+
+        [Test]
+        public void W249_GoldCoinsIcon_NightCombatLighting_ForegroundClear_And_Option2VictoryLoot_MeetContracts()
+        {
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(Path.Combine(Application.streamingAssetsPath, "bywater_m1"));
+
+            // 1. 32x32 Point Gold Coins icon exists cleanly without inflating 21 hotbar icon contract
+            Assert.That(catalog.hotbarIcons.Count, Is.EqualTo(21));
+            string coinPath = "Assets/Art/Cartography/Icons/icon_gold_coins.png";
+            Texture2D coinTex = AssetDatabase.LoadAssetAtPath<Texture2D>(coinPath);
+            Assert.That(coinTex, Is.Not.Null, "icon_gold_coins.png missing at " + coinPath);
+            Assert.That(coinTex.width, Is.EqualTo(32));
+            Assert.That(coinTex.height, Is.EqualTo(32));
+            TextureImporter coinImporter = AssetImporter.GetAtPath(coinPath) as TextureImporter;
+            Assert.That(coinImporter, Is.Not.Null);
+            Assert.That(coinImporter.filterMode, Is.EqualTo(FilterMode.Point));
+            Assert.That(coinImporter.textureType, Is.EqualTo(TextureImporterType.Sprite));
+            Assert.That(catalog.GetHotbarIcon("gold_coins") ?? BywaterUiHelpers.GetProceduralIconSprite("gold_coins"), Is.Not.Null);
+
+            // 2. Night Combat lighting preserves legible cool moonlight floor + party-side Torchlight
+            AmbientMode prevMode = RenderSettings.ambientMode;
+            Color prevSky = RenderSettings.ambientSkyColor;
+            Color prevEquator = RenderSettings.ambientEquatorColor;
+            Color prevGround = RenderSettings.ambientGroundColor;
+            GameObject camGo = new GameObject("W249Cam", typeof(Camera));
+            GameObject sunGo = new GameObject("W249Sun", typeof(Light));
+            GameObject volGo = new GameObject("W249Vol", typeof(Volume));
+            GameObject atmoGo = new GameObject("W249Atmo");
+            GameObject worldGo = new GameObject("W249World");
+            VolumeProfile profile = ScriptableObject.CreateInstance<VolumeProfile>();
+            Tonemapping tm = profile.Add<Tonemapping>(true);
+
+            bool hadEs = Object.FindFirstObjectByType<EventSystem>() != null;
+            GameObject hudGo = new GameObject("W249Hud");
+            try
+            {
+                camGo.GetComponent<Camera>().tag = "MainCamera";
+                Light sun = sunGo.GetComponent<Light>();
+                sun.type = LightType.Directional;
+                volGo.GetComponent<Volume>().sharedProfile = profile;
+                volGo.GetComponent<Volume>().isGlobal = true;
+
+                BywaterBiomeAtmosphere atmo = atmoGo.AddComponent<BywaterBiomeAtmosphere>();
+                atmo.targetCamera = camGo.GetComponent<Camera>();
+                atmo.directionalSun = sun;
+                atmo.globalVolume = volGo.GetComponent<Volume>();
+
+                atmo.ApplyBiome(false, WorldTimePhase.Night, 0.5f, hasLitTorch: false, immediate: true, isCombat: true);
+                Assert.That(atmo.IsCombatActive, Is.True);
+                Assert.That(sun.intensity, Is.GreaterThanOrEqualTo(0.80f), "Night Combat sun key must stay readable (>= 0.80).");
+                Assert.That(RenderSettings.ambientIntensity, Is.GreaterThanOrEqualTo(1.30f), "Night Combat ambient floor must prevent crushed silhouettes.");
+                Assert.That(RenderSettings.ambientSkyColor.b, Is.GreaterThan(RenderSettings.ambientSkyColor.r), "Night Combat must retain cool silver-blue tone.");
+                Assert.That(tm.mode.value, Is.EqualTo(TonemappingMode.Neutral));
+
+                // 3. Combat Foreground Clear Buffer hides non-arena props in arena + 5-tile south buffer & restores cleanly
+                TileMapData landMap = bundle.Maps["land_0"];
+                BywaterWorldRenderer renderer = worldGo.AddComponent<BywaterWorldRenderer>();
+                renderer.Initialize(catalog);
+                renderer.RenderMap(landMap, new GridCoord(44, 52), forceRebuild: true);
+
+                int originX = 38;
+                int originY = 48;
+                int arenaW = 12;
+                int arenaH = 8;
+                renderer.ClearCombatForegroundProps(originX, originY, arenaW, arenaH);
+                Assert.That(renderer.IsCombatForegroundClearActive, Is.True);
+                Assert.That(renderer.HiddenCombatForegroundPropCount, Is.GreaterThan(0),
+                    "Should hide overworld forest trees in southern 5-tile buffer + arena.");
+
+                int minClearX = originX - 2;
+                int maxClearX = originX + arenaW - 1 + 2;
+                int minClearY = originY;
+                int maxClearY = originY + arenaH - 1 + 5;
+                foreach (Transform child in renderer.PropsRoot)
+                {
+                    if (!child.gameObject.activeSelf) continue;
+                    CartographyWorldData.WorldToGrid(child.position, out int px, out int py);
+                    bool inBuffer = px >= minClearX && px <= maxClearX && py >= minClearY && py <= maxClearY;
+                    Assert.That(inBuffer, Is.False, $"Non-arena prop at ({px},{py}) remained visible inside Combat Foreground Clear Buffer.");
+                }
+
+                renderer.SetCombatArenaFrame(0, 0, 0, 0, false);
+                Assert.That(renderer.IsCombatForegroundClearActive, Is.False);
+                Assert.That(renderer.HiddenCombatForegroundPropCount, Is.EqualTo(0));
+
+                // 4. Option 2 Victory & Loot Screen: zero MVP, gold arrow & revive badges, Loot header, gold coin icon, self-contained cards, Take Selected (X)
+                PartyState party = PartyState.FromBundle(bundle);
+                BywaterHudController hud = hudGo.AddComponent<BywaterHudController>();
+                hud.BuildUi(catalog);
+                Canvas canvas = hud.GetComponentInChildren<Canvas>(true);
+
+                party.Members[0].AwardXp(250); // Aldric ready to level up
+                List<HeroVictorySummary> hv = new List<HeroVictorySummary>();
+                for (int i = 0; i < party.Members.Count; i++)
+                {
+                    PartyMemberState pm = party.Members[i];
+                    hv.Add(new HeroVictorySummary(
+                        pm.Id, pm.Name, pm.Archetype, pm.IconId, pm.PortraitId,
+                        pm.Level, pm.Level, System.Math.Max(0, pm.Xp - 60), pm.Xp, 60,
+                        PartyMemberState.GetXpRequiredForLevel(pm.Level), pm.XpForNextLevel,
+                        pm.HasPendingLevelUp, pm.PendingLevelUps,
+                        wasFallenRevived: i == 5, kills: i == 4 ? 2 : 0, damageDealt: 20, healingDone: 4, isMvp: i == 4));
+                }
+
+                List<LootStackSummary> loot = new List<LootStackSummary>
+                {
+                    new LootStackSummary(10, bundle.Items[10].Name, bundle.Items[10].Category, bundle.Items[10].Slot, 1, 0, bundle.Items[10].BasePrice, false),
+                    new LootStackSummary(418, bundle.Items[418].Name, bundle.Items[418].Category, bundle.Items[418].Slot, 1, 0, bundle.Items[418].BasePrice, false),
+                    new LootStackSummary(622, bundle.Items[622].Name, bundle.Items[622].Category, bundle.Items[622].Slot, 1, 0, bundle.Items[622].BasePrice, false),
+                    new LootStackSummary(611, bundle.Items[611].Name, bundle.Items[611].Category, bundle.Items[611].Slot, 2, 3, bundle.Items[611].BasePrice, false)
+                };
+                CombatVictorySummary summary = new CombatVictorySummary(240, 22, 2, 24, party.Gold, 2, hv, loot);
+                hud.ShowVictoryOutcome(summary, party, bundle);
+
+                Transform outcomeModal = FindDescendantByName(canvas.transform, "OutcomeModal");
+                Assert.That(FindDescendantByName(outcomeModal, "TakeAndEquipBtn"), Is.Null, "Option 2 must remove Equip Upgrades button.");
+                Assert.That(FindDescendantByName(outcomeModal, "VictoryLootHeader").GetComponent<TextMeshProUGUI>().text, Is.EqualTo("Loot"));
+                Assert.That(FindDescendantByName(outcomeModal, "GoldIcon").GetComponent<UnityEngine.UI.Image>().sprite, Is.Not.Null);
+
+                // Zero MVP, LEVEL UP!, or Revived @ 1 HP text banners; Crisp icon badges active
+                TextMeshProUGUI[] outcomeTexts = outcomeModal.GetComponentsInChildren<TextMeshProUGUI>(true);
+                for (int i = 0; i < outcomeTexts.Length; i++)
+                {
+                    if (!outcomeTexts[i].gameObject.activeInHierarchy) continue;
+                    Assert.That(outcomeTexts[i].fontSize, Is.GreaterThanOrEqualTo(15f));
+                    Assert.That(outcomeTexts[i].text, Does.Not.Contain("MVP"));
+                    Assert.That(outcomeTexts[i].text, Does.Not.Contain("Revived @ 1 HP"));
+                    Assert.That(outcomeTexts[i].text, Is.Not.EqualTo("LEVEL UP!"));
+                }
+
+                Assert.That(FindDescendantByPathSuffix(outcomeModal, "VictoryHero_0/Right/Top/LvlUpArrowBadge").gameObject.activeSelf, Is.True);
+                Assert.That(FindDescendantByPathSuffix(outcomeModal, "VictoryHero_5/Right/Top/ReviveBadgeIcon").gameObject.activeSelf, Is.True);
+
+                // Loot card 2 ("Speckled Luck Stone +2"): untruncated full name, inline stats, green upgrade hero Vex
+                Transform card2 = FindDescendantByName(outcomeModal, "LootTile_2");
+                Assert.That(FindDescendantByName(card2, "Name").GetComponent<TextMeshProUGUI>().text, Is.EqualTo("Speckled Luck Stone +2"));
+                Assert.That(FindDescendantByName(card2, "Stats").GetComponent<TextMeshProUGUI>().text, Does.Contain("+2 AC"));
+                Assert.That(FindDescendantByName(card2, "UpgRow").gameObject.activeSelf, Is.True);
+                Assert.That(FindDescendantByName(card2, "UpgHero").GetComponent<TextMeshProUGUI>().text, Is.EqualTo("Vex"));
+
+                // Loot card 1 ("Shield"): all shield users already have shields, non-shield classes cannot equip -> UpgRow hidden!
+                Transform card1 = FindDescendantByName(outcomeModal, "LootTile_1");
+                Assert.That(FindDescendantByName(card1, "UpgRow").gameObject.activeSelf, Is.False,
+                    "Shield must not tag incompatible classes as upgrade.");
+
+                // All 5 loot items selected by default (1+1+1+2 = 5) -> deselect Shield (card 1) -> Take Selected (4)
+                TextMeshProUGUI contTxt = FindDescendantByName(outcomeModal, "ContinueBtn").GetComponentInChildren<TextMeshProUGUI>();
+                Assert.That(contTxt.text, Is.EqualTo("Take Selected (5)"));
+                card1.GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                Assert.That(contTxt.text, Is.EqualTo("Take Selected (4)"));
+
+                int[] takenIndices = null;
+                hud.OnVictoryTakeLootRequested += arr => takenIndices = arr;
+                FindDescendantByName(outcomeModal, "ContinueBtn").GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                Assert.That(takenIndices, Is.EqualTo(new[] { 0, 2, 3 }));
+            }
+            finally
+            {
+                Object.DestroyImmediate(hudGo);
+                Object.DestroyImmediate(worldGo);
+                Object.DestroyImmediate(atmoGo);
+                Object.DestroyImmediate(volGo);
+                Object.DestroyImmediate(sunGo);
+                Object.DestroyImmediate(camGo);
+                Object.DestroyImmediate(profile);
+                RenderSettings.ambientMode = prevMode;
+                RenderSettings.ambientSkyColor = prevSky;
+                RenderSettings.ambientEquatorColor = prevEquator;
+                RenderSettings.ambientGroundColor = prevGround;
+                if (!hadEs)
+                {
+                    EventSystem created = Object.FindFirstObjectByType<EventSystem>();
+                    if (created != null) Object.DestroyImmediate(created.gameObject);
+                }
+            }
+        }
     }
 }

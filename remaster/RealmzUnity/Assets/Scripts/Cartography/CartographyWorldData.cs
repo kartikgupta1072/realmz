@@ -96,6 +96,7 @@ namespace Realmz.Cartography
         public bool CastsCanopyShadow;
         public float CanopyRadius;
         public float CanopyStrength;
+        public bool IsArenaObstacle;
     }
 
     [Serializable]
@@ -2607,14 +2608,15 @@ namespace Realmz.Cartography
             });
         }
 
-        private void AddProp(CartographyPropKind kind, float wx, float wy, float wz, float w, float h)
+        private void AddProp(CartographyPropKind kind, float wx, float wy, float wz, float w, float h, bool isArenaObstacle = false)
         {
             _props.Add(new CartographyPropPlacement
             {
                 Kind = kind,
                 WorldPosition = new Vector3(wx, wy, wz),
                 SizeMeters = new Vector2(w, h),
-                CastsCanopyShadow = false
+                CastsCanopyShadow = false,
+                IsArenaObstacle = isArenaObstacle
             });
         }
 
@@ -2625,7 +2627,8 @@ namespace Realmz.Cartography
             float wz,
             float w,
             float h,
-            float canopyRadius)
+            float canopyRadius,
+            bool isArenaObstacle = false)
         {
             _props.Add(new CartographyPropPlacement
             {
@@ -2634,7 +2637,8 @@ namespace Realmz.Cartography
                 SizeMeters = new Vector2(w, h),
                 CastsCanopyShadow = true,
                 CanopyRadius = canopyRadius,
-                CanopyStrength = 0.72f
+                CanopyStrength = 0.72f,
+                IsArenaObstacle = isArenaObstacle
             });
         }
 
@@ -3457,7 +3461,8 @@ namespace Realmz.Cartography
                                 propPos.y,
                                 propPos.z,
                                 ((wx + wy) & 1) == 0 ? 1.25f : 1.05f,
-                                ((wx + wy) & 1) == 0 ? 1.32f : 1.40f);
+                                ((wx + wy) & 1) == 0 ? 1.32f : 1.40f,
+                                isArenaObstacle: true);
                             break;
                         case RealmzCore.Combat.CombatArenaObstacleKind.RuinedWall:
                             AddProp(
@@ -3466,41 +3471,42 @@ namespace Realmz.Cartography
                                 propPos.y,
                                 propPos.z,
                                 (feat.Y & 1) == 0 ? 1.32f : 1.08f,
-                                (feat.Y & 1) == 0 ? 1.48f : 1.92f);
+                                (feat.Y & 1) == 0 ? 1.48f : 1.92f,
+                                isArenaObstacle: true);
                             break;
                         case RealmzCore.Combat.CombatArenaObstacleKind.TreeTrunk:
                         {
                             CartographyPropKind treeKind = ((wx + wy) & 1) == 0
                                 ? CartographyPropKind.TreeOakA
                                 : CartographyPropKind.TreePineA;
-                            AddCanopyTree(treeKind, propPos.x, propPos.y, propPos.z, 2.25f, 2.80f, 1.75f);
+                            AddCanopyTree(treeKind, propPos.x, propPos.y, propPos.z, 2.25f, 2.80f, 1.75f, isArenaObstacle: true);
                             break;
                         }
                         case RealmzCore.Combat.CombatArenaObstacleKind.StonePillar:
-                            AddProp(CartographyPropKind.DungeonPillar, propPos.x, propPos.y, propPos.z, 1.05f, 2.05f);
+                            AddProp(CartographyPropKind.DungeonPillar, propPos.x, propPos.y, propPos.z, 1.05f, 2.05f, isArenaObstacle: true);
                             break;
                         case RealmzCore.Combat.CombatArenaObstacleKind.SupplyWagon:
-                            AddProp(CartographyPropKind.WoodenWagon, propPos.x, propPos.y, propPos.z, 2.05f, 1.62f);
+                            AddProp(CartographyPropKind.WoodenWagon, propPos.x, propPos.y, propPos.z, 2.05f, 1.62f, isArenaObstacle: true);
                             break;
                         case RealmzCore.Combat.CombatArenaObstacleKind.BarrelsCrates:
-                            AddProp(CartographyPropKind.BarrelsCrates, propPos.x, propPos.y, propPos.z, 1.32f, 1.22f);
+                            AddProp(CartographyPropKind.BarrelsCrates, propPos.x, propPos.y, propPos.z, 1.32f, 1.22f, isArenaObstacle: true);
                             break;
                         case RealmzCore.Combat.CombatArenaObstacleKind.StoneFence:
-                            AddProp(CartographyPropKind.StoneFenceH, propPos.x, propPos.y, propPos.z, 1.12f, 1.20f);
+                            AddProp(CartographyPropKind.StoneFenceH, propPos.x, propPos.y, propPos.z, 1.12f, 1.20f, isArenaObstacle: true);
                             break;
                         case RealmzCore.Combat.CombatArenaObstacleKind.LitBrazier:
-                            AddProp(CartographyPropKind.TorchBrazier, propPos.x, propPos.y, propPos.z, 0.88f, 1.20f);
+                            AddProp(CartographyPropKind.TorchBrazier, propPos.x, propPos.y, propPos.z, 0.88f, 1.20f, isArenaObstacle: true);
                             AddUniqueLantern(propPos, 3.2f, 0.65f);
                             break;
                         case RealmzCore.Combat.CombatArenaObstacleKind.WallSconce:
-                            AddProp(CartographyPropKind.DungeonWallSconce4f, propPos.x, propPos.y, propPos.z, 1.25f, 1.25f);
+                            AddProp(CartographyPropKind.DungeonWallSconce4f, propPos.x, propPos.y, propPos.z, 1.25f, 1.25f, isArenaObstacle: true);
                             AddUniqueLantern(propPos, 3.2f, 0.65f);
                             break;
                         case RealmzCore.Combat.CombatArenaObstacleKind.IronGrate:
-                            AddProp(CartographyPropKind.DungeonIronGrate, propPos.x, propPos.y, propPos.z, 0.96f, 0.96f);
+                            AddProp(CartographyPropKind.DungeonIronGrate, propPos.x, propPos.y, propPos.z, 0.96f, 0.96f, isArenaObstacle: true);
                             break;
                         case RealmzCore.Combat.CombatArenaObstacleKind.BrushThicket:
-                            AddProp(CartographyPropKind.TreeOakB, propPos.x, propPos.y, propPos.z, 1.22f, 1.08f);
+                            AddProp(CartographyPropKind.TreeOakB, propPos.x, propPos.y, propPos.z, 1.22f, 1.08f, isArenaObstacle: true);
                             break;
                     }
                 }

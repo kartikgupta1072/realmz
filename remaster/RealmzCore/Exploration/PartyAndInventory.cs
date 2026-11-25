@@ -744,6 +744,29 @@ namespace RealmzCore.Exploration
         public string Reason { get; }
     }
 
+    public sealed class HeroUpgradeRecommendation
+    {
+        public HeroUpgradeRecommendation(
+            int heroIndex,
+            PartyMemberState hero,
+            double candidateScore,
+            double currentScore,
+            double scoreDelta)
+        {
+            HeroIndex = heroIndex;
+            Hero = hero ?? throw new ArgumentNullException(nameof(hero));
+            CandidateScore = candidateScore;
+            CurrentScore = currentScore;
+            ScoreDelta = scoreDelta;
+        }
+
+        public int HeroIndex { get; }
+        public PartyMemberState Hero { get; }
+        public double CandidateScore { get; }
+        public double CurrentScore { get; }
+        public double ScoreDelta { get; }
+    }
+
     public sealed class PartyState
     {
         public const int MaxQuickBandageCharges = 2;
@@ -1026,6 +1049,17 @@ namespace RealmzCore.Exploration
             IReadOnlyDictionary<int, ItemDefinition> catalog,
             EquipmentSlot? preferredSlot)
         {
+            return EquipFromStash(heroIndex, stashIndex, catalog, preferredSlot, out _);
+        }
+
+        public bool EquipFromStash(
+            int heroIndex,
+            int stashIndex,
+            IReadOnlyDictionary<int, ItemDefinition> catalog,
+            EquipmentSlot? preferredSlot,
+            out string failureReason)
+        {
+            failureReason = string.Empty;
             if (catalog == null)
             {
                 throw new ArgumentNullException(nameof(catalog));
@@ -1033,6 +1067,7 @@ namespace RealmzCore.Exploration
 
             if (heroIndex < 0 || heroIndex >= _members.Count || stashIndex < 0 || stashIndex >= _stash.Count)
             {
+                failureReason = "Invalid hero or stash slot.";
                 return false;
             }
 
@@ -1040,10 +1075,16 @@ namespace RealmzCore.Exploration
             if (!catalog.TryGetValue(stashEntry.ItemId, out ItemDefinition? def) ||
                 !PartyMemberState.TryParseSlot(def.Slot, out EquipmentSlot slot))
             {
+                failureReason = "Item cannot be equipped.";
                 return false;
             }
 
             PartyMemberState hero = _members[heroIndex];
+            if (!CanHeroEquip(hero, def, out failureReason))
+            {
+                return false;
+            }
+
             if (preferredSlot.HasValue)
             {
                 if (PartyMemberState.IsAccessorySlot(slot) && PartyMemberState.IsAccessorySlot(preferredSlot.Value))
@@ -1052,6 +1093,7 @@ namespace RealmzCore.Exploration
                 }
                 else if (preferredSlot.Value != slot)
                 {
+                    failureReason = $"{def.Name} does not fit the {preferredSlot.Value} slot.";
                     return false;
                 }
             }
@@ -1070,6 +1112,7 @@ namespace RealmzCore.Exploration
             InventoryItem toEquip = new InventoryItem(stashEntry.ItemId, 1, stashEntry.IsIdentified, stashEntry.RemainingCharges);
             if (!RemoveItemFromStash(stashIndex, 1))
             {
+                failureReason = "Item missing from stash.";
                 return false;
             }
 
@@ -1099,6 +1142,263 @@ namespace RealmzCore.Exploration
             return true;
         }
 
+        private enum HeroClassProfile
+        {
+            Knight,
+            Paladin,
+            Cleric,
+            Ranger,
+            Mage,
+            Rogue
+        }
+
+        private static HeroClassProfile ResolveClassProfile(string? archetype)
+        {
+            string arch = (archetype ?? string.Empty).Trim().ToLowerInvariant();
+            if (arch.Contains("paladin") || arch.Contains("templar")) return HeroClassProfile.Paladin;
+            if (arch.Contains("cleric") || arch.Contains("priest") || arch.Contains("healer") || arch.Contains("monk")) return HeroClassProfile.Cleric;
+            if (arch.Contains("ranger") || arch.Contains("archer") || arch.Contains("hunter") || arch.Contains("woods")) return HeroClassProfile.Ranger;
+            if (arch.Contains("mage") || arch.Contains("wizard") || arch.Contains("sorcer") || arch.Contains("enchant") || arch.Contains("warlock")) return HeroClassProfile.Mage;
+            if (arch.Contains("rogue") || arch.Contains("thief") || arch.Contains("assassin") || arch.Contains("burglar")) return HeroClassProfile.Rogue;
+            return HeroClassProfile.Knight;
+        }
+
+        public static bool CanHeroEquip(PartyMemberState? hero, ItemDefinition? item)
+        {
+            return CanHeroEquip(hero, item, out _);
+        }
+
+        public static bool CanHeroEquip(PartyMemberState? hero, ItemDefinition? item, out string reason)
+        {
+            if (hero == null || item == null)
+            {
+                reason = "Missing hero or item definition.";
+                return false;
+            }
+
+            if (!PartyMemberState.TryParseSlot(item.Slot, out EquipmentSlot slot))
+            {
+                reason = $"{item.Name} is not equippable gear.";
+                return false;
+            }
+
+            HeroClassProfile profile = ResolveClassProfile(hero.Archetype);
+            string archLabel = string.IsNullOrWhiteSpace(hero.Archetype) ? profile.ToString() : hero.Archetype;
+            string name = (item.Name ?? string.Empty).ToLowerInvariant();
+
+            switch (slot)
+            {
+                case EquipmentSlot.Weapon:
+                {
+                    bool isStaff = name.Contains("staff");
+                    bool isDagger = name.Contains("dagger");
+                    bool isBlunt = !isStaff && (
+                        name.Contains("mace") || name.Contains("flail") || name.Contains("morning star") ||
+                        name.Contains("hammer") || name.Contains("club") || name.Contains("cudgel") ||
+                        name.Contains("nunchuka"));
+                    bool isLightBlade = name.Contains("short sword") || name.Contains("shortsword") ||
+                        name.Contains("scimitar") || name.Contains("rapier") || name.Contains("dirk");
+
+                    if (isStaff)
+                    {
+                        if (profile == HeroClassProfile.Mage || profile == HeroClassProfile.Cleric)
+                        {
+                            reason = string.Empty;
+                            return true;
+                        }
+                        reason = $"Class restricted: {archLabel} cannot equip staves (Mage/Cleric only).";
+                        return false;
+                    }
+
+                    if (isBlunt)
+                    {
+                        if (profile == HeroClassProfile.Knight || profile == HeroClassProfile.Paladin || profile == HeroClassProfile.Cleric)
+                        {
+                            reason = string.Empty;
+                            return true;
+                        }
+                        reason = $"Class restricted: {archLabel} cannot wield heavy blunt weapons.";
+                        return false;
+                    }
+
+                    if (isDagger)
+                    {
+                        if (profile == HeroClassProfile.Cleric)
+                        {
+                            reason = "Class restricted: Clerics are restricted to blunt weapons (no edged blades).";
+                            return false;
+                        }
+                        reason = string.Empty;
+                        return true;
+                    }
+
+                    if (isLightBlade)
+                    {
+                        if (profile == HeroClassProfile.Cleric)
+                        {
+                            reason = "Class restricted: Clerics cannot wield edged swords.";
+                            return false;
+                        }
+                        if (profile == HeroClassProfile.Mage)
+                        {
+                            reason = "Class restricted: Mages may only wield staves and daggers.";
+                            return false;
+                        }
+                        reason = string.Empty;
+                        return true;
+                    }
+
+                    // Martial swords, axes, spears, pike-axes
+                    if (profile == HeroClassProfile.Knight || profile == HeroClassProfile.Paladin)
+                    {
+                        reason = string.Empty;
+                        return true;
+                    }
+                    if (profile == HeroClassProfile.Cleric)
+                    {
+                        reason = "Class restricted: Clerics are restricted to blunt weapons and staves.";
+                        return false;
+                    }
+                    if (profile == HeroClassProfile.Mage)
+                    {
+                        reason = "Class restricted: Mages may only wield staves and daggers.";
+                        return false;
+                    }
+                    reason = $"Class restricted: {archLabel} cannot wield heavy martial weapons.";
+                    return false;
+                }
+
+                case EquipmentSlot.MissileWeapon:
+                {
+                    if (profile == HeroClassProfile.Cleric)
+                    {
+                        reason = "Class restricted: Clerics cannot wield bows or missile weapons.";
+                        return false;
+                    }
+                    if (profile == HeroClassProfile.Mage)
+                    {
+                        reason = "Class restricted: Mages cannot equip missile weapons.";
+                        return false;
+                    }
+                    bool isBow = name.Contains("bow");
+                    if (isBow && profile == HeroClassProfile.Rogue)
+                    {
+                        reason = "Class restricted: Bows require Ranger or martial archery proficiency (Rogues use darts and thrown blades).";
+                        return false;
+                    }
+                    reason = string.Empty;
+                    return true;
+                }
+
+                case EquipmentSlot.Shield:
+                    if (profile == HeroClassProfile.Knight || profile == HeroClassProfile.Paladin || profile == HeroClassProfile.Cleric)
+                    {
+                        reason = string.Empty;
+                        return true;
+                    }
+                    reason = $"Class restricted: {archLabel} cannot equip shields.";
+                    return false;
+
+                case EquipmentSlot.Armor:
+                {
+                    bool isHeavyPlate = name.Contains("banded") || name.Contains("plate");
+                    bool isMediumChain = name.Contains("chain") || name.Contains("mail") || name.Contains("scale");
+                    bool isLeather = name.Contains("leather") || name.Contains("hide") || name.Contains("studded");
+
+                    if (profile == HeroClassProfile.Knight || profile == HeroClassProfile.Paladin)
+                    {
+                        reason = string.Empty;
+                        return true;
+                    }
+                    if (profile == HeroClassProfile.Cleric)
+                    {
+                        if (isHeavyPlate)
+                        {
+                            reason = "Class restricted: Clerics are limited to light and medium armor (no heavy plate).";
+                            return false;
+                        }
+                        reason = string.Empty;
+                        return true;
+                    }
+                    if (profile == HeroClassProfile.Ranger || profile == HeroClassProfile.Rogue)
+                    {
+                        if (isHeavyPlate || isMediumChain)
+                        {
+                            reason = $"Class restricted: {archLabel}s cannot wear medium chain or heavy armor.";
+                            return false;
+                        }
+                        reason = string.Empty;
+                        return true;
+                    }
+                    // Mage
+                    if (isHeavyPlate || isMediumChain || isLeather)
+                    {
+                        reason = "Class restricted: Mages may only wear robes (no leather or metal armor).";
+                        return false;
+                    }
+                    reason = string.Empty;
+                    return true;
+                }
+
+                case EquipmentSlot.Helm:
+                {
+                    if (profile == HeroClassProfile.Mage)
+                    {
+                        reason = "Class restricted: Mages cannot wear helms or headgear.";
+                        return false;
+                    }
+                    bool isLightCap = name.Contains("cap") || name.Contains("hood") || name.Contains("circlet") || item.ArmorClassBonus <= 2;
+                    if ((profile == HeroClassProfile.Ranger || profile == HeroClassProfile.Rogue) && !isLightCap)
+                    {
+                        reason = $"Class restricted: {archLabel}s cannot wear heavy metal helms.";
+                        return false;
+                    }
+                    reason = string.Empty;
+                    return true;
+                }
+
+                case EquipmentSlot.Feet:
+                {
+                    bool isMetalBoots = name.Contains("steel") || name.Contains("iron") || name.Contains("plate") || name.Contains("greave");
+                    if (isMetalBoots && profile != HeroClassProfile.Knight && profile != HeroClassProfile.Paladin && profile != HeroClassProfile.Cleric)
+                    {
+                        reason = $"Class restricted: {archLabel}s cannot wear heavy steel-shod boots.";
+                        return false;
+                    }
+                    reason = string.Empty;
+                    return true;
+                }
+
+                case EquipmentSlot.Hands:
+                {
+                    bool isMetalGauntlets = name.Contains("gauntlet") || name.Contains("plate") || name.Contains("steel");
+                    if (isMetalGauntlets && profile != HeroClassProfile.Knight && profile != HeroClassProfile.Paladin && profile != HeroClassProfile.Cleric)
+                    {
+                        reason = $"Class restricted: {archLabel}s cannot wear heavy metal gauntlets.";
+                        return false;
+                    }
+                    reason = string.Empty;
+                    return true;
+                }
+
+                case EquipmentSlot.Accessory1:
+                case EquipmentSlot.Accessory2:
+                {
+                    if (name.Contains("quiver") && (profile == HeroClassProfile.Mage || profile == HeroClassProfile.Cleric))
+                    {
+                        reason = $"Class restricted: {archLabel}s do not equip archery quivers.";
+                        return false;
+                    }
+                    reason = string.Empty;
+                    return true;
+                }
+
+                default:
+                    reason = string.Empty;
+                    return true;
+            }
+        }
+
         public static double ScoreItemForHero(PartyMemberState hero, ItemDefinition item)
         {
             if (hero == null || item == null)
@@ -1111,20 +1411,48 @@ namespace RealmzCore.Exploration
                 return -1.0;
             }
 
+            if (!CanHeroEquip(hero, item, out _))
+            {
+                return -1.0;
+            }
+
             double dmgAvg = 0.0;
             if (!string.IsNullOrWhiteSpace(item.DamageDice) && DiceSpec.TryParse(item.DamageDice, out DiceSpec spec))
             {
                 dmgAvg = (spec.Min + spec.Max) * 0.5;
             }
 
-            string arch = (hero.Archetype ?? string.Empty).Trim().ToLowerInvariant();
-            bool prefersRanged = arch == "ranger" || arch == "archer";
-            bool lightArmorRole = arch == "mage" || arch == "sorcerer" || arch == "rogue" || arch == "thief";
+            HeroClassProfile profile = ResolveClassProfile(hero.Archetype);
+            string name = (item.Name ?? string.Empty).ToLowerInvariant();
+            bool prefersRanged = profile == HeroClassProfile.Ranger;
+            bool lightArmorRole = profile == HeroClassProfile.Mage || profile == HeroClassProfile.Rogue;
+            bool isFrontline = profile == HeroClassProfile.Knight || profile == HeroClassProfile.Paladin;
 
             double score = 0.0;
             if (slot == EquipmentSlot.Weapon)
             {
                 score = item.WeaponBonus * 14.0 + dmgAvg * 2.5 + item.ArmorClassBonus * 3.0;
+                if (isFrontline && (name.Contains("sword") || name.Contains("axe") || name.Contains("morning star") || name.Contains("flail")))
+                {
+                    score += 8.0;
+                }
+                else if (profile == HeroClassProfile.Cleric && (name.Contains("mace") || name.Contains("flail") || name.Contains("morning star") || name.Contains("hammer") || name.Contains("staff")))
+                {
+                    score += 10.0;
+                }
+                else if (profile == HeroClassProfile.Mage && (name.Contains("staff") || name.Contains("spell") || name.Contains("shielding")))
+                {
+                    score += 16.0;
+                }
+                else if (profile == HeroClassProfile.Rogue && (name.Contains("dagger") || name.Contains("short sword")))
+                {
+                    score += 10.0;
+                }
+                else if (profile == HeroClassProfile.Ranger && name.Contains("short sword"))
+                {
+                    score += 4.0;
+                }
+
                 if (item.IsTwoHanded && hero.Equipped.ContainsKey(EquipmentSlot.Shield))
                 {
                     score -= 4.0;
@@ -1132,11 +1460,49 @@ namespace RealmzCore.Exploration
             }
             else if (slot == EquipmentSlot.MissileWeapon)
             {
-                score = item.WeaponBonus * 14.0 + dmgAvg * (prefersRanged ? 3.5 : 1.5) + (prefersRanged ? 5.0 : 0.0);
+                score = item.WeaponBonus * 14.0 + dmgAvg * (prefersRanged ? 3.5 : 1.5) + (prefersRanged ? 22.0 : 4.0);
+                if (name.Contains("bow") && profile == HeroClassProfile.Ranger)
+                {
+                    score += 12.0;
+                }
             }
             else
             {
                 score = item.ArmorClassBonus * 6.0 + item.WeaponBonus * 4.0;
+                if (slot == EquipmentSlot.Armor || slot == EquipmentSlot.Shield || slot == EquipmentSlot.Helm)
+                {
+                    if (isFrontline) score += item.ArmorClassBonus * 1.5;
+                    else if (profile == HeroClassProfile.Cleric) score += item.ArmorClassBonus * 1.0;
+                    else if (profile == HeroClassProfile.Mage && name.Contains("robe")) score += 6.0;
+                    else if (profile == HeroClassProfile.Ranger && name.Contains("leather")) score += 4.0;
+                    else if (profile == HeroClassProfile.Rogue && name.Contains("leather")) score += 4.0;
+
+                    if (isFrontline && name.Contains("robe"))
+                    {
+                        score *= 0.35;
+                    }
+                }
+                else if (slot == EquipmentSlot.Accessory1 || slot == EquipmentSlot.Accessory2)
+                {
+                    if (name.Contains("quiver"))
+                    {
+                        score += profile == HeroClassProfile.Ranger ? 22.0 : (profile == HeroClassProfile.Rogue ? 4.0 : 0.0);
+                    }
+                    else if (name.Contains("luck"))
+                    {
+                        if (profile == HeroClassProfile.Rogue) score += 18.0;
+                        else if (profile == HeroClassProfile.Mage) score += 12.0;
+                        else if (profile == HeroClassProfile.Ranger || profile == HeroClassProfile.Cleric) score += 6.0;
+                    }
+                    else if (name.Contains("cloak") || name.Contains("robe"))
+                    {
+                        if (profile == HeroClassProfile.Ranger || profile == HeroClassProfile.Mage || profile == HeroClassProfile.Rogue)
+                        {
+                            score += 9.0;
+                        }
+                    }
+                }
+
                 if (lightArmorRole && item.MovementMod < 0)
                 {
                     score += item.MovementMod * 2.5;
@@ -1148,6 +1514,128 @@ namespace RealmzCore.Exploration
             }
 
             return score + item.BasePrice * 0.001;
+        }
+
+        public static HeroUpgradeRecommendation? FindBestUpgradeRecipient(
+            PartyState? party,
+            ItemDefinition? item,
+            IReadOnlyDictionary<int, ItemDefinition>? catalog = null)
+        {
+            if (party == null || item == null)
+            {
+                return null;
+            }
+
+            if (!PartyMemberState.TryParseSlot(item.Slot, out EquipmentSlot slot))
+            {
+                return null;
+            }
+
+            HeroUpgradeRecommendation? best = null;
+            double bestPriority = double.MinValue;
+
+            for (int i = 0; i < party.Members.Count; i++)
+            {
+                PartyMemberState hero = party.Members[i];
+                if (hero == null || !hero.IsAlive)
+                {
+                    continue;
+                }
+
+                if (!CanHeroEquip(hero, item, out _))
+                {
+                    continue;
+                }
+
+                // Role-weighted upgrade recommendation: keep Bows reserved for Rangers/Archers and Robes for casters
+                HeroClassProfile recProfile = ResolveClassProfile(hero.Archetype);
+                string recName = (item.Name ?? string.Empty).ToLowerInvariant();
+                if (slot == EquipmentSlot.MissileWeapon && recName.Contains("bow") && recProfile != HeroClassProfile.Ranger)
+                {
+                    continue;
+                }
+                if (slot == EquipmentSlot.Armor && recName.Contains("robe") && recProfile != HeroClassProfile.Mage)
+                {
+                    continue;
+                }
+
+                double candScore = ScoreItemForHero(hero, item);
+                if (candScore <= 0.0)
+                {
+                    continue;
+                }
+
+                double currentScore = 0.0;
+                bool isEmptySlotUpgrade = false;
+                if (PartyMemberState.IsAccessorySlot(slot))
+                {
+                    bool has1 = hero.Equipped.TryGetValue(EquipmentSlot.Accessory1, out InventoryItem? acc1);
+                    bool has2 = hero.Equipped.TryGetValue(EquipmentSlot.Accessory2, out InventoryItem? acc2);
+                    if (!has1 || !has2)
+                    {
+                        isEmptySlotUpgrade = true;
+                        currentScore = 0.0;
+                    }
+                    else
+                    {
+                        double s1 = (catalog != null && acc1 != null && catalog.TryGetValue(acc1.ItemId, out ItemDefinition? d1))
+                            ? ScoreItemForHero(hero, d1)
+                            : 0.0;
+                        double s2 = (catalog != null && acc2 != null && catalog.TryGetValue(acc2.ItemId, out ItemDefinition? d2))
+                            ? ScoreItemForHero(hero, d2)
+                            : 0.0;
+                        currentScore = Math.Min(s1, s2);
+                    }
+                }
+                else
+                {
+                    if (!hero.Equipped.TryGetValue(slot, out InventoryItem? cur))
+                    {
+                        isEmptySlotUpgrade = true;
+                        currentScore = 0.0;
+                    }
+                    else if (catalog != null && catalog.TryGetValue(cur.ItemId, out ItemDefinition? curDef))
+                    {
+                        currentScore = Math.Max(0.0, ScoreItemForHero(hero, curDef));
+                    }
+                    else
+                    {
+                        // Without catalog lookup, assume same item id matches; otherwise cannot assume blind upgrade
+                        if (cur.ItemId == item.Id)
+                        {
+                            continue;
+                        }
+                        currentScore = candScore * 0.85;
+                    }
+                }
+
+                if (slot == EquipmentSlot.Weapon && item.IsTwoHanded &&
+                    hero.Equipped.TryGetValue(EquipmentSlot.Shield, out InventoryItem? shieldItem) &&
+                    catalog != null &&
+                    catalog.TryGetValue(shieldItem.ItemId, out ItemDefinition? shieldDef))
+                {
+                    double shieldScore = Math.Max(0.0, ScoreItemForHero(hero, shieldDef));
+                    if (candScore - shieldScore <= currentScore + 0.01)
+                    {
+                        continue;
+                    }
+                }
+
+                double delta = candScore - currentScore;
+                if (delta <= 0.01)
+                {
+                    continue;
+                }
+
+                double priority = candScore + delta * 0.5 + (isEmptySlotUpgrade ? 3.0 : 0.0);
+                if (priority > bestPriority)
+                {
+                    bestPriority = priority;
+                    best = new HeroUpgradeRecommendation(i, hero, candScore, currentScore, delta);
+                }
+            }
+
+            return best;
         }
 
         public int EquipBestForHero(int heroIndex, IReadOnlyDictionary<int, ItemDefinition> catalog)
@@ -1193,7 +1681,8 @@ namespace RealmzCore.Exploration
                     InventoryItem candidate = _stash[i];
                     if (candidate.Quantity <= 0 ||
                         !catalog.TryGetValue(candidate.ItemId, out ItemDefinition? candDef) ||
-                        !PartyMemberState.TryParseSlot(candDef.Slot, out EquipmentSlot candSlot))
+                        !PartyMemberState.TryParseSlot(candDef.Slot, out EquipmentSlot candSlot) ||
+                        !CanHeroEquip(hero, candDef, out _))
                     {
                         continue;
                     }

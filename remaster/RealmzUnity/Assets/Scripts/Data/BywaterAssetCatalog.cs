@@ -283,6 +283,21 @@ namespace Realmz.Data
                 }
             }
 
+            if (itemAndSpellIcons != null)
+            {
+                for (int i = 0; i < itemAndSpellIcons.Count; i++)
+                {
+                    HotbarIconEntry entry = itemAndSpellIcons[i];
+                    if (entry != null &&
+                        entry.sprite != null &&
+                        (string.Equals(entry.key, normalized, StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(entry.key, "icon_" + normalized, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return entry.sprite;
+                    }
+                }
+            }
+
 #if UNITY_EDITOR
             string iconPath = $"Assets/Art/Cartography/Icons/icon_{normalized}.png";
             Sprite editorSprite = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(iconPath);
