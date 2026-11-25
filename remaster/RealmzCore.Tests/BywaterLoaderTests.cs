@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using RealmzCore.Data;
+using RealmzCore.Exploration;
 using RealmzCore.Rules;
 using RealmzCore.Serialization;
 using Xunit;
@@ -299,6 +300,33 @@ namespace RealmzCore.Tests
             Assert.True(bundle.Spells.Count > 0);
             Assert.True(bundle.Items.Count > 0);
             Assert.True(bundle.Shops.Count > 0);
+        }
+
+        [Fact]
+        public void P04_AgilityBonus_AppliedOnceToAcAndRangedToHit()
+        {
+            string? dir = TryFindBywaterM1Dir();
+            Assert.NotNull(dir);
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(dir!);
+
+            bool sawHighAgility = false;
+            foreach (HeroPresetData preset in bundle.Party)
+            {
+                // The exporter must not bake Agility into base AC; RealmzCore adds the dodge bonus at runtime.
+                Assert.Equal(10, preset.Ac);
+
+                PartyMemberState member = new PartyMemberState(preset);
+                int agilityAc = Math.Max(0, (member.Agility - 12) / 3);
+                Assert.Equal(agilityAc, member.GetDodgeAcBonus());
+                Assert.Equal(member.BaseAc + agilityAc, member.GetEffectiveAc(null));
+                if (member.Agility >= 15)
+                {
+                    sawHighAgility = true;
+                    Assert.True(member.GetDodgeAcBonus() > 0, $"{preset.Name} should get exactly one Agility AC bonus.");
+                }
+            }
+
+            Assert.True(sawHighAgility, "Starter party should include at least one high-Agility hero (Vex/Kaelen).");
         }
     }
 }

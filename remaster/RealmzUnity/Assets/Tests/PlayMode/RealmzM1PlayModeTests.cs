@@ -528,6 +528,8 @@ namespace Realmz.PlayModeTests
                 bool captureProofs = string.Equals(Environment.GetEnvironmentVariable("REALMZ_CAPTURE_PROOFS"), "1", StringComparison.Ordinal);
 
                 // 1. Night Exploration with 0 torch -> engage Combat -> verify In the Dark & Combat Foreground Clear Buffer
+                // Seed dice deterministically so the 95%-capped kill swing below never fails 1 in 20 by RNG.
+                ctrl.SetRollerSeedForTest(20261125UL);
                 PartyState party = ctrl.ExploreSession.Party;
                 party.AddItemToStash(805, 1, isIdentified: true, charges: 6);
                 ctrl.StageScoutInterceptShowcaseForCapture(new GridCoord(18, 54), worldClockTurns: 58, torchTurnsRemaining: 0);

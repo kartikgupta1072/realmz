@@ -276,11 +276,13 @@ class TestP04UnequippedStatContract(unittest.TestCase):
             self.assertEqual(hero["equipped_ids"], spec["equipped_ids"])
             attrs = hero["attributes"]
             caste = castes[spec["caste_id"]]
-            expected_base_ac = max(5, 10 + max(0, (attrs["agility"] - 12) // 2))
+            # Agility is applied once at runtime (RealmzCore), never baked into exported base AC/missile.
+            expected_base_ac = 10
             expected_base_to_hit = 10 + caste["tohit_base"] + max(0, (attrs["brawn"] - 12) // 2)
 
-            self.assertEqual(hero["ac"], expected_base_ac, f"{hero['name']} base AC has baked equipment!")
+            self.assertEqual(hero["ac"], expected_base_ac, f"{hero['name']} base AC has baked equipment or Agility!")
             self.assertEqual(hero["to_hit"], expected_base_to_hit, f"{hero['name']} base To-Hit has baked equipment!")
+            self.assertEqual(hero["missile"], caste["missile_base"], f"{hero['name']} missile has baked Agility!")
 
             # Verify runtime equipment application adds armor AC cleanly once.
             eq_ac = sum(items_by_id[iid]["armor_class_bonus"] for iid in hero["equipped_ids"] if iid in items_by_id)

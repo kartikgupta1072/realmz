@@ -140,6 +140,15 @@ namespace Realmz.World
         private readonly Dictionary<SurfaceType, Texture2D> _surfaceTextures = new Dictionary<SurfaceType, Texture2D>(8);
         private readonly Dictionary<SurfaceType, Color> _surfaceBaseColors = new Dictionary<SurfaceType, Color>(8);
         private readonly Dictionary<SurfaceType, bool> _surfaceIsStrip = new Dictionary<SurfaceType, bool>(8);
+        private readonly Dictionary<SurfaceType, Texture2D> _surfaceStripSources = new Dictionary<SurfaceType, Texture2D>(8);
+        private readonly Dictionary<SurfaceType, Color32[]> _surfaceStripPixels = new Dictionary<SurfaceType, Color32[]>(8);
+        private readonly Dictionary<int, Texture2D> _surfaceEdgeTextures = new Dictionary<int, Texture2D>(32);
+        private static readonly int MainTexId = Shader.PropertyToID("_MainTex");
+        private const int SurfaceEdgeNorth = 1;
+        private const int SurfaceEdgeEast = 2;
+        private const int SurfaceEdgeSouth = 4;
+        private const int SurfaceEdgeWest = 8;
+        private const int SurfaceEdgeAll = 15;
         private readonly SurfaceType[] _animatedSurfaceTypes =
         {
             SurfaceType.Water,
@@ -357,6 +366,14 @@ namespace Realmz.World
                 DestroySafe(kv.Value);
             }
             _surfaceTextures.Clear();
+
+            foreach (KeyValuePair<int, Texture2D> kv in _surfaceEdgeTextures)
+            {
+                DestroySafe(kv.Value);
+            }
+            _surfaceEdgeTextures.Clear();
+            _surfaceStripSources.Clear();
+            _surfaceStripPixels.Clear();
         }
 
         private void DisposeVfxMaterialCache()
@@ -400,6 +417,17 @@ namespace Realmz.World
             if (cells != null)
             {
                 float t = Application.isPlaying ? Time.unscaledTime : 0f;
+
+                // Register every surface first so edge masks can see neighbors later in the list.
+                for (int i = 0; i < cells.Count; i++)
+                {
+                    CombatGridCell cell = cells[i];
+                    if (cell != null && cell.Surface != SurfaceType.None)
+                    {
+                        _surfaceByCoord[cell.Coord] = cell.Surface;
+                    }
+                }
+
                 for (int i = 0; i < cells.Count; i++)
                 {
                     CombatGridCell cell = cells[i];
@@ -407,8 +435,6 @@ namespace Realmz.World
                     {
                         continue;
                     }
-
-                    _surfaceByCoord[cell.Coord] = cell.Surface;
 
                     float elev = GetTileElevation(cell.X, cell.Y);
                     bool isRealRiverTile = (_waterTileResolver != null && _waterTileResolver(cell.X, cell.Y)) ||
@@ -431,7 +457,28 @@ namespace Realmz.World
                         ? Mathf.Max(elev, _waterSurfaceHeight) + 0.025f
                         : Mathf.Max(elev + 0.085f, _waterSurfaceHeight + 0.045f);
                     Vector3 pos = new Vector3(cell.X + 0.5f, y, -(cell.Y + 0.5f));
-                    PlaceCustomQuad(_surfaceLayer, pos, 0.96f, 0.96f, 0f, mat, baseCol);
+                    Texture2D edgeTex = null;
+                    int neighborBits = 0;
+                    if (UsesSurfaceEdgeMask(cell.Surface) &&
+                        _surfaceIsStrip.TryGetValue(cell.Surface, out bool isStripSurface) && isStripSurface)
+                    {
+                        neighborBits = ComputeSurfaceNeighborBits(cell.X, cell.Y, cell.Surface);
+                        edgeTex = neighborBits == SurfaceEdgeAll ? null : GetOrCreateSurfaceEdgeTexture(cell.Surface, neighborBits);
+                    }
+
+                    bool joinsNeighbors = edgeTex != null || neighborBits == SurfaceEdgeAll;
+                    float quadSize = joinsNeighbors ? 1.002f : 0.96f;
+                    PlaceCustomQuad(_surfaceLayer, pos, quadSize, quadSize, 0f, mat, baseCol);
+                    if (edgeTex != null)
+                    {
+                        MeshRenderer placed = _surfaceLayer.Quads[_surfaceLayer.ActiveCount - 1];
+                        _propBlock.Clear();
+                        _propBlock.SetColor(BaseColorId, baseCol);
+                        _propBlock.SetColor(ColorId, baseCol);
+                        _propBlock.SetTexture(BaseMapId, edgeTex);
+                        _propBlock.SetTexture(MainTexId, edgeTex);
+                        placed.SetPropertyBlock(_propBlock);
+                    }
                 }
 
                 if (_surfaceLayer.ActiveCount > 0)
@@ -1663,6 +1710,7 @@ namespace Realmz.World
                     SetMaterialTextureScale(stripMat, new Vector2(0.25f, 1f));
                     SetMaterialTextureOffset(stripMat, Vector2.zero);
                     _surfaceMaterials[surface] = stripMat;
+                    _surfaceStripSources[surface] = stripEntry.albedo;
                     return stripMat;
                 }
             }
@@ -1677,6 +1725,182 @@ namespace Realmz.World
             Material mat = CreateTransparentOverlayMaterial("Surface_" + surface, tex, baseCol);
             _surfaceMaterials[surface] = mat;
             return mat;
+        }
+
+        private static bool UsesSurfaceEdgeMask(SurfaceType surface)
+        {
+            // Full-bleed liquid strips read as hard square stickers; fire and steam already have organic alpha.
+            return surface == SurfaceType.Oil ||
+                   surface == SurfaceType.Poison ||
+                   surface == SurfaceType.Ice ||
+                   surface == SurfaceType.Water ||
+                   surface == SurfaceType.ElectrifiedWater;
+        }
+
+        private bool HasSameSurface(int x, int y, SurfaceType surface)
+        {
+            return _surfaceByCoord.TryGetValue(new GridCoord(x, y), out SurfaceType other) && other == surface;
+        }
+
+        private int ComputeSurfaceNeighborBits(int x, int y, SurfaceType surface)
+        {
+            // Grid y grows southward; world z = -(y + 0.5), so texture top (+V) faces grid north (y - 1).
+            int bits = 0;
+            if (HasSameSurface(x, y - 1, surface)) bits |= SurfaceEdgeNorth;
+            if (HasSameSurface(x + 1, y, surface)) bits |= SurfaceEdgeEast;
+            if (HasSameSurface(x, y + 1, surface)) bits |= SurfaceEdgeSouth;
+            if (HasSameSurface(x - 1, y, surface)) bits |= SurfaceEdgeWest;
+            return bits;
+        }
+
+        private Texture2D GetOrCreateSurfaceEdgeTexture(SurfaceType surface, int neighborBits)
+        {
+            int key = ((int)surface << 4) | (neighborBits & SurfaceEdgeAll);
+            if (_surfaceEdgeTextures.TryGetValue(key, out Texture2D cached) && cached != null)
+            {
+                return cached;
+            }
+
+            if (!_surfaceStripSources.TryGetValue(surface, out Texture2D src) || src == null)
+            {
+                return null;
+            }
+
+            Color32[] srcPixels = GetSurfaceStripPixels(surface, src);
+            if (srcPixels == null)
+            {
+                return null;
+            }
+
+            int w = src.width;
+            int h = src.height;
+            int frame = Mathf.Max(1, h);
+            Color32[] pixels = new Color32[srcPixels.Length];
+            Array.Copy(srcPixels, pixels, srcPixels.Length);
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    if (!IsInsideSurfaceEdgeMask(x % frame, y, frame, neighborBits))
+                    {
+                        pixels[y * w + x].a = 0;
+                    }
+                }
+            }
+
+            Texture2D tex = new Texture2D(w, h, TextureFormat.RGBA32, false, false)
+            {
+                name = $"SurfaceEdge_{surface}_{neighborBits}",
+                filterMode = FilterMode.Point,
+                wrapMode = src.wrapMode,
+                hideFlags = HideFlags.HideAndDontSave
+            };
+            tex.SetPixels32(pixels);
+            tex.Apply(false, false);
+            _surfaceEdgeTextures[key] = tex;
+            return tex;
+        }
+
+        private Color32[] GetSurfaceStripPixels(SurfaceType surface, Texture2D src)
+        {
+            if (_surfaceStripPixels.TryGetValue(surface, out Color32[] cached) && cached != null)
+            {
+                return cached;
+            }
+
+            Color32[] pixels = null;
+            try
+            {
+                if (src.isReadable)
+                {
+                    pixels = src.GetPixels32();
+                }
+                else
+                {
+                    // Catalog strips are not CPU-readable; copy once through a temporary sRGB render target.
+                    RenderTexture rt = RenderTexture.GetTemporary(src.width, src.height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+                    RenderTexture prevActive = RenderTexture.active;
+                    Graphics.Blit(src, rt);
+                    RenderTexture.active = rt;
+                    Texture2D readable = new Texture2D(src.width, src.height, TextureFormat.RGBA32, false, false);
+                    readable.ReadPixels(new Rect(0f, 0f, src.width, src.height), 0, 0, false);
+                    readable.Apply(false, false);
+                    RenderTexture.active = prevActive;
+                    RenderTexture.ReleaseTemporary(rt);
+                    pixels = readable.GetPixels32();
+                    DestroySafe(readable);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[BywaterGridOverlays] Surface edge mask unavailable for {surface}: {ex.Message}");
+                pixels = null;
+            }
+
+            _surfaceStripPixels[surface] = pixels;
+            return pixels;
+        }
+
+        /// <summary>
+        /// Ragged, pixel-quantized puddle edge on sides without a same-surface neighbor, with rounded outer
+        /// corners. Edge noise is periodic per side so neighboring tiles' boundaries line up seamlessly.
+        /// </summary>
+        private static bool IsInsideSurfaceEdgeMask(int fx, int fy, int frame, int neighborBits)
+        {
+            bool hasN = (neighborBits & SurfaceEdgeNorth) != 0;
+            bool hasE = (neighborBits & SurfaceEdgeEast) != 0;
+            bool hasS = (neighborBits & SurfaceEdgeSouth) != 0;
+            bool hasW = (neighborBits & SurfaceEdgeWest) != 0;
+
+            // Quantize to 2x2 texel blocks so the edge stays on the 64 px/m art grid.
+            int qx = fx & ~1;
+            int qy = fy & ~1;
+            float px = qx + 1f;
+            float py = qy + 1f;
+            float f = frame;
+
+            const float PhaseN = 0.00f;
+            const float PhaseE = 2.10f;
+            const float PhaseS = 1.30f;
+            const float PhaseW = 3.70f;
+
+            // Texture row 0 is the bottom edge (grid south); top rows face grid north.
+            if (!hasS && py < SurfaceEdgeInset(qx, frame, PhaseS)) return false;
+            if (!hasN && (f - py) < SurfaceEdgeInset(qx, frame, PhaseN)) return false;
+            if (!hasW && px < SurfaceEdgeInset(qy, frame, PhaseW)) return false;
+            if (!hasE && (f - px) < SurfaceEdgeInset(qy, frame, PhaseE)) return false;
+
+            float r = f * 0.17f;
+            if (!hasS && !hasW && !IsInsideRoundedCorner(px, py, SurfaceEdgeInset(0, frame, PhaseW) + r, SurfaceEdgeInset(0, frame, PhaseS) + r, r, -1f, -1f)) return false;
+            if (!hasS && !hasE && !IsInsideRoundedCorner(px, py, f - SurfaceEdgeInset(0, frame, PhaseE) - r, SurfaceEdgeInset(0, frame, PhaseS) + r, r, 1f, -1f)) return false;
+            if (!hasN && !hasW && !IsInsideRoundedCorner(px, py, SurfaceEdgeInset(0, frame, PhaseW) + r, f - SurfaceEdgeInset(0, frame, PhaseN) - r, r, -1f, 1f)) return false;
+            if (!hasN && !hasE && !IsInsideRoundedCorner(px, py, f - SurfaceEdgeInset(0, frame, PhaseE) - r, f - SurfaceEdgeInset(0, frame, PhaseN) - r, r, 1f, 1f)) return false;
+            return true;
+        }
+
+        private static bool IsInsideRoundedCorner(float px, float py, float cx, float cy, float r, float dirX, float dirY)
+        {
+            bool inCornerX = dirX < 0f ? px < cx : px > cx;
+            bool inCornerY = dirY < 0f ? py < cy : py > cy;
+            if (!inCornerX || !inCornerY)
+            {
+                return true;
+            }
+
+            float dx = px - cx;
+            float dy = py - cy;
+            return (dx * dx) + (dy * dy) <= r * r;
+        }
+
+        private static float SurfaceEdgeInset(int along, int frame, float phase)
+        {
+            // Periodic in 'along' over one frame, so insets at 0 and frame match across tile seams.
+            float u = (along / (float)frame) * Mathf.PI * 2f;
+            float n = 0.55f * Mathf.Sin(2f * u + phase) +
+                      0.30f * Mathf.Sin(5f * u + phase * 1.7f) +
+                      0.15f * Mathf.Sin(11f * u + phase * 2.3f);
+            float inset = frame * (0.085f + 0.045f * n);
+            return Mathf.Round(inset * 0.5f) * 2f;
         }
 
         private static string GetSurfaceCatalogKey(SurfaceType surface)

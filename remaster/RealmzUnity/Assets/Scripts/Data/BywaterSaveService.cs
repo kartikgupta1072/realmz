@@ -555,6 +555,12 @@ namespace Realmz.Data
                 backupPath = fullPath + ".bak";
 
                 File.WriteAllText(tempPath, json);
+                using (FileStream flushStream = new FileStream(tempPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                {
+                    // Force the temp file to disk before the swap so a crash cannot leave a torn save.
+                    flushStream.Flush(true);
+                }
+
                 FileInfo tmpInfo = new FileInfo(tempPath);
                 if (!tmpInfo.Exists || tmpInfo.Length <= 0)
                 {
@@ -564,18 +570,8 @@ namespace Realmz.Data
 
                 if (File.Exists(fullPath))
                 {
+                    // Keep the previous save as .bak; TryLoadSave falls back to it if the main file is unreadable.
                     File.Replace(tempPath, fullPath, backupPath, ignoreMetadataErrors: true);
-                    if (File.Exists(backupPath))
-                    {
-                        try
-                        {
-                            File.Delete(backupPath);
-                        }
-                        catch (Exception)
-                        {
-                            // Best-effort cleanup of backup file.
-                        }
-                    }
                 }
                 else
                 {
@@ -608,6 +604,26 @@ namespace Realmz.Data
         }
 
         public static bool TryLoadSave(string path, out BywaterSaveData data, out string status)
+        {
+            if (TryLoadSaveFile(path, out data, out status))
+            {
+                return true;
+            }
+
+            string backupPath = string.IsNullOrWhiteSpace(path) ? string.Empty : path + ".bak";
+            if (!string.IsNullOrEmpty(backupPath) && File.Exists(backupPath) &&
+                TryLoadSaveFile(backupPath, out BywaterSaveData backupData, out string backupStatus))
+            {
+                data = backupData;
+                status = "Main save unreadable (" + status + "); recovered previous save from backup.";
+                Debug.LogWarning("[BywaterSaveService] " + status + " " + backupStatus);
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool TryLoadSaveFile(string path, out BywaterSaveData data, out string status)
         {
             data = null;
             status = string.Empty;

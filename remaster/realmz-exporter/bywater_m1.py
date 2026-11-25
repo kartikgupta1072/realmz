@@ -683,10 +683,12 @@ def build_bywater_m1_payloads(realmz_base: Path) -> Dict[str, Any]:
 
         # Export unequipped base AC and To-Hit only; RealmzCore PartyMemberState
         # applies equipped armor AC and weapon bonus (+5% per +1) once at runtime.
-        base_ac = max(5, 10 + max(0, (ag - 12) // 2))
+        # Agility is also applied once at runtime (GetDodgeAcBonus for AC,
+        # GetRangedHitAgilityBonusPercent for missile), so it is not baked in here.
+        base_ac = 10
         to_hit = 10 + caste["tohit_base"] + max(0, (br - 12) // 2)
         dodge = max(2, caste["dodge_base"] + max(0, (ag - 12)))
-        missile = caste["missile_base"] + max(0, (ag - 12))
+        missile = caste["missile_base"]
         mv = max(8, race_prof["base_move"] + caste["move_bonus"])
         atk_round = max(1.0, float(race_prof.get("attacks_per_round", race["num_attacks"] + caste["bonus_attacks"])))
 
