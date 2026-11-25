@@ -99,8 +99,9 @@ def check_git_main_mutation(segment: str, cwd: str) -> str | None:
 
 
 def check_lifetwin_write(cmd: str) -> str | None:
-    lowered = cmd.lower()
-    if "lifetwin" not in lowered:
+    # Only react to LifeTwin as a filesystem path segment (\LifeTwin or /LifeTwin), so commit
+    # messages or prose that merely mention the word are not blocked.
+    if not re.search(r"[\\/]lifetwin\b", cmd, re.IGNORECASE):
         return None
 
     write_patterns = [
@@ -124,7 +125,7 @@ def check_lifetwin_write(cmd: str) -> str | None:
         "ls ",
     )
     for seg in split_segments(cmd):
-        if "lifetwin" not in seg.lower():
+        if not re.search(r"[\\/]lifetwin\b", seg, re.IGNORECASE):
             continue
         seg_low = seg.lower().lstrip("& ").strip()
         if not seg_low.startswith(readonly_prefixes):
