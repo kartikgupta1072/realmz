@@ -17,8 +17,10 @@ namespace RealmzCore.Combat
                 int score,
                 bool isHeal,
                 bool isCure,
-                bool isBuff)
+                bool isBuff,
+                int apCost = 3)
             {
+                SpellIdOrKey = spellKey;
                 SpellKey = spellKey;
                 Center = center;
                 TargetId = targetId;
@@ -26,8 +28,10 @@ namespace RealmzCore.Combat
                 IsHeal = isHeal;
                 IsCure = isCure;
                 IsBuff = isBuff;
+                ApCost = apCost;
             }
 
+            public string SpellIdOrKey { get; }
             public string SpellKey { get; }
             public GridCoord Center { get; }
             public string TargetId { get; }
@@ -35,6 +39,7 @@ namespace RealmzCore.Combat
             public bool IsHeal { get; }
             public bool IsCure { get; }
             public bool IsBuff { get; }
+            public int ApCost { get; }
         }
 
         public static CombatActionResult ExecuteTurn(TacticalCombatSession session)
@@ -82,63 +87,151 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(true, $"{actor.Name} flees in panic.");
             }
 
-            // Priority 1: Cleric healing spells (<65% HP) and critical swift potion (<50% HP).
-            if (TryExecutePriority1Healing(session, actor, out CombatActionResult healResult))
+            CombatActionResult finalResult = new CombatActionResult(true, $"{actor.Name} resolves turn.");
+            List<string> turnMessages = new List<string>();
+            List<AttackOutcome> turnOutcomes = new List<AttackOutcome>();
+            int totalTurnDmg = 0;
+            int totalTurnHeal = 0;
+            bool anyAoo = false;
+            int totalTurnAp = 0;
+            bool tookOffensiveOrMajorAction = false;
+            const int maxSubActions = 6;
+
+            void Accumulate(CombatActionResult r)
             {
-                FinishTurn(session, actor);
-                return healResult;
+                if (!string.IsNullOrWhiteSpace(r.Message))
+                {
+                    turnMessages.Add(r.Message);
+                }
+                if (r.AttackOutcomes.Count > 0)
+                {
+                    turnOutcomes.AddRange(r.AttackOutcomes);
+                }
+                totalTurnDmg += r.DamageDealt;
+                totalTurnHeal += r.HealingDone;
+                anyAoo |= r.AoOTriggered;
+                totalTurnAp += r.ApSpent;
             }
 
-            if (session.Outcome != CombatOutcome.InProgress || !actor.IsConscious)
+            for (int step = 0; step < maxSubActions; step++)
             {
-                FinishTurn(session, actor);
-                return new CombatActionResult(true, $"{actor.Name} resolved turn.");
-            }
+                if (session.Outcome != CombatOutcome.InProgress ||
+                    !string.Equals(session.CurrentActorId, actor.Id, StringComparison.Ordinal) ||
+                    !actor.IsConscious ||
+                    actor.Economy.CurrentAp <= 0 ||
+                    actor.IsGuarding)
+                {
+                    break;
+                }
 
-            enemies = CollectEnemies(session, actor);
-            if (enemies.Count == 0)
-            {
-                FinishTurn(session, actor);
-                return new CombatActionResult(true, $"{actor.Name} has no targets.");
-            }
+                int apBefore = actor.Economy.CurrentAp;
+                int freeBefore = actor.Economy.FreeMoveTilesRemaining;
 
-            // Priority 2: Swift Shove hazard/ledge opportunity before committing standard action.
-            if (actor.Economy.HasSwiftAction && TryOpportunisticSwiftShove(session, actor, enemies, out CombatActionResult shoveResult))
-            {
+                // Priority 1: Cleric healing spells (<65% HP) and critical swift potion (<50% HP).
+                if (TryExecutePriority1Healing(session, actor, out CombatActionResult healResult))
+                {
+                    finalResult = healResult;
+                    Accumulate(healResult);
+                    List<CombatantState> alliesAfterHeal = CollectLivingBySide(session, actor.Side);
+                    bool anyStillLow = false;
+                    for (int a = 0; a < alliesAfterHeal.Count; a++)
+                    {
+                        if (alliesAfterHeal[a].Hp * 100 < alliesAfterHeal[a].MaxHp * 65)
+                        {
+                            anyStillLow = true;
+                            break;
+                        }
+                    }
+
+                    if (!anyStillLow || actor.Economy.CurrentAp < 2)
+                    {
+                        break;
+                    }
+
+                    if (actor.Economy.CurrentAp == apBefore && actor.Economy.FreeMoveTilesRemaining == freeBefore)
+                    {
+                        break;
+                    }
+
+                    continue;
+                }
+
                 if (session.Outcome != CombatOutcome.InProgress || !actor.IsConscious)
                 {
-                    FinishTurn(session, actor);
-                    return shoveResult;
+                    break;
                 }
 
                 enemies = CollectEnemies(session, actor);
                 if (enemies.Count == 0)
                 {
-                    FinishTurn(session, actor);
-                    return shoveResult;
+                    break;
+                }
+
+                // Priority 2: Shove hazard/ledge opportunity (2 AP).
+                if (actor.Economy.HasApFor(CombatActionEconomy.DefaultShoveApCost) &&
+                    TryOpportunisticSwiftShove(session, actor, enemies, out CombatActionResult shoveResult))
+                {
+                    finalResult = shoveResult;
+                    Accumulate(shoveResult);
+                    tookOffensiveOrMajorAction = true;
+                    continue;
+                }
+
+                // Bank <= 2 AP cleanly if already acted this turn and out of immediate melee/caster range.
+                if (tookOffensiveOrMajorAction &&
+                    actor.Economy.CurrentAp <= CombatActionEconomy.DefaultMaxCarryoverAp &&
+                    MinChebyshevDistance(actor.Position, enemies) > 1 &&
+                    actor.MeleeApCost > actor.Economy.CurrentAp &&
+                    (actor.RangedRange <= 1 || string.IsNullOrWhiteSpace(actor.RangedDice) || actor.RangedApCost > actor.Economy.CurrentAp) &&
+                    (actor.SpellIds.Count == 0 || actor.Sp <= 0))
+                {
+                    break;
+                }
+
+                CombatActionResult subResult;
+                if (actor.SpellIds.Count > 0)
+                {
+                    subResult = ExecuteCasterPriority(session, actor, enemies);
+                }
+                else if (actor.RangedRange > 1 && !string.IsNullOrWhiteSpace(actor.RangedDice))
+                {
+                    subResult = ExecuteRangerPriority(session, actor, enemies);
+                }
+                else
+                {
+                    subResult = ExecuteMeleePriority(session, actor, enemies);
+                }
+
+                if (subResult.Success)
+                {
+                    finalResult = subResult;
+                    Accumulate(subResult);
+                    if (subResult.DamageDealt > 0 || subResult.HealingDone > 0 || subResult.AttackOutcomes.Count > 0 || subResult.ApSpent > 0)
+                    {
+                        tookOffensiveOrMajorAction = true;
+                    }
+                }
+
+                if (actor.Economy.CurrentAp == apBefore && actor.Economy.FreeMoveTilesRemaining == freeBefore)
+                {
+                    break;
                 }
             }
 
-            // Priority 3: Mage / Caster AoE (strictly zero friendly fire), single-target, Cure/Buff, and kiting.
-            if (actor.SpellIds.Count > 0)
+            if (turnMessages.Count > 1)
             {
-                CombatActionResult casterResult = ExecuteCasterPriority(session, actor, enemies);
-                FinishTurn(session, actor);
-                return casterResult;
+                finalResult = new CombatActionResult(
+                    true,
+                    string.Join(" | ", turnMessages),
+                    turnOutcomes,
+                    damageDealt: totalTurnDmg,
+                    healingDone: totalTurnHeal,
+                    aooTriggered: anyAoo,
+                    apSpent: totalTurnAp);
             }
 
-            // Priority 4: Ranger / Ranged Heroes (non-casters with ranged weapons).
-            if (actor.RangedRange > 1 && !string.IsNullOrWhiteSpace(actor.RangedDice))
-            {
-                CombatActionResult rangedResult = ExecuteRangerPriority(session, actor, enemies);
-                FinishTurn(session, actor);
-                return rangedResult;
-            }
-
-            // Priority 5: Melee Heroes (Knight, Paladin, Rogue, or fallback).
-            CombatActionResult meleeResult = ExecuteMeleePriority(session, actor, enemies);
             FinishTurn(session, actor);
-            return meleeResult;
+            return finalResult;
         }
 
         private static bool TryExecutePriority1Healing(
@@ -216,8 +309,8 @@ namespace RealmzCore.Combat
                 }
             }
 
-            // Fallback swift healing potion when no heal spell was cast and an ally is critically injured (<50% HP).
-            if (actor.Economy.HasSwiftAction && session.Party != null)
+            // Fallback potion (2 AP) when no heal spell was cast and an ally is critically injured (<50% HP).
+            if (actor.Economy.HasApFor(CombatActionEconomy.DefaultPotionApCost) && session.Party != null)
             {
                 CombatantState? criticalAlly = null;
                 for (int i = 0; i < injuredAllies.Count; i++)
@@ -246,7 +339,7 @@ namespace RealmzCore.Combat
             out CombatActionResult result)
         {
             result = new CombatActionResult(false, string.Empty);
-            if (!actor.Economy.HasSwiftAction)
+            if (!actor.Economy.HasApFor(CombatActionEconomy.DefaultShoveApCost))
             {
                 return false;
             }
@@ -477,12 +570,12 @@ namespace RealmzCore.Combat
                 return session.ExecuteMeleeAttack(meleeHere.Id);
             }
 
-            if (actor.Economy.HasStandardAction)
+            if (actor.Economy.HasApFor(actor.Economy.EffectiveGuardApCost))
             {
                 return session.GuardOverwatch();
             }
 
-            return new CombatActionResult(true, $"{actor.Name} holds position.");
+            return new CombatActionResult(false, $"{actor.Name} holds position.");
         }
 
         private static CombatActionResult ExecuteRangerPriority(
@@ -559,6 +652,11 @@ namespace RealmzCore.Combat
                     continue;
                 }
 
+                if (tile.PathCost + actor.RangedApCost > actor.Economy.CurrentAp)
+                {
+                    continue;
+                }
+
                 if (tilePreview.ElevationModifierPct >= 15 && tilePreview.ElevationModifierPct > currentElevMod)
                 {
                     int score = targetScore + (tileElev * 40) - tile.PathCost;
@@ -604,7 +702,7 @@ namespace RealmzCore.Combat
             {
                 ReachableTileInfo tile = reachable[r];
                 CombatantState? target = PickBestRangedTarget(session, actor, tile.Coord, enemies, ignoreActionBudget: true, out int targetScore, out TacticalAttackPreview? preview);
-                if (target == null || preview == null)
+                if (target == null || preview == null || tile.PathCost + actor.RangedApCost > actor.Economy.CurrentAp)
                 {
                     continue;
                 }
@@ -657,12 +755,12 @@ namespace RealmzCore.Combat
                 }
             }
 
-            if (actor.Economy.HasStandardAction)
+            if (actor.Economy.HasApFor(actor.Economy.EffectiveGuardApCost))
             {
                 return session.GuardOverwatch();
             }
 
-            return new CombatActionResult(true, $"{actor.Name} holds position.");
+            return new CombatActionResult(false, $"{actor.Name} holds position.");
         }
 
         private static CombatActionResult ExecuteMeleePriority(
@@ -722,8 +820,9 @@ namespace RealmzCore.Combat
                     }
                 }
 
-                // Check Swift Shove opportunity after moving adjacent to an enemy.
-                if (actor.Economy.HasSwiftAction && TryOpportunisticSwiftShove(session, actor, enemies, out CombatActionResult shoveResult))
+                // Check Shove opportunity (2 AP) after moving adjacent to an enemy.
+                if (actor.Economy.HasApFor(CombatActionEconomy.DefaultShoveApCost) &&
+                    TryOpportunisticSwiftShove(session, actor, enemies, out CombatActionResult shoveResult))
                 {
                     if (session.Outcome != CombatOutcome.InProgress || !actor.IsConscious)
                     {
@@ -757,12 +856,12 @@ namespace RealmzCore.Combat
                     }
                 }
 
-                if (actor.Economy.HasStandardAction)
+                if (actor.Economy.HasApFor(actor.Economy.EffectiveGuardApCost))
                 {
                     return session.GuardOverwatch();
                 }
 
-                return new CombatActionResult(true, $"{actor.Name} holds position.");
+                return new CombatActionResult(false, $"{actor.Name} holds position.");
             }
 
             // No melee target reachable this turn: try ranged weapon if available, else safe approach + GuardOverwatch.
@@ -786,12 +885,12 @@ namespace RealmzCore.Combat
                 }
             }
 
-            if (actor.Economy.HasStandardAction)
+            if (actor.Economy.HasApFor(actor.Economy.EffectiveGuardApCost))
             {
                 return session.GuardOverwatch();
             }
 
-            return new CombatActionResult(true, moved ? $"{actor.Name} advances." : $"{actor.Name} holds position.");
+            return new CombatActionResult(moved, moved ? $"{actor.Name} advances." : $"{actor.Name} holds position.");
         }
 
         private static void ScoreMeleeCandidatesAtTile(
@@ -833,7 +932,7 @@ namespace RealmzCore.Combat
                 bool isHighGround = session.Grid.GetElevation(coord) > session.Grid.GetElevation(foe.Position);
 
                 int shoveSetupBonus = 0;
-                if (actor.Economy.HasSwiftAction)
+                if (actor.Economy.HasApFor(CombatActionEconomy.DefaultShoveApCost))
                 {
                     TacticalShovePreview shovePreview = session.PreviewShove(actor.Id, foe.Id, coord);
                     if (shovePreview.CanExecute && shovePreview.SuccessChancePct >= 50)
@@ -857,7 +956,9 @@ namespace RealmzCore.Combat
                 int targetFinishBonus = (isKillingBlow ? 80 : 0) + (100 - Math.Min(99, foe.Hp)) + threatBonus;
                 int stayBonus = isCurrentPos ? 5 : 0;
 
-                int score = (isFlanking ? 50 : 0) +
+                int score = preview.HitChancePct +
+                            (preview.IsFlanking ? 30 : 0) +
+                            (actor.Economy.CurrentAp - pathCost >= actor.MeleeApCost ? 500 : -500) +
                             (isHighGround ? 25 : 0) +
                             (foe.IsProne ? 20 : 0) +
                             aooPenalty +
@@ -917,7 +1018,7 @@ namespace RealmzCore.Combat
                     if (score > bestScore)
                     {
                         bestScore = score;
-                        bestHeal = new SpellCandidate(spellKey, ally.Position, ally.Id, score, isHeal: true, isCure: false, isBuff: false);
+                        bestHeal = new SpellCandidate(spellKey, ally.Position, ally.Id, score, isHeal: true, isCure: false, isBuff: false, apCost: preview.ApCost);
                     }
                 }
             }
@@ -977,7 +1078,7 @@ namespace RealmzCore.Combat
                         if (score > bestScore)
                         {
                             bestScore = score;
-                            best = new SpellCandidate(spellKey, ally.Position, ally.Id, score, isHeal: false, isCure: true, isBuff: false);
+                            best = new SpellCandidate(spellKey, ally.Position, ally.Id, score, isHeal: false, isCure: true, isBuff: false, apCost: preview.ApCost);
                         }
                     }
 
@@ -1030,7 +1131,7 @@ namespace RealmzCore.Combat
                         if (score > bestScore)
                         {
                             bestScore = score;
-                            best = new SpellCandidate(spellKey, ally.Position, ally.Id, score, isHeal: false, isCure: false, isBuff: true);
+                            best = new SpellCandidate(spellKey, ally.Position, ally.Id, score, isHeal: false, isCure: false, isBuff: true, apCost: preview.ApCost);
                         }
                     }
 
@@ -1128,7 +1229,7 @@ namespace RealmzCore.Combat
                     if (score > bestScore)
                     {
                         bestScore = score;
-                        best = new SpellCandidate(spellKey, center, primaryTargetId, score, isHeal: false, isCure: false, isBuff: false);
+                        best = new SpellCandidate(spellKey, center, primaryTargetId, score, isHeal: false, isCure: false, isBuff: false, apCost: preview.ApCost);
                     }
                 }
             }
@@ -1169,7 +1270,7 @@ namespace RealmzCore.Combat
                 }
 
                 SpellCandidate? candidate = TryFindBestCasterSpell(session, actor, tile.Coord, enemies, ignoreActionBudget: true);
-                if (candidate == null)
+                if (candidate == null || tile.PathCost + candidate.ApCost > actor.Economy.CurrentAp)
                 {
                     continue;
                 }
@@ -1204,14 +1305,14 @@ namespace RealmzCore.Combat
             {
                 ReachableTileInfo tile = reachable[r];
                 int minDist = MinChebyshevDistance(tile.Coord, enemies);
-                if (minDist < 2)
+                if (minDist < 2 || tile.PathCost + actor.RangedApCost > actor.Economy.CurrentAp)
                 {
                     continue;
                 }
 
                 bool hazardous = IsHazardousSurface(session.Grid.GetSurface(tile.Coord));
                 CombatantState? target = PickBestRangedTarget(session, actor, tile.Coord, enemies, ignoreActionBudget: true, out int targetScore, out TacticalAttackPreview? preview);
-                if (target == null || preview == null)
+                if (target == null || preview == null || tile.PathCost + actor.RangedApCost > actor.Economy.CurrentAp)
                 {
                     continue;
                 }
@@ -1257,7 +1358,9 @@ namespace RealmzCore.Combat
                 }
 
                 bool hazardous = IsHazardousSurface(session.Grid.GetSurface(tile.Coord));
-                int score = (minDist * 20) +
+                bool leavesGuardAp = (actor.Economy.CurrentAp - tile.PathCost) >= actor.Economy.EffectiveGuardApCost;
+                int score = (leavesGuardAp ? 200 : 0) +
+                            (minDist * 20) +
                             (session.Grid.GetElevation(tile.Coord) * 10) +
                             (tile.ProvokesAoO ? -150 : 100) +
                             (hazardous ? -1000 : 0) -

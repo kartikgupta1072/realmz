@@ -102,107 +102,168 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(true, $"{actor.Name} has no targets.");
             }
 
-            AiDecision decision = ChooseNextDecision(session, actor, dryRun: false);
+            CombatActionResult finalResult = new CombatActionResult(true, $"{actor.Name} holds position.");
+            bool tookAttackOrCast = false;
+            const int maxSubActions = 5;
 
-            if (decision.ActionKind == CombatIntentActionType.Flee)
+            for (int step = 0; step < maxSubActions; step++)
             {
+                if (session.Outcome != CombatOutcome.InProgress ||
+                    !string.Equals(session.CurrentActorId, actor.Id, StringComparison.Ordinal) ||
+                    !actor.IsConscious ||
+                    actor.Economy.CurrentAp <= 0 ||
+                    actor.IsGuarding)
+                {
+                    break;
+                }
+
+                enemies = CollectLivingBySide(
+                    session,
+                    actor.Side == CombatSide.Monster ? CombatSide.Hero : CombatSide.Monster);
+                if (enemies.Count == 0)
+                {
+                    break;
+                }
+
+                int apBefore = actor.Economy.CurrentAp;
+                int freeBefore = actor.Economy.FreeMoveTilesRemaining;
+
+                // If already attacked/cast this turn and only <= 2 AP remains (cannot afford another attack/cast without wasting carryover), bank it cleanly.
+                if (tookAttackOrCast)
+                {
+                    bool canFollowUpCast = TryFindBestSpell(session, actor, actor.Position, ignoreActionBudget: false, out _, out _, out _, out _, out _);
+                    bool canFollowUpRanged = actor.RangedRange > 1 && !string.IsNullOrWhiteSpace(actor.RangedDice) &&
+                                             PickBestRangedTarget(session, actor, actor.Position, enemies, ignoreActionBudget: false, out _) != null;
+                    bool canFollowUpMelee = PickBestMeleeTarget(session, actor, actor.Position, enemies, ignoreActionBudget: false, out _) != null;
+                    if (!canFollowUpCast && !canFollowUpRanged && !canFollowUpMelee)
+                    {
+                        break;
+                    }
+                }
+
+                AiDecision decision = ChooseNextDecision(session, actor, dryRun: false);
+
+                if (decision.ActionKind == CombatIntentActionType.Flee)
+                {
+                    if (decision.MoveCoord.HasValue && decision.MoveCoord.Value != actor.Position)
+                    {
+                        finalResult = session.TryMoveTo(decision.MoveCoord.Value);
+                    }
+                    break;
+                }
+
+                // If already acted and holding with <= 2 AP out of immediate strike/cast range, bank AP for next turn.
+                if (tookAttackOrCast &&
+                    decision.ActionKind == CombatIntentActionType.Hold &&
+                    actor.Economy.CurrentAp <= CombatActionEconomy.DefaultMaxCarryoverAp)
+                {
+                    break;
+                }
+
+                bool moved = false;
                 if (decision.MoveCoord.HasValue && decision.MoveCoord.Value != actor.Position)
                 {
-                    session.TryMoveTo(decision.MoveCoord.Value);
+                    CombatActionResult moveRes = session.TryMoveTo(decision.MoveCoord.Value);
+                    moved = moveRes.Success;
+                    if (moved)
+                    {
+                        finalResult = moveRes;
+                    }
+
+                    if (session.Outcome != CombatOutcome.InProgress || !actor.IsConscious)
+                    {
+                        break;
+                    }
                 }
 
-                session.EndTurn();
-                return new CombatActionResult(true, $"{actor.Name} flees in panic.");
-            }
-
-            bool moved = false;
-            if (decision.MoveCoord.HasValue && decision.MoveCoord.Value != actor.Position)
-            {
-                moved = session.TryMoveTo(decision.MoveCoord.Value).Success;
-                if (session.Outcome != CombatOutcome.InProgress)
+                CombatActionResult? actionResult = null;
+                if ((decision.ActionKind == CombatIntentActionType.CastSpell ||
+                     decision.ActionKind == CombatIntentActionType.MoveAndCast ||
+                     decision.ActionKind == CombatIntentActionType.HealAlly) &&
+                    !string.IsNullOrEmpty(decision.SpellKey))
                 {
-                    return new CombatActionResult(true, $"{actor.Name} resolved turn.");
+                    TacticalSpellPreview postMoveSpell = session.PreviewSpell(actor.Id, decision.SpellKey, decision.TargetCoord);
+                    if (postMoveSpell.CanExecute)
+                    {
+                        actionResult = session.CastSpell(decision.SpellKey, decision.TargetCoord);
+                    }
+                }
+
+                if (actionResult == null &&
+                    TryFindBestSpell(session, actor, actor.Position, ignoreActionBudget: false, out string? fallbackSpellKey, out GridCoord fallbackSpellCenter, out _, out _, out _) &&
+                    fallbackSpellKey != null)
+                {
+                    actionResult = session.CastSpell(fallbackSpellKey, fallbackSpellCenter);
+                }
+
+                if (actionResult == null &&
+                    (decision.ActionKind == CombatIntentActionType.RangedAttack ||
+                     decision.ActionKind == CombatIntentActionType.MoveAndRanged) &&
+                    !string.IsNullOrEmpty(decision.TargetId) &&
+                    session.PreviewRangedAttack(actor.Id, decision.TargetId).CanExecute)
+                {
+                    actionResult = session.ExecuteRangedAttack(decision.TargetId);
+                }
+
+                if (actionResult == null &&
+                    actor.RangedRange > 1 &&
+                    !string.IsNullOrWhiteSpace(actor.RangedDice))
+                {
+                    CombatantState? bestRanged = PickBestRangedTarget(session, actor, actor.Position, enemies, ignoreActionBudget: false, out _);
+                    if (bestRanged != null)
+                    {
+                        actionResult = session.ExecuteRangedAttack(bestRanged.Id);
+                    }
+                }
+
+                if (actionResult == null)
+                {
+                    CombatantState? meleeTarget = !string.IsNullOrEmpty(decision.TargetId) &&
+                                                  decision.ActionKind == CombatIntentActionType.MeleeAttack
+                        ? session.GetCombatant(decision.TargetId)
+                        : null;
+                    if (meleeTarget == null || !session.PreviewMeleeAttack(actor.Id, meleeTarget.Id).CanExecute)
+                    {
+                        meleeTarget = PickBestMeleeTarget(session, actor, actor.Position, enemies, ignoreActionBudget: false, out _);
+                    }
+
+                    if (meleeTarget != null)
+                    {
+                        actionResult = session.ExecuteMeleeAttack(meleeTarget.Id);
+                    }
+                }
+
+                if (actionResult != null && actionResult.Success)
+                {
+                    finalResult = actionResult;
+                    tookAttackOrCast = true;
+                    continue;
+                }
+
+                if (!tookAttackOrCast && actor.Economy.HasApFor(actor.Economy.EffectiveGuardApCost))
+                {
+                    finalResult = session.GuardOverwatch();
+                    break;
+                }
+
+                if (moved && actor.Economy.CurrentAp != apBefore)
+                {
+                    continue;
+                }
+
+                if (actor.Economy.CurrentAp == apBefore && actor.Economy.FreeMoveTilesRemaining == freeBefore)
+                {
+                    break;
                 }
             }
 
-            if (!actor.IsConscious)
+            if (session.Outcome == CombatOutcome.InProgress &&
+                string.Equals(session.CurrentActorId, actor.Id, StringComparison.Ordinal))
             {
                 session.EndTurn();
-                return new CombatActionResult(true, $"{actor.Name} was stopped.");
             }
 
-            // Execute planned spell (or re-evaluate spells after moving!).
-            if ((decision.ActionKind == CombatIntentActionType.CastSpell ||
-                 decision.ActionKind == CombatIntentActionType.MoveAndCast ||
-                 decision.ActionKind == CombatIntentActionType.HealAlly) &&
-                !string.IsNullOrEmpty(decision.SpellKey))
-            {
-                TacticalSpellPreview postMoveSpell = session.PreviewSpell(actor.Id, decision.SpellKey, decision.TargetCoord);
-                if (postMoveSpell.CanExecute)
-                {
-                    CombatActionResult castRes = session.CastSpell(decision.SpellKey, decision.TargetCoord);
-                    session.EndTurn();
-                    return castRes;
-                }
-            }
-
-            // Re-evaluate best spell at post-move position if caster hadn't cast yet.
-            if (TryFindBestSpell(session, actor, actor.Position, ignoreActionBudget: false, out string? fallbackSpellKey, out GridCoord fallbackSpellCenter, out _, out _, out _) &&
-                fallbackSpellKey != null)
-            {
-                CombatActionResult castRes = session.CastSpell(fallbackSpellKey, fallbackSpellCenter);
-                session.EndTurn();
-                return castRes;
-            }
-
-            // Execute planned or available ranged attack if applicable.
-            if ((decision.ActionKind == CombatIntentActionType.RangedAttack ||
-                 decision.ActionKind == CombatIntentActionType.MoveAndRanged) &&
-                !string.IsNullOrEmpty(decision.TargetId))
-            {
-                if (session.PreviewRangedAttack(actor.Id, decision.TargetId).CanExecute)
-                {
-                    CombatActionResult rangedRes = session.ExecuteRangedAttack(decision.TargetId);
-                    session.EndTurn();
-                    return rangedRes;
-                }
-            }
-
-            if (actor.RangedRange > 1 && !string.IsNullOrWhiteSpace(actor.RangedDice))
-            {
-                CombatantState? bestRanged = PickBestRangedTarget(session, actor, actor.Position, enemies, ignoreActionBudget: false, out _);
-                if (bestRanged != null)
-                {
-                    CombatActionResult rangedRes = session.ExecuteRangedAttack(bestRanged.Id);
-                    session.EndTurn();
-                    return rangedRes;
-                }
-            }
-
-            // Execute planned or available melee attack.
-            CombatantState? meleeTarget = !string.IsNullOrEmpty(decision.TargetId) &&
-                                          decision.ActionKind == CombatIntentActionType.MeleeAttack
-                ? session.GetCombatant(decision.TargetId)
-                : null;
-            if (meleeTarget == null || !session.PreviewMeleeAttack(actor.Id, meleeTarget.Id).CanExecute)
-            {
-                meleeTarget = PickBestMeleeTarget(session, actor, actor.Position, enemies, ignoreActionBudget: false, out _);
-            }
-
-            if (meleeTarget != null)
-            {
-                CombatActionResult meleeRes = session.ExecuteMeleeAttack(meleeTarget.Id);
-                session.EndTurn();
-                return meleeRes;
-            }
-
-            if (actor.Economy.HasStandardAction)
-            {
-                session.GuardOverwatch();
-            }
-
-            session.EndTurn();
-            return new CombatActionResult(true, moved ? $"{actor.Name} advances and guards." : $"{actor.Name} holds position.");
+            return finalResult;
         }
 
         private static AiDecision ChooseNextDecision(
@@ -558,6 +619,14 @@ namespace RealmzCore.Combat
                         !isHeal &&
                         spellKey != null)
                     {
+                        if (!ignoreBudget)
+                        {
+                            TacticalSpellPreview spCheck = session.PreviewSpellInternal(actor.Id, spellKey, spellCenter, tile.Coord, ignoreActionBudget: true);
+                            if (tile.PathCost + spCheck.ApCost > actor.Economy.CurrentAp)
+                            {
+                                continue;
+                            }
+                        }
                         int totalScore = spellScore + elevBonus + aooPenalty - surfacePenalty - tile.PathCost;
                         if (totalScore > bestScore)
                         {
@@ -582,7 +651,7 @@ namespace RealmzCore.Combat
                         enemies,
                         ignoreActionBudget: true,
                         out int rangedScore);
-                    if (rangedTarget != null)
+                    if (rangedTarget != null && (ignoreBudget || tile.PathCost + actor.RangedApCost <= actor.Economy.CurrentAp))
                     {
                         int totalScore = rangedScore + elevBonus + aooPenalty - surfacePenalty - tile.PathCost;
                         if (totalScore > bestScore)

@@ -50,6 +50,10 @@ namespace Realmz.World
         private static readonly Color HoveredAttackTargetColor = new Color(0.98f, 0.34f, 0.24f, 0.95f);
         private static readonly Color TacticalSelectColor = new Color(0.98f, 0.84f, 0.24f, 0.92f);
         private static readonly Color CombatBoundsColor = new Color(0.98f, 0.78f, 0.22f, 0.52f);
+        private static readonly Color DeploymentZoneFillColor = new Color(0.16f, 0.85f, 0.96f, 0.28f);
+        private static readonly Color DeploymentZoneBorderColor = new Color(0.16f, 0.85f, 0.96f, 0.90f);
+        private static readonly Color DeploymentSelectedFillColor = new Color(0.28f, 0.94f, 1.00f, 0.56f);
+        private static readonly Color DeploymentSelectedFrameColor = new Color(1.00f, 0.84f, 0.22f, 0.96f);
 
         private static readonly Color ShoveSafeEmerald = new Color(0.06f, 0.73f, 0.51f, 0.78f);
         private static readonly Color ShoveLedgeGold = new Color(0.98f, 0.80f, 0.08f, 0.82f);
@@ -91,6 +95,7 @@ namespace Realmz.World
         private OverlayLayer _losLayer;
         private OverlayLayer _flankLayer;
         private OverlayLayer _shoveLayer;
+        private OverlayLayer _deploymentZoneLayer;
 
         private Transform _intentArcContainer;
         private readonly List<LineRenderer> _intentArcPool = new List<LineRenderer>(16);
@@ -180,6 +185,7 @@ namespace Realmz.World
             ApplyOpacityToLayer(_combatThreatenedLayer);
             ApplyOpacityToLayer(_attackTargetLayer);
             ApplyOpacityToLayer(_exploreHoverLayer);
+            ApplyOpacityToLayer(_deploymentZoneLayer);
         }
 
         public void Initialize(BywaterAssetCatalog catalog)
@@ -318,6 +324,7 @@ namespace Realmz.World
             HideLayer(_losLayer);
             HideLayer(_flankLayer);
             HideLayer(_shoveLayer);
+            HideLayer(_deploymentZoneLayer);
             ClearEnemyIntentArcs();
         }
 
@@ -824,6 +831,85 @@ namespace Realmz.World
             TrimLayer(_combatBoundsLayer);
         }
 
+        public void SetDeploymentZone(IReadOnlyList<GridCoord> worldCoords, GridCoord? selectedHeroWorld = null)
+        {
+            EnsureLayers();
+            _deploymentZoneLayer.ActiveCount = 0;
+
+            if (worldCoords != null && worldCoords.Count > 0)
+            {
+                Material bracketMat = GetOrCreateBracketMaterial();
+                Material outlineMat = GetOrCreateAoeFillMaterial();
+                Color fillDisplay = ScaleAlpha(DeploymentZoneFillColor, _gridOpacity);
+                Color borderDisplay = ScaleAlpha(DeploymentZoneBorderColor, _gridOpacity);
+                bool selectedInZone = false;
+
+                for (int i = 0; i < worldCoords.Count; i++)
+                {
+                    GridCoord tile = worldCoords[i];
+                    float baseY = GetTileElevation(tile.X, tile.Y) + 0.025f;
+
+                    PlaceQuadWithBaseColor(
+                        _deploymentZoneLayer,
+                        tile.X + 0.5f,
+                        baseY + 0.003f,
+                        -(tile.Y + 0.5f),
+                        0.92f,
+                        0.92f,
+                        DeploymentZoneFillColor,
+                        fillDisplay);
+
+                    PlaceCustomQuadWithBaseColor(
+                        _deploymentZoneLayer,
+                        new Vector3(tile.X + 0.5f, baseY + 0.0045f, -(tile.Y + 0.5f)),
+                        0.94f,
+                        0.94f,
+                        0f,
+                        bracketMat,
+                        DeploymentZoneBorderColor,
+                        borderDisplay);
+
+                    if (selectedHeroWorld.HasValue && tile == selectedHeroWorld.Value)
+                    {
+                        selectedInZone = true;
+                    }
+                }
+
+                if (selectedInZone)
+                {
+                    GridCoord sel = selectedHeroWorld.Value;
+                    float selBaseY = GetTileElevation(sel.X, sel.Y) + 0.025f;
+                    Color selFillDisplay = ScaleAlpha(DeploymentSelectedFillColor, _gridOpacity);
+                    Color selFrameDisplay = ScaleAlpha(DeploymentSelectedFrameColor, _gridOpacity);
+
+                    PlaceCustomQuadWithBaseColor(
+                        _deploymentZoneLayer,
+                        new Vector3(sel.X + 0.5f, selBaseY + 0.012f, -(sel.Y + 0.5f)),
+                        0.94f,
+                        0.94f,
+                        0f,
+                        outlineMat,
+                        DeploymentSelectedFillColor,
+                        selFillDisplay);
+
+                    PlaceTileBorderWithOpacity(
+                        _deploymentZoneLayer,
+                        sel,
+                        0.015f,
+                        DeploymentSelectedFrameColor,
+                        selFrameDisplay);
+                }
+            }
+
+            TrimLayer(_deploymentZoneLayer);
+        }
+
+        public void ClearDeploymentZone()
+        {
+            EnsureLayers();
+            HideLayer(_deploymentZoneLayer);
+        }
+
         public void SetCombatHoverPath(IReadOnlyList<GridCoord> path, bool provokesAoO)
         {
             EnsureLayers();
@@ -956,6 +1042,16 @@ namespace Realmz.World
 
         private void PlaceTileBorder(OverlayLayer layer, GridCoord coord, float layerOffset, Color color)
         {
+            PlaceTileBorderWithOpacity(layer, coord, layerOffset, color, color);
+        }
+
+        private void PlaceTileBorderWithOpacity(
+            OverlayLayer layer,
+            GridCoord coord,
+            float layerOffset,
+            Color baseColor,
+            Color displayColor)
+        {
             const float thickness = 0.10f;
             const float span = 0.94f;
             float offset = (span - thickness) * 0.5f;
@@ -963,10 +1059,10 @@ namespace Realmz.World
             float cz = -(coord.Y + 0.5f);
             float y = GetTileElevation(coord.X, coord.Y) + 0.025f + layerOffset;
 
-            PlaceQuad(layer, cx, y, cz + offset, span, thickness, color);
-            PlaceQuad(layer, cx, y, cz - offset, span, thickness, color);
-            PlaceQuad(layer, cx - offset, y, cz, thickness, span - thickness * 2f, color);
-            PlaceQuad(layer, cx + offset, y, cz, thickness, span - thickness * 2f, color);
+            PlaceQuadWithBaseColor(layer, cx, y, cz + offset, span, thickness, baseColor, displayColor);
+            PlaceQuadWithBaseColor(layer, cx, y, cz - offset, span, thickness, baseColor, displayColor);
+            PlaceQuadWithBaseColor(layer, cx - offset, y, cz, thickness, span - thickness * 2f, baseColor, displayColor);
+            PlaceQuadWithBaseColor(layer, cx + offset, y, cz, thickness, span - thickness * 2f, baseColor, displayColor);
         }
 
         private void PlaceQuad(OverlayLayer layer, float x, float y, float z, float scaleX, float scaleZ, Color color)
@@ -2240,6 +2336,7 @@ namespace Realmz.World
             if (_losLayer == null) _losLayer = new OverlayLayer(transform, "LosPreview");
             if (_flankLayer == null) _flankLayer = new OverlayLayer(transform, "FlankIndicator");
             if (_shoveLayer == null) _shoveLayer = new OverlayLayer(transform, "ShovePreview");
+            if (_deploymentZoneLayer == null) _deploymentZoneLayer = new OverlayLayer(transform, "DeploymentZone");
 
             if (_intentArcContainer == null)
             {

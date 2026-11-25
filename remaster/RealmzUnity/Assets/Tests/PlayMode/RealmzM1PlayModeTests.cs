@@ -598,7 +598,7 @@ namespace Realmz.PlayModeTests
                 var lootList = lootField?.GetValue(ctrl.CombatSession) as List<int>;
                 Assert.That(lootList, Is.Not.Null);
                 lootList.Clear();
-                lootList.AddRange(new[] { 10, 418, 622, 611, 250, 108 });
+                lootList.AddRange(new[] { 10, 418, 622, 611, 250, 108, 450, 452, 454, 455, 209, 20 });
 
                 CombatantState currentHero = ctrl.CombatSession.CurrentActor;
                 Assert.That(currentHero, Is.Not.Null);
@@ -702,6 +702,158 @@ namespace Realmz.PlayModeTests
                 Assert.That(postVictoryStashTotal, Is.EqualTo(preVictoryStashTotal + expectedTakenQty));
 
                 Assert.That(errors, Is.Empty, "PlayMode W-249 errors:\n" + string.Join("\n", errors));
+            }
+            finally
+            {
+                Application.logMessageReceived -= LogHandler;
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator PlayMode_W253_PreBattleDeployment_And_UnifiedSixApCombat_CapturesProofs()
+        {
+            List<string> errors = new List<string>();
+            void LogHandler(string condition, string stackTrace, LogType type)
+            {
+                if (type == LogType.Error || type == LogType.Exception || type == LogType.Assert)
+                {
+                    errors.Add($"{type}: {condition}");
+                }
+            }
+
+            Application.logMessageReceived += LogHandler;
+            try
+            {
+                AsyncOperation loadOp = SceneManager.LoadSceneAsync("M1_Bywater_Slice", LoadSceneMode.Single);
+                while (loadOp != null && !loadOp.isDone)
+                {
+                    yield return null;
+                }
+                yield return null;
+                yield return null;
+
+                BywaterGameController ctrl = Object.FindFirstObjectByType<BywaterGameController>();
+                Assert.That(ctrl, Is.Not.Null);
+                bool captureProofs = string.Equals(Environment.GetEnvironmentVariable("REALMZ_CAPTURE_PROOFS"), "1", StringComparison.Ordinal);
+
+                // Give Vex 2pc Scout's Leather (Leather Cap 450) so FreeMovePill is active cleanly during combat!
+                PartyState party = ctrl.ExploreSession.Party;
+                party.AddItemToStash(450, 1);
+                int vexIdx = -1;
+                for (int i = 0; i < party.Members.Count; i++)
+                {
+                    if (party.Members[i].Name == "Vex") { vexIdx = i; break; }
+                }
+                if (vexIdx >= 0)
+                {
+                    party.EquipFromStash(vexIdx, party.Stash.Count - 1, ctrl.Bundle.Items);
+                }
+
+                // 1. Trigger combat with Pre-Battle Deployment active
+                ctrl.TriggerDemoSkirmish(enterDeployment: true);
+                yield return null;
+                yield return null;
+
+                Assert.That(ctrl.IsInCombat, Is.True);
+                Assert.That(ctrl.CombatSession.Phase, Is.EqualTo(CombatPhase.Deployment));
+                Assert.That(ctrl.CombatSession.DeploymentZoneTiles.Count, Is.GreaterThanOrEqualTo(6));
+                GameObject deployBanner = GameObject.Find("DeploymentBanner");
+                Assert.That(deployBanner != null && deployBanner.activeInHierarchy, Is.True, "DeploymentBanner must be active in Deployment phase.");
+
+                CombatantState heroA = null;
+                CombatantState heroB = null;
+                for (int i = 0; i < ctrl.CombatSession.Combatants.Count; i++)
+                {
+                    CombatantState c = ctrl.CombatSession.Combatants[i];
+                    if (c.Side == CombatSide.Hero && c.IsAlive)
+                    {
+                        if (heroA == null) heroA = c;
+                        else if (heroB == null) { heroB = c; break; }
+                    }
+                }
+                Assert.That(heroA != null && heroB != null, Is.True);
+                GridCoord origA = heroA.Position;
+                GridCoord origB = heroB.Position;
+
+                ctrl.ClickCombatCoordForTest(origA);
+                yield return null;
+                ctrl.ClickCombatCoordForTest(origB);
+                yield return null;
+                Assert.That(heroA.Position, Is.EqualTo(origB));
+                Assert.That(heroB.Position, Is.EqualTo(origA));
+
+                // Re-select Hero A so highlighted cyan/gold tile shows clearly in Deployment proof
+                ctrl.ClickCombatCoordForTest(heroA.Position);
+                ctrl.hudController?.HideToast();
+                yield return null;
+
+                if (captureProofs)
+                {
+                    CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
+                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_Deployment_Proof.png", 1600, 900);
+                }
+
+                // 2. Click Start Battle -> enter Unified 6-AP Combat
+                UnityEngine.UI.Button startBattleBtn = GameObject.Find("StartBattleBtn")?.GetComponent<UnityEngine.UI.Button>();
+                Assert.That(startBattleBtn, Is.Not.Null);
+                startBattleBtn.onClick.Invoke();
+                yield return null;
+
+                int waitFrames = 0;
+                while (ctrl.CombatSession != null &&
+                       ctrl.CombatSession.Outcome == CombatOutcome.InProgress &&
+                       (ctrl.CombatSession.CurrentActor == null ||
+                        ctrl.CombatSession.CurrentActor.Side != CombatSide.Hero ||
+                        !ctrl.CombatSession.CurrentActor.IsConscious) &&
+                       waitFrames < 240)
+                {
+                    waitFrames++;
+                    yield return new WaitForSeconds(0.05f);
+                }
+
+                Assert.That(ctrl.CombatSession.Phase, Is.EqualTo(CombatPhase.Combat));
+                Assert.That(ctrl.CombatSession.CurrentActor?.Side, Is.EqualTo(CombatSide.Hero));
+                CombatantState currentHero = ctrl.CombatSession.CurrentActor;
+
+                // Hover nearest monster so Cost: X AP tooltip & AP Diamonds are displayed cleanly
+                CombatantState enemy = null;
+                for (int i = 0; i < ctrl.CombatSession.Combatants.Count; i++)
+                {
+                    CombatantState c = ctrl.CombatSession.Combatants[i];
+                    if (c.Side == CombatSide.Monster && c.IsAlive) { enemy = c; break; }
+                }
+                Assert.That(enemy, Is.Not.Null);
+                typeof(BywaterGameController).GetMethod("UpdateCombatHoverVisuals", BindingFlags.Instance | BindingFlags.NonPublic)
+                    ?.Invoke(ctrl, new object[] { enemy.Position });
+                if (Camera.main != null)
+                {
+                    GridCoord wGrid = new GridCoord(ctrl.ArenaOrigin.X + enemy.Position.X, ctrl.ArenaOrigin.Y + enemy.Position.Y);
+                    Vector3 wPos = CartographyWorldData.GridToWorld(wGrid, ctrl.worldRenderer.GetTileElevation(wGrid.X, wGrid.Y));
+                    ctrl.hudController.UpdateCursorTooltipPosition(Camera.main.WorldToScreenPoint(wPos));
+                }
+                ctrl.hudController?.HideToast();
+                yield return null;
+
+                GameObject apRow = GameObject.Find("ApDiamondsRow");
+                Assert.That(apRow != null && apRow.activeInHierarchy, Is.True);
+                TMPro.TextMeshProUGUI apLbl = GameObject.Find("ApValueLabel")?.GetComponent<TMPro.TextMeshProUGUI>();
+                Assert.That(apLbl != null && apLbl.text.Contains("AP"), Is.True);
+
+                if (captureProofs)
+                {
+                    CaptureCameraToPng(ctrl.GetComponentInChildren<Camera>() ?? Camera.main, ctrl.hudController,
+                        @"c:\Users\karti\LifeTwin\scratch\M1_Bywater_ActionPoints_Combat_Proof.png", 1600, 900);
+                }
+
+                // Execute Guard / Overwatch and verify exact AP deduction
+                int apBeforeGuard = currentHero.Economy.CurrentAp;
+                int expectedGuardCost = currentHero.Economy.EffectiveGuardApCost;
+                GameObject.Find("GuardBtn")?.GetComponent<UnityEngine.UI.Button>()?.onClick.Invoke();
+                yield return null;
+                Assert.That(currentHero.IsGuarding, Is.True);
+                Assert.That(currentHero.Economy.CurrentAp, Is.EqualTo(apBeforeGuard - expectedGuardCost));
+
+                Assert.That(errors, Is.Empty, "PlayMode W-253 errors:\n" + string.Join("\n", errors));
             }
             finally
             {

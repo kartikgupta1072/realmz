@@ -891,9 +891,10 @@ namespace Realmz.EditorTests
                     }
                 }
 
-                Assert.That(FindDescendantByName(canvas.transform, "MoveSegments"), Is.Not.Null);
-                Assert.That(FindDescendantByName(canvas.transform, "StdPipIcon"), Is.Not.Null);
-                Assert.That(FindDescendantByName(canvas.transform, "SwiftPipIcon"), Is.Not.Null);
+                Assert.That(FindDescendantByName(canvas.transform, "ApDiamondsRow"), Is.Not.Null);
+                Assert.That(FindDescendantByName(canvas.transform, "ApValueLabel"), Is.Not.Null);
+                Assert.That(FindDescendantByName(canvas.transform, "ApDiamond_0"), Is.Not.Null);
+                Assert.That(FindDescendantByName(canvas.transform, "ApDiamond_5"), Is.Not.Null);
                 Assert.That(FindDescendantByName(canvas.transform, "CombatPartyStrip"), Is.Not.Null);
                 Assert.That(FindDescendantByName(canvas.transform, "CombatTickerPanel"), Is.Not.Null);
 
@@ -2702,14 +2703,15 @@ namespace Realmz.EditorTests
                 Assert.That(confirmFired, Is.True);
                 Assert.That(party.Members[0].Level, Is.EqualTo(2));
 
-                // Save v3 round-trip preserves QuickBandageCharges, attributes, PendingLevelUps & KnownSpellIds.
+                // Save v4 round-trip preserves QuickBandageCharges, attributes, PendingLevelUps, KnownSpellIds, and FormationRank.
                 party.QuickBandageCharges = 1;
+                party.SetFormationRank(4, FormationRank.Front);
                 party.Members[1].AwardXp(250);
-                string tempSave = Path.Combine(Path.GetTempPath(), "realmz_v3_test.json");
+                string tempSave = Path.Combine(Path.GetTempPath(), "realmz_v4_test.json");
                 try
                 {
                     BywaterSaveData snap = BywaterSaveService.CaptureSnapshot(session);
-                    Assert.That(snap.version, Is.EqualTo(3));
+                    Assert.That(snap.version, Is.EqualTo(4));
                     Assert.That(BywaterSaveService.TryWriteSave(tempSave, snap), Is.True);
                     Assert.That(BywaterSaveService.TryLoadSave(tempSave, out BywaterSaveData loaded, out string _), Is.True);
 
@@ -2718,6 +2720,7 @@ namespace Realmz.EditorTests
                     Assert.That(restored.Party.QuickBandageCharges, Is.EqualTo(1));
                     Assert.That(restored.Party.Members[0].Level, Is.EqualTo(2));
                     Assert.That(restored.Party.Members[1].PendingLevelUps, Is.EqualTo(1));
+                    Assert.That(restored.Party.GetFormationRank(4), Is.EqualTo(FormationRank.Front));
                 }
                 finally
                 {
@@ -3144,6 +3147,109 @@ namespace Realmz.EditorTests
                 RenderSettings.ambientSkyColor = prevSky;
                 RenderSettings.ambientEquatorColor = prevEquator;
                 RenderSettings.ambientGroundColor = prevGround;
+                if (!hadEs)
+                {
+                    EventSystem created = Object.FindFirstObjectByType<EventSystem>();
+                    if (created != null) Object.DestroyImmediate(created.gameObject);
+                }
+            }
+        }
+
+        [Test]
+        public void W253_Compact4AcrossLoot_FormationUi_DeploymentBanner_And_ApHudContractsHold()
+        {
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
+            PartyState party = PartyState.FromBundle(bundle);
+
+            bool hadEs = Object.FindFirstObjectByType<EventSystem>() != null;
+            GameObject hudGo = new GameObject("W253HudTest");
+            try
+            {
+                BywaterHudController hud = hudGo.AddComponent<BywaterHudController>();
+                hud.BuildUi(catalog);
+                Canvas canvas = hud.GetComponentInChildren<Canvas>(true);
+
+                // 1. Party [P] Formation rank buttons + Iron Vanguard set progress in CharSheet
+                hud.TogglePartyPanel(true);
+                hud.RefreshPartyDrawer(party, bundle, 0);
+                Transform charExtra = FindDescendantByName(canvas.transform, "ExtraBody");
+                Assert.That(charExtra, Is.Not.Null);
+                Assert.That(charExtra.GetComponent<TextMeshProUGUI>().text, Does.Contain("Iron Vanguard (3/3 pcs)"));
+
+                FormationRank changedRank = FormationRank.Front;
+                int changedIdx = -1;
+                hud.OnHeroFormationChanged += (idx, rank) =>
+                {
+                    changedIdx = idx;
+                    changedRank = rank;
+                    party.SetFormationRank(idx, rank);
+                };
+                FindDescendantByName(canvas.transform, "FormationRankBtn_Back").GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                Assert.That(changedIdx, Is.EqualTo(0));
+                Assert.That(changedRank, Is.EqualTo(FormationRank.Back));
+                hud.TogglePartyPanel(false);
+
+                // 2. Pre-Battle Deployment banner + Start Battle CTA toggle cleanly vs TacticalActionBar + AP Diamonds
+                CombatGrid grid = new CombatGrid(12, 10);
+                List<CombatantState> units = new List<CombatantState>
+                {
+                    CombatantState.FromHero(party.Members[0], new GridCoord(2, 4), bundle.Items),
+                    new CombatantState("m1", "Slow Goblin", CombatSide.Monster, new GridCoord(8, 4), 20, 20, dexterity: 4)
+                };
+                TacticalCombatSession session = new TacticalCombatSession(
+                    grid, units, bundle.Spells, bundle.Items, party: party, startInDeployment: true);
+                hud.RefreshCombatHud(session, bundle, CombatActionMode.Smart, -1, "1x");
+
+                Transform deployBanner = FindDescendantByName(canvas.transform, "DeploymentBanner");
+                Transform actionBar = FindDescendantByName(canvas.transform, "TacticalActionBar");
+                Assert.That(deployBanner.gameObject.activeSelf, Is.True);
+                Assert.That(actionBar.gameObject.activeSelf, Is.False);
+
+                Assert.That(session.StartBattleFromDeployment(), Is.True);
+                hud.RefreshCombatHud(session, bundle, CombatActionMode.Smart, -1, "1x");
+                Assert.That(deployBanner.gameObject.activeSelf, Is.False);
+                Assert.That(actionBar.gameObject.activeSelf, Is.True);
+                Assert.That(FindDescendantByName(actionBar, "ApValueLabel").GetComponent<TextMeshProUGUI>().text, Does.Contain("7/7 AP"));
+                Assert.That(FindDescendantByPathSuffix(actionBar, "GuardBtn/TopRow/ApBadge/ApBadgeLabel").GetComponent<TextMeshProUGUI>().text, Is.EqualTo("1 AP"));
+                Assert.That(FindDescendantByPathSuffix(actionBar, "HotbarSlot_0/TopRow/CostCol/ApCost").GetComponent<TextMeshProUGUI>().text, Is.EqualTo("3 AP"));
+
+                // 3. Compact 4-across Victory Loot grid (216x72, constraintCount == 4, 12 items = 3 visible rows)
+                List<HeroVictorySummary> hv = new List<HeroVictorySummary>();
+                for (int i = 0; i < party.Members.Count; i++)
+                {
+                    PartyMemberState pm = party.Members[i];
+                    hv.Add(new HeroVictorySummary(
+                        pm.Id, pm.Name, pm.Archetype, pm.IconId, pm.PortraitId,
+                        pm.Level, pm.Level, pm.Xp, pm.Xp + 40, 40,
+                        PartyMemberState.GetXpRequiredForLevel(pm.Level), pm.XpForNextLevel,
+                        false, 0, false, 0, 10, 0, false));
+                }
+                int[] itemIds = { 10, 418, 622, 611, 250, 108, 450, 452, 454, 455, 209, 20 };
+                List<LootStackSummary> loot = new List<LootStackSummary>();
+                for (int i = 0; i < itemIds.Length; i++)
+                {
+                    ItemDefinition item = bundle.Items[itemIds[i]];
+                    loot.Add(new LootStackSummary(item.Id, item.Name, item.Category, item.Slot, 1, item.Charges, item.BasePrice, false));
+                }
+                hud.ShowVictoryOutcome(new CombatVictorySummary(240, 20, 1, 20, party.Gold, 0, hv, loot), party, bundle);
+                Transform lootScrollContent = FindDescendantByPathSuffix(canvas.transform, "VictoryLootScroll/Viewport/Content");
+                UnityEngine.UI.GridLayoutGroup gridLayout = lootScrollContent.GetComponent<UnityEngine.UI.GridLayoutGroup>();
+                Assert.That(gridLayout, Is.Not.Null);
+                Assert.That(gridLayout.constraintCount, Is.EqualTo(4));
+                Assert.That(gridLayout.cellSize.x, Is.LessThanOrEqualTo(222f));
+                Assert.That(gridLayout.cellSize.y, Is.LessThanOrEqualTo(76f));
+
+                TextMeshProUGUI[] allLabels = canvas.GetComponentsInChildren<TextMeshProUGUI>(true);
+                for (int i = 0; i < allLabels.Length; i++)
+                {
+                    Assert.That(allLabels[i].fontSize, Is.GreaterThanOrEqualTo(15f), $"Label '{allLabels[i].gameObject.name}' has fontSize < 15f.");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(hudGo);
                 if (!hadEs)
                 {
                     EventSystem created = Object.FindFirstObjectByType<EventSystem>();

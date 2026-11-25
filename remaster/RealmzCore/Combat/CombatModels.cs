@@ -19,6 +19,13 @@ namespace RealmzCore.Combat
         Defeat = 2
     }
 
+    public enum CombatPhase
+    {
+        Deployment = 0,
+        Combat = 1,
+        Ended = 2
+    }
+
     public enum CombatInitiativeSurpriseMode
     {
         None = 0,
@@ -686,7 +693,7 @@ namespace RealmzCore.Combat
             PrefersRanged = prefersRanged ?? (RangedRange > 1 && !string.IsNullOrWhiteSpace(RangedDice));
             WeaponBonusIncludedInToHit = weaponBonusIncludedInToHit;
             Conditions = new ConditionTracker();
-            Economy = new CombatActionEconomy(MovementMax);
+            Economy = new CombatActionEconomy();
         }
 
         public static CombatantState FromHero(
@@ -755,6 +762,18 @@ namespace RealmzCore.Combat
             state.Luck = hero.Luck;
             state.ExhaustionStacks = hero.ExhaustionStacks;
             state.CurseStacks = hero.CurseStacks;
+            state.FormationRank = hero.FormationRank;
+            state.EquipApBonus = hero.GetSetApBonus();
+            state.FreeMoveTiles = hero.GetSetFreeMoveTiles();
+            state.GuardApDiscount = hero.GetSetGuardApDiscount();
+            state.MeleeApCost = hero.GetMeleeWeaponApCost(catalog);
+            state.RangedApCost = hero.GetRangedWeaponApCost(catalog);
+            state.Economy.ResetUnifiedTurn(
+                CombatActionEconomy.DefaultBaseApPerTurn,
+                state.EquipApBonus,
+                state.FreeMoveTiles,
+                state.GuardApDiscount,
+                applyCarryover: false);
 
             if (hero.Conditions.Has(CharConditionId.Poisoned)) state.Conditions.Apply(CharConditionId.Poisoned);
             if (hero.Conditions.Has(CharConditionId.Diseased)) state.Conditions.Apply(CharConditionId.Diseased);
@@ -876,6 +895,12 @@ namespace RealmzCore.Combat
         public bool IsUndead { get; }
         public ConditionTracker Conditions { get; }
         public CombatActionEconomy Economy { get; }
+        public FormationRank FormationRank { get; set; } = FormationRank.Mid;
+        public int EquipApBonus { get; set; }
+        public int FreeMoveTiles { get; set; }
+        public int GuardApDiscount { get; set; }
+        public int MeleeApCost { get; set; } = CombatActionEconomy.StandardWeaponApCost;
+        public int RangedApCost { get; set; } = CombatActionEconomy.StandardWeaponApCost;
         public int ExhaustionStacks { get; set; }
         public int CurseStacks { get; set; }
         public bool IsGuarding { get; set; }
@@ -1223,7 +1248,8 @@ namespace RealmzCore.Combat
             LosResult? losResult,
             int defenderAc,
             IReadOnlyList<string> conditionTags,
-            int elevationModifierPct = 0)
+            int elevationModifierPct = 0,
+            int apCost = 3)
         {
             CanExecute = canExecute;
             Reason = reason ?? string.Empty;
@@ -1239,6 +1265,7 @@ namespace RealmzCore.Combat
             DefenderAc = defenderAc;
             ConditionTags = conditionTags ?? Array.Empty<string>();
             ElevationModifierPct = elevationModifierPct;
+            ApCost = apCost;
         }
 
         public bool CanExecute { get; }
@@ -1255,6 +1282,7 @@ namespace RealmzCore.Combat
         public int DefenderAc { get; }
         public IReadOnlyList<string> ConditionTags { get; }
         public int ElevationModifierPct { get; }
+        public int ApCost { get; }
     }
 
     public sealed class TacticalSpellPreview
@@ -1267,7 +1295,8 @@ namespace RealmzCore.Combat
             int maxAmount,
             int saveChancePct,
             SpellAoeFootprint aoeFootprint,
-            IReadOnlyList<string> conditionTags)
+            IReadOnlyList<string> conditionTags,
+            int apCost = 3)
         {
             CanExecute = canExecute;
             Reason = reason ?? string.Empty;
@@ -1277,6 +1306,7 @@ namespace RealmzCore.Combat
             SaveChancePct = saveChancePct;
             AoeFootprint = aoeFootprint;
             ConditionTags = conditionTags ?? Array.Empty<string>();
+            ApCost = apCost;
         }
 
         public bool CanExecute { get; }
@@ -1287,6 +1317,7 @@ namespace RealmzCore.Combat
         public int SaveChancePct { get; }
         public SpellAoeFootprint AoeFootprint { get; }
         public IReadOnlyList<string> ConditionTags { get; }
+        public int ApCost { get; }
     }
 
     public sealed class TacticalShovePreview
@@ -1302,7 +1333,8 @@ namespace RealmzCore.Combat
             bool pushesOffLedge,
             int fallElevationDrop,
             SurfaceType destinationSurface,
-            bool isAllyShove)
+            bool isAllyShove,
+            int apCost = 2)
         {
             CanExecute = canExecute;
             Reason = reason ?? string.Empty;
@@ -1315,6 +1347,7 @@ namespace RealmzCore.Combat
             FallElevationDrop = fallElevationDrop;
             DestinationSurface = destinationSurface;
             IsAllyShove = isAllyShove;
+            ApCost = apCost;
         }
 
         public bool CanExecute { get; }
@@ -1328,6 +1361,7 @@ namespace RealmzCore.Combat
         public int FallElevationDrop { get; }
         public SurfaceType DestinationSurface { get; }
         public bool IsAllyShove { get; }
+        public int ApCost { get; }
     }
 
     public sealed class EnemyIntentPrediction
@@ -1412,7 +1446,8 @@ namespace RealmzCore.Combat
             IReadOnlyList<AttackOutcome>? attackOutcomes = null,
             int damageDealt = 0,
             int healingDone = 0,
-            bool aooTriggered = false)
+            bool aooTriggered = false,
+            int apSpent = 0)
         {
             Success = success;
             Message = message ?? string.Empty;
@@ -1420,6 +1455,7 @@ namespace RealmzCore.Combat
             DamageDealt = damageDealt;
             HealingDone = healingDone;
             AoOTriggered = aooTriggered;
+            ApSpent = apSpent;
         }
 
         public bool Success { get; }
@@ -1428,5 +1464,6 @@ namespace RealmzCore.Combat
         public int DamageDealt { get; }
         public int HealingDone { get; }
         public bool AoOTriggered { get; }
+        public int ApSpent { get; }
     }
 }

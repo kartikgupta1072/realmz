@@ -133,6 +133,7 @@ namespace RealmzCore.Exploration
             Luck = preset.Luck;
             _knownSpellIds = new List<int>(preset.KnownSpellIds);
             Conditions = new ConditionTracker();
+            FormationRank = ResolveDefaultFormationRank(Id, Name, 0);
 
             if (catalog != null && preset.EquippedIds.Count > 0)
             {
@@ -193,6 +194,7 @@ namespace RealmzCore.Exploration
         public int Luck { get; set; }
         public int ExhaustionStacks { get; set; }
         public int CurseStacks { get; set; }
+        public FormationRank FormationRank { get; set; } = FormationRank.Mid;
         public ConditionTracker Conditions { get; }
         public IReadOnlyList<int> KnownSpellIds => _knownSpellIds;
         public IReadOnlyDictionary<EquipmentSlot, InventoryItem> Equipped => _equipped;
@@ -498,8 +500,128 @@ namespace RealmzCore.Exploration
                 }
             }
 
+            ac += GetSetAcBonus();
             ac -= ExhaustionStacks + CurseStacks;
             return ac;
+        }
+
+        public static FormationRank ResolveDefaultFormationRank(string? id, string? name, int partyIndex)
+        {
+            string key = (id ?? string.Empty).Trim();
+            string label = (name ?? string.Empty).Trim();
+            if (string.Equals(key, "hero_knight", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(key, "hero_templar", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(label, "Aldric", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(label, "Seraphina", StringComparison.OrdinalIgnoreCase))
+            {
+                return FormationRank.Front;
+            }
+
+            if (string.Equals(key, "hero_cleric", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(key, "hero_rogue", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(label, "Liora", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(label, "Vex", StringComparison.OrdinalIgnoreCase))
+            {
+                return FormationRank.Mid;
+            }
+
+            if (string.Equals(key, "hero_archer", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(key, "hero_mage", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(label, "Kaelen", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(label, "Theron", StringComparison.OrdinalIgnoreCase))
+            {
+                return FormationRank.Back;
+            }
+
+            return partyIndex < 2
+                ? FormationRank.Front
+                : (partyIndex < 4 ? FormationRank.Mid : FormationRank.Back);
+        }
+
+        public IReadOnlyList<EquipmentSetProgress> GetActiveEquipmentSets(bool includeZeroPieces = false)
+        {
+            return EquipmentSetCatalog.EvaluateHeroSets(_equipped, includeZeroPieces);
+        }
+
+        public EquipmentSetProgress? GetEquipmentSetProgress(string setId)
+        {
+            for (int i = 0; i < EquipmentSetCatalog.AllSets.Count; i++)
+            {
+                if (string.Equals(EquipmentSetCatalog.AllSets[i].SetId, setId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return EquipmentSetCatalog.EvaluateSet(EquipmentSetCatalog.AllSets[i], _equipped);
+                }
+            }
+
+            return null;
+        }
+
+        public int GetSetAcBonus()
+        {
+            int bonus = 0;
+            IReadOnlyList<EquipmentSetProgress> sets = GetActiveEquipmentSets();
+            for (int i = 0; i < sets.Count; i++)
+            {
+                bonus += sets[i].AcBonus;
+            }
+            return bonus;
+        }
+
+        public int GetSetApBonus()
+        {
+            int bonus = 0;
+            IReadOnlyList<EquipmentSetProgress> sets = GetActiveEquipmentSets();
+            for (int i = 0; i < sets.Count; i++)
+            {
+                bonus += sets[i].ApBonus;
+            }
+            return bonus;
+        }
+
+        public int GetSetFreeMoveTiles()
+        {
+            int bonus = 0;
+            IReadOnlyList<EquipmentSetProgress> sets = GetActiveEquipmentSets();
+            for (int i = 0; i < sets.Count; i++)
+            {
+                bonus += sets[i].FreeMoveTiles;
+            }
+            return bonus;
+        }
+
+        public int GetSetGuardApDiscount()
+        {
+            int bonus = 0;
+            IReadOnlyList<EquipmentSetProgress> sets = GetActiveEquipmentSets();
+            for (int i = 0; i < sets.Count; i++)
+            {
+                bonus += sets[i].GuardApDiscount;
+            }
+            return bonus;
+        }
+
+        public int GetMeleeWeaponApCost(IReadOnlyDictionary<int, ItemDefinition>? catalog = null)
+        {
+            IReadOnlyDictionary<int, ItemDefinition>? lookup = catalog ?? _catalog;
+            if (lookup != null && _equipped.TryGetValue(EquipmentSlot.Weapon, out InventoryItem? weapon) &&
+                lookup.TryGetValue(weapon.ItemId, out ItemDefinition? item))
+            {
+                return CombatWeaponCosts.GetWeaponApCost(item, isRangedSlot: false);
+            }
+
+            return Rules.CombatActionEconomy.StandardWeaponApCost;
+        }
+
+        public int GetRangedWeaponApCost(IReadOnlyDictionary<int, ItemDefinition>? catalog = null)
+        {
+            IReadOnlyDictionary<int, ItemDefinition>? lookup = catalog ?? _catalog;
+            if (lookup != null && _equipped.TryGetValue(EquipmentSlot.MissileWeapon, out InventoryItem? missile) &&
+                lookup.TryGetValue(missile.ItemId, out ItemDefinition? item))
+            {
+                return CombatWeaponCosts.GetWeaponApCost(item, isRangedSlot: true);
+            }
+
+            return Rules.CombatActionEconomy.StandardWeaponApCost;
         }
 
         public int GetEffectiveToHit(IReadOnlyDictionary<int, ItemDefinition>? catalog)
@@ -790,6 +912,10 @@ namespace RealmzCore.Exploration
             }
 
             _members = new List<PartyMemberState>(members);
+            for (int i = 0; i < _members.Count; i++)
+            {
+                _members[i].FormationRank = PartyMemberState.ResolveDefaultFormationRank(_members[i].Id, _members[i].Name, i);
+            }
             _stash = stash != null ? new List<InventoryItem>(stash) : new List<InventoryItem>();
             Gold = Math.Max(0, gold);
             HasBoat = hasBoat;
@@ -833,6 +959,74 @@ namespace RealmzCore.Exploration
         public int TorchTurnsRemaining { get; set; }
         public int QuickBandageCharges { get; set; }
         public bool DeferLevelUp { get; set; }
+
+        public FormationRank GetFormationRank(int memberIndex)
+        {
+            if (memberIndex < 0 || memberIndex >= _members.Count)
+            {
+                return FormationRank.Mid;
+            }
+
+            return _members[memberIndex].FormationRank;
+        }
+
+        public bool SetFormationRank(int memberIndex, FormationRank rank)
+        {
+            if (memberIndex < 0 || memberIndex >= _members.Count)
+            {
+                return false;
+            }
+
+            _members[memberIndex].FormationRank = rank;
+            return true;
+        }
+
+        public bool CycleFormationRank(int memberIndex, int delta)
+        {
+            if (memberIndex < 0 || memberIndex >= _members.Count)
+            {
+                return false;
+            }
+
+            int next = Math.Clamp((int)_members[memberIndex].FormationRank + delta, (int)FormationRank.Front, (int)FormationRank.Back);
+            _members[memberIndex].FormationRank = (FormationRank)next;
+            return true;
+        }
+
+        public bool MoveMemberInFormationOrder(int memberIndex, int delta)
+        {
+            if (memberIndex < 0 || memberIndex >= _members.Count || delta == 0)
+            {
+                return false;
+            }
+
+            int targetIndex = memberIndex + Math.Sign(delta);
+            if (targetIndex < 0 || targetIndex >= _members.Count)
+            {
+                return false;
+            }
+
+            PartyMemberState moving = _members[memberIndex];
+            _members[memberIndex] = _members[targetIndex];
+            _members[targetIndex] = moving;
+            return true;
+        }
+
+        public IReadOnlyList<int> GetOrderedFormationMemberIndices()
+        {
+            List<int> ordered = new List<int>(_members.Count);
+            for (int rank = (int)FormationRank.Front; rank <= (int)FormationRank.Back; rank++)
+            {
+                for (int i = 0; i < _members.Count; i++)
+                {
+                    if ((int)_members[i].FormationRank == rank)
+                    {
+                        ordered.Add(i);
+                    }
+                }
+            }
+            return ordered;
+        }
 
         public bool TryLightTorchFromStash(out string feedbackMessage, IReadOnlyDictionary<int, ItemDefinition>? catalog = null)
         {

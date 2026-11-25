@@ -31,6 +31,8 @@ namespace RealmzCore.Combat
         private readonly List<CombatLogEntry> _log = new List<CombatLogEntry>();
         private readonly List<int> _collectedLootItemIds = new List<int>();
         private readonly List<SurfaceChangeEvent> _lastSurfaceChanges = new List<SurfaceChangeEvent>();
+        private readonly List<GridCoord> _deploymentZone = new List<GridCoord>();
+        private readonly HashSet<GridCoord> _deploymentZoneSet = new HashSet<GridCoord>();
         private readonly AStarPathfinder _pathfinder;
         private bool _victoryRewardsGranted;
         private bool _partyRewardsApplied;
@@ -47,7 +49,9 @@ namespace RealmzCore.Combat
             CombatInitiativeSurpriseMode surpriseMode = CombatInitiativeSurpriseMode.None,
             int rewardBonusPercent = 0,
             bool isAmbientDarkness = false,
-            bool deferLootDeposit = false)
+            bool deferLootDeposit = false,
+            bool startInDeployment = false,
+            IEnumerable<GridCoord>? deploymentZone = null)
         {
             Grid = grid ?? throw new ArgumentNullException(nameof(grid));
             if (combatants == null)
@@ -103,9 +107,42 @@ namespace RealmzCore.Combat
                     "AMBUSHED IN THE DARK! Enemies strike first on Round 1."));
             }
 
-            RebuildRoundQueue();
-            StartCurrentActorTurn();
-            CheckOutcome();
+            bool enterDeployment = startInDeployment && SurpriseMode != CombatInitiativeSurpriseMode.EnemySurprisedParty;
+            if (enterDeployment)
+            {
+                List<GridCoord> resolvedZone = deploymentZone != null
+                    ? new List<GridCoord>(deploymentZone)
+                    : ComputeDefaultDeploymentZone(Grid, _combatants, SurpriseMode);
+                for (int i = 0; i < resolvedZone.Count; i++)
+                {
+                    GridCoord tile = resolvedZone[i];
+                    if (Grid.InBounds(tile) && Grid.IsWalkable(tile.X, tile.Y) && _deploymentZoneSet.Add(tile))
+                    {
+                        _deploymentZone.Add(tile);
+                    }
+                }
+
+                for (int i = 0; i < _combatants.Count; i++)
+                {
+                    CombatantState c = _combatants[i];
+                    if (c.Side == CombatSide.Hero && c.IsAlive && Grid.InBounds(c.Position) && Grid.IsWalkable(c.Position.X, c.Position.Y) &&
+                        _deploymentZoneSet.Add(c.Position))
+                    {
+                        _deploymentZone.Add(c.Position);
+                    }
+                }
+
+                Phase = CombatPhase.Deployment;
+                RebuildRoundQueue();
+                CheckOutcome();
+            }
+            else
+            {
+                Phase = CombatPhase.Combat;
+                RebuildRoundQueue();
+                StartCurrentActorTurn();
+                CheckOutcome();
+            }
         }
 
         public event Action<IReadOnlyList<SurfaceChangeEvent>>? SurfaceChanged;
@@ -121,6 +158,8 @@ namespace RealmzCore.Combat
         public int RewardBonusPercent { get; }
         public bool IsAmbientDarkness { get; }
         public bool DeferLootDeposit { get; }
+        public CombatPhase Phase { get; private set; }
+        public IReadOnlyList<GridCoord> DeploymentZoneTiles => _deploymentZone;
         public bool IsCombatFireIlluminated { get; private set; }
         public bool IsArenaIlluminated => !IsAmbientDarkness || IsCombatFireIlluminated || (Party != null && Party.TorchTurnsRemaining > 0);
         public bool IsInTheDark => IsAmbientDarkness && !IsArenaIlluminated;
@@ -148,11 +187,138 @@ namespace RealmzCore.Combat
         public string CurrentActorId => CurrentActor?.Id ?? string.Empty;
 
         public bool CanUndoMove =>
+            Phase == CombatPhase.Combat &&
             Outcome == CombatOutcome.InProgress &&
             CurrentActor != null &&
             CurrentActor.Economy.CanUndoMove &&
-            CurrentActor.Economy.HasSwiftAction &&
             !CurrentActor.HasTriggeredIrreversibleEvent;
+
+        public static List<GridCoord> ComputeDefaultDeploymentZone(
+            CombatGrid grid,
+            IReadOnlyList<CombatantState> combatants,
+            CombatInitiativeSurpriseMode surpriseMode)
+        {
+            List<GridCoord> zone = new List<GridCoord>();
+            if (grid == null)
+            {
+                return zone;
+            }
+
+            HashSet<GridCoord> enemyOccupied = new HashSet<GridCoord>();
+            if (combatants != null)
+            {
+                for (int i = 0; i < combatants.Count; i++)
+                {
+                    if (combatants[i].Side == CombatSide.Monster && combatants[i].IsAlive)
+                    {
+                        enemyOccupied.Add(combatants[i].Position);
+                    }
+                }
+            }
+
+            bool widenedAmbush = surpriseMode == CombatInitiativeSurpriseMode.PartyAmbush;
+            int maxDefaultCol = widenedAmbush ? Math.Min(grid.Width - 1, Math.Max(4, grid.Width / 2)) : Math.Min(grid.Width - 1, 3);
+            for (int y = 0; y < grid.Height; y++)
+            {
+                for (int x = 0; x <= maxDefaultCol; x++)
+                {
+                    GridCoord coord = new GridCoord(x, y);
+                    if (!grid.IsWalkable(x, y) || enemyOccupied.Contains(coord))
+                    {
+                        continue;
+                    }
+
+                    zone.Add(coord);
+                }
+            }
+
+            if (widenedAmbush)
+            {
+                int bonusMaxCol = Math.Min(grid.Width - 1, maxDefaultCol + 2);
+                for (int y = 0; y < grid.Height; y++)
+                {
+                    for (int x = maxDefaultCol + 1; x <= bonusMaxCol; x++)
+                    {
+                        GridCoord coord = new GridCoord(x, y);
+                        if (!grid.IsWalkable(x, y) || enemyOccupied.Contains(coord))
+                        {
+                            continue;
+                        }
+
+                        if (grid.GetElevation(x, y) > 0 || grid.ProvidesCover(x, y))
+                        {
+                            zone.Add(coord);
+                        }
+                    }
+                }
+            }
+
+            return zone;
+        }
+
+        public bool IsValidDeploymentTile(GridCoord coord)
+        {
+            return _deploymentZoneSet.Contains(coord) && Grid.IsWalkable(coord.X, coord.Y);
+        }
+
+        public bool SwapOrMoveHeroInDeployment(string heroId, GridCoord targetCoord)
+        {
+            if (Phase != CombatPhase.Deployment || Outcome != CombatOutcome.InProgress)
+            {
+                return false;
+            }
+
+            CombatantState? hero = GetCombatant(heroId);
+            if (hero == null || hero.Side != CombatSide.Hero || !hero.IsAlive)
+            {
+                return false;
+            }
+
+            if (!IsValidDeploymentTile(targetCoord))
+            {
+                return false;
+            }
+
+            CombatantState? occupant = GetLivingUnitAt(targetCoord, excludeId: hero.Id);
+            if (occupant != null)
+            {
+                if (occupant.Side != CombatSide.Hero)
+                {
+                    return false;
+                }
+
+                GridCoord oldPos = hero.Position;
+                hero.Position = targetCoord;
+                hero.TurnStartPosition = targetCoord;
+                occupant.Position = oldPos;
+                occupant.TurnStartPosition = oldPos;
+                return true;
+            }
+
+            hero.Position = targetCoord;
+            hero.TurnStartPosition = targetCoord;
+            return true;
+        }
+
+        public bool StartBattleFromDeployment()
+        {
+            if (Phase != CombatPhase.Deployment)
+            {
+                return false;
+            }
+
+            Phase = CombatPhase.Combat;
+            if (Outcome != CombatOutcome.InProgress)
+            {
+                return false;
+            }
+
+            AppendLog("system", "Formation", "BattleStart", "Party deployment locked in. Battle begins!");
+            RebuildRoundQueue();
+            StartCurrentActorTurn();
+            CheckOutcome();
+            return true;
+        }
 
         public CombatantState? GetCombatant(string id)
         {
@@ -316,6 +482,45 @@ namespace RealmzCore.Combat
             return provokingEnemyIds.Count > 0;
         }
 
+        public int GetTileMoveApCost(int x, int y)
+        {
+            int cost = Grid.GetMoveCost(x, y);
+            if (cost == int.MaxValue)
+            {
+                return int.MaxValue;
+            }
+
+            if (Grid.GetSurface(x, y) == SurfaceType.Water)
+            {
+                cost = Math.Max(cost, CombatActionEconomy.RoughTileMoveApCost);
+            }
+
+            return Math.Max(CombatActionEconomy.NormalTileMoveApCost, cost);
+        }
+
+        public int ComputePathApCost(IReadOnlyList<GridCoord> steps, int freeMoveTilesRemaining)
+        {
+            if (steps == null || steps.Count == 0)
+            {
+                return 0;
+            }
+
+            int freeLeft = Math.Max(0, freeMoveTilesRemaining);
+            int totalAp = 0;
+            for (int i = 0; i < steps.Count; i++)
+            {
+                if (freeLeft > 0)
+                {
+                    freeLeft--;
+                    continue;
+                }
+
+                totalAp += GetTileMoveApCost(steps[i].X, steps[i].Y);
+            }
+
+            return totalAp;
+        }
+
         public IReadOnlyList<ReachableTileInfo> GetReachableTiles(string combatantId)
         {
             return GetReachableTilesInternal(combatantId, ignoreMoveRemaining: false);
@@ -328,8 +533,17 @@ namespace RealmzCore.Combat
                 return Array.Empty<ReachableTileInfo>();
             }
 
-            int budget = ignoreMoveRemaining ? unit.EffectiveMovement : unit.Economy.MoveRemaining;
-            if (budget <= 0)
+            if (!ignoreMoveRemaining && unit.Economy.MovementLocked)
+            {
+                return Array.Empty<ReachableTileInfo>();
+            }
+
+            int freeMoves = ignoreMoveRemaining ? unit.FreeMoveTiles : unit.Economy.FreeMoveTilesRemaining;
+            int apBudget = ignoreMoveRemaining
+                ? (CombatActionEconomy.DefaultBaseApPerTurn + unit.EquipApBonus)
+                : unit.Economy.CurrentAp;
+            int searchBudget = (freeMoves * CombatActionEconomy.RoughTileMoveApCost) + apBudget;
+            if (apBudget <= 0 && freeMoves <= 0)
             {
                 return Array.Empty<ReachableTileInfo>();
             }
@@ -338,16 +552,22 @@ namespace RealmzCore.Combat
                 Grid.Width,
                 Grid.Height,
                 unit.Position,
-                budget,
+                searchBudget,
                 isPassable: (x, y) => IsWalkableFor(unit, x, y),
                 canStopOn: (x, y) => !IsOccupiedByLiving(x, y, excludeId: unit.Id),
-                getMoveCost: (x, y) => Grid.GetMoveCost(x, y),
+                getMoveCost: (x, y) => GetTileMoveApCost(x, y),
                 allowDiagonal: true,
                 useOctileCost: false);
 
             List<ReachableTileInfo> results = new List<ReachableTileInfo>(nodes.Count);
             foreach (ReachableNode node in nodes.Values)
             {
+                int actualApCost = ComputePathApCost(node.Path, freeMoves);
+                if (actualApCost > apBudget)
+                {
+                    continue;
+                }
+
                 bool provokes = false;
                 HashSet<string> threats = new HashSet<string>(StringComparer.Ordinal);
                 GridCoord prev = unit.Position;
@@ -368,7 +588,7 @@ namespace RealmzCore.Combat
 
                 results.Add(new ReachableTileInfo(
                     node.Coord,
-                    node.TotalCost,
+                    actualApCost,
                     node.Path,
                     provokes,
                     new List<string>(threats)));
@@ -714,12 +934,13 @@ namespace RealmzCore.Combat
                 provokesAoO = WouldStepProvokeAoO(attackerId, attacker.Position, fromPos.Value);
             }
 
-            bool hasAction = ignoreActionBudget || attacker.Economy.HasStandardAction;
+            int apCost = Math.Max(1, attacker.MeleeApCost);
+            bool hasAction = ignoreActionBudget || attacker.Economy.HasApFor(apCost);
             bool canExecute = adjacent && attacker.Side != defender.Side && hasAction;
             string reason = !adjacent
                 ? "Target is out of melee reach."
                 : !hasAction
-                    ? "No standard action remaining."
+                    ? $"Insufficient AP (needs {apCost} AP, has {attacker.Economy.CurrentAp})."
                     : string.Empty;
 
             return new TacticalAttackPreview(
@@ -736,7 +957,8 @@ namespace RealmzCore.Combat
                 losResult: null,
                 defenderAc: defender.EffectiveAc,
                 conditionTags: tags,
-                elevationModifierPct: hit.ElevationModifierPercent);
+                elevationModifierPct: hit.ElevationModifierPercent,
+                apCost: apCost);
         }
 
         public TacticalAttackPreview PreviewRangedAttack(string attackerId, string defenderId, GridCoord? fromPos = null)
@@ -802,9 +1024,10 @@ namespace RealmzCore.Combat
                 tags.Add($"In the Dark -{darknessPenalty}% Ranged");
             }
 
+            int apCost = Math.Max(1, attacker.RangedApCost);
             bool inRange = hasRanged && dist > 0 && dist <= effectiveRange;
             bool losClear = los.Kind != LosKind.Blocked;
-            bool hasAction = ignoreActionBudget || attacker.Economy.HasStandardAction;
+            bool hasAction = ignoreActionBudget || attacker.Economy.HasApFor(apCost);
             bool canExecute = inRange && losClear && attacker.Side != defender.Side && hasAction;
             string reason = !hasRanged
                 ? "No ranged weapon equipped."
@@ -813,7 +1036,7 @@ namespace RealmzCore.Combat
                     : !losClear
                         ? "Line of sight is blocked."
                         : !hasAction
-                            ? "No standard action remaining."
+                            ? $"Insufficient AP (needs {apCost} AP, has {attacker.Economy.CurrentAp})."
                             : string.Empty;
 
             return new TacticalAttackPreview(
@@ -830,7 +1053,8 @@ namespace RealmzCore.Combat
                 losResult: los,
                 defenderAc: defender.EffectiveAc,
                 conditionTags: tags,
-                elevationModifierPct: hit.ElevationModifierPercent);
+                elevationModifierPct: hit.ElevationModifierPercent,
+                apCost: apCost);
         }
 
         public TacticalSpellPreview PreviewSpell(string casterId, string spellIdOrKey, GridCoord targetCenter)
@@ -911,9 +1135,10 @@ namespace RealmzCore.Combat
                 tags.Add("IMMUNE");
             }
 
+            int apCost = CombatWeaponCosts.GetSpellApCost(spell);
             bool silenced = caster.Conditions.Has(CharConditionId.Silenced);
             bool enoughSp = caster.Sp >= spell.SpCost;
-            bool hasAction = ignoreActionBudget || caster.Economy.HasStandardAction;
+            bool hasAction = ignoreActionBudget || caster.Economy.HasApFor(apCost);
             bool canExecute = caster.IsConscious && !silenced && enoughSp && hasAction && footprint.InRange && footprint.HasLineOfSight;
 
             string reason = silenced
@@ -925,7 +1150,7 @@ namespace RealmzCore.Combat
                         : !footprint.HasLineOfSight
                             ? "Target is blocked by wall or obstacle (no line of sight)."
                             : !hasAction
-                                ? "No standard action remaining."
+                                ? $"Insufficient AP (needs {apCost} AP, has {caster.Economy.CurrentAp})."
                                 : string.Empty;
 
             return new TacticalSpellPreview(
@@ -936,7 +1161,8 @@ namespace RealmzCore.Combat
                 maxAmount: maxAmount,
                 saveChancePct: saveChancePct,
                 aoeFootprint: footprint,
-                conditionTags: tags);
+                conditionTags: tags,
+                apCost: apCost);
         }
 
         public TacticalShovePreview PreviewShove(string actorId, string targetId, GridCoord? fromPos = null)
@@ -966,7 +1192,8 @@ namespace RealmzCore.Combat
             GridCoord dest = new GridCoord(target.Position.X + dx, target.Position.Y + dy);
 
             bool adjacent = pos.ChebyshevDistance(target.Position) == 1;
-            bool hasSwift = actor.Economy.HasSwiftAction;
+            int apCost = CombatActionEconomy.DefaultShoveApCost;
+            bool hasAp = actor.Economy.HasApFor(apCost);
             bool isAlly = actor.Side == target.Side;
 
             bool hitsWall = !Grid.InBounds(dest) || !Grid.IsWalkable(dest.X, dest.Y);
@@ -990,11 +1217,11 @@ namespace RealmzCore.Combat
                 ? 100
                 : ComputeShoveSuccessChance(actor, target);
 
-            bool canExecute = adjacent && hasSwift;
+            bool canExecute = adjacent && hasAp;
             string reason = !adjacent
                 ? "Target is not adjacent for Shove."
-                : !hasSwift
-                    ? "No swift action remaining."
+                : !hasAp
+                    ? $"Insufficient AP (Shove needs {apCost} AP, has {actor.Economy.CurrentAp})."
                     : string.Empty;
 
             return new TacticalShovePreview(
@@ -1008,14 +1235,15 @@ namespace RealmzCore.Combat
                 pushesOffLedge: pushesOffLedge,
                 fallElevationDrop: elevDrop,
                 destinationSurface: destSurface,
-                isAllyShove: isAlly);
+                isAllyShove: isAlly,
+                apCost: apCost);
         }
 
         public CombatActionResult TryShove(string targetId)
         {
-            if (Outcome != CombatOutcome.InProgress)
+            if (Phase != CombatPhase.Combat || Outcome != CombatOutcome.InProgress)
             {
-                return new CombatActionResult(false, "Combat has ended.");
+                return new CombatActionResult(false, Phase == CombatPhase.Deployment ? "Finish pre-battle deployment first." : "Combat has ended.");
             }
 
             CombatantState? actor = CurrentActor;
@@ -1031,7 +1259,7 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, preview.Reason);
             }
 
-            actor.Economy.CommitSwiftAction();
+            actor.Economy.SpendAp(preview.ApCost, lockMoveUndo: true);
             actor.HasTriggeredIrreversibleEvent = true;
 
             if (!preview.IsAllyShove)
@@ -1041,7 +1269,7 @@ namespace RealmzCore.Combat
                 {
                     string resistMsg = $"{actor.Name} tries to shove {target.Name} ({preview.SuccessChancePct}%), but {target.Name} holds firm (roll {roll}).";
                     AppendLog(actor.Id, actor.Name, "Shove", resistMsg, new[] { target.Id });
-                    return new CombatActionResult(true, resistMsg);
+                    return new CombatActionResult(true, resistMsg, apSpent: preview.ApCost);
                 }
             }
 
@@ -1121,20 +1349,25 @@ namespace RealmzCore.Combat
             AppendLog(actor.Id, actor.Name, "Shove", msg, loggedTargets, damageDealt: totalDamage);
             CheckOutcome();
 
-            return new CombatActionResult(true, msg, damageDealt: totalDamage);
+            return new CombatActionResult(true, msg, damageDealt: totalDamage, apSpent: preview.ApCost);
         }
 
         public CombatActionResult TryMoveTo(GridCoord destination)
         {
-            if (Outcome != CombatOutcome.InProgress)
+            if (Phase != CombatPhase.Combat || Outcome != CombatOutcome.InProgress)
             {
-                return new CombatActionResult(false, "Combat has ended.");
+                return new CombatActionResult(false, Phase == CombatPhase.Deployment ? "Finish pre-battle deployment first." : "Combat has ended.");
             }
 
             CombatantState? actor = CurrentActor;
             if (actor == null || !actor.IsConscious)
             {
                 return new CombatActionResult(false, "No conscious actor.");
+            }
+
+            if (actor.Economy.MovementLocked)
+            {
+                return new CombatActionResult(false, "Movement is locked this turn.");
             }
 
             if (destination == actor.Position)
@@ -1147,22 +1380,25 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, "Destination tile is occupied.");
             }
 
+            int maxSearchCost = (actor.Economy.FreeMoveTilesRemaining * CombatActionEconomy.RoughTileMoveApCost) + actor.Economy.CurrentAp;
             PathResult path = _pathfinder.FindPath(
                 Grid.Width,
                 Grid.Height,
                 actor.Position,
                 destination,
                 isPassable: (x, y) => IsWalkableFor(actor, x, y),
-                getMoveCost: (x, y) => Grid.GetMoveCost(x, y),
+                getMoveCost: (x, y) => GetTileMoveApCost(x, y),
                 allowDiagonal: true,
-                maxCost: actor.Economy.MoveRemaining,
+                maxCost: maxSearchCost,
                 useOctileCost: false);
 
-            if (!path.Found || path.Steps.Count == 0)
+            int requiredApCost = ComputePathApCost(path.Steps, actor.Economy.FreeMoveTilesRemaining);
+            if (!path.Found || path.Steps.Count == 0 || requiredApCost > actor.Economy.CurrentAp)
             {
-                return new CombatActionResult(false, "Destination is unreachable within remaining movement.");
+                return new CombatActionResult(false, "Destination is unreachable within remaining AP.");
             }
 
+            int apBefore = actor.Economy.CurrentAp;
             bool aooTriggered = false;
             int totalDamage = 0;
             List<AttackOutcome> aooOutcomes = new List<AttackOutcome>();
@@ -1179,18 +1415,20 @@ namespace RealmzCore.Combat
                             $"{actor.Name} was stopped at {actor.Position}.",
                             aooOutcomes,
                             damageDealt: totalDamage,
-                            aooTriggered: aooTriggered);
+                            aooTriggered: aooTriggered,
+                            apSpent: Math.Max(0, apBefore - actor.Economy.CurrentAp));
                     }
 
                     break;
                 }
             }
 
+            int apSpent = Math.Max(0, apBefore - actor.Economy.CurrentAp);
             AppendLog(
                 actor.Id,
                 actor.Name,
                 "Move",
-                $"{actor.Name} moves to {actor.Position}.",
+                $"{actor.Name} moves to {actor.Position} ({apSpent} AP).",
                 Array.Empty<string>(),
                 damageDealt: 0);
 
@@ -1200,7 +1438,8 @@ namespace RealmzCore.Combat
                 $"{actor.Name} moved to {actor.Position}.",
                 aooOutcomes,
                 damageDealt: totalDamage,
-                aooTriggered: aooTriggered);
+                aooTriggered: aooTriggered,
+                apSpent: apSpent);
         }
 
         private bool ResolveMovementStep(
@@ -1246,13 +1485,55 @@ namespace RealmzCore.Combat
                 }
             }
 
-            int stepCost = Grid.GetMoveCost(next.X, next.Y);
+            int stepCost = GetTileMoveApCost(next.X, next.Y);
             if (!actor.Economy.TryStep(stepCost))
             {
                 return false;
             }
 
             actor.Position = next;
+
+            // Overwatch Reaction Strike when stepping into threat of a Guarding enemy.
+            if (actor.IsConscious && !actor.Conditions.Has(CharConditionId.Invisible))
+            {
+                for (int i = 0; i < _combatants.Count; i++)
+                {
+                    CombatantState guarder = _combatants[i];
+                    if (guarder.Side == actor.Side ||
+                        !guarder.IsGuarding ||
+                        !guarder.IsConscious ||
+                        !guarder.Economy.HasReaction ||
+                        guarder.Conditions.Has(CharConditionId.RunsAway) ||
+                        guarder.Position.ChebyshevDistance(next) > 1)
+                    {
+                        continue;
+                    }
+
+                    if (!guarder.Economy.CommitReaction())
+                    {
+                        continue;
+                    }
+
+                    actor.HasTriggeredIrreversibleEvent = true;
+                    aooTriggered = true;
+
+                    AttackOutcome owHit = ResolveSingleMeleeSwing(guarder, actor, isFlanking: false);
+                    aooOutcomes.Add(owHit);
+                    totalDamage += owHit.DamageDealt;
+                    AppendLog(
+                        guarder.Id,
+                        guarder.Name,
+                        "Overwatch",
+                        $"{guarder.Name} triggers OVERWATCH on {actor.Name}: {owHit.Kind} ({owHit.DamageDealt} dmg).",
+                        new[] { actor.Id },
+                        damageDealt: owHit.DamageDealt);
+
+                    if (!actor.IsConscious)
+                    {
+                        return false;
+                    }
+                }
+            }
 
             bool wasProneBefore = actor.IsProne;
             int surfaceDamage = ApplyTileSurfaceHazard(actor, next, isStepEnter: true);
@@ -1286,9 +1567,9 @@ namespace RealmzCore.Combat
 
         public CombatActionResult ExecuteMeleeAttack(string targetId)
         {
-            if (Outcome != CombatOutcome.InProgress)
+            if (Phase != CombatPhase.Combat || Outcome != CombatOutcome.InProgress)
             {
-                return new CombatActionResult(false, "Combat has ended.");
+                return new CombatActionResult(false, Phase == CombatPhase.Deployment ? "Finish pre-battle deployment first." : "Combat has ended.");
             }
 
             CombatantState? actor = CurrentActor;
@@ -1304,7 +1585,7 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, preview.Reason);
             }
 
-            actor.Economy.CommitStandardAction();
+            actor.Economy.SpendAp(preview.ApCost, lockMoveUndo: true);
             actor.HasTriggeredIrreversibleEvent = true;
 
             List<AttackOutcome> outcomes = new List<AttackOutcome>();
@@ -1318,18 +1599,18 @@ namespace RealmzCore.Combat
                 totalDamage += outcome.DamageDealt;
             }
 
-            string msg = $"{actor.Name} attacks {target.Name} ({outcomes.Count} swing(s)) for {totalDamage} total damage.";
+            string msg = $"{actor.Name} attacks {target.Name} ({outcomes.Count} swing(s), {preview.ApCost} AP) for {totalDamage} total damage.";
             AppendLog(actor.Id, actor.Name, "MeleeAttack", msg, new[] { target.Id }, damageDealt: totalDamage);
             CheckOutcome();
 
-            return new CombatActionResult(true, msg, outcomes, damageDealt: totalDamage);
+            return new CombatActionResult(true, msg, outcomes, damageDealt: totalDamage, apSpent: preview.ApCost);
         }
 
         public CombatActionResult ExecuteRangedAttack(string targetId)
         {
-            if (Outcome != CombatOutcome.InProgress)
+            if (Phase != CombatPhase.Combat || Outcome != CombatOutcome.InProgress)
             {
-                return new CombatActionResult(false, "Combat has ended.");
+                return new CombatActionResult(false, Phase == CombatPhase.Deployment ? "Finish pre-battle deployment first." : "Combat has ended.");
             }
 
             CombatantState? actor = CurrentActor;
@@ -1345,7 +1626,7 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, preview.Reason);
             }
 
-            actor.Economy.CommitStandardAction();
+            actor.Economy.SpendAp(preview.ApCost, lockMoveUndo: true);
             actor.HasTriggeredIrreversibleEvent = true;
 
             int coverPenalty = preview.LosResult != null ? preview.LosResult.CoverPenaltyPct : 0;
@@ -1393,18 +1674,18 @@ namespace RealmzCore.Combat
                 }
             }
 
-            string msg = $"{actor.Name} fires at {target.Name}: {outcome.Kind} ({outcome.DamageDealt} dmg).";
+            string msg = $"{actor.Name} fires at {target.Name} ({preview.ApCost} AP): {outcome.Kind} ({outcome.DamageDealt} dmg).";
             AppendLog(actor.Id, actor.Name, "RangedAttack", msg, new[] { target.Id }, damageDealt: outcome.DamageDealt);
             CheckOutcome();
 
-            return new CombatActionResult(true, msg, new[] { outcome }, damageDealt: outcome.DamageDealt);
+            return new CombatActionResult(true, msg, new[] { outcome }, damageDealt: outcome.DamageDealt, apSpent: preview.ApCost);
         }
 
         public CombatActionResult CastSpell(string spellIdOrKey, GridCoord targetCenter)
         {
-            if (Outcome != CombatOutcome.InProgress)
+            if (Phase != CombatPhase.Combat || Outcome != CombatOutcome.InProgress)
             {
-                return new CombatActionResult(false, "Combat has ended.");
+                return new CombatActionResult(false, Phase == CombatPhase.Deployment ? "Finish pre-battle deployment first." : "Combat has ended.");
             }
 
             CombatantState? caster = CurrentActor;
@@ -1420,7 +1701,7 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, preview.Reason);
             }
 
-            caster.Economy.CommitStandardAction();
+            caster.Economy.SpendAp(preview.ApCost, lockMoveUndo: true);
             caster.HasTriggeredIrreversibleEvent = true;
             caster.Sp = Math.Max(0, caster.Sp - spell.SpCost);
 
@@ -1584,11 +1865,11 @@ namespace RealmzCore.Combat
             string immuneSuffix = immuneTargetNames.Count > 0
                 ? $" [Immune: {string.Join(", ", immuneTargetNames)}]"
                 : string.Empty;
-            string msg = $"{caster.Name} casts {spell.Name} ({totalDamage} dmg, {totalHealing} heal).{immuneSuffix}";
+            string msg = $"{caster.Name} casts {spell.Name} ({preview.ApCost} AP: {totalDamage} dmg, {totalHealing} heal).{immuneSuffix}";
             AppendLog(caster.Id, caster.Name, "CastSpell", msg, targetIds, damageDealt: totalDamage, healingDone: totalHealing);
             CheckOutcome();
 
-            return new CombatActionResult(true, msg, damageDealt: totalDamage, healingDone: totalHealing);
+            return new CombatActionResult(true, msg, damageDealt: totalDamage, healingDone: totalHealing, apSpent: preview.ApCost);
         }
 
         public int ApplySurfaceInteraction(
@@ -1608,9 +1889,9 @@ namespace RealmzCore.Combat
 
         public CombatActionResult GuardOverwatch()
         {
-            if (Outcome != CombatOutcome.InProgress)
+            if (Phase != CombatPhase.Combat || Outcome != CombatOutcome.InProgress)
             {
-                return new CombatActionResult(false, "Combat has ended.");
+                return new CombatActionResult(false, Phase == CombatPhase.Deployment ? "Finish pre-battle deployment first." : "Combat has ended.");
             }
 
             CombatantState? actor = CurrentActor;
@@ -1619,24 +1900,25 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, "No conscious actor.");
             }
 
-            if (!actor.Economy.CommitStandardAction())
+            int guardCost = actor.Economy.EffectiveGuardApCost;
+            if (!actor.Economy.SpendAp(guardCost, lockMoveUndo: true))
             {
-                return new CombatActionResult(false, "No standard action remaining.");
+                return new CombatActionResult(false, $"Insufficient AP (Guard requires {guardCost} AP).");
             }
 
             actor.IsGuarding = true;
             actor.HasTriggeredIrreversibleEvent = true;
-            string msg = $"{actor.Name} takes a defensive guard stance (+4 AC).";
+            string msg = $"{actor.Name} takes OVERWATCH / Guard (+4 AC, threat reaction, {guardCost} AP).";
             AppendLog(actor.Id, actor.Name, "Guard", msg);
 
-            return new CombatActionResult(true, msg);
+            return new CombatActionResult(true, msg, apSpent: guardCost);
         }
 
         public CombatActionResult TryLightTorchInCombat(string? actorId = null)
         {
-            if (Outcome != CombatOutcome.InProgress)
+            if (Phase != CombatPhase.Combat || Outcome != CombatOutcome.InProgress)
             {
-                return new CombatActionResult(false, "Combat has ended.");
+                return new CombatActionResult(false, Phase == CombatPhase.Deployment ? "Finish pre-battle deployment first." : "Combat has ended.");
             }
 
             if (Party == null)
@@ -1654,9 +1936,10 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, "Requires an active conscious hero turn to light a torch.");
             }
 
-            if (!actor.Economy.HasSwiftAction)
+            int torchCost = CombatActionEconomy.DefaultTorchApCost;
+            if (!actor.Economy.HasApFor(torchCost))
             {
-                return new CombatActionResult(false, "No swift action remaining this turn.");
+                return new CombatActionResult(false, $"Insufficient AP (Light Torch needs {torchCost} AP).");
             }
 
             if (!Party.TryLightTorchFromStash(out string feedback, _items))
@@ -1664,20 +1947,20 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, feedback);
             }
 
-            actor.Economy.CommitSwiftAction();
+            actor.Economy.SpendAp(torchCost, lockMoveUndo: true);
             actor.HasTriggeredIrreversibleEvent = true;
 
-            string msg = $"{actor.Name} lights a Torch! {feedback}";
+            string msg = $"{actor.Name} lights a Torch ({torchCost} AP)! {feedback}";
             AppendLog(actor.Id, actor.Name, "LightTorch", msg);
             OnArenaIlluminationChanged?.Invoke(IsArenaIlluminated);
-            return new CombatActionResult(true, msg);
+            return new CombatActionResult(true, msg, apSpent: torchCost);
         }
 
         public CombatActionResult UseSwiftPotion(int itemId, string? targetId = null)
         {
-            if (Outcome != CombatOutcome.InProgress)
+            if (Phase != CombatPhase.Combat || Outcome != CombatOutcome.InProgress)
             {
-                return new CombatActionResult(false, "Combat has ended.");
+                return new CombatActionResult(false, Phase == CombatPhase.Deployment ? "Finish pre-battle deployment first." : "Combat has ended.");
             }
 
             CombatantState? actor = CurrentActor;
@@ -1686,9 +1969,10 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, "No conscious actor.");
             }
 
-            if (!actor.Economy.HasSwiftAction)
+            int potionCost = CombatActionEconomy.DefaultPotionApCost;
+            if (!actor.Economy.HasApFor(potionCost))
             {
-                return new CombatActionResult(false, "No swift action remaining.");
+                return new CombatActionResult(false, $"Insufficient AP (Potion needs {potionCost} AP).");
             }
 
             if (!_items.TryGetValue(itemId, out ItemDefinition? item))
@@ -1704,7 +1988,7 @@ namespace RealmzCore.Combat
                 }
             }
 
-            actor.Economy.CommitSwiftAction();
+            actor.Economy.SpendAp(potionCost, lockMoveUndo: true);
             actor.HasTriggeredIrreversibleEvent = true;
 
             CombatantState target = !string.IsNullOrWhiteSpace(targetId)
@@ -1753,7 +2037,7 @@ namespace RealmzCore.Combat
             actor.CombatHealingDone += healed;
             AppendLog(actor.Id, actor.Name, "SwiftPotion", msg, new[] { target.Id }, healingDone: healed);
 
-            return new CombatActionResult(true, msg, healingDone: healed);
+            return new CombatActionResult(true, msg, healingDone: healed, apSpent: potionCost);
         }
 
         public void ApplyDrainOrAgeCurse(string targetId, int stacks = 1)
@@ -1838,6 +2122,8 @@ namespace RealmzCore.Combat
                     actor.IsProne = false;
                     AppendLog(actor.Id, actor.Name, "ProneEnd", $"{actor.Name} stands up from Prone.");
                 }
+
+                actor.Economy.BankCarryoverForEndTurn(allowCarryover: actor.IsConscious);
             }
 
             CheckOutcome();
@@ -2965,14 +3251,19 @@ namespace RealmzCore.Combat
                 return;
             }
 
-            actor.Economy.ResetTurn(actor.EffectiveMovement);
+            actor.Economy.ResetUnifiedTurn(
+                CombatActionEconomy.DefaultBaseApPerTurn,
+                actor.EquipApBonus,
+                actor.FreeMoveTiles,
+                actor.GuardApDiscount,
+                applyCarryover: true);
             actor.TurnStartPosition = actor.Position;
             actor.HasTriggeredIrreversibleEvent = false;
             actor.IsGuarding = false;
 
             if (actor.IsProne && actor.PronePendingMovePenalty)
             {
-                actor.Economy.ConsumeAllMovement();
+                actor.Economy.LockMovementForTurn();
                 actor.PronePendingMovePenalty = false;
                 AppendLog(
                     actor.Id,

@@ -146,6 +146,7 @@ namespace Realmz.Game
         private GridCoord _cachedRayGridCoord;
         private float _combatPendingEndTurnWaitUntil;
         private Coroutine _delayedTurnRoutine;
+        private string _selectedDeploymentHeroId;
 
         public bool IsInCombat => _isInCombat;
         public int ActiveExploreViewCount => _exploreHeroViews.Count;
@@ -176,12 +177,18 @@ namespace Realmz.Game
             {
                 return;
             }
+            if (CombatSession.Phase == CombatPhase.Deployment)
+            {
+                HandleDeploymentClick(localCoord);
+                return;
+            }
             CombatantState actor = CombatSession.CurrentActor;
             if (actor != null && actor.Side == CombatSide.Hero && CombatSession.Grid.InBounds(localCoord))
             {
                 ExecuteCombatClick(actor, localCoord);
             }
         }
+        public void StartBattleFromDeploymentForTest() => HandleStartBattleFromDeployment();
         public void EscapeKeyForTest() => HandleEscapeKey();
 
         public void InitializeForTests(BywaterM1Bundle bundle, ExplorationSession exploreSession, ulong seed = 12345UL)
@@ -409,6 +416,11 @@ namespace Realmz.Game
 
         public void TriggerDemoSkirmish()
         {
+            TriggerDemoSkirmish(enterDeployment: false);
+        }
+
+        public void TriggerDemoSkirmish(bool enterDeployment)
+        {
             if (ExploreSession == null || Bundle == null)
             {
                 return;
@@ -419,7 +431,7 @@ namespace Realmz.Game
             _activeCombatSurpriseMode = CombatInitiativeSurpriseMode.None;
             _activeCombatRewardBonusPct = 0;
             List<MonsterDefinition> monsters = SelectSkirmishMonsters(ExploreSession.CurrentMap.IsDungeon);
-            StartTacticalCombat(monsters, "Bywater Skirmish");
+            StartTacticalCombat(monsters, "Bywater Skirmish", CombatInitiativeSurpriseMode.None, 0, startInDeployment: enterDeployment);
         }
 
         public void ForceCompleteWalkForTest()
@@ -894,7 +906,7 @@ namespace Realmz.Game
             hudController.OnSkirmishRequested += () =>
             {
                 audioDirector?.PlayUiClick();
-                TriggerDemoSkirmish();
+                TriggerDemoSkirmish(enterDeployment: true);
             };
             hudController.OnTogglePartyRequested += () =>
             {
@@ -946,6 +958,8 @@ namespace Realmz.Game
             hudController.OnCycleSpeedRequested += HandleCycleSpeed;
             hudController.OnSpellSelected += HandleSpellSelected;
             hudController.OnCombatPartyAllyClicked += HandleCombatPartyAllyClicked;
+            hudController.OnHeroFormationChanged += HandleHeroFormationChanged;
+            hudController.OnStartBattleRequested += HandleStartBattleFromDeployment;
             hudController.OnHotbarSlotHovered += (actionId, title, body) =>
             {
                 _isHoveringHotbarUi = true;
@@ -1127,6 +1141,16 @@ namespace Realmz.Game
                     CombatSession.Outcome == CombatOutcome.InProgress)
                 {
                     SetAutoCombatEnabled(!_autoCombatEnabled);
+                    return;
+                }
+
+                if (CombatSession != null && CombatSession.Phase == CombatPhase.Deployment)
+                {
+                    if (kb.spaceKey.wasPressedThisFrame || kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame)
+                    {
+                        HandleStartBattleFromDeployment();
+                        return;
+                    }
                     return;
                 }
 
@@ -2442,6 +2466,21 @@ namespace Realmz.Game
             }
         }
 
+        private void HandleHeroFormationChanged(int heroIdx, FormationRank rank)
+        {
+            if (ExploreSession?.Party == null || Bundle == null)
+            {
+                return;
+            }
+
+            audioDirector?.PlayUiClick();
+            if (ExploreSession.Party.SetFormationRank(heroIdx, rank))
+            {
+                hudController?.RefreshPartyDrawer(ExploreSession.Party, Bundle, heroIdx);
+                hudController?.ShowToast($"{ExploreSession.Party.Members[heroIdx].Name} assigned to {rank} rank.", 1.5f);
+            }
+        }
+
         private void HandleEquipFromStash(int heroIdx, int stashIdx)
         {
             audioDirector?.PlayUiClick();
@@ -2748,7 +2787,8 @@ namespace Realmz.Game
             List<MonsterDefinition> monstersToSpawn,
             string title,
             CombatInitiativeSurpriseMode surpriseMode = CombatInitiativeSurpriseMode.None,
-            int rewardBonusPercent = -1)
+            int rewardBonusPercent = -1,
+            bool startInDeployment = true)
         {
             if (monstersToSpawn == null || monstersToSpawn.Count == 0)
             {
@@ -2824,39 +2864,77 @@ namespace Realmz.Game
             HashSet<GridCoord> occupied = new HashSet<GridCoord>();
             List<CombatantState> combatants = new List<CombatantState>();
 
-            GridCoord[] preferredHeroSlots =
+            bool isAmbushedInDark = surpriseMode == CombatInitiativeSurpriseMode.EnemySurprisedParty;
+            GridCoord[] frontSlots = { new GridCoord(3, 4), new GridCoord(3, 5), new GridCoord(3, 3), new GridCoord(3, 6) };
+            GridCoord[] midSlots = { new GridCoord(2, 4), new GridCoord(2, 5), new GridCoord(2, 3), new GridCoord(2, 6) };
+            GridCoord[] backSlots = { new GridCoord(1, 4), new GridCoord(1, 5), new GridCoord(0, 4), new GridCoord(0, 5) };
+            GridCoord[] surprisedHeroSlots =
             {
-                new GridCoord(2, 4),
-                new GridCoord(1, 5),
-                new GridCoord(3, 5),
-                new GridCoord(2, 6),
                 new GridCoord(3, 4),
-                new GridCoord(1, 3)
+                new GridCoord(2, 4),
+                new GridCoord(3, 5),
+                new GridCoord(2, 5),
+                new GridCoord(4, 4),
+                new GridCoord(4, 5)
             };
 
-            for (int i = 0; i < ExploreSession.Party.Members.Count; i++)
+            int frontIdx = 0;
+            int midIdx = 0;
+            int backIdx = 0;
+            IReadOnlyList<int> orderedHeroIndices = ExploreSession.Party.GetOrderedFormationMemberIndices();
+            for (int order = 0; order < orderedHeroIndices.Count; order++)
             {
-                PartyMemberState member = ExploreSession.Party.Members[i];
+                PartyMemberState member = ExploreSession.Party.Members[orderedHeroIndices[order]];
                 if (member.Hp <= 0)
                 {
                     member.Hp = 1;
                 }
 
-                GridCoord targetSlot = preferredHeroSlots[i % preferredHeroSlots.Length];
+                GridCoord targetSlot;
+                if (isAmbushedInDark)
+                {
+                    targetSlot = surprisedHeroSlots[order % surprisedHeroSlots.Length];
+                }
+                else
+                {
+                    switch (member.FormationRank)
+                    {
+                        case FormationRank.Front:
+                            targetSlot = frontSlots[frontIdx++ % frontSlots.Length];
+                            break;
+                        case FormationRank.Back:
+                            targetSlot = backSlots[backIdx++ % backSlots.Length];
+                            break;
+                        default:
+                            targetSlot = midSlots[midIdx++ % midSlots.Length];
+                            break;
+                    }
+                }
+
                 GridCoord spot = PickNearestFreeWalkable(connectedWalkable, occupied, targetSlot, map, _arenaOriginX, _arenaOriginY);
                 occupied.Add(spot);
                 combatants.Add(CombatantState.FromHero(member, spot, Bundle.Items));
             }
 
-            GridCoord[] preferredMonsterSlots =
-            {
-                new GridCoord(7, 4),
-                new GridCoord(8, 5),
-                new GridCoord(7, 6),
-                new GridCoord(9, 4),
-                new GridCoord(8, 6),
-                new GridCoord(9, 6)
-            };
+            GridCoord[] preferredMonsterSlots = isAmbushedInDark
+                ? new[]
+                {
+                    new GridCoord(5, 4),
+                    new GridCoord(6, 5),
+                    new GridCoord(5, 6),
+                    new GridCoord(5, 3),
+                    new GridCoord(7, 4),
+                    new GridCoord(7, 5)
+                }
+                : new[]
+                {
+                    new GridCoord(7, 4),
+                    new GridCoord(8, 5),
+                    new GridCoord(7, 6),
+                    new GridCoord(9, 4),
+                    new GridCoord(8, 6),
+                    new GridCoord(9, 6)
+                };
 
             bool spawnedGiantFrog = false;
             for (int i = 0; i < monstersToSpawn.Count; i++)
@@ -2898,7 +2976,8 @@ namespace Realmz.Game
                 _activeCombatSurpriseMode,
                 resolvedRewardBonusPct,
                 isAmbientDarkness: isCombatDark,
-                deferLootDeposit: true);
+                deferLootDeposit: true,
+                startInDeployment: startInDeployment && !isAmbushedInDark);
             CombatSession.SurfaceChanged += OnCombatSurfaceChanged;
             CombatSession.OnArenaIlluminationChanged += OnCombatArenaIlluminationChanged;
 
@@ -2908,6 +2987,7 @@ namespace Realmz.Game
             _activeCombatMode = CombatActionMode.Smart;
             _selectedSpellId = -1;
             _hoveredCombatUnitId = null;
+            _selectedDeploymentHeroId = null;
             _isHoveringHotbarUi = false;
             _combatHoverDirty = true;
             _lastCombatHover = new GridCoord(-1, -1);
@@ -2977,7 +3057,115 @@ namespace Realmz.Game
                 audioDirector?.PlayFrogCroak();
             }
 
-            BeginCurrentCombatTurn();
+            if (CombatSession.Phase == CombatPhase.Deployment)
+            {
+                RefreshDeploymentOverlays();
+                SyncAllCombatUnitViews();
+                RefreshUnitNameplates();
+                RefreshCombatHudState();
+            }
+            else
+            {
+                BeginCurrentCombatTurn();
+            }
+        }
+
+        private void RefreshDeploymentOverlays()
+        {
+            if (gridOverlays == null || CombatSession == null || CombatSession.Phase != CombatPhase.Deployment)
+            {
+                return;
+            }
+
+            gridOverlays.ClearAll();
+            gridOverlays.SetSurfaceCells(OffsetSurfaceCells(CombatSession.GetActiveSurfaceCells()));
+            IReadOnlyList<GridCoord> localZone = CombatSession.DeploymentZoneTiles;
+            List<GridCoord> worldZone = new List<GridCoord>(localZone.Count);
+            for (int i = 0; i < localZone.Count; i++)
+            {
+                worldZone.Add(LocalToWorld(localZone[i]));
+            }
+
+            GridCoord? selectedWorld = null;
+            if (!string.IsNullOrEmpty(_selectedDeploymentHeroId))
+            {
+                CombatantState sel = CombatSession.GetCombatant(_selectedDeploymentHeroId);
+                if (sel != null)
+                {
+                    selectedWorld = LocalToWorld(sel.Position);
+                }
+            }
+
+            gridOverlays.SetDeploymentZone(worldZone, selectedWorld);
+        }
+
+        private void HandleDeploymentClick(GridCoord localCoord)
+        {
+            if (CombatSession == null || CombatSession.Phase != CombatPhase.Deployment)
+            {
+                return;
+            }
+
+            CombatantState clicked = GetLivingUnitAt(localCoord);
+            if (string.IsNullOrEmpty(_selectedDeploymentHeroId))
+            {
+                if (clicked != null && clicked.Side == CombatSide.Hero)
+                {
+                    _selectedDeploymentHeroId = clicked.Id;
+                    audioDirector?.PlayUiClick();
+                    RefreshDeploymentOverlays();
+                    hudController?.ShowToast($"Selected {clicked.Name}. Click another hero to swap or a cyan tile to move.", 2.2f);
+                }
+                return;
+            }
+
+            if (clicked != null && string.Equals(clicked.Id, _selectedDeploymentHeroId, StringComparison.Ordinal))
+            {
+                _selectedDeploymentHeroId = null;
+                RefreshDeploymentOverlays();
+                return;
+            }
+
+            if (CombatSession.SwapOrMoveHeroInDeployment(_selectedDeploymentHeroId, localCoord))
+            {
+                audioDirector?.PlayUiClick();
+                _selectedDeploymentHeroId = null;
+                SyncAllCombatUnitViews();
+                RefreshUnitNameplates();
+                RefreshDeploymentOverlays();
+                RefreshCombatHudState();
+                hudController?.ShowToast("Deployment updated. Press [Start Battle] or [Space] when ready.", 1.6f);
+                return;
+            }
+
+            if (clicked != null && clicked.Side == CombatSide.Hero)
+            {
+                _selectedDeploymentHeroId = clicked.Id;
+                audioDirector?.PlayUiClick();
+                RefreshDeploymentOverlays();
+                hudController?.ShowToast($"Selected {clicked.Name}.", 1.8f);
+            }
+            else
+            {
+                hudController?.ShowToast("Place heroes on highlighted cyan deployment tiles.", 1.6f);
+            }
+        }
+
+        private void HandleStartBattleFromDeployment()
+        {
+            if (!_isInCombat || CombatSession == null || CombatSession.Phase != CombatPhase.Deployment)
+            {
+                return;
+            }
+
+            audioDirector?.PlayUiClick();
+            _selectedDeploymentHeroId = null;
+            gridOverlays?.ClearDeploymentZone();
+            if (CombatSession.StartBattleFromDeployment())
+            {
+                hudController?.ShowToast("Battle begins!", 1.8f);
+                BeginCurrentCombatTurn();
+            }
         }
 
         private void OnCombatSurfaceChanged(IReadOnlyList<SurfaceChangeEvent> changes)
@@ -3636,6 +3824,54 @@ namespace Realmz.Game
                 return;
             }
 
+            if (CombatSession.Phase == CombatPhase.Deployment)
+            {
+                GridCoord deployLocal = WorldToLocal(worldCoord);
+                if (!CombatSession.Grid.InBounds(deployLocal))
+                {
+                    if (!_isHoveringHotbarUi)
+                    {
+                        hudController?.ClearCombatHoverPreview();
+                    }
+                    return;
+                }
+
+                if (deployLocal != _lastCombatHover || _combatHoverDirty)
+                {
+                    _lastCombatHover = deployLocal;
+                    _combatHoverDirty = false;
+                    CombatantState hoverUnit = GetLivingUnitAt(deployLocal);
+                    if (hoverUnit != null && hoverUnit.Side == CombatSide.Hero)
+                    {
+                        string hint = string.IsNullOrEmpty(_selectedDeploymentHeroId)
+                            ? "Click to select hero for swap/move."
+                            : (hoverUnit.Id == _selectedDeploymentHeroId ? "Currently selected. Click to deselect." : "Click to swap hero positions.");
+                        hudController?.SetCombatHoverPreview(
+                            $"{hoverUnit.Name} ({hoverUnit.FormationRank} Rank)",
+                            $"HP {hoverUnit.Hp}/{hoverUnit.MaxHp} | AC {hoverUnit.EffectiveAc} | 6 AP\n{hint}");
+                    }
+                    else if (CombatSession.IsValidDeploymentTile(deployLocal))
+                    {
+                        string tileHint = string.IsNullOrEmpty(_selectedDeploymentHeroId)
+                            ? "Select a hero first, then click this cyan tile to reposition."
+                            : "Click cyan tile to deploy selected hero here.";
+                        hudController?.SetCombatHoverPreview(
+                            $"Deployment Tile ({deployLocal.X}, {deployLocal.Y})",
+                            $"{tileHint}\nPress [Start Battle] or [Space] to begin.");
+                    }
+                    else
+                    {
+                        hudController?.ClearCombatHoverPreview();
+                    }
+                }
+
+                if (leftClick)
+                {
+                    HandleDeploymentClick(deployLocal);
+                }
+                return;
+            }
+
             CombatantState actor = CombatSession.CurrentActor;
             if (actor == null || actor.Side != CombatSide.Hero || _autoCombatEnabled)
             {
@@ -3669,6 +3905,12 @@ namespace Realmz.Game
         {
             if (gridOverlays == null || CombatSession == null || actor == null)
             {
+                return;
+            }
+
+            if (CombatSession.Phase == CombatPhase.Deployment)
+            {
+                RefreshDeploymentOverlays();
                 return;
             }
 
@@ -3956,23 +4198,24 @@ namespace Realmz.Game
                 {
                     if (hoveredUnit != null && hoveredUnit.Side == CombatSide.Monster)
                     {
-                        bool hasStd = actor.Economy.HasStandardAction;
+                        bool canMeleeAp = actor.Economy.HasApFor(actor.MeleeApCost);
+                        bool canRangedAp = actor.Economy.HasApFor(actor.RangedApCost);
                         bool isAdjacent = actor.Position.ChebyshevDistance(hoveredUnit.Position) <= 1;
                         bool hasRanged = actor.RangedRange > 1 && !string.IsNullOrWhiteSpace(actor.RangedDice);
                         TacticalAttackPreview meleePreview = CombatSession.PreviewMeleeAttack(actor.Id, hoveredUnit.Id);
                         TacticalAttackPreview rangedPreview = hasRanged ? CombatSession.PreviewRangedAttack(actor.Id, hoveredUnit.Id) : null;
                         ReachableTileInfo approachTile = null;
                         TacticalAttackPreview approachMelee = null;
-                        bool canApproachMelee = hasStd &&
+                        bool canApproachMelee = canMeleeAp &&
                                                 actor.Economy.MoveRemaining > 0 &&
                                                 FindBestSmartApproachTile(actor, hoveredUnit, out approachTile, out approachMelee);
 
-                        if (isAdjacent && hasStd)
+                        if (isAdjacent && canMeleeAp)
                         {
                             ShowAttackTooltip($"[{actor.Name}] Melee vs {hoveredUnit.Name}", meleePreview, isRanged: false, suffixLine: hoveredEnemyIntentLine);
                             UpdateFlankOverlay(actor, hoveredUnit, meleePreview.IsFlanking);
                         }
-                        else if (hasRanged && rangedPreview != null && rangedPreview.CanExecute && (!canApproachMelee || actor.PrefersRanged))
+                        else if (hasRanged && canRangedAp && rangedPreview != null && rangedPreview.CanExecute && (!canApproachMelee || actor.PrefersRanged))
                         {
                             ShowAttackTooltip($"[{actor.Name}] Ranged vs {hoveredUnit.Name}", rangedPreview, isRanged: true, suffixLine: hoveredEnemyIntentLine);
                             if (rangedPreview.LosResult != null)
@@ -3983,7 +4226,8 @@ namespace Realmz.Game
                                     LocalToWorld(hoveredUnit.Position));
                             }
                         }
-                        else if (canApproachMelee && approachTile != null && approachMelee != null)
+                        else if (canApproachMelee && approachTile != null && approachMelee != null &&
+                                 approachTile.PathCost + actor.MeleeApCost <= actor.Economy.CurrentAp)
                         {
                             List<GridCoord> worldPath = new List<GridCoord>(approachTile.Path.Count);
                             for (int i = 0; i < approachTile.Path.Count; i++)
@@ -3995,7 +4239,7 @@ namespace Realmz.Game
                                 $"[{actor.Name}] Approach & Melee: {hoveredUnit.Name}",
                                 approachMelee,
                                 isRanged: false,
-                                prefixLine: $"Move Cost {approachTile.PathCost} + Melee\n",
+                                prefixLine: $"Cost: {approachTile.PathCost} Move + {approachMelee.ApCost} Melee AP (Total {approachTile.PathCost + approachMelee.ApCost} AP)\n",
                                 suffixLine: hoveredEnemyIntentLine);
                             UpdateFlankOverlayFrom(approachTile.Coord, actor, hoveredUnit, approachMelee.IsFlanking);
                         }
@@ -4053,9 +4297,13 @@ namespace Realmz.Game
                         string aooNote = match.ProvokesAoO
                             ? "WARNING: Path provokes Attack of Opportunity (AoO)!"
                             : "Safe path (no AoO provoked).";
+                        string tileCostTag = CombatSession.GetTileMoveApCost(localCoord.X, localCoord.Y) >= 2 ? " (Mud/Water 2 AP)" : string.Empty;
+                        string freeNote = match.PathCost == 0 && actor.Economy.FreeMoveTilesRemaining > 0
+                            ? " (Free Move)"
+                            : string.Empty;
                         hudController?.SetCombatHoverPreview(
                             $"Move {actor.Name} to ({localCoord.X}, {localCoord.Y})",
-                            $"Move Cost: {match.PathCost} / {actor.Economy.MoveRemaining} remaining\n{aooNote}\n\nClick to step.");
+                            $"Cost: {match.PathCost} AP{freeNote} / {actor.Economy.CurrentAp} AP remaining{tileCostTag}\n{aooNote}\n\nClick to step.");
                     }
                     else if (!_isHoveringHotbarUi)
                     {
@@ -4086,7 +4334,7 @@ namespace Realmz.Game
                             : "Safe path.";
                         hudController?.SetCombatHoverPreview(
                             $"Move {actor.Name} to ({localCoord.X}, {localCoord.Y})",
-                            $"Move Cost: {meleeMoveMatch.PathCost} / {actor.Economy.MoveRemaining} remaining\n{aooNote}\n\nClick tile to exit Melee and move.");
+                            $"Cost: {meleeMoveMatch.PathCost} AP / {actor.Economy.CurrentAp} AP remaining\n{aooNote}\n\nClick tile to exit Melee and move.");
                     }
                     else if (!_isHoveringHotbarUi)
                     {
@@ -4152,9 +4400,10 @@ namespace Realmz.Game
                         isBeneficial);
 
                     string condText = preview.ConditionTags.Count > 0 ? string.Join(", ", preview.ConditionTags) : "None";
-                    string statusLine = preview.CanExecute ? "READY TO CAST (Click to fire)" : $"Blocked: {preview.Reason}";
+                    string statusLine = preview.CanExecute ? $"Cost: {preview.ApCost} AP | READY TO CAST (Click to fire)" : $"Blocked: {preview.Reason}";
                     hudController?.SetCombatTooltip(
-                        $"Spell: {spell.Name} ({spell.SpCost} SP)",
+                        $"Spell: {spell.Name} ({preview.ApCost} AP | {spell.SpCost} SP)",
+                        $"Cost: {preview.ApCost} AP   |   Mana: {spell.SpCost} SP\n" +
                         $"Effect ({spell.EffectKind}): {preview.MinAmount} - {preview.MaxAmount}\n" +
                         $"Save%: {preview.SaveChancePct}%\n" +
                         $"AoE Hits: {preview.AoeFootprint.AffectedEnemyIds.Count} Foe(s) vs {preview.AoeFootprint.AffectedAllyIds.Count} Ally(s)\n" +
@@ -4170,12 +4419,12 @@ namespace Realmz.Game
                             ? $"Target: {hoveredUnit.Name} ({hoveredUnit.Hp}/{hoveredUnit.MaxHp} HP)"
                             : "Click any conscious or injured ally to heal.";
                         hudController?.SetCombatTooltip(
-                            $"Swift Potion: {potionDef.Name}",
-                            $"Heal Dice: {potionDef.HealDice}\nCost: 1 Swift Action\n\n{targetText}");
+                            $"Healing Potion: {potionDef.Name} ({CombatActionEconomy.DefaultPotionApCost} AP)",
+                            $"Heal Dice: {potionDef.HealDice}\nCost: {CombatActionEconomy.DefaultPotionApCost} AP\n\n{targetText}");
                     }
                     else if (!_isHoveringHotbarUi)
                     {
-                        hudController?.SetCombatTooltip("Swift Potion", "No healing potions left in party stash.");
+                        hudController?.SetCombatTooltip("Healing Potion", "No healing potions left in party stash.");
                     }
                     break;
                 }
@@ -4207,12 +4456,12 @@ namespace Realmz.Game
                         string surfaceLine = preview.DestinationSurface != SurfaceType.None
                             ? $"\nSurface Hazard: {preview.DestinationSurface}"
                             : string.Empty;
-                        string statusLine = preview.CanExecute ? "SWIFT ACTION: Click to shove." : $"Blocked: {preview.Reason}";
+                        string statusLine = preview.CanExecute ? $"Cost: {preview.ApCost} AP | Click to shove." : $"Blocked: {preview.Reason}";
 
                         string intentSuffix = string.IsNullOrEmpty(hoveredEnemyIntentLine) ? string.Empty : $"\n{hoveredEnemyIntentLine}";
                         hudController?.SetCombatHoverPreview(
-                            $"Shove: {hoveredUnit.Name}",
-                            $"{chanceLine}{hazardLine}{surfaceLine}{intentSuffix}\n\n{statusLine}",
+                            $"Shove: {hoveredUnit.Name} ({preview.ApCost} AP)",
+                            $"Cost: {preview.ApCost} AP\n{chanceLine}{hazardLine}{surfaceLine}{intentSuffix}\n\n{statusLine}",
                             badge);
                     }
                     else if (!_isHoveringHotbarUi)
@@ -4259,7 +4508,7 @@ namespace Realmz.Game
                             ? CombatSession.PreviewRangedAttack(actor.Id, clickedUnit.Id)
                             : null;
                         ReachableTileInfo bestTile = null;
-                        bool canApproachMelee = actor.Economy.HasStandardAction &&
+                        bool canApproachMelee = actor.Economy.HasApFor(actor.MeleeApCost) &&
                                                 actor.Economy.MoveRemaining > 0 &&
                                                 FindBestSmartApproachTile(actor, clickedUnit, out bestTile, out _);
 
@@ -4278,7 +4527,7 @@ namespace Realmz.Game
                             return;
                         }
 
-                        if (canApproachMelee && bestTile != null)
+                        if (canApproachMelee && bestTile != null && bestTile.PathCost + actor.MeleeApCost <= actor.Economy.CurrentAp)
                         {
                             CombatActionResult stepRes = ExecuteCombatMoveStep(actor, bestTile.Coord);
                             if (!stepRes.Success)
@@ -4295,7 +4544,7 @@ namespace Realmz.Game
 
                             if (actor.IsConscious &&
                                 actor.Position.ChebyshevDistance(clickedUnit.Position) <= 1 &&
-                                actor.Economy.HasStandardAction &&
+                                actor.Economy.HasApFor(actor.MeleeApCost) &&
                                 clickedUnit.IsAlive)
                             {
                                 Dictionary<string, int> postMoveHps = CaptureCombatantHps();
@@ -4655,15 +4904,35 @@ namespace Realmz.Game
             CombatantState actor = CombatSession.CurrentActor;
             if (actor != null)
             {
-                if (!actor.Economy.HasStandardAction &&
-                    (_activeCombatMode == CombatActionMode.Melee ||
-                     _activeCombatMode == CombatActionMode.Ranged ||
-                     _activeCombatMode == CombatActionMode.Spell))
+                if (res.ApSpent > 0 && _combatUnitViews.TryGetValue(actor.Id, out BywaterUnitView apActorView) && apActorView != null)
+                {
+                    apActorView.ShowArcingFloatingText($"-{res.ApSpent} AP", new Color(0.98f, 0.80f, 0.14f, 1f), isCrit: false);
+                }
+
+                if (_activeCombatMode == CombatActionMode.Melee && !actor.Economy.HasApFor(actor.MeleeApCost))
                 {
                     _activeCombatMode = CombatActionMode.Smart;
                 }
+                else if (_activeCombatMode == CombatActionMode.Ranged && !actor.Economy.HasApFor(actor.RangedApCost))
+                {
+                    _activeCombatMode = CombatActionMode.Smart;
+                }
+                else if (_activeCombatMode == CombatActionMode.Spell)
+                {
+                    int spAp = 3;
+                    int spCost = 0;
+                    if (_selectedSpellId >= 0 && Bundle != null && Bundle.Spells.TryGetValue(_selectedSpellId, out SpellDefinition spDef))
+                    {
+                        spAp = CombatWeaponCosts.GetSpellApCost(spDef);
+                        spCost = spDef.SpCost;
+                    }
+                    if (!actor.Economy.HasApFor(spAp) || actor.Sp < spCost)
+                    {
+                        _activeCombatMode = CombatActionMode.Smart;
+                    }
+                }
                 else if ((_activeCombatMode == CombatActionMode.Shove || _activeCombatMode == CombatActionMode.Potion) &&
-                         !actor.Economy.HasSwiftAction)
+                         !actor.Economy.HasApFor(CombatActionEconomy.DefaultShoveApCost))
                 {
                     _activeCombatMode = CombatActionMode.Smart;
                 }
@@ -4671,9 +4940,8 @@ namespace Realmz.Game
                 if (_autoEndTurn &&
                     !_autoCombatEnabled &&
                     CombatSession.Outcome == CombatOutcome.InProgress &&
-                    !actor.Economy.HasStandardAction &&
-                    !actor.Economy.HasSwiftAction &&
-                    actor.Economy.MoveRemaining == 0)
+                    actor.Economy.CurrentAp == 0 &&
+                    actor.Economy.FreeMoveTilesRemaining == 0)
                 {
                     HandleEndTurn();
                     return;
@@ -4784,7 +5052,7 @@ namespace Realmz.Game
             {
                 if (_combatUnitViews.TryGetValue(actor.Id, out BywaterUnitView view) && view != null)
                 {
-                    view.ShowArcingFloatingText("GUARD +4 AC", BywaterUiHelpers.InfoCyan, isCrit: false);
+                    view.ShowArcingFloatingText($"OVERWATCH (-{res.ApSpent} AP)", BywaterUiHelpers.InfoCyan, isCrit: false);
                 }
 
                 SyncAllCombatUnitViews();
@@ -5039,7 +5307,7 @@ namespace Realmz.Game
             hudController?.SetCombatHoverPreview(
                 title,
                 (prefixLine ?? string.Empty) +
-                $"Hit%: {preview.HitChancePct}% (Uncapped {preview.UncappedHitScore}%)\n" +
+                $"Cost: {preview.ApCost} AP   |   Hit%: {preview.HitChancePct}% (Uncapped {preview.UncappedHitScore}%)\n" +
                 $"Dmg: {preview.MinDamage} - {preview.MaxDamage}   |   Defender AC: {preview.DefenderAc}\n" +
                 $"Crit%: {preview.CritChancePct}%   |   Graze%: {preview.GrazeChancePct}%\n" +
                 losLine + flankLine + aooLine +
@@ -5657,9 +5925,9 @@ namespace Realmz.Game
                 case CombatActionMode.Spell:
                     return "Spell Mode - Hover arena to preview AoE & Save%, click to cast, or Right-Click / [Esc] to cancel.";
                 case CombatActionMode.Potion:
-                    return "Potion Mode - Click any ally (or yourself) to heal [Swift], or Right-Click / [Esc] to cancel.";
+                    return "Potion Mode - Click any ally (or yourself) to heal [2 AP], or Right-Click / [Esc] to cancel.";
                 case CombatActionMode.Shove:
-                    return "Shove Mode - Hover adjacent unit to preview push direction, click to shove, or Right-Click / [Esc] to cancel.";
+                    return "Shove Mode - Hover adjacent unit to preview push direction, click to shove [2 AP], or Right-Click / [Esc] to cancel.";
                 default:
                     return string.Empty;
             }
@@ -6512,10 +6780,18 @@ namespace Realmz.Game
             audioDirector?.PlayFootstep(rule.SoundId, map.IsDungeon);
             worldRenderer?.UpdateHeroWorldPosition(destWorld);
 
+            if (actor.Side == CombatSide.Hero && _combatUnitViews.TryGetValue(actor.Id, out BywaterUnitView stepView) && stepView != null)
+            {
+                string stepCostLabel = moveRes.ApSpent > 0 ? $"-{moveRes.ApSpent} AP" : "FREE MOVE";
+                Color stepCostCol = moveRes.ApSpent > 0 ? new Color(0.98f, 0.80f, 0.14f, 1f) : BywaterUiHelpers.InfoCyan;
+                stepView.ShowArcingFloatingText(stepCostLabel, stepCostCol, isCrit: false);
+            }
+
             if (moveRes.AoOTriggered && _combatUnitViews.TryGetValue(actor.Id, out BywaterUnitView hitView) && hitView != null)
             {
+                bool wasOverwatch = CombatSession.Log.Count > 0 && string.Equals(CombatSession.Log[CombatSession.Log.Count - 1].ActionType, "Overwatch", StringComparison.Ordinal);
                 hitView.PlayHitFlash(0.055f);
-                hitView.ShowArcingFloatingText($"AoO -{moveRes.DamageDealt}!", BywaterUiHelpers.DangerRed, isCrit: false);
+                hitView.ShowArcingFloatingText(wasOverwatch ? $"OVERWATCH -{moveRes.DamageDealt}!" : $"AoO -{moveRes.DamageDealt}!", BywaterUiHelpers.DangerRed, isCrit: false);
                 cameraRig?.PlayImpactImpulse(0.12f, 0.14f);
             }
 
@@ -6540,9 +6816,8 @@ namespace Realmz.Game
                 CombatSession.Outcome == CombatOutcome.InProgress &&
                 CombatSession.CurrentActor == actor &&
                 actor != null &&
-                !actor.Economy.HasStandardAction &&
-                !actor.Economy.HasSwiftAction &&
-                actor.Economy.MoveRemaining == 0)
+                actor.Economy.CurrentAp == 0 &&
+                actor.Economy.FreeMoveTilesRemaining == 0)
             {
                 HandleEndTurn();
                 return true;

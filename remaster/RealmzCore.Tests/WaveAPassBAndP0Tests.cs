@@ -885,7 +885,9 @@ namespace RealmzCore.Tests
             Assert.Equal(new GridCoord(5, 4), goblin.Position);
             Assert.Equal(16, goblin.Hp);
             Assert.True(goblin.IsProne);
-            Assert.False(hero.Economy.HasSwiftAction);
+            Assert.Equal(2, res.ApSpent);
+            Assert.Equal(4, hero.Economy.CurrentAp);
+            Assert.True(hero.Economy.HasApFor(3));
             Assert.True(hero.Economy.HasStandardAction);
         }
 
@@ -1093,15 +1095,16 @@ namespace RealmzCore.Tests
             Assert.Equal(goblinSwiftBefore, goblin.Economy.HasSwiftAction);
             Assert.Equal(goblinReactBefore, goblin.Economy.HasReaction);
 
-            // Hero passes uncontested; supply exact rolls for goblin's melee attack and execute.
+            // Hero passes uncontested with Guard/Overwatch; supply rolls for Hero Overwatch reaction miss (99) + Goblin melee attack (15, 4).
             Assert.True(session.GuardOverwatch().Success);
             session.EndTurn();
             Assert.Equal("m1", session.CurrentActorId);
 
-            roller.Enqueue(15, 4);
+            roller.Enqueue(99, 15, 4);
             CombatActionResult execRes = session.ExecuteMonsterAiTurn();
             Assert.True(execRes.Success);
             Assert.Equal(prediction.PlannedMoveCoord, goblin.Position);
+            Assert.Contains(session.Log, e => e.ActorId == "h1" && e.ActionType == "Overwatch");
             Assert.Contains(session.Log, e => e.ActorId == "m1" && e.ActionType == "MeleeAttack" && e.TargetIds.Count == 1 && e.TargetIds[0] == targetId);
         }
 

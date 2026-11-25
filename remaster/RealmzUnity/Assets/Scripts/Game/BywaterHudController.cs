@@ -115,6 +115,7 @@ namespace Realmz.Game
             public Image Icon;
             public TextMeshProUGUI HotkeyText;
             public TextMeshProUGUI LabelText;
+            public TextMeshProUGUI ApText;
             public TextMeshProUGUI SpText;
             public LayoutElement Layout;
             public string ActionId;
@@ -228,6 +229,7 @@ namespace Realmz.Game
         private readonly List<Button> _partyHeroSelectorBtns = new List<Button>(6);
         private Image _drawerHeroPortrait;
         private TextMeshProUGUI _drawerHeroTitle;
+        private readonly List<Button> _formationRankBtns = new List<Button>(3);
         private TextMeshProUGUI _drawerHeroStats;
         private TextMeshProUGUI _drawerHeroConditions;
         private TextMeshProUGUI _drawerHeroSpells;
@@ -276,12 +278,12 @@ namespace Realmz.Game
         private Image _combatActorPortrait;
         private TextMeshProUGUI _combatActorName;
         private TextMeshProUGUI _combatActorVitals;
-        private readonly List<Image> _movePipSegments = new List<Image>(10);
-        private TextMeshProUGUI _combatMovePip;
-        private Image _combatStdPipIcon;
-        private TextMeshProUGUI _combatStdPip;
-        private Image _combatSwiftPipIcon;
-        private TextMeshProUGUI _combatSwiftPip;
+        private GameObject _actionBarRoot;
+        private GameObject _apDiamondsRow;
+        private readonly List<Image> _apDiamondIcons = new List<Image>(10);
+        private TextMeshProUGUI _combatApValueText;
+        private GameObject _combatFreeMovePill;
+        private TextMeshProUGUI _combatFreeMoveText;
         private readonly List<HotbarSlotRefs> _hotbarSlots = new List<HotbarSlotRefs>(MaxHotbarSlots);
         private readonly List<string> _visibleHotbarActionIds = new List<string>(16);
         private readonly List<string> _badgeKeysScratch = new List<string>(4);
@@ -289,6 +291,7 @@ namespace Realmz.Game
         private Image _combatUndoBtnIcon;
         private Button _combatPotionBtn;
         private Image _combatPotionBtnIcon;
+        private TextMeshProUGUI _combatPotionApBadgeText;
         private Button _combatTorchBtn;
         private Image _combatTorchBtnIcon;
         private Button _combatShoveBtn;
@@ -297,9 +300,14 @@ namespace Realmz.Game
         private TextMeshProUGUI _combatShoveSwiftBadgeText;
         private Button _combatGuardBtn;
         private Image _combatGuardBtnIcon;
+        private TextMeshProUGUI _combatGuardApBadgeText;
+        private Image _combatGuardApBadgeBg;
         private Button _combatEndTurnBtn;
         private Image _combatEndTurnBtnIcon;
         private bool _pulseEndTurn;
+        private GameObject _deploymentBannerRoot;
+        private TextMeshProUGUI _deploymentBannerText;
+        private Button _deploymentStartBattleBtn;
         private GameObject _combatDarknessBadge;
         private TextMeshProUGUI _combatDarknessText;
         private GameObject _spellPickerBar;
@@ -417,6 +425,8 @@ namespace Realmz.Game
 
         public event Action<int> OnHeroCardClicked;
         public event Action<int> OnPartyHeroSelected;
+        public event Action<int, FormationRank> OnHeroFormationChanged;
+        public event Action OnStartBattleRequested;
         public event Action<int, EquipmentSlot> OnUnequipRequested;
         public event Action<int, int> OnEquipFromStashRequested;
         public event Action<int, int> OnUseStashItemRequested;
@@ -1310,12 +1320,18 @@ namespace Realmz.Game
                 TextMeshProUGUI lbl = btn.GetComponentInChildren<TextMeshProUGUI>();
                 if (lbl != null)
                 {
-                    lbl.text = party.Members[i].Name;
+                    FormationRank rank = party.GetFormationRank(i);
+                    string rankCode = rank == FormationRank.Front ? "F" : (rank == FormationRank.Mid ? "M" : "B");
+                    lbl.text = $"{party.Members[i].Name} [{rankCode}]";
                 }
                 BywaterUiHelpers.SetButtonColors(btn, i == _selectedHeroIndex);
             }
 
             PartyMemberState hero = party.Members[_selectedHeroIndex];
+            for (int r = 0; r < _formationRankBtns.Count; r++)
+            {
+                BywaterUiHelpers.SetButtonColors(_formationRankBtns[r], (int)hero.FormationRank == r);
+            }
             _drawerHeroPortrait.sprite = ResolveHeroPortrait(hero.Id, hero.PortraitId, hero.Archetype);
             _drawerHeroPortrait.preserveAspect = true;
             _drawerHeroPortrait.color = _drawerHeroPortrait.sprite != null ? Color.white : new Color(0.2f, 0.25f, 0.35f, 1f);
@@ -2051,8 +2067,25 @@ namespace Realmz.Game
             CombatantState actor = combat.CurrentActor;
             RefreshCombatPartyStrip(combat, actor);
 
-            // 3. Bottom Tactical Action Bar + Visual Action Pips + Contextual Icon Hotbar
-            bool isHeroTurn = combat.Outcome == CombatOutcome.InProgress && actor != null && actor.Side == CombatSide.Hero;
+            // 3. Bottom Tactical Action Bar OR Pre-Battle Deployment Banner
+            bool isDeployment = combat.Phase == CombatPhase.Deployment;
+            bool isHeroTurn = !isDeployment && combat.Outcome == CombatOutcome.InProgress && actor != null && actor.Side == CombatSide.Hero;
+
+            if (_deploymentBannerRoot != null)
+            {
+                _deploymentBannerRoot.SetActive(isDeployment);
+                if (isDeployment && _deploymentBannerText != null)
+                {
+                    _deploymentBannerText.text = combat.SurpriseMode == CombatInitiativeSurpriseMode.PartyAmbush
+                        ? "SCOUT AMBUSH DEPLOYMENT: High Ground unlocked! Click 2 heroes to swap or click a cyan tile."
+                        : "PRE-BATTLE DEPLOYMENT: Click 2 heroes to swap, or click a cyan tile to move.";
+                }
+            }
+
+            if (_actionBarRoot != null)
+            {
+                _actionBarRoot.SetActive(!isDeployment);
+            }
 
             if (actor != null)
             {
@@ -2060,7 +2093,7 @@ namespace Realmz.Game
                 _combatActorPortrait.sprite = actorSprite;
                 _combatActorPortrait.preserveAspect = true;
                 _combatActorPortrait.color = actorSprite != null ? Color.white : new Color(0.25f, 0.25f, 0.35f, 1f);
-                _combatActorName.text = isHeroTurn ? actor.Name : $"{actor.Name} (AI)";
+                _combatActorName.text = isDeployment ? "Deployment Phase" : (isHeroTurn ? actor.Name : $"{actor.Name} (AI)");
                 _combatActorVitals.text = $"HP {actor.Hp}/{actor.MaxHp}  |  SP {actor.Sp}/{actor.MaxSp}  |  AC {actor.EffectiveAc}";
 
                 RefreshVisualActionPips(actor);
@@ -2397,44 +2430,62 @@ namespace Realmz.Game
 
         private void RefreshVisualActionPips(CombatantState actor)
         {
-            int moveMax = Mathf.Max(1, actor.Economy.MoveBudget);
-            int moveRem = Mathf.Clamp(actor.Economy.MoveRemaining, 0, moveMax);
-            int segCount = _movePipSegments.Count;
-            int litSegments = moveRem <= 0 ? 0 : Mathf.CeilToInt((moveRem / (float)moveMax) * segCount);
-
-            Color moveLit = new Color(0.18f, 0.84f, 0.44f, 1f);
-            Color moveSpent = new Color(0.16f, 0.20f, 0.26f, 0.90f);
-            for (int i = 0; i < segCount; i++)
+            if (actor == null)
             {
-                _movePipSegments[i].color = i < litSegments ? moveLit : moveSpent;
+                return;
             }
 
-            if (_combatMovePip != null)
+            int basePlusSet = Mathf.Max(CombatActionEconomy.DefaultBaseApPerTurn, actor.Economy.NominalMaxAp);
+            int maxThisTurn = Mathf.Max(basePlusSet, actor.Economy.MaxAp);
+            int currentAp = Mathf.Clamp(actor.Economy.CurrentAp, 0, maxThisTurn);
+            int totalVisibleDiamonds = Mathf.Min(_apDiamondIcons.Count, Mathf.Max(basePlusSet, maxThisTurn));
+
+            Color goldAp = new Color(0.98f, 0.80f, 0.14f, 1f);
+            Color carryoverTint = new Color(0.32f, 0.92f, 0.98f, 1f);
+            Color spentDim = new Color(0.22f, 0.25f, 0.32f, 0.90f);
+
+            for (int i = 0; i < _apDiamondIcons.Count; i++)
             {
-                _combatMovePip.text = $"{moveRem}/{moveMax}";
-                _combatMovePip.color = moveRem > 0 ? moveLit : BywaterUiHelpers.MutedSlate;
+                Image diamond = _apDiamondIcons[i];
+                if (diamond == null)
+                {
+                    continue;
+                }
+
+                bool visible = i < totalVisibleDiamonds;
+                diamond.gameObject.SetActive(visible);
+                if (!visible)
+                {
+                    continue;
+                }
+
+                if (i < currentAp)
+                {
+                    diamond.color = i >= basePlusSet ? carryoverTint : goldAp;
+                }
+                else
+                {
+                    diamond.color = spentDim;
+                }
             }
 
-            Color dimCharcoal = new Color(0.22f, 0.25f, 0.32f, 0.95f);
-            Color actionGold = new Color(0.98f, 0.80f, 0.08f, 1f); // #FACC15
-            Color swiftCyan = new Color(0.22f, 0.74f, 0.97f, 1f);  // #38BDF8
-
-            if (_combatStdPipIcon != null)
+            if (_combatApValueText != null)
             {
-                _combatStdPipIcon.color = actor.Economy.HasStandardAction ? actionGold : dimCharcoal;
-            }
-            if (_combatStdPip != null)
-            {
-                _combatStdPip.color = actor.Economy.HasStandardAction ? actionGold : BywaterUiHelpers.MutedSlate;
+                string carrySuffix = actor.Economy.CarriedInAp > 0 ? $" (+{actor.Economy.CarriedInAp})" : string.Empty;
+                _combatApValueText.text = $"{currentAp}/{basePlusSet} AP{carrySuffix}";
+                _combatApValueText.color = actor.Economy.CarriedInAp > 0
+                    ? carryoverTint
+                    : (currentAp > 0 ? goldAp : BywaterUiHelpers.MutedSlate);
             }
 
-            if (_combatSwiftPipIcon != null)
+            if (_combatFreeMovePill != null)
             {
-                _combatSwiftPipIcon.color = actor.Economy.HasSwiftAction ? swiftCyan : dimCharcoal;
-            }
-            if (_combatSwiftPip != null)
-            {
-                _combatSwiftPip.color = actor.Economy.HasSwiftAction ? swiftCyan : BywaterUiHelpers.MutedSlate;
+                int freeLeft = actor.Economy.FreeMoveTilesRemaining;
+                _combatFreeMovePill.SetActive(freeLeft > 0);
+                if (freeLeft > 0 && _combatFreeMoveText != null)
+                {
+                    _combatFreeMoveText.text = $"+{freeLeft} Free";
+                }
             }
         }
 
@@ -2449,8 +2500,15 @@ namespace Realmz.Game
             _visibleHotbarActionIds.Clear();
 
             int slotCursor = 0;
-            bool hasStd = isHeroTurn && actor != null && actor.Economy.HasStandardAction;
-            bool hasSwift = isHeroTurn && actor != null && actor.Economy.HasSwiftAction;
+            int meleeCost = actor != null ? Mathf.Max(1, actor.MeleeApCost) : CombatActionEconomy.StandardWeaponApCost;
+            int rangedCost = actor != null ? Mathf.Max(1, actor.RangedApCost) : CombatActionEconomy.StandardWeaponApCost;
+            int guardCost = actor != null ? actor.Economy.EffectiveGuardApCost : CombatActionEconomy.DefaultGuardApCost;
+            bool hasMeleeAp = isHeroTurn && actor != null && actor.Economy.HasApFor(meleeCost);
+            bool hasRangedAp = isHeroTurn && actor != null && actor.Economy.HasApFor(rangedCost);
+            bool hasShoveAp = isHeroTurn && actor != null && actor.Economy.HasApFor(CombatActionEconomy.DefaultShoveApCost);
+            bool hasPotionAp = isHeroTurn && actor != null && actor.Economy.HasApFor(CombatActionEconomy.DefaultPotionApCost);
+            bool hasTorchAp = isHeroTurn && actor != null && actor.Economy.HasApFor(CombatActionEconomy.DefaultTorchApCost);
+            bool hasGuardAp = isHeroTurn && actor != null && actor.Economy.HasApFor(guardCost);
 
             if (actor != null && actor.IsAlive)
             {
@@ -2467,11 +2525,12 @@ namespace Realmz.Game
                     hotkeyIndex: slotCursor,
                     iconKey: meleeIconKey,
                     label: meleeLabel,
+                    apCost: meleeCost,
                     spCost: 0,
-                    interactable: hasStd,
+                    interactable: hasMeleeAp,
                     selected: isHeroTurn && activeMode == CombatActionMode.Melee,
-                    tipTitle: $"{meleeLabel} [Melee]",
-                    tipBody: $"Weapon: {actor.WeaponDice} (+{actor.EffectiveToHit} Hit). Standard action.",
+                    tipTitle: $"{meleeLabel} [{meleeCost} AP]",
+                    tipBody: $"Weapon: {actor.WeaponDice} (+{actor.EffectiveToHit} Hit). Cost: {meleeCost} AP.",
                     directIconSprite: meleeSprite);
 
                 // Slot 2: Ranged (ONLY if actor has ranged weapon/range)
@@ -2489,11 +2548,12 @@ namespace Realmz.Game
                         hotkeyIndex: slotCursor,
                         iconKey: "bow",
                         label: rangedLabel,
+                        apCost: rangedCost,
                         spCost: 0,
-                        interactable: hasStd,
+                        interactable: hasRangedAp,
                         selected: isHeroTurn && activeMode == CombatActionMode.Ranged,
-                        tipTitle: $"{rangedLabel} [Ranged]",
-                        tipBody: $"Damage: {actor.RangedDice}, Range {actor.RangedRange}. Standard action.",
+                        tipTitle: $"{rangedLabel} [{rangedCost} AP]",
+                        tipBody: $"Damage: {actor.RangedDice}, Range {actor.RangedRange}. Cost: {rangedCost} AP.",
                         directIconSprite: rangedSprite);
                 }
 
@@ -2508,7 +2568,9 @@ namespace Realmz.Game
                             continue;
                         }
 
+                        int spellAp = CombatWeaponCosts.GetSpellApCost(spell);
                         bool enoughSp = actor.Sp >= spell.SpCost;
+                        bool enoughAp = isHeroTurn && actor.Economy.HasApFor(spellAp);
                         bool isSelectedSpell = isHeroTurn && activeMode == CombatActionMode.Spell && spell.Id == selectedSpellId;
                         string spellIcon = ResolveSpellIconKey(spell);
                         Sprite spellSprite = _catalog != null
@@ -2529,11 +2591,12 @@ namespace Realmz.Game
                             hotkeyIndex: slotCursor,
                             iconKey: spellIcon,
                             label: ShortenSpellName(spell.Name),
+                            apCost: spellAp,
                             spCost: spell.SpCost,
-                            interactable: hasStd && enoughSp,
+                            interactable: enoughAp && enoughSp,
                             selected: isSelectedSpell,
-                            tipTitle: $"{spell.Name} ({spell.SpCost} SP)",
-                            tipBody: $"{scope} | Range {spell.Range} | {(string.IsNullOrWhiteSpace(spell.EffectDice) ? spell.EffectKind : spell.EffectDice)}. {(string.IsNullOrWhiteSpace(spell.Description) ? string.Empty : spell.Description)}",
+                            tipTitle: $"{spell.Name} [{spellAp} AP | {spell.SpCost} SP]",
+                            tipBody: $"{scope} | Range {spell.Range} | {(string.IsNullOrWhiteSpace(spell.EffectDice) ? spell.EffectKind : spell.EffectDice)}. Cost: {spellAp} AP, {spell.SpCost} SP. {(string.IsNullOrWhiteSpace(spell.Description) ? string.Empty : spell.Description)}",
                             directIconSprite: spellSprite);
                     }
                 }
@@ -2561,8 +2624,9 @@ namespace Realmz.Game
             if (_combatPotionBtn != null)
             {
                 _combatPotionBtn.gameObject.SetActive(hasPotion);
-                _combatPotionBtn.interactable = hasPotion && hasSwift;
-                if (_combatPotionBtnIcon != null) _combatPotionBtnIcon.color = (hasPotion && hasSwift) ? enabledIconTint : disabledIconTint;
+                _combatPotionBtn.interactable = hasPotion && hasPotionAp;
+                if (_combatPotionBtnIcon != null) _combatPotionBtnIcon.color = (hasPotion && hasPotionAp) ? enabledIconTint : disabledIconTint;
+                if (_combatPotionApBadgeText != null) _combatPotionApBadgeText.color = (hasPotion && hasPotionAp) ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.MutedSlate;
                 BywaterUiHelpers.SetButtonColors(_combatPotionBtn, isHeroTurn && activeMode == CombatActionMode.Potion);
                 if (hasPotion) _visibleHotbarActionIds.Add("potion");
             }
@@ -2572,34 +2636,46 @@ namespace Realmz.Game
             if (_combatTorchBtn != null)
             {
                 _combatTorchBtn.gameObject.SetActive(showCombatTorch);
-                _combatTorchBtn.interactable = showCombatTorch && hasSwift;
-                if (_combatTorchBtnIcon != null) _combatTorchBtnIcon.color = (showCombatTorch && hasSwift) ? enabledIconTint : disabledIconTint;
+                _combatTorchBtn.interactable = showCombatTorch && hasTorchAp;
+                if (_combatTorchBtnIcon != null) _combatTorchBtnIcon.color = (showCombatTorch && hasTorchAp) ? enabledIconTint : disabledIconTint;
                 if (showCombatTorch) _visibleHotbarActionIds.Add("torch");
             }
 
             if (_combatShoveBtn != null)
             {
-                _combatShoveBtn.interactable = hasSwift;
-                if (_combatShoveBtnIcon != null) _combatShoveBtnIcon.color = hasSwift ? enabledIconTint : disabledIconTint;
+                _combatShoveBtn.interactable = hasShoveAp;
+                if (_combatShoveBtnIcon != null) _combatShoveBtnIcon.color = hasShoveAp ? enabledIconTint : disabledIconTint;
                 BywaterUiHelpers.SetButtonColors(_combatShoveBtn, isHeroTurn && activeMode == CombatActionMode.Shove);
                 _visibleHotbarActionIds.Add("shove");
             }
             if (_combatShoveSwiftBadgeText != null)
             {
-                _combatShoveSwiftBadgeText.color = hasSwift ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.MutedSlate;
+                _combatShoveSwiftBadgeText.text = $"{CombatActionEconomy.DefaultShoveApCost} AP";
+                _combatShoveSwiftBadgeText.color = hasShoveAp ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.MutedSlate;
             }
             if (_combatShoveSwiftBadgeBg != null)
             {
-                _combatShoveSwiftBadgeBg.color = hasSwift
+                _combatShoveSwiftBadgeBg.color = hasShoveAp
                     ? new Color(0.32f, 0.22f, 0.04f, 0.96f)
                     : new Color(0.10f, 0.12f, 0.18f, 0.90f);
-                BywaterUiHelpers.SetBorderColor(_combatShoveSwiftBadgeBg.transform, hasSwift ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.MutedSlate);
+                BywaterUiHelpers.SetBorderColor(_combatShoveSwiftBadgeBg.transform, hasShoveAp ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.MutedSlate);
             }
 
             if (_combatGuardBtn != null)
             {
-                _combatGuardBtn.interactable = hasStd;
-                if (_combatGuardBtnIcon != null) _combatGuardBtnIcon.color = hasStd ? enabledIconTint : disabledIconTint;
+                _combatGuardBtn.interactable = hasGuardAp;
+                if (_combatGuardBtnIcon != null) _combatGuardBtnIcon.color = hasGuardAp ? enabledIconTint : disabledIconTint;
+                if (_combatGuardApBadgeText != null)
+                {
+                    _combatGuardApBadgeText.text = $"{guardCost} AP";
+                    _combatGuardApBadgeText.color = hasGuardAp
+                        ? (guardCost < CombatActionEconomy.DefaultGuardApCost ? BywaterUiHelpers.InfoCyan : BywaterUiHelpers.BrassHighlight)
+                        : BywaterUiHelpers.MutedSlate;
+                }
+                if (_combatGuardApBadgeBg != null)
+                {
+                    BywaterUiHelpers.SetBorderColor(_combatGuardApBadgeBg.transform, hasGuardAp ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.MutedSlate);
+                }
                 _visibleHotbarActionIds.Add("guard");
             }
 
@@ -2607,7 +2683,7 @@ namespace Realmz.Game
             {
                 _combatEndTurnBtn.interactable = isHeroTurn;
                 if (_combatEndTurnBtnIcon != null) _combatEndTurnBtnIcon.color = isHeroTurn ? enabledIconTint : disabledIconTint;
-                _pulseEndTurn = isHeroTurn && actor != null && !actor.Economy.HasStandardAction && !actor.Economy.HasSwiftAction;
+                _pulseEndTurn = isHeroTurn && actor != null && actor.Economy.CurrentAp < 2 && actor.Economy.FreeMoveTilesRemaining == 0;
                 if (!_pulseEndTurn)
                 {
                     BywaterUiHelpers.SetButtonColors(_combatEndTurnBtn, false);
@@ -2624,6 +2700,7 @@ namespace Realmz.Game
             int hotkeyIndex,
             string iconKey,
             string label,
+            int apCost,
             int spCost,
             bool interactable,
             bool selected,
@@ -2647,6 +2724,12 @@ namespace Realmz.Game
             slot.Icon.sprite = directIconSprite != null ? directIconSprite : LoadHotbarIcon(iconKey);
             slot.Icon.preserveAspect = true;
             slot.Icon.color = interactable ? Color.white : new Color(0.55f, 0.55f, 0.60f, 0.85f);
+
+            if (slot.ApText != null)
+            {
+                slot.ApText.text = $"{apCost} AP";
+                slot.ApText.color = interactable ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.MutedSlate;
+            }
 
             if (spCost > 0)
             {
@@ -3220,11 +3303,11 @@ namespace Realmz.Game
                     accent = BywaterUiHelpers.InfoCyan;
                     break;
                 case CombatActionMode.Shove:
-                    msg = "Shove Mode [Swift] - Click adjacent unit, or Right-Click / [Esc] to Move";
+                    msg = "Shove Mode [2 AP] - Click adjacent unit, or Right-Click / [Esc] to Move";
                     accent = BywaterUiHelpers.BrassHighlight;
                     break;
                 case CombatActionMode.Potion:
-                    msg = "Potion Mode [Swift] - Click ally to heal, or Right-Click / [Esc] to Move";
+                    msg = "Potion Mode [2 AP] - Click ally to heal, or Right-Click / [Esc] to Move";
                     accent = BywaterUiHelpers.SuccessGreen;
                     break;
                 default:
@@ -3275,6 +3358,10 @@ namespace Realmz.Game
                     if (_targetingBannerRoot != null)
                     {
                         _targetingBannerRoot.SetActive(false);
+                    }
+                    if (_deploymentBannerRoot != null)
+                    {
+                        _deploymentBannerRoot.SetActive(false);
                     }
                     if (_combatLogDrawerRoot != null)
                     {
@@ -3838,9 +3925,45 @@ namespace Realmz.Game
 
             BywaterUiHelpers.CreatePortraitFrame(heroTop.transform, "DrawerPortraitFrame", 128f, out _drawerHeroPortrait);
 
-            _drawerHeroTitle = BywaterUiHelpers.CreateLabel(heroTop.transform, "HeroTitle", "Aldric", _font, 18.5f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold);
+            GameObject heroTitleCol = new GameObject("HeroTitleFormationCol", typeof(RectTransform), typeof(VerticalLayoutGroup));
+            heroTitleCol.transform.SetParent(heroTop.transform, false);
+            heroTitleCol.AddComponent<LayoutElement>().flexibleWidth = 1f;
+            VerticalLayoutGroup htcVlg = heroTitleCol.GetComponent<VerticalLayoutGroup>();
+            htcVlg.spacing = 8f;
+            htcVlg.childControlWidth = true;
+            htcVlg.childControlHeight = true;
+            htcVlg.childForceExpandHeight = false;
+
+            _drawerHeroTitle = BywaterUiHelpers.CreateLabel(heroTitleCol.transform, "HeroTitle", "Aldric", _font, 18.5f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold);
             BywaterUiHelpers.AddTextDropShadow(_drawerHeroTitle);
-            _drawerHeroTitle.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+            _drawerHeroTitle.gameObject.AddComponent<LayoutElement>().preferredHeight = 46f;
+
+            GameObject formationRow = new GameObject("FormationRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+            formationRow.transform.SetParent(heroTitleCol.transform, false);
+            formationRow.AddComponent<LayoutElement>().preferredHeight = 32f;
+            HorizontalLayoutGroup frmHlg = formationRow.GetComponent<HorizontalLayoutGroup>();
+            frmHlg.spacing = 6f;
+            frmHlg.childControlWidth = true;
+            frmHlg.childControlHeight = true;
+            frmHlg.childForceExpandWidth = false;
+            frmHlg.childAlignment = TextAnchor.MiddleLeft;
+
+            TextMeshProUGUI frmLbl = BywaterUiHelpers.CreateLabel(formationRow.transform, "FormationLabel", "Rank:", _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            frmLbl.gameObject.AddComponent<LayoutElement>().preferredWidth = 52f;
+
+            _formationRankBtns.Clear();
+            FormationRank[] ranks = { FormationRank.Front, FormationRank.Mid, FormationRank.Back };
+            string[] rankNames = { "Front", "Mid", "Back" };
+            for (int r = 0; r < ranks.Length; r++)
+            {
+                FormationRank targetRank = ranks[r];
+                Button rankBtn = BywaterUiHelpers.CreateButton(formationRow.transform, $"FormationRankBtn_{rankNames[r]}", rankNames[r], _font, () =>
+                {
+                    OnHeroFormationChanged?.Invoke(_selectedHeroIndex, targetRank);
+                }, 15f);
+                rankBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 72f;
+                _formationRankBtns.Add(rankBtn);
+            }
 
             _drawerHeroStats = BywaterUiHelpers.CreateLabel(leftCol, "HeroStats", string.Empty, _font, 15.5f, BywaterUiHelpers.ParchmentText);
             _drawerHeroStats.gameObject.AddComponent<LayoutElement>().preferredHeight = 72f;
@@ -4779,13 +4902,14 @@ namespace Realmz.Game
             _spellPickerBar = legacySpellBar;
             _spellPickerBar.SetActive(false);
 
-            // 5. Bottom Tactical Action Bar (Visual Action Pips + Contextual Icon Hotbar 1-6 + Skills)
+            // 5. Bottom Tactical Action Bar (Unified 6-AP Diamonds + Contextual Hotbar 1-6 + Skills)
             RectTransform actionBar = BywaterUiHelpers.CreatePanel(_combatRoot.transform, "TacticalActionBar", BywaterUiHelpers.PanelDarkBg, withBrassOutline: true, outlinePx: 1.8f);
+            _actionBarRoot = actionBar.gameObject;
             actionBar.anchorMin = new Vector2(0.5f, 0f);
             actionBar.anchorMax = new Vector2(0.5f, 0f);
             actionBar.pivot = new Vector2(0.5f, 0f);
             actionBar.anchoredPosition = new Vector2(-180f, 10f);
-            actionBar.sizeDelta = new Vector2(1200f, 88f);
+            actionBar.sizeDelta = new Vector2(1240f, 90f);
 
             HorizontalLayoutGroup abHlg = actionBar.gameObject.AddComponent<HorizontalLayoutGroup>();
             abHlg.padding = new RectOffset(10, 10, 6, 6);
@@ -4803,7 +4927,7 @@ namespace Realmz.Game
 
             GameObject actorInfo = new GameObject("ActorInfo", typeof(RectTransform), typeof(VerticalLayoutGroup));
             actorInfo.transform.SetParent(actionBar, false);
-            actorInfo.AddComponent<LayoutElement>().preferredWidth = 228f;
+            actorInfo.AddComponent<LayoutElement>().preferredWidth = 286f;
             VerticalLayoutGroup aiVlg = actorInfo.GetComponent<VerticalLayoutGroup>();
             aiVlg.spacing = 2f;
             aiVlg.childControlWidth = true;
@@ -4815,58 +4939,44 @@ namespace Realmz.Game
             _combatActorVitals = BywaterUiHelpers.CreateLabel(actorInfo.transform, "ActorVitals", "HP 17/17 | SP 0/0 | AC 29", _font, 15.5f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, wrap: false);
             _combatActorVitals.overflowMode = TextOverflowModes.Truncate;
 
-            // BG3-style Visual Action Pips Row
-            GameObject pipsRow = new GameObject("PipsRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
-            pipsRow.transform.SetParent(actorInfo.transform, false);
-            pipsRow.AddComponent<LayoutElement>().preferredHeight = 24f;
-            HorizontalLayoutGroup pHlg = pipsRow.GetComponent<HorizontalLayoutGroup>();
-            pHlg.spacing = 4f;
-            pHlg.childControlWidth = true;
-            pHlg.childControlHeight = true;
-            pHlg.childForceExpandWidth = false;
-            pHlg.childAlignment = TextAnchor.MiddleLeft;
+            // Unified 6-AP Golden Diamonds Row + Carryover Tint + Free Move Boot Pill
+            GameObject apRow = new GameObject("ApDiamondsRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+            _apDiamondsRow = apRow;
+            apRow.transform.SetParent(actorInfo.transform, false);
+            apRow.AddComponent<LayoutElement>().preferredHeight = 24f;
+            HorizontalLayoutGroup apHlg = apRow.GetComponent<HorizontalLayoutGroup>();
+            apHlg.spacing = 3f;
+            apHlg.childControlWidth = true;
+            apHlg.childControlHeight = true;
+            apHlg.childForceExpandWidth = false;
+            apHlg.childAlignment = TextAnchor.MiddleLeft;
 
-            GameObject moveSegGroup = new GameObject("MoveSegments", typeof(RectTransform), typeof(HorizontalLayoutGroup));
-            moveSegGroup.transform.SetParent(pipsRow.transform, false);
-            moveSegGroup.AddComponent<LayoutElement>().preferredWidth = 60f;
-            HorizontalLayoutGroup msHlg = moveSegGroup.GetComponent<HorizontalLayoutGroup>();
-            msHlg.spacing = 2f;
-            msHlg.childControlWidth = true;
-            msHlg.childControlHeight = true;
-            msHlg.childForceExpandWidth = true;
-            msHlg.childAlignment = TextAnchor.MiddleLeft;
-
-            _movePipSegments.Clear();
-            for (int i = 0; i < 6; i++)
+            _apDiamondIcons.Clear();
+            Sprite diamondSprite = BywaterUiHelpers.GetProceduralIconSprite("diamond");
+            for (int i = 0; i < 10; i++)
             {
-                Image seg = BywaterUiHelpers.CreateImage(moveSegGroup.transform, $"MoveSeg_{i}", null, new Color(0.18f, 0.84f, 0.44f, 1f), preserveAspect: false);
-                seg.raycastTarget = false;
-                LayoutElement segLe = seg.gameObject.AddComponent<LayoutElement>();
-                segLe.preferredWidth = 8f;
-                segLe.preferredHeight = 14f;
-                _movePipSegments.Add(seg);
+                Image pip = BywaterUiHelpers.CreateImage(apRow.transform, $"ApDiamond_{i}", diamondSprite, new Color(0.98f, 0.80f, 0.14f, 1f), preserveAspect: true);
+                pip.raycastTarget = false;
+                LayoutElement pipLe = pip.gameObject.AddComponent<LayoutElement>();
+                pipLe.preferredWidth = 14f;
+                pipLe.preferredHeight = 14f;
+                pip.gameObject.SetActive(i < 6);
+                _apDiamondIcons.Add(pip);
             }
 
-            _combatMovePip = BywaterUiHelpers.CreateLabel(pipsRow.transform, "MovePip", "6/6", _font, 15f, new Color(0.18f, 0.84f, 0.44f, 1f), TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
-            _combatMovePip.gameObject.AddComponent<LayoutElement>().preferredWidth = 34f;
+            _combatApValueText = BywaterUiHelpers.CreateLabel(apRow.transform, "ApValueLabel", "6/6 AP", _font, 15f, new Color(0.98f, 0.80f, 0.14f, 1f), TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            _combatApValueText.gameObject.AddComponent<LayoutElement>().preferredWidth = 84f;
 
-            _combatStdPipIcon = BywaterUiHelpers.CreateImage(pipsRow.transform, "StdPipIcon", BywaterUiHelpers.GetProceduralIconSprite("circle"), new Color(0.98f, 0.80f, 0.08f, 1f), preserveAspect: true);
-            _combatStdPipIcon.preserveAspect = true;
-            _combatStdPipIcon.raycastTarget = false;
-            LayoutElement stdIconLe = _combatStdPipIcon.gameObject.AddComponent<LayoutElement>();
-            stdIconLe.preferredWidth = 17f;
-            stdIconLe.preferredHeight = 17f;
-            _combatStdPip = BywaterUiHelpers.CreateLabel(pipsRow.transform, "StdPip", "Act", _font, 15f, new Color(0.98f, 0.80f, 0.08f, 1f), TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
-            _combatStdPip.gameObject.AddComponent<LayoutElement>().preferredWidth = 32f;
-
-            _combatSwiftPipIcon = BywaterUiHelpers.CreateImage(pipsRow.transform, "SwiftPipIcon", BywaterUiHelpers.GetProceduralIconSprite("diamond"), new Color(0.22f, 0.74f, 0.97f, 1f), preserveAspect: true);
-            _combatSwiftPipIcon.preserveAspect = true;
-            _combatSwiftPipIcon.raycastTarget = false;
-            LayoutElement swiftIconLe = _combatSwiftPipIcon.gameObject.AddComponent<LayoutElement>();
-            swiftIconLe.preferredWidth = 17f;
-            swiftIconLe.preferredHeight = 17f;
-            _combatSwiftPip = BywaterUiHelpers.CreateLabel(pipsRow.transform, "SwiftPip", "Swf", _font, 15f, new Color(0.22f, 0.74f, 0.97f, 1f), TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
-            _combatSwiftPip.gameObject.AddComponent<LayoutElement>().preferredWidth = 34f;
+            RectTransform freePillRt = BywaterUiHelpers.CreatePanel(apRow.transform, "FreeMovePill", new Color(0.08f, 0.30f, 0.24f, 0.96f), withBrassOutline: true, outlinePx: 1f);
+            _combatFreeMovePill = freePillRt.gameObject;
+            BywaterUiHelpers.SetBorderColor(freePillRt, new Color(0.24f, 0.88f, 0.65f, 0.95f));
+            freePillRt.gameObject.AddComponent<LayoutElement>().preferredWidth = 74f;
+            _combatFreeMoveText = BywaterUiHelpers.CreateLabel(freePillRt, "FreeMoveLabel", "+1 Free", _font, 15f, new Color(0.45f, 0.98f, 0.78f, 1f), TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
+            _combatFreeMoveText.rectTransform.anchorMin = Vector2.zero;
+            _combatFreeMoveText.rectTransform.anchorMax = Vector2.one;
+            _combatFreeMoveText.rectTransform.offsetMin = Vector2.zero;
+            _combatFreeMoveText.rectTransform.offsetMax = Vector2.zero;
+            _combatFreeMovePill.SetActive(false);
 
             // Contextual Hotbar Slots (pooled 0..7)
             _hotbarSlots.Clear();
@@ -4875,32 +4985,75 @@ namespace Realmz.Game
                 _hotbarSlots.Add(CreateHotbarSlot(actionBar, i));
             }
 
-            // Fixed Tactical Skills (MoveBtn removed; UndoMove only when CanUndoMove; W-234 32x32 pixel icons)
-            _combatUndoBtn = AddCombatSkillButton(actionBar, "UndoMoveBtn", "undo", "Undo", 80f, () => OnUndoMoveRequested?.Invoke(), out _combatUndoBtnIcon);
-            AttachHoverTooltip(_combatUndoBtn.gameObject, "undo_move", "Undo Move", "Rewind your last movement step this turn.");
+            // Fixed Tactical Skills
+            _combatUndoBtn = AddCombatSkillButton(actionBar, "UndoMoveBtn", "undo", "Undo", 76f, () => OnUndoMoveRequested?.Invoke(), out _combatUndoBtnIcon, out _, out _, null);
+            AttachHoverTooltip(_combatUndoBtn.gameObject, "undo_move", "Undo Move [0 AP]", "Rewind your last movement step this turn.");
 
-            _combatPotionBtn = AddCombatSkillButton(actionBar, "PotionBtn", "potion", "Potion", 84f, () => OnCombatModeSelected?.Invoke(CombatActionMode.Potion), out _combatPotionBtnIcon);
-            AttachHoverTooltip(_combatPotionBtn.gameObject, "potion", "Healing Potion [Swift]", "Drink or throw a healing potion. Uses Swift action.");
+            _combatPotionBtn = AddCombatSkillButton(actionBar, "PotionBtn", "potion", "Potion", 94f, () => OnCombatModeSelected?.Invoke(CombatActionMode.Potion), out _combatPotionBtnIcon, out _combatPotionApBadgeText, out _, "2 AP");
+            AttachHoverTooltip(_combatPotionBtn.gameObject, "potion", "Healing Potion [2 AP]", "Drink or throw a healing potion. Cost: 2 AP.");
 
-            _combatTorchBtn = AddCombatSkillButton(actionBar, "CombatTorchBtn", "torch", "Torch", 82f, () => OnLightTorchFromHudRequested?.Invoke(), out _combatTorchBtnIcon);
-            AttachHoverTooltip(_combatTorchBtn.gameObject, "torch", "Light Torch [Swift]", "Ignite a Torch from party stash (+30 turns) to illuminate darkness and lift the -15% Ranged penalty.");
+            _combatTorchBtn = AddCombatSkillButton(actionBar, "CombatTorchBtn", "torch", "Torch", 90f, () => OnLightTorchFromHudRequested?.Invoke(), out _combatTorchBtnIcon, out _, out _, "2 AP");
+            AttachHoverTooltip(_combatTorchBtn.gameObject, "torch", "Light Torch [2 AP]", "Ignite a Torch from party stash (+30 turns) to illuminate darkness and lift the -15% Ranged penalty. Cost: 2 AP.");
             _combatTorchBtn.gameObject.SetActive(false);
 
-            _combatShoveBtn = AddShoveCombatButton(actionBar, "ShoveBtn", 124f, () => OnCombatModeSelected?.Invoke(CombatActionMode.Shove), out _combatShoveBtnIcon);
-            AttachHoverTooltip(_combatShoveBtn.gameObject, "shove", "Shove [V] [Swift]", "Push an adjacent enemy 1 tile (off ledges or into walls). Uses Swift action.");
+            _combatShoveBtn = AddShoveCombatButton(actionBar, "ShoveBtn", 104f, () => OnCombatModeSelected?.Invoke(CombatActionMode.Shove), out _combatShoveBtnIcon);
+            AttachHoverTooltip(_combatShoveBtn.gameObject, "shove", "Shove [V] [2 AP]", "Push an adjacent enemy 1 tile (off ledges or into walls). Cost: 2 AP.");
 
-            _combatGuardBtn = AddCombatSkillButton(actionBar, "GuardBtn", "guard", "Guard", 82f, () => OnGuardRequested?.Invoke(), out _combatGuardBtnIcon);
-            AttachHoverTooltip(_combatGuardBtn.gameObject, "guard", "Guard / Overwatch [G]", "+4 AC until next turn and prepare reaction strike. Uses Standard action.");
+            _combatGuardBtn = AddCombatSkillButton(actionBar, "GuardBtn", "guard", "Guard", 94f, () => OnGuardRequested?.Invoke(), out _combatGuardBtnIcon, out _combatGuardApBadgeText, out _combatGuardApBadgeBg, "2 AP");
+            AttachHoverTooltip(_combatGuardBtn.gameObject, "guard", "Guard / Overwatch [G] [2 AP]", "+4 AC and Overwatch reaction strike when an enemy enters melee reach (1 AP with Iron Vanguard 3pc).");
 
-            _combatEndTurnBtn = AddCombatSkillButton(actionBar, "EndTurnBtn", "end_turn", "End Turn", 104f, () => OnEndTurnRequested?.Invoke(), out _combatEndTurnBtnIcon);
-            AttachHoverTooltip(_combatEndTurnBtn.gameObject, "end_turn", "End Turn [Space]", "Finish the current hero's turn and advance initiative.");
+            _combatEndTurnBtn = AddCombatSkillButton(actionBar, "EndTurnBtn", "end_turn", "End Turn", 98f, () => OnEndTurnRequested?.Invoke(), out _combatEndTurnBtnIcon, out _, out _, null);
+            AttachHoverTooltip(_combatEndTurnBtn.gameObject, "end_turn", "End Turn [Space]", "Finish the current hero's turn and bank up to 2 unused AP.");
+
+            // Pre-Battle Deployment Phase Banner + [Start Battle] CTA Button
+            RectTransform deployRt = BywaterUiHelpers.CreatePanel(_combatRoot.transform, "DeploymentBanner", BywaterUiHelpers.PanelDarkBg, withBrassOutline: true, outlinePx: 1.8f);
+            _deploymentBannerRoot = deployRt.gameObject;
+            BywaterUiHelpers.SetBorderColor(deployRt, BywaterUiHelpers.InfoCyan);
+            deployRt.anchorMin = new Vector2(0.5f, 0f);
+            deployRt.anchorMax = new Vector2(0.5f, 0f);
+            deployRt.pivot = new Vector2(0.5f, 0f);
+            deployRt.anchoredPosition = new Vector2(-145f, 16f);
+            deployRt.sizeDelta = new Vector2(960f, 58f);
+
+            HorizontalLayoutGroup dpHlg = deployRt.gameObject.AddComponent<HorizontalLayoutGroup>();
+            dpHlg.padding = new RectOffset(14, 14, 8, 8);
+            dpHlg.spacing = 12f;
+            dpHlg.childControlWidth = true;
+            dpHlg.childControlHeight = true;
+            dpHlg.childForceExpandWidth = false;
+            dpHlg.childAlignment = TextAnchor.MiddleLeft;
+
+            _deploymentBannerText = BywaterUiHelpers.CreateLabel(
+                deployRt,
+                "DeploymentBannerText",
+                "PRE-BATTLE DEPLOYMENT: Click 2 heroes to swap, or click a cyan tile to move.",
+                _font,
+                15.5f,
+                BywaterUiHelpers.InfoCyan,
+                TextAlignmentOptions.MidlineLeft,
+                FontStyles.Bold,
+                wrap: false);
+            _deploymentBannerText.overflowMode = TextOverflowModes.Truncate;
+            BywaterUiHelpers.AddTextDropShadow(_deploymentBannerText);
+            _deploymentBannerText.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+
+            _deploymentStartBattleBtn = BywaterUiHelpers.CreateButton(
+                deployRt,
+                "StartBattleBtn",
+                "Start Battle [Space]",
+                _font,
+                () => OnStartBattleRequested?.Invoke(),
+                16f);
+            BywaterUiHelpers.SetButtonColors(_deploymentStartBattleBtn, true);
+            _deploymentStartBattleBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 198f;
+            _deploymentBannerRoot.SetActive(false);
 
             // Compact non-blocking targeting banner above action bar when in Melee / Ranged / Spell / Shove / Potion mode
             RectTransform bannerRt = BywaterUiHelpers.CreatePanel(_combatRoot.transform, "TargetingModeBanner", BywaterUiHelpers.PanelDarkBg, withBrassOutline: true, outlinePx: 1.4f);
             bannerRt.anchorMin = new Vector2(0.5f, 0f);
             bannerRt.anchorMax = new Vector2(0.5f, 0f);
             bannerRt.pivot = new Vector2(0.5f, 0f);
-            bannerRt.anchoredPosition = new Vector2(-180f, 104f);
+            bannerRt.anchoredPosition = new Vector2(-180f, 108f);
             bannerRt.sizeDelta = new Vector2(680f, 34f);
             _targetingBannerRoot = bannerRt.gameObject;
             _targetingBannerBg = bannerRt.GetComponent<Image>();
@@ -4945,8 +5098,8 @@ namespace Realmz.Game
             btn.colors = colors;
 
             LayoutElement le = go.AddComponent<LayoutElement>();
-            le.preferredWidth = 96f;
-            le.preferredHeight = 68f;
+            le.preferredWidth = 104f;
+            le.preferredHeight = 72f;
 
             VerticalLayoutGroup vlg = go.AddComponent<VerticalLayoutGroup>();
             vlg.padding = new RectOffset(4, 4, 3, 3);
@@ -4958,7 +5111,7 @@ namespace Realmz.Game
 
             GameObject topRow = new GameObject("TopRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             topRow.transform.SetParent(go.transform, false);
-            topRow.AddComponent<LayoutElement>().preferredHeight = 34f;
+            topRow.AddComponent<LayoutElement>().preferredHeight = 36f;
             HorizontalLayoutGroup topHlg = topRow.GetComponent<HorizontalLayoutGroup>();
             topHlg.spacing = 2f;
             topHlg.childControlWidth = true;
@@ -4967,16 +5120,28 @@ namespace Realmz.Game
             topHlg.childAlignment = TextAnchor.MiddleCenter;
 
             TextMeshProUGUI hotkeyLbl = BywaterUiHelpers.CreateLabel(topRow.transform, "Hotkey", (index + 1).ToString(), _font, 15f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.TopLeft, FontStyles.Bold, wrap: false);
-            hotkeyLbl.gameObject.AddComponent<LayoutElement>().preferredWidth = 16f;
+            hotkeyLbl.gameObject.AddComponent<LayoutElement>().preferredWidth = 14f;
 
             Image iconImg = BywaterUiHelpers.CreateImage(topRow.transform, "Icon", BywaterUiHelpers.GetProceduralIconSprite("sword"), Color.white, preserveAspect: true);
             iconImg.raycastTarget = false;
             LayoutElement iconLe = iconImg.gameObject.AddComponent<LayoutElement>();
-            iconLe.preferredWidth = 28f;
-            iconLe.preferredHeight = 28f;
+            iconLe.preferredWidth = 26f;
+            iconLe.preferredHeight = 26f;
 
-            TextMeshProUGUI spLbl = BywaterUiHelpers.CreateLabel(topRow.transform, "SpCost", string.Empty, _font, 15f, BywaterUiHelpers.InfoCyan, TextAlignmentOptions.TopRight, FontStyles.Bold, wrap: false);
-            spLbl.gameObject.AddComponent<LayoutElement>().preferredWidth = 32f;
+            GameObject costCol = new GameObject("CostCol", typeof(RectTransform), typeof(VerticalLayoutGroup));
+            costCol.transform.SetParent(topRow.transform, false);
+            costCol.AddComponent<LayoutElement>().preferredWidth = 48f;
+            VerticalLayoutGroup ccVlg = costCol.GetComponent<VerticalLayoutGroup>();
+            ccVlg.spacing = 0f;
+            ccVlg.childControlWidth = true;
+            ccVlg.childControlHeight = true;
+            ccVlg.childForceExpandHeight = false;
+
+            TextMeshProUGUI apLbl = BywaterUiHelpers.CreateLabel(costCol.transform, "ApCost", "3 AP", _font, 15f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.TopRight, FontStyles.Bold, wrap: false);
+            apLbl.gameObject.AddComponent<LayoutElement>().preferredHeight = 18f;
+
+            TextMeshProUGUI spLbl = BywaterUiHelpers.CreateLabel(costCol.transform, "SpCost", string.Empty, _font, 15f, BywaterUiHelpers.InfoCyan, TextAlignmentOptions.BottomRight, FontStyles.Bold, wrap: false);
+            spLbl.gameObject.AddComponent<LayoutElement>().preferredHeight = 18f;
 
             TextMeshProUGUI nameLbl = BywaterUiHelpers.CreateLabel(go.transform, "SkillLabel", string.Empty, _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
             nameLbl.overflowMode = TextOverflowModes.Truncate;
@@ -4991,6 +5156,7 @@ namespace Realmz.Game
                 Icon = iconImg,
                 HotkeyText = hotkeyLbl,
                 LabelText = nameLbl,
+                ApText = apLbl,
                 SpText = spLbl,
                 Layout = le
             };
@@ -5119,15 +5285,15 @@ namespace Realmz.Game
             _combatShoveSwiftBadgeBg.raycastTarget = false;
             BywaterUiHelpers.SetBorderColor(badgeRt, BywaterUiHelpers.BrassHighlight);
             LayoutElement badgeLe = badgeRt.gameObject.AddComponent<LayoutElement>();
-            badgeLe.preferredWidth = 76f;
-            badgeLe.minWidth = 76f;
+            badgeLe.preferredWidth = 54f;
+            badgeLe.minWidth = 54f;
             badgeLe.flexibleWidth = 0f;
             badgeLe.preferredHeight = 22f;
 
             _combatShoveSwiftBadgeText = BywaterUiHelpers.CreateLabel(
                 badgeRt,
                 "SwiftBadgeLabel",
-                "[SWIFT]",
+                "2 AP",
                 _font,
                 15f,
                 BywaterUiHelpers.BrassHighlight,
@@ -5163,8 +5329,13 @@ namespace Realmz.Game
             string label,
             float width,
             UnityEngine.Events.UnityAction onClick,
-            out Image iconImg)
+            out Image iconImg,
+            out TextMeshProUGUI apBadgeText,
+            out Image apBadgeBg,
+            string initialApBadge = null)
         {
+            apBadgeText = null;
+            apBadgeBg = null;
             GameObject go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
             go.transform.SetParent(parent, false);
 
@@ -5188,7 +5359,7 @@ namespace Realmz.Game
 
             LayoutElement le = go.AddComponent<LayoutElement>();
             le.preferredWidth = width;
-            le.preferredHeight = 68f;
+            le.preferredHeight = 72f;
 
             VerticalLayoutGroup vlg = go.AddComponent<VerticalLayoutGroup>();
             vlg.padding = new RectOffset(4, 4, 4, 3);
@@ -5199,13 +5370,62 @@ namespace Realmz.Game
             vlg.childForceExpandHeight = false;
             vlg.childAlignment = TextAnchor.MiddleCenter;
 
-            iconImg = BywaterUiHelpers.CreateImage(go.transform, "Icon", LoadHotbarIcon(iconKey), Color.white, preserveAspect: true);
-            iconImg.raycastTarget = false;
-            LayoutElement iconLe = iconImg.gameObject.AddComponent<LayoutElement>();
-            iconLe.preferredWidth = 28f;
-            iconLe.preferredHeight = 28f;
-            iconLe.minWidth = 28f;
-            iconLe.minHeight = 28f;
+            if (!string.IsNullOrEmpty(initialApBadge))
+            {
+                GameObject topRow = new GameObject("TopRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+                topRow.transform.SetParent(go.transform, false);
+                topRow.AddComponent<LayoutElement>().preferredHeight = 28f;
+                HorizontalLayoutGroup topHlg = topRow.GetComponent<HorizontalLayoutGroup>();
+                topHlg.spacing = 4f;
+                topHlg.childControlWidth = true;
+                topHlg.childControlHeight = true;
+                topHlg.childForceExpandWidth = false;
+                topHlg.childAlignment = TextAnchor.MiddleCenter;
+
+                iconImg = BywaterUiHelpers.CreateImage(topRow.transform, "Icon", LoadHotbarIcon(iconKey), Color.white, preserveAspect: true);
+                iconImg.raycastTarget = false;
+                LayoutElement iconLe = iconImg.gameObject.AddComponent<LayoutElement>();
+                iconLe.preferredWidth = 26f;
+                iconLe.preferredHeight = 26f;
+
+                RectTransform badgeRt = BywaterUiHelpers.CreatePanel(
+                    topRow.transform,
+                    "ApBadge",
+                    new Color(0.32f, 0.22f, 0.04f, 0.96f),
+                    withBrassOutline: true,
+                    outlinePx: 1f);
+                apBadgeBg = badgeRt.GetComponent<Image>();
+                apBadgeBg.raycastTarget = false;
+                BywaterUiHelpers.SetBorderColor(badgeRt, BywaterUiHelpers.BrassHighlight);
+                LayoutElement badgeLe = badgeRt.gameObject.AddComponent<LayoutElement>();
+                badgeLe.preferredWidth = 46f;
+                badgeLe.preferredHeight = 22f;
+
+                apBadgeText = BywaterUiHelpers.CreateLabel(
+                    badgeRt,
+                    "ApBadgeLabel",
+                    initialApBadge,
+                    _font,
+                    15f,
+                    BywaterUiHelpers.BrassHighlight,
+                    TextAlignmentOptions.Center,
+                    FontStyles.Bold,
+                    wrap: false);
+                apBadgeText.rectTransform.anchorMin = Vector2.zero;
+                apBadgeText.rectTransform.anchorMax = Vector2.one;
+                apBadgeText.rectTransform.offsetMin = Vector2.zero;
+                apBadgeText.rectTransform.offsetMax = Vector2.zero;
+            }
+            else
+            {
+                iconImg = BywaterUiHelpers.CreateImage(go.transform, "Icon", LoadHotbarIcon(iconKey), Color.white, preserveAspect: true);
+                iconImg.raycastTarget = false;
+                LayoutElement iconLe = iconImg.gameObject.AddComponent<LayoutElement>();
+                iconLe.preferredWidth = 28f;
+                iconLe.preferredHeight = 28f;
+                iconLe.minWidth = 28f;
+                iconLe.minHeight = 28f;
+            }
 
             TextMeshProUGUI lbl = BywaterUiHelpers.CreateLabel(
                 go.transform,

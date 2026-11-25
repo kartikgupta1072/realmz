@@ -52,6 +52,7 @@ namespace Realmz.Data
         public int[] knownSpellIds = Array.Empty<int>();
         public int exhaustionStacks;
         public int curseStacks;
+        public int formationRank = -1;
         public SavedConditionState[] conditions = Array.Empty<SavedConditionState>();
         public SavedEquippedEntry[] equippedEntries = Array.Empty<SavedEquippedEntry>();
         public int[] equippedItemIds = Array.Empty<int>();
@@ -99,11 +100,11 @@ namespace Realmz.Data
     }
 
     /// <summary>
-    /// Atomic JSON persistence service for City of Bywater exploration sessions (v3 schema with v1/v2 backward compatibility).
+    /// Atomic JSON persistence service for City of Bywater exploration sessions (v4 schema with v1/v2/v3 backward compatibility).
     /// </summary>
     public static class BywaterSaveService
     {
-        public const int CurrentSaveVersion = 3;
+        public const int CurrentSaveVersion = 4;
         private const ulong DefaultFallbackSeed = 0x5245414C4D5AUL;
 
         public static BywaterSaveData CaptureSnapshot(
@@ -206,6 +207,7 @@ namespace Realmz.Data
                     knownSpellIds = knownCopy,
                     exhaustionStacks = member.ExhaustionStacks,
                     curseStacks = member.CurseStacks,
+                    formationRank = (int)member.FormationRank,
                     conditions = savedConditions,
                     equippedEntries = equippedEntries,
                     equippedItemIds = equippedItemIds
@@ -374,6 +376,9 @@ namespace Realmz.Data
                     member.Sp = Clamp(saved.sp, 0, member.MaxSp);
                     member.ExhaustionStacks = Math.Max(0, saved.exhaustionStacks);
                     member.CurseStacks = Math.Max(0, saved.curseStacks);
+                    member.FormationRank = saved.formationRank >= 0
+                        ? (FormationRank)Clamp(saved.formationRank, (int)FormationRank.Front, (int)FormationRank.Back)
+                        : PartyMemberState.ResolveDefaultFormationRank(member.Id, member.Name, memberIndex);
 
                     member.Conditions.Clear();
                     if (saved.conditions != null)
@@ -793,6 +798,19 @@ namespace Realmz.Data
             else if (ulong.TryParse(data.prngStateText.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out ulong parsed))
             {
                 data.prngState = parsed;
+            }
+
+            for (int i = 0; i < data.members.Length; i++)
+            {
+                SavedMemberState member = data.members[i];
+                if (member == null)
+                {
+                    continue;
+                }
+
+                member.formationRank = member.formationRank >= 0
+                    ? Clamp(member.formationRank, (int)FormationRank.Front, (int)FormationRank.Back)
+                    : -1;
             }
         }
 

@@ -5,19 +5,55 @@ namespace RealmzCore.Rules
 {
     public sealed class CombatActionEconomy
     {
-        private readonly Stack<int> _moveHistory = new Stack<int>();
+        public const int DefaultBaseApPerTurn = 6;
+        public const int DefaultMaxCarryoverAp = 2;
+        public const int NormalTileMoveApCost = 1;
+        public const int RoughTileMoveApCost = 2;
+        public const int LightWeaponApCost = 2;
+        public const int StandardWeaponApCost = 3;
+        public const int DefaultShoveApCost = 2;
+        public const int DefaultPotionApCost = 2;
+        public const int DefaultTorchApCost = 2;
+        public const int DefaultGuardApCost = 2;
+
+        private readonly Stack<(int apCost, int freeMovesUsed)> _apMoveHistory = new Stack<(int, int)>();
+        private int _legacyMoveBudget;
+        private int _legacyMoveRemaining;
+        private bool _legacyHasStandardAction;
+        private bool _legacyHasSwiftAction;
+        private bool _undoLockedByAction;
+        private int _carryoverBankAp;
+
+        public CombatActionEconomy()
+        {
+            ResetUnifiedTurn(DefaultBaseApPerTurn, 0, 0, 0, applyCarryover: false);
+        }
 
         public CombatActionEconomy(int moveBudget)
         {
             ResetTurn(moveBudget);
         }
 
-        public int MoveBudget { get; private set; }
-        public int MoveRemaining { get; private set; }
-        public bool HasStandardAction { get; private set; }
-        public bool HasSwiftAction { get; private set; }
+        public bool IsUnifiedApMode { get; private set; }
+        public int BaseApPerTurn { get; private set; } = DefaultBaseApPerTurn;
+        public int EquipApBonus { get; private set; }
+        public int CarriedInAp { get; private set; }
+        public int MaxAp { get; private set; } = DefaultBaseApPerTurn;
+        public int NominalMaxAp => BaseApPerTurn + EquipApBonus;
+        public int CurrentAp { get; private set; } = DefaultBaseApPerTurn;
+        public int PendingCarryoverAp => IsUnifiedApMode ? Math.Min(DefaultMaxCarryoverAp, Math.Max(0, CurrentAp)) : 0;
+        public int FreeMoveTilesMax { get; private set; }
+        public int FreeMoveTilesRemaining { get; private set; }
+        public int GuardApDiscount { get; private set; }
+        public int EffectiveGuardApCost => Math.Max(1, DefaultGuardApCost - GuardApDiscount);
+        public bool MovementLocked { get; private set; }
+
+        public int MoveBudget => IsUnifiedApMode ? (MaxAp + FreeMoveTilesMax) : _legacyMoveBudget;
+        public int MoveRemaining => IsUnifiedApMode ? (MovementLocked ? 0 : (FreeMoveTilesRemaining + CurrentAp)) : _legacyMoveRemaining;
+        public bool HasStandardAction => IsUnifiedApMode ? CurrentAp >= LightWeaponApCost : _legacyHasStandardAction;
+        public bool HasSwiftAction => IsUnifiedApMode ? CurrentAp >= DefaultShoveApCost : _legacyHasSwiftAction;
         public bool HasReaction { get; private set; }
-        public bool CanUndoMove => _moveHistory.Count > 0 && HasStandardAction;
+        public bool CanUndoMove => _apMoveHistory.Count > 0 && !_undoLockedByAction;
 
         public void ResetTurn(int moveBudget)
         {
@@ -26,30 +62,159 @@ namespace RealmzCore.Rules
                 throw new ArgumentOutOfRangeException(nameof(moveBudget));
             }
 
-            MoveBudget = moveBudget;
-            MoveRemaining = moveBudget;
-            HasStandardAction = true;
-            HasSwiftAction = true;
+            IsUnifiedApMode = false;
+            _legacyMoveBudget = moveBudget;
+            _legacyMoveRemaining = moveBudget;
+            _legacyHasStandardAction = true;
+            _legacyHasSwiftAction = true;
+            _undoLockedByAction = false;
+            MovementLocked = false;
             HasReaction = true;
-            _moveHistory.Clear();
+            _apMoveHistory.Clear();
         }
 
-        public bool TryStep(int cost = 1)
+        public void ResetUnifiedTurn(
+            int baseAp = DefaultBaseApPerTurn,
+            int equipApBonus = 0,
+            int freeMoveTiles = 0,
+            int guardApDiscount = 0,
+            bool applyCarryover = true)
         {
-            if (cost <= 0 || MoveRemaining < cost)
+            IsUnifiedApMode = true;
+            BaseApPerTurn = Math.Max(1, baseAp);
+            EquipApBonus = Math.Max(0, equipApBonus);
+            CarriedInAp = applyCarryover ? Math.Clamp(_carryoverBankAp, 0, DefaultMaxCarryoverAp) : 0;
+            _carryoverBankAp = 0;
+            MaxAp = BaseApPerTurn + EquipApBonus + CarriedInAp;
+            CurrentAp = MaxAp;
+            FreeMoveTilesMax = Math.Max(0, freeMoveTiles);
+            FreeMoveTilesRemaining = FreeMoveTilesMax;
+            GuardApDiscount = Math.Max(0, guardApDiscount);
+            MovementLocked = false;
+            _undoLockedByAction = false;
+            HasReaction = true;
+            _apMoveHistory.Clear();
+        }
+
+        public bool HasApFor(int apCost)
+        {
+            if (apCost <= 0)
+            {
+                return true;
+            }
+
+            return IsUnifiedApMode
+                ? CurrentAp >= apCost
+                : (apCost <= 2 ? (_legacyHasSwiftAction || _legacyHasStandardAction) : _legacyHasStandardAction);
+        }
+
+        public bool SpendAp(int apCost, bool lockMoveUndo = true)
+        {
+            if (!IsUnifiedApMode)
+            {
+                return apCost <= 2 ? CommitSwiftAction() : CommitStandardAction();
+            }
+
+            if (apCost < 0 || CurrentAp < apCost)
             {
                 return false;
             }
 
-            MoveRemaining -= cost;
-            _moveHistory.Push(cost);
+            CurrentAp -= apCost;
+            if (lockMoveUndo)
+            {
+                _undoLockedByAction = true;
+                _apMoveHistory.Clear();
+            }
+
+            return true;
+        }
+
+        public void BankCarryoverForEndTurn(bool allowCarryover = true)
+        {
+            if (IsUnifiedApMode)
+            {
+                _carryoverBankAp = allowCarryover ? Math.Min(DefaultMaxCarryoverAp, Math.Max(0, CurrentAp)) : 0;
+            }
+        }
+
+        public void ZeroApForIncapacitatedTurn()
+        {
+            if (IsUnifiedApMode)
+            {
+                CurrentAp = 0;
+                FreeMoveTilesRemaining = 0;
+                MovementLocked = true;
+                _carryoverBankAp = 0;
+                _apMoveHistory.Clear();
+            }
+            else
+            {
+                _legacyMoveRemaining = 0;
+                _legacyHasStandardAction = false;
+                _legacyHasSwiftAction = false;
+                _apMoveHistory.Clear();
+            }
+        }
+
+        public void LockMovementForTurn()
+        {
+            if (IsUnifiedApMode)
+            {
+                MovementLocked = true;
+                _apMoveHistory.Clear();
+            }
+            else
+            {
+                _legacyMoveRemaining = 0;
+                _apMoveHistory.Clear();
+            }
+        }
+
+        public bool TryStep(int cost = 1)
+        {
+            if (cost <= 0)
+            {
+                return false;
+            }
+
+            if (!IsUnifiedApMode)
+            {
+                if (_legacyMoveRemaining < cost)
+                {
+                    return false;
+                }
+
+                _legacyMoveRemaining -= cost;
+                _apMoveHistory.Push((cost, 0));
+                return true;
+            }
+
+            if (MovementLocked)
+            {
+                return false;
+            }
+
+            if (FreeMoveTilesRemaining > 0)
+            {
+                FreeMoveTilesRemaining--;
+                _apMoveHistory.Push((0, 1));
+                return true;
+            }
+
+            if (CurrentAp < cost)
+            {
+                return false;
+            }
+
+            CurrentAp -= cost;
+            _apMoveHistory.Push((cost, 0));
             return true;
         }
 
         public void ConsumeAllMovement()
         {
-            MoveRemaining = 0;
-            _moveHistory.Clear();
+            LockMovementForTurn();
         }
 
         public bool UndoMove()
@@ -59,32 +224,50 @@ namespace RealmzCore.Rules
                 return false;
             }
 
-            int lastCost = _moveHistory.Pop();
-            MoveRemaining += lastCost;
+            (int apCost, int freeUsed) = _apMoveHistory.Pop();
+            if (!IsUnifiedApMode)
+            {
+                _legacyMoveRemaining += apCost;
+                return true;
+            }
+
+            CurrentAp += apCost;
+            FreeMoveTilesRemaining += freeUsed;
             return true;
         }
 
         public bool CommitStandardAction()
         {
-            if (!HasStandardAction)
+            if (!IsUnifiedApMode)
             {
-                return false;
+                if (!_legacyHasStandardAction)
+                {
+                    return false;
+                }
+
+                _legacyHasStandardAction = false;
+                _undoLockedByAction = true;
+                _apMoveHistory.Clear();
+                return true;
             }
 
-            HasStandardAction = false;
-            _moveHistory.Clear();
-            return true;
+            return SpendAp(StandardWeaponApCost, lockMoveUndo: true);
         }
 
         public bool CommitSwiftAction()
         {
-            if (!HasSwiftAction)
+            if (!IsUnifiedApMode)
             {
-                return false;
+                if (!_legacyHasSwiftAction)
+                {
+                    return false;
+                }
+
+                _legacyHasSwiftAction = false;
+                return true;
             }
 
-            HasSwiftAction = false;
-            return true;
+            return SpendAp(DefaultShoveApCost, lockMoveUndo: false);
         }
 
         public bool CommitReaction()
