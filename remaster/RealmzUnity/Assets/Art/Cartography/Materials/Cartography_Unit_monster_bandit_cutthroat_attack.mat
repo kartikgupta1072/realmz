@@ -33,7 +33,7 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _AnimFps: 10
+    - _AnimFps: 5.5
     - _BillboardMode: 0
     - _BuildingDepthSculpt: 0
     - _BumpScale: 0.7
