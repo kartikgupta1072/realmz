@@ -183,6 +183,8 @@ namespace Realmz.Game
 
         private BywaterAssetCatalog _catalog;
         private TMP_FontAsset _font;
+        private TMP_FontAsset _displayFont;
+        private GameObject _modalScrimRoot;
         private bool _uiBuilt;
         private bool _isCombatHudActive;
         private bool _isDevToolsVisible;
@@ -561,7 +563,15 @@ namespace Realmz.Game
                 Image btnImg = _combatEndTurnBtn.GetComponent<Image>();
                 if (btnImg != null)
                 {
-                    btnImg.color = Color.Lerp(BywaterUiHelpers.ButtonActiveBg, new Color(0.55f, 0.41f, 0.12f, 0.98f), pulse);
+                    if (BywaterUiHelpers.HasChromeSprites)
+                    {
+                        BywaterUiHelpers.ApplySurfaceState(btnImg, true, isButton: true);
+                        btnImg.color = Color.Lerp(Color.white, new Color(1.18f, 1.05f, 0.72f, 1f), pulse);
+                    }
+                    else
+                    {
+                        btnImg.color = Color.Lerp(BywaterUiHelpers.ButtonActiveBg, new Color(0.55f, 0.41f, 0.12f, 0.98f), pulse);
+                    }
                 }
                 BywaterUiHelpers.SetBorderColor(
                     _combatEndTurnBtn.transform,
@@ -572,6 +582,8 @@ namespace Realmz.Game
             {
                 UpdateCursorTooltipPosition(Mouse.current.position.ReadValue());
             }
+
+            SyncModalScrim();
         }
 
         private void OnDestroy()
@@ -608,7 +620,9 @@ namespace Realmz.Game
 
             _uiBuilt = true;
             _catalog = catalog;
+            BywaterUiHelpers.ApplyTheme(catalog);
             _font = BywaterUiHelpers.ResolveFont(catalog != null ? catalog.uiFont : null);
+            _displayFont = BywaterUiHelpers.ResolveDisplayFont(_font);
 
             BywaterUiHelpers.EnsureEventSystemWithInputSystem();
 
@@ -629,6 +643,7 @@ namespace Realmz.Game
             BuildTopHudBar(_canvas.transform);
             BuildExploreHud(_canvas.transform);
             BuildCombatHud(_canvas.transform);
+            BuildModalBackdropScrim(_canvas.transform);
             BuildPartyDrawer(_canvas.transform);
             BuildShopModal(_canvas.transform);
             BuildTempleModal(_canvas.transform);
@@ -648,6 +663,99 @@ namespace Realmz.Game
             if (_encounterInterceptModalRoot != null) _encounterInterceptModalRoot.SetActive(false);
             _outcomeModalRoot.SetActive(false);
             _toastRoot.SetActive(false);
+            SyncModalScrim();
+        }
+
+        private void BuildModalBackdropScrim(Transform parent)
+        {
+            GameObject go = new GameObject("ModalBackdropScrim", typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(parent, false);
+
+            RectTransform rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+
+            Image img = go.GetComponent<Image>();
+            if (_catalog != null && _catalog.uiModalScrimSprite != null)
+            {
+                img.sprite = _catalog.uiModalScrimSprite;
+                img.type = Image.Type.Simple;
+                img.preserveAspect = false;
+                img.color = Color.white;
+            }
+            else
+            {
+                img.color = new Color(0.03f, 0.04f, 0.06f, 0.72f);
+            }
+
+            img.raycastTarget = true;
+            go.SetActive(false);
+            _modalScrimRoot = go;
+        }
+
+        private void SyncModalScrim()
+        {
+            if (_modalScrimRoot == null)
+            {
+                return;
+            }
+
+            GameObject[] modals =
+            {
+                _partyDrawerRoot,
+                _shopModalRoot,
+                _templeModalRoot,
+                _settingsModalRoot,
+                _quickResolveModalRoot,
+                _encounterInterceptModalRoot,
+                _outcomeModalRoot,
+                _levelUpModalRoot,
+                _diceRollModalRoot
+            };
+
+            GameObject topModal = null;
+            int topIndex = -1;
+            for (int i = 0; i < modals.Length; i++)
+            {
+                GameObject m = modals[i];
+                if (m != null && m.activeSelf)
+                {
+                    int idx = m.transform.GetSiblingIndex();
+                    if (idx > topIndex)
+                    {
+                        topIndex = idx;
+                        topModal = m;
+                    }
+                }
+            }
+
+            if (topModal == null)
+            {
+                if (_modalScrimRoot.activeSelf)
+                {
+                    _modalScrimRoot.SetActive(false);
+                }
+                return;
+            }
+
+            if (!_modalScrimRoot.activeSelf)
+            {
+                _modalScrimRoot.SetActive(true);
+            }
+
+            int scrimIdx = _modalScrimRoot.transform.GetSiblingIndex();
+            int targetIdx = scrimIdx < topIndex ? topIndex - 1 : topIndex;
+            if (scrimIdx != targetIdx)
+            {
+                _modalScrimRoot.transform.SetSiblingIndex(targetIdx);
+            }
+
+            if (_toastRoot != null && _toastRoot.activeSelf)
+            {
+                _toastRoot.transform.SetAsLastSibling();
+            }
         }
 
         public void ShowToast(string message, float duration = 2.8f)
@@ -761,12 +869,14 @@ namespace Realmz.Game
                 RefreshSettingsModalControls();
                 _settingsModalRoot.SetActive(true);
                 _settingsModalRoot.transform.SetAsLastSibling();
+                SyncModalScrim();
             }
             else
             {
                 _quitConfirmArmed = false;
                 RefreshSettingsModalControls();
                 _settingsModalRoot.SetActive(false);
+                SyncModalScrim();
             }
         }
 
@@ -838,6 +948,7 @@ namespace Realmz.Game
 
             _quickResolveModalRoot.SetActive(true);
             _quickResolveModalRoot.transform.SetAsLastSibling();
+            SyncModalScrim();
         }
 
         public void HideQuickResolveModal()
@@ -846,6 +957,7 @@ namespace Realmz.Game
             {
                 _quickResolveModalRoot.SetActive(false);
             }
+            SyncModalScrim();
         }
 
         public bool TriggerHotbarSlot(int oneBasedIndex)
@@ -891,6 +1003,7 @@ namespace Realmz.Game
                     RefreshPartyDrawer(_cachedParty, _cachedBundle, _selectedHeroIndex);
                 }
             }
+            SyncModalScrim();
         }
 
         public void CloseAllModals()
@@ -904,6 +1017,7 @@ namespace Realmz.Game
             if (_outcomeModalRoot != null) _outcomeModalRoot.SetActive(false);
             if (_levelUpModalRoot != null) _levelUpModalRoot.SetActive(false);
             _quitConfirmArmed = false;
+            SyncModalScrim();
         }
 
         public void OpenShop(string shopId, PartyState party, BywaterM1Bundle bundle)
@@ -947,6 +1061,7 @@ namespace Realmz.Game
             _shopModalRoot.SetActive(true);
             _shopModalRoot.transform.SetAsLastSibling();
             RefreshShopModal(party, bundle);
+            SyncModalScrim();
         }
 
         public void CloseShopModal()
@@ -955,6 +1070,7 @@ namespace Realmz.Game
             {
                 _shopModalRoot.SetActive(false);
             }
+            SyncModalScrim();
         }
 
         public void OpenTempleModal(PartyState party, BywaterM1Bundle bundle)
@@ -991,6 +1107,7 @@ namespace Realmz.Game
             _templeModalRoot.SetActive(true);
             _templeModalRoot.transform.SetAsLastSibling();
             RefreshTempleModal(party, bundle);
+            SyncModalScrim();
         }
 
         public void CloseTempleModal()
@@ -999,6 +1116,7 @@ namespace Realmz.Game
             {
                 _templeModalRoot.SetActive(false);
             }
+            SyncModalScrim();
         }
 
         public void RefreshTempleModal(PartyState party, BywaterM1Bundle bundle)
@@ -1284,7 +1402,7 @@ namespace Realmz.Game
                     card.LvlUpBadgeBtn.gameObject.SetActive(m.HasPendingLevelUp);
                 }
 
-                card.Background.color = selected ? BywaterUiHelpers.CardSelectedBg : BywaterUiHelpers.CardBg;
+                BywaterUiHelpers.ApplySurfaceState(card.Background, selected);
                 BywaterUiHelpers.SetBorderColor(card.Root, selected ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.BrassAccent);
             }
 
@@ -2094,7 +2212,7 @@ namespace Realmz.Game
                 {
                     card.MetaText.text = "TURN";
                     card.MetaText.color = BywaterUiHelpers.BrassHighlight;
-                    card.Background.color = new Color(0.290f, 0.220f, 0.080f, 0.98f);
+                    BywaterUiHelpers.ApplySurfaceState(card.Background, true);
                     BywaterUiHelpers.SetBorderColor(card.Root, BywaterUiHelpers.BrassHighlight);
                     card.Root.localScale = new Vector3(1.10f, 1.18f, 1f);
                     if (card.Layout != null)
@@ -2109,9 +2227,10 @@ namespace Realmz.Game
                         ? (string.IsNullOrEmpty(roleTag) ? $"HP {unit.Hp}/{unit.MaxHp}" : $"HP {unit.Hp}/{unit.MaxHp} {roleTag}")
                         : "Ready";
                     card.MetaText.color = BywaterUiHelpers.ParchmentText;
-                    card.Background.color = entry.Side == CombatSide.Hero
+                    Color sideTint = entry.Side == CombatSide.Hero
                         ? new Color(0.070f, 0.115f, 0.200f, 0.94f)
                         : new Color(0.180f, 0.075f, 0.095f, 0.94f);
+                    BywaterUiHelpers.ApplyTintedChrome(card.Background, sideTint, preferBar: true);
                     BywaterUiHelpers.SetBorderColor(
                         card.Root,
                         entry.Side == CombatSide.Hero
@@ -2475,7 +2594,7 @@ namespace Realmz.Game
                 bool isCurrent = currentActor != null && string.Equals(currentActor.Id, unit.Id, StringComparison.Ordinal);
                 bool isFallen = !unit.IsAlive;
                 card.CanvasGroup.alpha = isFallen ? 0.45f : 1f;
-                card.Background.color = isCurrent ? BywaterUiHelpers.CardSelectedBg : BywaterUiHelpers.CardBg;
+                BywaterUiHelpers.ApplySurfaceState(card.Background, isCurrent);
                 BywaterUiHelpers.SetBorderColor(
                     card.Root.transform,
                     isCurrent ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.BrassAccent);
@@ -2487,6 +2606,39 @@ namespace Realmz.Game
             {
                 _combatPartyCards[i].Root.SetActive(false);
                 _combatPartyCards[i].BoundCombatantId = null;
+            }
+        }
+
+        private static void ApplyActionPipVisual(Image pip, Sprite activeSprite, Color fallbackActiveColor, bool isActive)
+        {
+            if (pip == null)
+            {
+                return;
+            }
+
+            if (isActive)
+            {
+                if (activeSprite != null)
+                {
+                    pip.sprite = activeSprite;
+                    pip.color = Color.white;
+                }
+                else
+                {
+                    pip.color = fallbackActiveColor;
+                }
+            }
+            else
+            {
+                if (BywaterUiHelpers.GemPipOffSprite != null)
+                {
+                    pip.sprite = BywaterUiHelpers.GemPipOffSprite;
+                    pip.color = Color.white;
+                }
+                else
+                {
+                    pip.color = new Color(0.22f, 0.25f, 0.32f, 0.90f);
+                }
             }
         }
 
@@ -2504,7 +2656,6 @@ namespace Realmz.Game
                 int totalVisiblePips = Mathf.Min(_apDiamondIcons.Count, moveBudget);
 
                 Color moveCyan = new Color(0.24f, 0.88f, 0.96f, 1f);
-                Color spentDim = new Color(0.22f, 0.25f, 0.32f, 0.90f);
 
                 for (int i = 0; i < _apDiamondIcons.Count; i++)
                 {
@@ -2514,7 +2665,7 @@ namespace Realmz.Game
                     pip.gameObject.SetActive(visible);
                     if (visible)
                     {
-                        pip.color = i < moveRem ? moveCyan : spentDim;
+                        ApplyActionPipVisual(pip, BywaterUiHelpers.GemPipCyanSprite, moveCyan, i < moveRem);
                     }
                 }
 
@@ -2563,7 +2714,6 @@ namespace Realmz.Game
                 int curAp = Mathf.Clamp(actor.Economy.CurrentAp, 0, maxAp);
                 int totalDiamonds = Mathf.Min(_apDiamondIcons.Count, maxAp);
                 Color gold = new Color(0.98f, 0.80f, 0.14f, 1f);
-                Color dim = new Color(0.22f, 0.25f, 0.32f, 0.90f);
 
                 for (int i = 0; i < _apDiamondIcons.Count; i++)
                 {
@@ -2573,7 +2723,7 @@ namespace Realmz.Game
                     d.gameObject.SetActive(vis);
                     if (vis)
                     {
-                        d.color = i < curAp ? gold : dim;
+                        ApplyActionPipVisual(d, BywaterUiHelpers.GemPipGoldSprite, gold, i < curAp);
                     }
                 }
 
@@ -2609,7 +2759,6 @@ namespace Realmz.Game
 
             Color goldAp = new Color(0.98f, 0.80f, 0.14f, 1f);
             Color carryoverTint = new Color(0.32f, 0.92f, 0.98f, 1f);
-            Color legacySpentDim = new Color(0.22f, 0.25f, 0.32f, 0.90f);
 
             for (int i = 0; i < _apDiamondIcons.Count; i++)
             {
@@ -2628,11 +2777,16 @@ namespace Realmz.Game
 
                 if (i < currentAp)
                 {
-                    diamond.color = i >= basePlusSet ? carryoverTint : goldAp;
+                    bool isCarry = i >= basePlusSet;
+                    ApplyActionPipVisual(
+                        diamond,
+                        isCarry ? (BywaterUiHelpers.GemPipCyanSprite ?? BywaterUiHelpers.GemPipGoldSprite) : BywaterUiHelpers.GemPipGoldSprite,
+                        isCarry ? carryoverTint : goldAp,
+                        isActive: true);
                 }
                 else
                 {
-                    diamond.color = legacySpentDim;
+                    ApplyActionPipVisual(diamond, BywaterUiHelpers.GemPipGoldSprite, goldAp, isActive: false);
                 }
             }
 
@@ -2660,9 +2814,29 @@ namespace Realmz.Game
         {
             if (bg != null)
             {
-                bg.color = active
-                    ? new Color(activeColor.r * 0.28f, activeColor.g * 0.24f, activeColor.b * 0.18f, 0.96f)
-                    : new Color(0.10f, 0.12f, 0.16f, 0.78f);
+                if (BywaterUiHelpers.HasChromeSprites)
+                {
+                    if (active)
+                    {
+                        BywaterUiHelpers.ApplyTintedChrome(
+                            bg,
+                            new Color(activeColor.r * 0.28f, activeColor.g * 0.24f, activeColor.b * 0.18f, 0.96f),
+                            preferBar: true);
+                    }
+                    else
+                    {
+                        bg.sprite = BywaterUiHelpers.StoneWellSprite ?? BywaterUiHelpers.StoneBarSprite;
+                        bg.type = Image.Type.Sliced;
+                        bg.pixelsPerUnitMultiplier = BywaterUiHelpers.ChromePpuMultiplier;
+                        bg.color = Color.white;
+                    }
+                }
+                else
+                {
+                    bg.color = active
+                        ? new Color(activeColor.r * 0.28f, activeColor.g * 0.24f, activeColor.b * 0.18f, 0.96f)
+                        : new Color(0.10f, 0.12f, 0.16f, 0.78f);
+                }
                 BywaterUiHelpers.SetBorderColor(bg.transform, active ? activeColor : BywaterUiHelpers.MutedSlate);
             }
 
@@ -2876,9 +3050,21 @@ namespace Realmz.Game
             }
             if (_combatShoveSwiftBadgeBg != null)
             {
-                _combatShoveSwiftBadgeBg.color = hasShoveAp
-                    ? new Color(0.32f, 0.22f, 0.04f, 0.96f)
-                    : new Color(0.10f, 0.12f, 0.18f, 0.90f);
+                if (BywaterUiHelpers.HasChromeSprites)
+                {
+                    _combatShoveSwiftBadgeBg.sprite = hasShoveAp
+                        ? (BywaterUiHelpers.ButtonGoldSprite ?? BywaterUiHelpers.StoneBarSprite)
+                        : (BywaterUiHelpers.StoneWellSprite ?? BywaterUiHelpers.StoneBarSprite);
+                    _combatShoveSwiftBadgeBg.type = Image.Type.Sliced;
+                    _combatShoveSwiftBadgeBg.pixelsPerUnitMultiplier = BywaterUiHelpers.ChromePpuMultiplier;
+                    _combatShoveSwiftBadgeBg.color = Color.white;
+                }
+                else
+                {
+                    _combatShoveSwiftBadgeBg.color = hasShoveAp
+                        ? new Color(0.32f, 0.22f, 0.04f, 0.96f)
+                        : new Color(0.10f, 0.12f, 0.18f, 0.90f);
+                }
                 BywaterUiHelpers.SetBorderColor(_combatShoveSwiftBadgeBg.transform, hasShoveAp ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.MutedSlate);
             }
 
@@ -3423,26 +3609,26 @@ namespace Realmz.Game
             {
                 borderCol = BywaterUiHelpers.DangerRed;
                 if (_tooltipBadgeText != null) _tooltipBadgeText.color = BywaterUiHelpers.DangerRed;
-                if (_tooltipBadgeBg != null) _tooltipBadgeBg.color = new Color(0.28f, 0.06f, 0.07f, 0.96f);
+                if (_tooltipBadgeBg != null) BywaterUiHelpers.ApplyTintedChrome(_tooltipBadgeBg, new Color(0.28f, 0.06f, 0.07f, 0.96f));
             }
             else if (hasHighGround)
             {
                 borderCol = BywaterUiHelpers.BrassHighlight;
                 if (_tooltipBadgeText != null) _tooltipBadgeText.color = BywaterUiHelpers.BrassHighlight;
-                if (_tooltipBadgeBg != null) _tooltipBadgeBg.color = new Color(0.26f, 0.20f, 0.05f, 0.96f);
+                if (_tooltipBadgeBg != null) BywaterUiHelpers.ApplySurfaceState(_tooltipBadgeBg, true);
             }
             else if (hasLowGround)
             {
                 Color amberWarning = new Color(0.95f, 0.60f, 0.22f, 1f);
                 borderCol = amberWarning;
                 if (_tooltipBadgeText != null) _tooltipBadgeText.color = amberWarning;
-                if (_tooltipBadgeBg != null) _tooltipBadgeBg.color = new Color(0.28f, 0.14f, 0.04f, 0.96f);
+                if (_tooltipBadgeBg != null) BywaterUiHelpers.ApplyTintedChrome(_tooltipBadgeBg, new Color(0.28f, 0.14f, 0.04f, 0.96f));
             }
             else if (!string.IsNullOrEmpty(badgeLabel))
             {
                 borderCol = BywaterUiHelpers.BrassHighlight;
                 if (_tooltipBadgeText != null) _tooltipBadgeText.color = BywaterUiHelpers.BrassHighlight;
-                if (_tooltipBadgeBg != null) _tooltipBadgeBg.color = new Color(0.22f, 0.17f, 0.06f, 0.96f);
+                if (_tooltipBadgeBg != null) BywaterUiHelpers.ApplySurfaceState(_tooltipBadgeBg, true);
             }
 
             if (_tooltipPanel != null)
@@ -3615,6 +3801,7 @@ namespace Realmz.Game
 
             _outcomeModalRoot.SetActive(true);
             _outcomeModalRoot.transform.SetAsLastSibling();
+            SyncModalScrim();
         }
 
         public void HideOutcomeModal()
@@ -3624,6 +3811,7 @@ namespace Realmz.Game
             {
                 _outcomeModalRoot.SetActive(false);
             }
+            SyncModalScrim();
         }
 
         public void SetCombatTargetingBanner(CombatActionMode mode, string spellName = null)
@@ -3705,6 +3893,7 @@ namespace Realmz.Game
                     if (_shopModalRoot != null) _shopModalRoot.SetActive(false);
                     if (_templeModalRoot != null) _templeModalRoot.SetActive(false);
                     if (_quickResolveModalRoot != null) _quickResolveModalRoot.SetActive(false);
+                    SyncModalScrim();
                 }
                 else
                 {
@@ -3911,9 +4100,8 @@ namespace Realmz.Game
             hlg.childForceExpandWidth = false;
             hlg.childForceExpandHeight = true;
 
-            _topMapText = BywaterUiHelpers.CreateLabel(bar, "MapNameText", "City of Bywater (2, 1)", _font, 18f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            _topMapText = BywaterUiHelpers.CreateDisplayLabel(bar, "MapNameText", "City of Bywater (2, 1)", _font, 18f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
             _topMapText.overflowMode = TextOverflowModes.Truncate;
-            BywaterUiHelpers.AddTextDropShadow(_topMapText);
             LayoutElement mapLe = _topMapText.gameObject.AddComponent<LayoutElement>();
             mapLe.preferredWidth = 315f;
 
@@ -4134,9 +4322,8 @@ namespace Realmz.Game
                 infoVlg.childControlWidth = true;
                 infoVlg.childControlHeight = true;
 
-                TextMeshProUGUI nameTxt = BywaterUiHelpers.CreateLabel(infoCol.transform, "Name", $"Hero {i + 1}", _font, 16f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+                TextMeshProUGUI nameTxt = BywaterUiHelpers.CreateDisplayLabel(infoCol.transform, "Name", $"Hero {i + 1}", _font, 16f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
                 nameTxt.overflowMode = TextOverflowModes.Truncate;
-                BywaterUiHelpers.AddTextDropShadow(nameTxt);
                 TextMeshProUGUI classTxt = BywaterUiHelpers.CreateLabel(infoCol.transform, "Class", "Fighter", _font, 15f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, wrap: false);
                 classTxt.overflowMode = TextOverflowModes.Truncate;
 
@@ -4223,8 +4410,7 @@ namespace Realmz.Game
             headerHlg.childControlHeight = true;
             headerHlg.childForceExpandWidth = false;
 
-            TextMeshProUGUI title = BywaterUiHelpers.CreateLabel(header.transform, "Title", "Vanguard Party, Equipment, Stash & Camp", _font, 21f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
-            BywaterUiHelpers.AddTextDropShadow(title);
+            TextMeshProUGUI title = BywaterUiHelpers.CreateDisplayLabel(header.transform, "Title", "Vanguard Party, Equipment, Stash & Camp", _font, 21f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
             title.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
 
             _drawerGoldTorchLabel = BywaterUiHelpers.CreateLabel(header.transform, "GoldTorch", "Gold: 400g  |  Torch: 0t", _font, 15.5f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineRight, wrap: false);
@@ -4238,6 +4424,8 @@ namespace Realmz.Game
             LayoutElement closeLe = closeBtn.gameObject.AddComponent<LayoutElement>();
             closeLe.preferredWidth = 90f;
             closeLe.flexibleHeight = 0f;
+
+            BywaterUiHelpers.CreateHeaderDivider(modal, "PartyHeaderRule");
 
             // Hero Selector Strip
             GameObject selectorRow = new GameObject("HeroSelectorRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
@@ -4424,7 +4612,7 @@ namespace Realmz.Game
             titleVlg.childForceExpandHeight = false;
             titleVlg.childAlignment = TextAnchor.MiddleLeft;
 
-            _shopHeaderTitle = BywaterUiHelpers.CreateLabel(
+            _shopHeaderTitle = BywaterUiHelpers.CreateDisplayLabel(
                 titleStack.transform,
                 "ShopTitle",
                 "Bywater Armory - Master Blacksmith Borin",
@@ -4435,9 +4623,8 @@ namespace Realmz.Game
                 FontStyles.Bold,
                 wrap: false);
             _shopHeaderTitle.overflowMode = TextOverflowModes.Truncate;
-            BywaterUiHelpers.AddTextDropShadow(_shopHeaderTitle);
             LayoutElement shopTitleLe = _shopHeaderTitle.gameObject.AddComponent<LayoutElement>();
-            shopTitleLe.preferredHeight = 30f;
+            shopTitleLe.preferredHeight = 32f;
             shopTitleLe.flexibleHeight = 0f;
 
             _shopGreetingLabel = BywaterUiHelpers.CreateLabel(
@@ -4465,6 +4652,8 @@ namespace Realmz.Game
             closeLe.preferredWidth = 94f;
             closeLe.preferredHeight = 40f;
             closeLe.flexibleHeight = 0f;
+
+            BywaterUiHelpers.CreateHeaderDivider(modal, "ShopHeaderRule");
 
             // Filter Bar (36px fixed height)
             GameObject filterRow = new GameObject("FilterRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
@@ -4676,7 +4865,7 @@ namespace Realmz.Game
             titleVlg.childForceExpandHeight = false;
             titleVlg.childAlignment = TextAnchor.MiddleLeft;
 
-            TextMeshProUGUI titleLbl = BywaterUiHelpers.CreateLabel(
+            TextMeshProUGUI titleLbl = BywaterUiHelpers.CreateDisplayLabel(
                 titleStack.transform,
                 "TempleTitle",
                 "Bywater Magistrate & Shrine",
@@ -4687,9 +4876,8 @@ namespace Realmz.Game
                 FontStyles.Bold,
                 wrap: false);
             titleLbl.overflowMode = TextOverflowModes.Truncate;
-            BywaterUiHelpers.AddTextDropShadow(titleLbl);
             LayoutElement titleLblLe = titleLbl.gameObject.AddComponent<LayoutElement>();
-            titleLblLe.preferredHeight = 30f;
+            titleLblLe.preferredHeight = 32f;
             titleLblLe.flexibleHeight = 0f;
 
             TextMeshProUGUI greetingLbl = BywaterUiHelpers.CreateLabel(
@@ -5117,11 +5305,15 @@ namespace Realmz.Game
             tkVlg.childControlHeight = true;
             tkVlg.childForceExpandHeight = false;
 
-            GameObject tickerHeaderGo = new GameObject("CombatLogHeaderBtn", typeof(RectTransform), typeof(Image), typeof(Button));
-            tickerHeaderGo.transform.SetParent(tickerPanel, false);
-            tickerHeaderGo.GetComponent<Image>().color = new Color(0.11f, 0.15f, 0.24f, 0.92f);
+            RectTransform tickerHeaderRt = BywaterUiHelpers.CreatePanel(
+                tickerPanel,
+                "CombatLogHeaderBtn",
+                BywaterUiHelpers.ButtonBg,
+                withBrassOutline: false);
+            GameObject tickerHeaderGo = tickerHeaderRt.gameObject;
+            BywaterUiHelpers.ApplySurfaceState(tickerHeaderGo.GetComponent<Image>(), false, isButton: true);
             tickerHeaderGo.AddComponent<LayoutElement>().preferredHeight = 26f;
-            Button tickerBtn = tickerHeaderGo.GetComponent<Button>();
+            Button tickerBtn = tickerHeaderGo.AddComponent<Button>();
             tickerBtn.targetGraphic = tickerHeaderGo.GetComponent<Image>();
             tickerBtn.onClick.AddListener(() => ToggleCombatLogDrawer());
 
@@ -5305,15 +5497,14 @@ namespace Realmz.Game
 
             GameObject actorInfo = new GameObject("ActorInfo", typeof(RectTransform), typeof(VerticalLayoutGroup));
             actorInfo.transform.SetParent(actionBar, false);
-            actorInfo.AddComponent<LayoutElement>().preferredWidth = 320f;
+            actorInfo.AddComponent<LayoutElement>().preferredWidth = 336f;
             VerticalLayoutGroup aiVlg = actorInfo.GetComponent<VerticalLayoutGroup>();
             aiVlg.spacing = 2f;
             aiVlg.childControlWidth = true;
             aiVlg.childControlHeight = true;
 
-            _combatActorName = BywaterUiHelpers.CreateLabel(actorInfo.transform, "ActorName", "Aldric", _font, 18f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            _combatActorName = BywaterUiHelpers.CreateDisplayLabel(actorInfo.transform, "ActorName", "Aldric", _font, 18f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
             _combatActorName.overflowMode = TextOverflowModes.Truncate;
-            BywaterUiHelpers.AddTextDropShadow(_combatActorName);
             _combatActorVitals = BywaterUiHelpers.CreateLabel(actorInfo.transform, "ActorVitals", "HP 17/17 | SP 0/0 | AC 29", _font, 15.5f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, wrap: false);
             _combatActorVitals.overflowMode = TextOverflowModes.Truncate;
 
@@ -5337,7 +5528,7 @@ namespace Realmz.Game
                 withBrassOutline: true,
                 outlinePx: 1f);
             BywaterUiHelpers.SetBorderColor(mpPillRt, mpCyan);
-            mpPillRt.gameObject.AddComponent<LayoutElement>().preferredWidth = 68f;
+            mpPillRt.gameObject.AddComponent<LayoutElement>().preferredWidth = 66f;
             _mpValuePillRoot = mpPillRt.gameObject;
             _combatMpValueText = BywaterUiHelpers.CreateLabel(mpPillRt, "MpValueLabel", "4/4 MP", _font, 15f, mpCyan, TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
             _combatMpValueText.rectTransform.anchorMin = Vector2.zero;
@@ -5346,20 +5537,22 @@ namespace Realmz.Game
             _combatMpValueText.rectTransform.offsetMax = Vector2.zero;
 
             _apDiamondIcons.Clear();
-            Sprite diamondSprite = BywaterUiHelpers.GetProceduralIconSprite("diamond");
+            Sprite diamondSprite = BywaterUiHelpers.GemPipGoldSprite ?? BywaterUiHelpers.GetProceduralIconSprite("diamond");
+            Color initialPipColor = BywaterUiHelpers.GemPipGoldSprite != null ? Color.white : new Color(0.98f, 0.80f, 0.14f, 1f);
+            float pipSize = BywaterUiHelpers.GemPipGoldSprite != null ? 12f : 10f;
             for (int i = 0; i < 10; i++)
             {
-                Image pip = BywaterUiHelpers.CreateImage(apRow.transform, $"ApDiamond_{i}", diamondSprite, new Color(0.98f, 0.80f, 0.14f, 1f), preserveAspect: true);
+                Image pip = BywaterUiHelpers.CreateImage(apRow.transform, $"ApDiamond_{i}", diamondSprite, initialPipColor, preserveAspect: true);
                 pip.raycastTarget = false;
                 LayoutElement pipLe = pip.gameObject.AddComponent<LayoutElement>();
-                pipLe.preferredWidth = 10f;
-                pipLe.preferredHeight = 10f;
+                pipLe.preferredWidth = pipSize;
+                pipLe.preferredHeight = pipSize;
                 pip.gameObject.SetActive(i < 6);
                 _apDiamondIcons.Add(pip);
             }
 
             _combatApValueText = BywaterUiHelpers.CreateLabel(apRow.transform, "ApValueLabel", "6/6 AP", _font, 15f, new Color(0.98f, 0.80f, 0.14f, 1f), TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
-            _combatApValueText.gameObject.AddComponent<LayoutElement>().preferredWidth = 64f;
+            _combatApValueText.gameObject.AddComponent<LayoutElement>().preferredWidth = 62f;
 
             CreateCombatSlotPill(apRow.transform, "ActionSlotPill", "ACT", new Color(0.98f, 0.80f, 0.14f, 1f), out _actionSlotPillBg, out _actionSlotPillText);
             CreateCombatSlotPill(apRow.transform, "BonusSlotPill", "BON", new Color(0.98f, 0.56f, 0.18f, 1f), out _bonusSlotPillBg, out _bonusSlotPillText);
@@ -5521,17 +5714,20 @@ namespace Realmz.Game
             go.transform.SetParent(parent, false);
 
             Image bg = go.GetComponent<Image>();
-            bg.color = BywaterUiHelpers.ButtonBg;
-            BywaterUiHelpers.AddBrassBorder(go.GetComponent<RectTransform>(), BywaterUiHelpers.BrassAccent, 1.3f);
+            BywaterUiHelpers.ApplySurfaceState(bg, false, isButton: true);
+            if (!BywaterUiHelpers.HasChromeSprites)
+            {
+                BywaterUiHelpers.AddBrassBorder(go.GetComponent<RectTransform>(), BywaterUiHelpers.BrassAccent, 1.3f);
+            }
 
             Button btn = go.GetComponent<Button>();
             btn.targetGraphic = bg;
             ColorBlock colors = btn.colors;
             colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(1.18f, 1.12f, 0.96f, 1f);
-            colors.pressedColor = new Color(0.82f, 0.78f, 0.70f, 1f);
+            colors.highlightedColor = new Color(1.16f, 1.08f, 0.92f, 1f);
+            colors.pressedColor = new Color(0.84f, 0.78f, 0.68f, 1f);
             colors.disabledColor = new Color(0.55f, 0.55f, 0.58f, 0.65f);
-            colors.colorMultiplier = 1f;
+            colors.colorMultiplier = BywaterUiHelpers.ChromePpuMultiplier;
             btn.colors = colors;
 
             LayoutElement le = go.AddComponent<LayoutElement>();
@@ -5663,19 +5859,22 @@ namespace Realmz.Game
             go.transform.SetParent(parent, false);
 
             Image img = go.GetComponent<Image>();
-            img.color = BywaterUiHelpers.ButtonBg;
+            BywaterUiHelpers.ApplySurfaceState(img, false, isButton: true);
 
             RectTransform btnRt = go.GetComponent<RectTransform>();
-            BywaterUiHelpers.AddBrassBorder(btnRt, BywaterUiHelpers.BrassAccent, 1.2f);
+            if (!BywaterUiHelpers.HasChromeSprites)
+            {
+                BywaterUiHelpers.AddBrassBorder(btnRt, BywaterUiHelpers.BrassAccent, 1.2f);
+            }
 
             Button btn = go.GetComponent<Button>();
             btn.targetGraphic = img;
             ColorBlock colors = btn.colors;
             colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(1.18f, 1.12f, 0.96f, 1f);
-            colors.pressedColor = new Color(0.82f, 0.78f, 0.70f, 1f);
+            colors.highlightedColor = new Color(1.16f, 1.08f, 0.92f, 1f);
+            colors.pressedColor = new Color(0.84f, 0.78f, 0.68f, 1f);
             colors.disabledColor = new Color(0.55f, 0.55f, 0.58f, 0.65f);
-            colors.colorMultiplier = 1f;
+            colors.colorMultiplier = BywaterUiHelpers.ChromePpuMultiplier;
             btn.colors = colors;
             if (onClick != null)
             {
@@ -5780,17 +5979,20 @@ namespace Realmz.Game
             go.transform.SetParent(parent, false);
 
             Image bg = go.GetComponent<Image>();
-            bg.color = BywaterUiHelpers.ButtonBg;
-            BywaterUiHelpers.AddBrassBorder(go.GetComponent<RectTransform>(), BywaterUiHelpers.BrassAccent, 1.2f);
+            BywaterUiHelpers.ApplySurfaceState(bg, false, isButton: true);
+            if (!BywaterUiHelpers.HasChromeSprites)
+            {
+                BywaterUiHelpers.AddBrassBorder(go.GetComponent<RectTransform>(), BywaterUiHelpers.BrassAccent, 1.2f);
+            }
 
             Button btn = go.GetComponent<Button>();
             btn.targetGraphic = bg;
             ColorBlock colors = btn.colors;
             colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(1.18f, 1.12f, 0.96f, 1f);
-            colors.pressedColor = new Color(0.82f, 0.78f, 0.70f, 1f);
+            colors.highlightedColor = new Color(1.16f, 1.08f, 0.92f, 1f);
+            colors.pressedColor = new Color(0.84f, 0.78f, 0.68f, 1f);
             colors.disabledColor = new Color(0.55f, 0.55f, 0.58f, 0.65f);
-            colors.colorMultiplier = 1f;
+            colors.colorMultiplier = BywaterUiHelpers.ChromePpuMultiplier;
             btn.colors = colors;
             if (onClick != null)
             {
@@ -5900,12 +6102,12 @@ namespace Realmz.Game
             modal.anchorMax = new Vector2(0.5f, 0.5f);
             modal.pivot = new Vector2(0.5f, 0.5f);
             modal.anchoredPosition = Vector2.zero;
-            modal.sizeDelta = new Vector2(760f, 700f);
+            modal.sizeDelta = new Vector2(760f, 716f);
             _settingsModalRoot = modal.gameObject;
 
             VerticalLayoutGroup vlg = modal.gameObject.AddComponent<VerticalLayoutGroup>();
-            vlg.padding = new RectOffset(22, 22, 18, 18);
-            vlg.spacing = 10f;
+            vlg.padding = new RectOffset(22, 22, 16, 16);
+            vlg.spacing = 7f;
             vlg.childControlWidth = true;
             vlg.childControlHeight = true;
             vlg.childForceExpandHeight = false;
@@ -5919,12 +6121,13 @@ namespace Realmz.Game
             hHlg.childControlHeight = true;
             hHlg.childForceExpandWidth = false;
 
-            TextMeshProUGUI title = BywaterUiHelpers.CreateLabel(header.transform, "Title", "Game Options & Pause Menu", _font, 21f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
-            BywaterUiHelpers.AddTextDropShadow(title);
+            TextMeshProUGUI title = BywaterUiHelpers.CreateDisplayLabel(header.transform, "Title", "Game Options & Pause Menu", _font, 21f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
             title.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
 
             Button closeBtn = BywaterUiHelpers.CreateButton(header.transform, "CloseSettingsBtn", "Resume [Esc]", _font, CloseSettingsModal, 15.5f);
             closeBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 136f;
+
+            BywaterUiHelpers.CreateHeaderDivider(modal, "SettingsHeaderRule");
 
             // Toggles row 1: Auto-Combat & Auto-End Turn
             _settingsAutoCombatBtn = AddSettingsToggleRow(modal, "AutoCombatRow", "Auto-Combat [A]", out _settingsAutoCombatLabel, () =>
@@ -6148,7 +6351,7 @@ namespace Realmz.Game
                     Image muteBg = _settingsMuteBtn.GetComponent<Image>();
                     if (muteBg != null)
                     {
-                        muteBg.color = new Color(0.24f, 0.09f, 0.11f, 0.96f);
+                        BywaterUiHelpers.ApplyTintedChrome(muteBg, new Color(0.24f, 0.09f, 0.11f, 0.96f));
                     }
                     BywaterUiHelpers.SetBorderColor(_settingsMuteBtn.transform, BywaterUiHelpers.DangerRed);
                 }
@@ -6180,7 +6383,7 @@ namespace Realmz.Game
                     Image quitBg = _settingsQuitBtn.GetComponent<Image>();
                     if (quitBg != null)
                     {
-                        quitBg.color = new Color(0.38f, 0.11f, 0.12f, 0.98f);
+                        BywaterUiHelpers.ApplyTintedChrome(quitBg, new Color(0.38f, 0.11f, 0.12f, 0.98f));
                     }
                     BywaterUiHelpers.SetBorderColor(_settingsQuitBtn.transform, BywaterUiHelpers.BrassHighlight);
                 }
@@ -6218,8 +6421,7 @@ namespace Realmz.Game
             vlg.childControlHeight = true;
             vlg.childForceExpandHeight = false;
 
-            _quickResolveTitle = BywaterUiHelpers.CreateLabel(modal, "QuickResolveTitle", "Encounter Ahead", _font, 22f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.Center, FontStyles.Bold);
-            BywaterUiHelpers.AddTextDropShadow(_quickResolveTitle);
+            _quickResolveTitle = BywaterUiHelpers.CreateDisplayLabel(modal, "QuickResolveTitle", "Encounter Ahead", _font, 22f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.Center, FontStyles.Bold);
             _quickResolveTitle.gameObject.AddComponent<LayoutElement>().preferredHeight = 38f;
 
             _quickResolveSummary = BywaterUiHelpers.CreateLabel(
@@ -6273,11 +6475,12 @@ namespace Realmz.Game
             vlg.childControlHeight = true;
             vlg.childForceExpandHeight = false;
 
-            _outcomeTitle = BywaterUiHelpers.CreateLabel(modal, "OutcomeTitle", "VICTORY!", _font, 26f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.Center, FontStyles.Bold);
-            BywaterUiHelpers.AddTextDropShadow(_outcomeTitle);
+            _outcomeTitle = BywaterUiHelpers.CreateDisplayLabel(modal, "OutcomeTitle", "VICTORY!", _font, 26f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.Center, FontStyles.Bold);
             LayoutElement titleLe = _outcomeTitle.gameObject.AddComponent<LayoutElement>();
-            titleLe.preferredHeight = 36f;
+            titleLe.preferredHeight = 40f;
             titleLe.flexibleHeight = 0f;
+
+            BywaterUiHelpers.CreateHeaderDivider(modal, "OutcomeHeaderRule");
 
             RectTransform lvlBanner = BywaterUiHelpers.CreatePanel(
                 modal,
@@ -6355,8 +6558,7 @@ namespace Realmz.Game
             _toastCanvasGroup.blocksRaycasts = false;
             _toastCanvasGroup.interactable = false;
 
-            _toastText = BywaterUiHelpers.CreateLabel(toast, "ToastText", string.Empty, _font, 16.5f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
-            BywaterUiHelpers.AddTextDropShadow(_toastText);
+            _toastText = BywaterUiHelpers.CreateDisplayLabel(toast, "ToastText", string.Empty, _font, 16.5f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
             _toastText.rectTransform.anchorMin = Vector2.zero;
             _toastText.rectTransform.anchorMax = Vector2.one;
             _toastText.rectTransform.offsetMin = new Vector2(12f, 4f);

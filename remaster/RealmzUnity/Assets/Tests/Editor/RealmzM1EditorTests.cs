@@ -3558,5 +3558,107 @@ namespace Realmz.EditorTests
                 Object.DestroyImmediate(audioGo);
             }
         }
+
+        [Test]
+        public void RealmzHeritageUi_Has9SliceChromeSpritesDisplayFontAndModalScrim()
+        {
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            Assert.That(catalog, Is.Not.Null, "BywaterAssetCatalog missing.");
+            Assert.That(catalog.uiFont, Is.Not.Null, "catalog.uiFont missing.");
+            Assert.That(catalog.uiDisplayFont, Is.Not.Null, "catalog.uiDisplayFont missing.");
+            Assert.That(catalog.uiDisplayFont, Is.Not.SameAs(catalog.uiFont),
+                "uiDisplayFont must be distinct from body uiFont (Black Chancery vs LiberationSans).");
+
+            Sprite[] all14Sprites =
+            {
+                catalog.uiStonePanelSprite,
+                catalog.uiStoneBarSprite,
+                catalog.uiStoneWellSprite,
+                catalog.uiTintPanelSprite,
+                catalog.uiButtonStoneSprite,
+                catalog.uiButtonGoldSprite,
+                catalog.uiBarTrackSprite,
+                catalog.uiBarFillSprite,
+                catalog.uiHeaderRuleSprite,
+                catalog.uiGemPipOffSprite,
+                catalog.uiGemPipGoldSprite,
+                catalog.uiGemPipCyanSprite,
+                catalog.uiGemPipEmeraldSprite,
+                catalog.uiModalScrimSprite
+            };
+            for (int i = 0; i < all14Sprites.Length; i++)
+            {
+                Assert.That(all14Sprites[i], Is.Not.Null, $"UI chrome sprite at index {i} is null.");
+            }
+
+            Sprite[] slicedSprites =
+            {
+                catalog.uiStonePanelSprite,
+                catalog.uiStoneBarSprite,
+                catalog.uiStoneWellSprite,
+                catalog.uiTintPanelSprite,
+                catalog.uiButtonStoneSprite,
+                catalog.uiButtonGoldSprite,
+                catalog.uiBarTrackSprite,
+                catalog.uiBarFillSprite,
+                catalog.uiHeaderRuleSprite
+            };
+            for (int i = 0; i < slicedSprites.Length; i++)
+            {
+                Vector4 b = slicedSprites[i].border;
+                Assert.That(b.x + b.y + b.z + b.w, Is.GreaterThan(0f),
+                    $"Expected non-zero 9-slice border on '{slicedSprites[i].name}', got {b}.");
+            }
+
+            bool hadEs = Object.FindFirstObjectByType<EventSystem>() != null;
+            GameObject hudGo = new GameObject("TempHeritageUiTestHud");
+            try
+            {
+                BywaterHudController hud = hudGo.AddComponent<BywaterHudController>();
+                hud.BuildUi(catalog);
+                Canvas canvas = hudGo.GetComponentInChildren<Canvas>(true);
+                Assert.That(canvas, Is.Not.Null);
+
+                Transform scrimTf = FindDescendantByName(canvas.transform, "ModalBackdropScrim");
+                Assert.That(scrimTf, Is.Not.Null, "ModalBackdropScrim missing from BywaterHudCanvas.");
+                Assert.That(scrimTf.gameObject.activeSelf, Is.False, "ModalBackdropScrim should start inactive.");
+
+                hud.ToggleSettingsModal(true);
+                Assert.That(scrimTf.gameObject.activeSelf, Is.True, "ModalBackdropScrim should activate when SettingsModal opens.");
+
+                hud.CloseSettingsModal();
+                Assert.That(scrimTf.gameObject.activeSelf, Is.False, "ModalBackdropScrim should deactivate when SettingsModal closes.");
+
+                Transform topBarTf = FindDescendantByName(canvas.transform, "TopHudBar");
+                Assert.That(topBarTf, Is.Not.Null, "TopHudBar missing.");
+                UnityEngine.UI.Image topBarImg = topBarTf.GetComponent<UnityEngine.UI.Image>();
+                Assert.That(topBarImg, Is.Not.Null);
+                Assert.That(topBarImg.sprite, Is.Not.Null, "TopHudBar must have a sliced chrome sprite.");
+                Assert.That(topBarImg.type, Is.EqualTo(UnityEngine.UI.Image.Type.Sliced));
+
+                Transform settingsModalTf = FindDescendantByName(canvas.transform, "SettingsModal");
+                Assert.That(settingsModalTf, Is.Not.Null, "SettingsModal missing.");
+                UnityEngine.UI.Image settingsImg = settingsModalTf.GetComponent<UnityEngine.UI.Image>();
+                Assert.That(settingsImg, Is.Not.Null);
+                Assert.That(settingsImg.sprite, Is.Not.Null, "SettingsModal must have a sliced chrome sprite.");
+                Assert.That(settingsImg.type, Is.EqualTo(UnityEngine.UI.Image.Type.Sliced));
+
+                TextMeshProUGUI[] labels = canvas.GetComponentsInChildren<TextMeshProUGUI>(true);
+                for (int i = 0; i < labels.Length; i++)
+                {
+                    Assert.That(labels[i].fontSize, Is.GreaterThanOrEqualTo(15f),
+                        $"Label '{labels[i].gameObject.name}' has fontSize {labels[i].fontSize} < 15f.");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(hudGo);
+                if (!hadEs)
+                {
+                    EventSystem created = Object.FindFirstObjectByType<EventSystem>();
+                    if (created != null) Object.DestroyImmediate(created.gameObject);
+                }
+            }
+        }
     }
 }

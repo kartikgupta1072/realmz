@@ -9,6 +9,7 @@ using TMPro;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.TextCore.LowLevel;
 
 namespace Realmz.EditorTools
 {
@@ -29,6 +30,9 @@ namespace Realmz.EditorTools
         private const string AudioResourcesRoot = ResourcesDir + "/RealmzAudio";
         private const string CatalogAssetPath = ResourcesDir + "/BywaterAssetCatalog.asset";
         private const string UiFontAssetPath = M1ArtRoot + "/RealmzUiFont.asset";
+        private const string CartographyUiDir = "Assets/Art/Cartography/UI";
+        private const string DisplayFontTtfPath = CartographyUiDir + "/BlackChancery.ttf";
+        private const string DisplayFontAssetPath = CartographyUiDir + "/RealmzDisplayFont.asset";
         private const float UnifiedCharacterPpu = 64f;
 
         private struct HeroSpec
@@ -545,8 +549,9 @@ namespace Realmz.EditorTools
                 });
             }
 
-            // 6. UI Font Asset
+            // 6. UI Font Asset & M1.15 Realmz Heritage UI Chrome
             catalog.uiFont = EnsureUiFontAsset();
+            ImportAndAssignUiChrome(catalog);
 
             EditorUtility.SetDirty(catalog);
             AssetDatabase.SaveAssets();
@@ -596,6 +601,8 @@ namespace Realmz.EditorTools
                 ConfigureBillboardSprite(PropsDir + "/" + propKey + ".png");
                 ConfigureNormalMap(PropsDir + "/" + propKey + "_n.png", TextureWrapMode.Clamp);
             }
+
+            ConfigureUiChromeTextures();
         }
 
         private static void ConfigureBillboardSprite(string assetPath, float? ppuOverride = null)
@@ -1079,6 +1086,33 @@ namespace Realmz.EditorTools
             return mat;
         }
 
+        private static bool IsDisplayFontAsset(TMP_FontAsset font, string assetPath = null)
+        {
+            if (!string.IsNullOrEmpty(assetPath) &&
+                string.Equals(assetPath, DisplayFontAssetPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (font != null)
+            {
+                string resolvedPath = AssetDatabase.GetAssetPath(font);
+                if (!string.IsNullOrEmpty(resolvedPath) &&
+                    string.Equals(resolvedPath, DisplayFontAssetPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                if (!string.IsNullOrEmpty(font.name) &&
+                    font.name.IndexOf("RealmzDisplayFont", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private static TMP_FontAsset EnsureUiFontAsset()
         {
             const string liberationPath = "Assets/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF.asset";
@@ -1088,7 +1122,7 @@ namespace Realmz.EditorTools
                 return directFont;
             }
 
-            if (TMP_Settings.defaultFontAsset != null)
+            if (TMP_Settings.defaultFontAsset != null && !IsDisplayFontAsset(TMP_Settings.defaultFontAsset))
             {
                 return TMP_Settings.defaultFontAsset;
             }
@@ -1120,7 +1154,37 @@ namespace Realmz.EditorTools
             string[] fontGuids = AssetDatabase.FindAssets("t:TMP_FontAsset");
             if (fontGuids != null && fontGuids.Length > 0)
             {
-                return AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(AssetDatabase.GUIDToAssetPath(fontGuids[0]));
+                TMP_FontAsset firstNonDisplay = null;
+                for (int i = 0; i < fontGuids.Length; i++)
+                {
+                    string path = AssetDatabase.GUIDToAssetPath(fontGuids[i]);
+                    if (string.IsNullOrEmpty(path) ||
+                        string.Equals(path, DisplayFontAssetPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    TMP_FontAsset candidate = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(path);
+                    if (candidate == null || IsDisplayFontAsset(candidate, path))
+                    {
+                        continue;
+                    }
+
+                    if (path.IndexOf("LiberationSans", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        return candidate;
+                    }
+
+                    if (firstNonDisplay == null)
+                    {
+                        firstNonDisplay = candidate;
+                    }
+                }
+
+                if (firstNonDisplay != null)
+                {
+                    return firstNonDisplay;
+                }
             }
 
             TMP_FontAsset existing = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(UiFontAssetPath);
@@ -1189,6 +1253,214 @@ namespace Realmz.EditorTools
             EditorUtility.SetDirty(fontAsset);
             AssetDatabase.SaveAssets();
             return fontAsset;
+        }
+
+        private static TMP_FontAsset EnsureDisplayFontAsset()
+        {
+            Font ttf = AssetDatabase.LoadAssetAtPath<Font>(DisplayFontTtfPath);
+            if (ttf == null)
+            {
+                Debug.LogWarning("[M1AssetImporter] Display TTF missing at " + DisplayFontTtfPath);
+                return AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(DisplayFontAssetPath);
+            }
+
+            char[] asciiChars = new char[95];
+            for (int i = 0; i < asciiChars.Length; i++)
+            {
+                asciiChars[i] = (char)(32 + i);
+            }
+            string printableAscii = new string(asciiChars);
+
+            TMP_FontAsset existing = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(DisplayFontAssetPath);
+            if (existing != null &&
+                existing.atlasTexture != null &&
+                existing.material != null &&
+                existing.sourceFontFile == ttf)
+            {
+                existing.name = "RealmzDisplayFont";
+                existing.atlasPopulationMode = AtlasPopulationMode.Dynamic;
+                existing.TryAddCharacters(printableAscii);
+                EditorUtility.SetDirty(existing);
+                return existing;
+            }
+
+            if (existing != null)
+            {
+                AssetDatabase.DeleteAsset(DisplayFontAssetPath);
+            }
+
+            EnsureFolder(CartographyUiDir);
+            TMP_FontAsset displayFont = TMP_FontAsset.CreateFontAsset(
+                ttf,
+                48,
+                6,
+                GlyphRenderMode.SDFAA,
+                512,
+                512);
+            if (displayFont == null)
+            {
+                displayFont = TMP_FontAsset.CreateFontAsset(ttf);
+            }
+
+            if (displayFont == null)
+            {
+                Debug.LogWarning("[M1AssetImporter] Failed to create RealmzDisplayFont from " + DisplayFontTtfPath);
+                return null;
+            }
+
+            displayFont.name = "RealmzDisplayFont";
+            displayFont.atlasPopulationMode = AtlasPopulationMode.Dynamic;
+            displayFont.TryAddCharacters(printableAscii);
+
+            AssetDatabase.CreateAsset(displayFont, DisplayFontAssetPath);
+
+            if (displayFont.atlasTextures != null)
+            {
+                for (int i = 0; i < displayFont.atlasTextures.Length; i++)
+                {
+                    Texture2D tex = displayFont.atlasTextures[i];
+                    if (tex != null && !AssetDatabase.Contains(tex))
+                    {
+                        if (string.IsNullOrEmpty(tex.name))
+                        {
+                            tex.name = "RealmzDisplayFont Atlas " + i;
+                        }
+                        AssetDatabase.AddObjectToAsset(tex, displayFont);
+                    }
+                }
+            }
+
+            if (displayFont.material != null && !AssetDatabase.Contains(displayFont.material))
+            {
+                if (string.IsNullOrEmpty(displayFont.material.name))
+                {
+                    displayFont.material.name = "RealmzDisplayFont Material";
+                }
+                AssetDatabase.AddObjectToAsset(displayFont.material, displayFont);
+            }
+
+            EditorUtility.SetDirty(displayFont);
+            AssetDatabase.SaveAssets();
+            return displayFont;
+        }
+
+        private static readonly (string fileName, Vector4 border, float ppu, FilterMode filter)[] UiChromeSpecs =
+        {
+            ("ui_stone_panel_9s.png", new Vector4(10f, 10f, 10f, 10f), 64f, FilterMode.Point),
+            ("ui_stone_bar_9s.png", new Vector4(6f, 6f, 6f, 6f), 64f, FilterMode.Point),
+            ("ui_stone_well_9s.png", new Vector4(6f, 6f, 6f, 6f), 64f, FilterMode.Point),
+            ("ui_tint_panel_9s.png", new Vector4(6f, 6f, 6f, 6f), 64f, FilterMode.Point),
+            ("ui_btn_stone_9s.png", new Vector4(6f, 6f, 6f, 6f), 64f, FilterMode.Point),
+            ("ui_btn_gold_9s.png", new Vector4(6f, 6f, 6f, 6f), 64f, FilterMode.Point),
+            ("ui_bar_track_9s.png", new Vector4(4f, 4f, 4f, 4f), 64f, FilterMode.Point),
+            ("ui_bar_fill_9s.png", new Vector4(2f, 2f, 2f, 2f), 64f, FilterMode.Point),
+            ("ui_header_rule.png", new Vector4(16f, 0f, 16f, 0f), 64f, FilterMode.Point),
+            ("ui_gem_pip_off.png", Vector4.zero, 64f, FilterMode.Point),
+            ("ui_gem_pip_gold.png", Vector4.zero, 64f, FilterMode.Point),
+            ("ui_gem_pip_cyan.png", Vector4.zero, 64f, FilterMode.Point),
+            ("ui_gem_pip_emerald.png", Vector4.zero, 64f, FilterMode.Point),
+            ("ui_modal_scrim.png", Vector4.zero, 64f, FilterMode.Point)
+        };
+
+        private static void ConfigureUiChromeTextures()
+        {
+            if (!AssetDatabase.IsValidFolder(CartographyUiDir))
+            {
+                return;
+            }
+
+            for (int i = 0; i < UiChromeSpecs.Length; i++)
+            {
+                var spec = UiChromeSpecs[i];
+                ConfigureUiChromeTexture(
+                    CartographyUiDir + "/" + spec.fileName,
+                    spec.border,
+                    spec.ppu,
+                    spec.filter);
+            }
+        }
+
+        private static bool ConfigureUiChromeTexture(string assetPath, Vector4 border, float ppu, FilterMode filterMode)
+        {
+            TextureImporter importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
+            if (importer == null)
+            {
+                return false;
+            }
+
+            TextureImporterSettings settings = new TextureImporterSettings();
+            importer.ReadTextureSettings(settings);
+
+            bool changed =
+                importer.textureType != TextureImporterType.Sprite ||
+                importer.spriteImportMode != SpriteImportMode.Single ||
+                importer.filterMode != filterMode ||
+                importer.textureCompression != TextureImporterCompression.Uncompressed ||
+                importer.mipmapEnabled ||
+                !importer.sRGBTexture ||
+                !importer.alphaIsTransparency ||
+                importer.wrapMode != TextureWrapMode.Clamp ||
+                Mathf.Abs(importer.spritePixelsPerUnit - ppu) > 0.01f ||
+                (importer.spriteBorder - border).sqrMagnitude > 0.01f ||
+                settings.spriteMeshType != SpriteMeshType.FullRect ||
+                settings.spriteAlignment != (int)SpriteAlignment.Center ||
+                (settings.spritePivot - new Vector2(0.5f, 0.5f)).sqrMagnitude > 0.0001f ||
+                (settings.spriteBorder - border).sqrMagnitude > 0.01f;
+
+            if (!changed)
+            {
+                return false;
+            }
+
+            importer.textureType = TextureImporterType.Sprite;
+            importer.spriteImportMode = SpriteImportMode.Single;
+            importer.sRGBTexture = true;
+            importer.alphaIsTransparency = true;
+            importer.wrapMode = TextureWrapMode.Clamp;
+            importer.filterMode = filterMode;
+            importer.textureCompression = TextureImporterCompression.Uncompressed;
+            importer.mipmapEnabled = false;
+            importer.spritePixelsPerUnit = ppu;
+            importer.spriteBorder = border;
+
+            importer.ReadTextureSettings(settings);
+            settings.spriteMeshType = SpriteMeshType.FullRect;
+            settings.spriteAlignment = (int)SpriteAlignment.Center;
+            settings.spritePivot = new Vector2(0.5f, 0.5f);
+            settings.spriteBorder = border;
+            importer.SetTextureSettings(settings);
+
+            importer.SaveAndReimport();
+            AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceUpdate);
+            return true;
+        }
+
+        public static void ImportAndAssignUiChrome(BywaterAssetCatalog catalog)
+        {
+            if (catalog == null)
+            {
+                return;
+            }
+
+            ConfigureUiChromeTextures();
+
+            catalog.uiDisplayFont = EnsureDisplayFontAsset();
+            catalog.uiStonePanelSprite = AssetDatabase.LoadAssetAtPath<Sprite>(CartographyUiDir + "/ui_stone_panel_9s.png");
+            catalog.uiStoneBarSprite = AssetDatabase.LoadAssetAtPath<Sprite>(CartographyUiDir + "/ui_stone_bar_9s.png");
+            catalog.uiStoneWellSprite = AssetDatabase.LoadAssetAtPath<Sprite>(CartographyUiDir + "/ui_stone_well_9s.png");
+            catalog.uiTintPanelSprite = AssetDatabase.LoadAssetAtPath<Sprite>(CartographyUiDir + "/ui_tint_panel_9s.png");
+            catalog.uiButtonStoneSprite = AssetDatabase.LoadAssetAtPath<Sprite>(CartographyUiDir + "/ui_btn_stone_9s.png");
+            catalog.uiButtonGoldSprite = AssetDatabase.LoadAssetAtPath<Sprite>(CartographyUiDir + "/ui_btn_gold_9s.png");
+            catalog.uiBarTrackSprite = AssetDatabase.LoadAssetAtPath<Sprite>(CartographyUiDir + "/ui_bar_track_9s.png");
+            catalog.uiBarFillSprite = AssetDatabase.LoadAssetAtPath<Sprite>(CartographyUiDir + "/ui_bar_fill_9s.png");
+            catalog.uiHeaderRuleSprite = AssetDatabase.LoadAssetAtPath<Sprite>(CartographyUiDir + "/ui_header_rule.png");
+            catalog.uiGemPipOffSprite = AssetDatabase.LoadAssetAtPath<Sprite>(CartographyUiDir + "/ui_gem_pip_off.png");
+            catalog.uiGemPipGoldSprite = AssetDatabase.LoadAssetAtPath<Sprite>(CartographyUiDir + "/ui_gem_pip_gold.png");
+            catalog.uiGemPipCyanSprite = AssetDatabase.LoadAssetAtPath<Sprite>(CartographyUiDir + "/ui_gem_pip_cyan.png");
+            catalog.uiGemPipEmeraldSprite = AssetDatabase.LoadAssetAtPath<Sprite>(CartographyUiDir + "/ui_gem_pip_emerald.png");
+            catalog.uiModalScrimSprite = AssetDatabase.LoadAssetAtPath<Sprite>(CartographyUiDir + "/ui_modal_scrim.png");
+
+            EditorUtility.SetDirty(catalog);
         }
 
         [Serializable]

@@ -137,7 +137,7 @@ namespace Realmz.Game
             {
                 _interceptScoutSummaryText.text = "Something lunges out of the pitch dark!";
                 _interceptScoutSummaryText.color = BywaterUiHelpers.DangerRed;
-                _interceptScoutBannerBg.color = new Color(0.24f, 0.05f, 0.06f, 0.96f);
+                BywaterUiHelpers.ApplyTintedChrome(_interceptScoutBannerBg, new Color(0.24f, 0.05f, 0.06f, 0.96f));
                 BywaterUiHelpers.SetBorderColor(_interceptScoutBannerBg.transform, BywaterUiHelpers.DangerRed);
                 BywaterUiHelpers.SetBorderColor(_encounterInterceptModalRoot.transform, BywaterUiHelpers.DangerRed);
             }
@@ -146,7 +146,7 @@ namespace Realmz.Game
                 string scoutName = string.IsNullOrWhiteSpace(report.LeadScoutName) ? "Kaelen & Vex" : report.LeadScoutName;
                 _interceptScoutSummaryText.text = $"{scoutName} spotted them ahead.";
                 _interceptScoutSummaryText.color = BywaterUiHelpers.SuccessGreen;
-                _interceptScoutBannerBg.color = new Color(0.05f, 0.16f, 0.09f, 0.95f);
+                BywaterUiHelpers.ApplyTintedChrome(_interceptScoutBannerBg, new Color(0.05f, 0.16f, 0.09f, 0.95f));
                 BywaterUiHelpers.SetBorderColor(_interceptScoutBannerBg.transform, BywaterUiHelpers.SuccessGreen);
                 BywaterUiHelpers.SetBorderColor(_encounterInterceptModalRoot.transform, BywaterUiHelpers.BrassHighlight);
             }
@@ -154,7 +154,7 @@ namespace Realmz.Game
             {
                 _interceptScoutSummaryText.text = "Hostile figures block the road ahead.";
                 _interceptScoutSummaryText.color = BywaterUiHelpers.ParchmentText;
-                _interceptScoutBannerBg.color = BywaterUiHelpers.CardBg;
+                BywaterUiHelpers.ApplySurfaceState(_interceptScoutBannerBg, false);
                 BywaterUiHelpers.SetBorderColor(_interceptScoutBannerBg.transform, BywaterUiHelpers.BrassAccent);
                 BywaterUiHelpers.SetBorderColor(_encounterInterceptModalRoot.transform, BywaterUiHelpers.BrassAccent);
             }
@@ -214,6 +214,7 @@ namespace Realmz.Game
 
             _encounterInterceptModalRoot.SetActive(true);
             _encounterInterceptModalRoot.transform.SetAsLastSibling();
+            SyncModalScrim();
         }
 
         public void ShowDiceRollCheck(EncounterCheckSpec spec, EncounterCheckRollResult result, Action onComplete)
@@ -292,6 +293,7 @@ namespace Realmz.Game
 
             _diceRollModalRoot.SetActive(true);
             _diceRollModalRoot.transform.SetAsLastSibling();
+            SyncModalScrim();
 
             if (Application.isBatchMode || !Application.isPlaying || !gameObject.activeInHierarchy)
             {
@@ -299,6 +301,7 @@ namespace Realmz.Game
                 Action done = _diceRollPendingComplete;
                 _diceRollPendingComplete = null;
                 _diceRollModalRoot.SetActive(false);
+                SyncModalScrim();
                 done?.Invoke();
                 return;
             }
@@ -483,6 +486,7 @@ namespace Realmz.Game
 
             _diceRollCoroutine = null;
             _diceRollModalRoot.SetActive(false);
+            SyncModalScrim();
             Action done = _diceRollPendingComplete;
             _diceRollPendingComplete = null;
             done?.Invoke();
@@ -494,6 +498,7 @@ namespace Realmz.Game
             {
                 _encounterInterceptModalRoot.SetActive(false);
             }
+            SyncModalScrim();
         }
 
         private void BuildEncounterDirectorTopBarPills(Transform bar)
@@ -694,7 +699,14 @@ namespace Realmz.Game
             BywaterUiHelpers.SetBorderColor(_topSurvivalPill.transform, borderColor);
             if (_topSurvivalPillBg != null)
             {
-                _topSurvivalPillBg.color = bgColor;
+                if (bgColor == BywaterUiHelpers.CardBg)
+                {
+                    BywaterUiHelpers.ApplySurfaceState(_topSurvivalPillBg, false);
+                }
+                else
+                {
+                    BywaterUiHelpers.ApplyTintedChrome(_topSurvivalPillBg, bgColor);
+                }
             }
 
             _topSurvivalPill.SetActive(!_isCombatHudActive && _hasSurvivalBannerState);
@@ -732,9 +744,14 @@ namespace Realmz.Game
                 }
                 if (_topClockPillBg != null)
                 {
-                    _topClockPillBg.color = clock.IsNight
-                        ? new Color(0.05f, 0.08f, 0.16f, 0.96f)
-                        : BywaterUiHelpers.CardBg;
+                    if (clock.IsNight)
+                    {
+                        BywaterUiHelpers.ApplyTintedChrome(_topClockPillBg, new Color(0.05f, 0.08f, 0.16f, 0.96f));
+                    }
+                    else
+                    {
+                        BywaterUiHelpers.ApplySurfaceState(_topClockPillBg, false);
+                    }
                 }
             }
 
@@ -773,12 +790,12 @@ namespace Realmz.Game
             modal.anchorMax = new Vector2(0.5f, 0.5f);
             modal.pivot = new Vector2(0.5f, 0.5f);
             modal.anchoredPosition = Vector2.zero;
-            modal.sizeDelta = new Vector2(760f, 460f);
+            modal.sizeDelta = new Vector2(760f, 476f);
             _encounterInterceptModalRoot = modal.gameObject;
 
             VerticalLayoutGroup vlg = modal.gameObject.AddComponent<VerticalLayoutGroup>();
-            vlg.padding = new RectOffset(22, 22, 18, 18);
-            vlg.spacing = 12f;
+            vlg.padding = new RectOffset(22, 22, 16, 16);
+            vlg.spacing = 10f;
             vlg.childControlWidth = true;
             vlg.childControlHeight = true;
             vlg.childForceExpandWidth = true;
@@ -787,7 +804,7 @@ namespace Realmz.Game
             // 1. Header banner
             GameObject headerGo = new GameObject("InterceptHeader", typeof(RectTransform), typeof(VerticalLayoutGroup));
             headerGo.transform.SetParent(modal, false);
-            headerGo.AddComponent<LayoutElement>().preferredHeight = 72f;
+            headerGo.AddComponent<LayoutElement>().preferredHeight = 76f;
             VerticalLayoutGroup headerVlg = headerGo.GetComponent<VerticalLayoutGroup>();
             headerVlg.spacing = 4f;
             headerVlg.childControlWidth = true;
@@ -795,7 +812,7 @@ namespace Realmz.Game
             headerVlg.childForceExpandWidth = true;
             headerVlg.childForceExpandHeight = false;
 
-            _interceptTitleText = BywaterUiHelpers.CreateLabel(
+            _interceptTitleText = BywaterUiHelpers.CreateDisplayLabel(
                 headerGo.transform,
                 "InterceptTitle",
                 "Wilderness Encounter",
@@ -806,8 +823,7 @@ namespace Realmz.Game
                 FontStyles.Bold,
                 wrap: false);
             _interceptTitleText.overflowMode = TextOverflowModes.Truncate;
-            BywaterUiHelpers.AddTextDropShadow(_interceptTitleText);
-            _interceptTitleText.gameObject.AddComponent<LayoutElement>().preferredHeight = 32f;
+            _interceptTitleText.gameObject.AddComponent<LayoutElement>().preferredHeight = 34f;
 
             GameObject subRow = new GameObject("InterceptSubtitleRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             subRow.transform.SetParent(headerGo.transform, false);
@@ -865,6 +881,8 @@ namespace Realmz.Game
             _interceptNightBonusText.rectTransform.offsetMin = new Vector2(6f, 2f);
             _interceptNightBonusText.rectTransform.offsetMax = new Vector2(-6f, -2f);
             _interceptNightBonusBadge.SetActive(false);
+
+            BywaterUiHelpers.CreateHeaderDivider(modal, "InterceptHeaderRule");
 
             // 2. Scouting banner
             RectTransform scoutBannerRt = BywaterUiHelpers.CreatePanel(
@@ -1081,9 +1099,9 @@ namespace Realmz.Game
             dVlg.childForceExpandWidth = true;
             dVlg.childForceExpandHeight = false;
 
-            _diceRollTitleText = BywaterUiHelpers.CreateLabel(
+            _diceRollTitleText = BywaterUiHelpers.CreateDisplayLabel(
                 d20Root, "DiceRollTitle", "Skill Check", _font, 20f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
-            _diceRollTitleText.gameObject.AddComponent<LayoutElement>().preferredHeight = 28f;
+            _diceRollTitleText.gameObject.AddComponent<LayoutElement>().preferredHeight = 32f;
 
             _diceRollSubtitleText = BywaterUiHelpers.CreateLabel(
                 d20Root, "DiceRollSubtitle", "Target DC 12", _font, 15f, BywaterUiHelpers.MutedSlate, TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
@@ -1288,7 +1306,14 @@ namespace Realmz.Game
             _topThreatText.color = textCol;
             if (_topThreatPillBg != null)
             {
-                _topThreatPillBg.color = bgCol;
+                if (bgCol == BywaterUiHelpers.CardBg)
+                {
+                    BywaterUiHelpers.ApplySurfaceState(_topThreatPillBg, false);
+                }
+                else
+                {
+                    BywaterUiHelpers.ApplyTintedChrome(_topThreatPillBg, bgCol);
+                }
             }
             if (_topThreatPill != null)
             {

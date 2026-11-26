@@ -279,8 +279,9 @@ namespace Realmz.Game
         {
             RectTransform rt = BywaterUiHelpers.CreatePanel(parent, name, BywaterUiHelpers.ButtonBg, withBrassOutline: true, outlinePx: 1.4f);
             LayoutElement le = rt.gameObject.AddComponent<LayoutElement>();
-            le.preferredWidth = 86f;
-            le.minWidth = 82f;
+            le.preferredWidth = 96f;
+            le.minWidth = 88f;
+            le.flexibleWidth = 0f;
             le.preferredHeight = 40f;
 
             Button btn = rt.gameObject.AddComponent<Button>();
@@ -468,13 +469,13 @@ namespace Realmz.Game
                 TextAlignmentOptions.Center,
                 wrap: true);
             _paperDollSummaryText.enableAutoSizing = true;
-            _paperDollSummaryText.fontSizeMin = 11f;
+            _paperDollSummaryText.fontSizeMin = 10.5f;
             _paperDollSummaryText.fontSizeMax = 15f;
             _paperDollSummaryText.overflowMode = TextOverflowModes.Ellipsis;
             _paperDollSummaryText.rectTransform.anchorMin = Vector2.zero;
             _paperDollSummaryText.rectTransform.anchorMax = Vector2.one;
-            _paperDollSummaryText.rectTransform.offsetMin = new Vector2(6f, 4f);
-            _paperDollSummaryText.rectTransform.offsetMax = new Vector2(-6f, -4f);
+            _paperDollSummaryText.rectTransform.offsetMin = new Vector2(6f, 2f);
+            _paperDollSummaryText.rectTransform.offsetMax = new Vector2(-6f, -2f);
 
             // Character Sheet View (initially hidden)
             RectTransform csRt = BywaterUiHelpers.CreatePanel(leftCol, "CharacterSheetPanel", BywaterUiHelpers.PanelDarkBg, withBrassOutline: true, outlinePx: 1f);
@@ -1026,9 +1027,30 @@ namespace Realmz.Game
                     sr.Icon.gameObject.SetActive(false);
                 }
 
-                sr.Background.color = isFilterActive
-                    ? BywaterUiHelpers.CardSelectedBg
-                    : (sr.BoundDef != null ? BywaterUiHelpers.CardBg : new Color(0.055f, 0.078f, 0.138f, 0.90f));
+                if (BywaterUiHelpers.HasChromeSprites)
+                {
+                    if (isFilterActive)
+                    {
+                        BywaterUiHelpers.ApplySurfaceState(sr.Background, true);
+                    }
+                    else if (sr.BoundDef != null)
+                    {
+                        BywaterUiHelpers.ApplySurfaceState(sr.Background, false);
+                    }
+                    else
+                    {
+                        sr.Background.sprite = BywaterUiHelpers.StoneWellSprite ?? BywaterUiHelpers.StoneBarSprite;
+                        sr.Background.type = Image.Type.Sliced;
+                        sr.Background.pixelsPerUnitMultiplier = BywaterUiHelpers.ChromePpuMultiplier;
+                        sr.Background.color = Color.white;
+                    }
+                }
+                else
+                {
+                    sr.Background.color = isFilterActive
+                        ? BywaterUiHelpers.CardSelectedBg
+                        : (sr.BoundDef != null ? BywaterUiHelpers.CardBg : new Color(0.055f, 0.078f, 0.138f, 0.90f));
+                }
                 BywaterUiHelpers.SetBorderColor(
                     sr.Root,
                     isFilterActive
@@ -1489,12 +1511,13 @@ namespace Realmz.Game
             tvlg.childControlWidth = true;
             tvlg.childControlHeight = true;
 
-            _levelUpTitle = BywaterUiHelpers.CreateLabel(titleCol.transform, "LevelUpTitle", "LEVEL UP!", _font, 22f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
-            BywaterUiHelpers.AddTextDropShadow(_levelUpTitle);
+            _levelUpTitle = BywaterUiHelpers.CreateDisplayLabel(titleCol.transform, "LevelUpTitle", "LEVEL UP!", _font, 22f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
             _levelUpPointsLabel = BywaterUiHelpers.CreateLabel(titleCol.transform, "LevelUpPoints", "Allocate 2 Attribute Points", _font, 16f, BywaterUiHelpers.SuccessGreen, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
 
             Button closeBtn = BywaterUiHelpers.CreateButton(hdrRow.transform, "CloseBtn", "Later", _font, CloseLevelUpModal, 15.5f);
             closeBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 88f;
+
+            BywaterUiHelpers.CreateHeaderDivider(modal, "LevelUpHeaderRule");
 
             string[] keys = { "Brawn", "Knowledge", "Judgment", "Agility", "Vitality", "Luck" };
             for (int i = 0; i < 6; i++)
@@ -1590,6 +1613,7 @@ namespace Realmz.Game
             _levelUpModalRoot.transform.SetAsLastSibling();
             RefreshLevelUpModal();
             PlayModalPopIn(_levelUpModalRoot, 0.90f, 0.16f);
+            SyncModalScrim();
         }
 
         public void CloseLevelUpModal()
@@ -1599,6 +1623,7 @@ namespace Realmz.Game
             {
                 _levelUpModalRoot.SetActive(false);
             }
+            SyncModalScrim();
         }
 
         private void ApplyRecommendedLevelUpPoints()
@@ -1852,13 +1877,23 @@ namespace Realmz.Game
                 RectTransform xpTrack = BywaterUiHelpers.CreatePanel(right.transform, "XpTrack", BywaterUiHelpers.BarTrackColor, withBrassOutline: true, outlinePx: 1f);
                 xpTrack.gameObject.AddComponent<LayoutElement>().preferredHeight = 20f;
 
-                Image baseFill = BywaterUiHelpers.CreateImage(xpTrack, "XpBaseFill", null, new Color(0.24f, 0.42f, 0.72f, 1f));
+                Image baseFill = BywaterUiHelpers.CreateImage(xpTrack, "XpBaseFill", BywaterUiHelpers.BarFillSprite, new Color(0.24f, 0.42f, 0.72f, 1f), preserveAspect: false);
+                if (BywaterUiHelpers.BarFillSprite != null)
+                {
+                    baseFill.type = Image.Type.Sliced;
+                    baseFill.pixelsPerUnitMultiplier = BywaterUiHelpers.ChromePpuMultiplier;
+                }
                 baseFill.rectTransform.anchorMin = Vector2.zero;
                 baseFill.rectTransform.anchorMax = new Vector2(0.2f, 1f);
                 baseFill.rectTransform.offsetMin = Vector2.zero;
                 baseFill.rectTransform.offsetMax = Vector2.zero;
 
-                Image gainFill = BywaterUiHelpers.CreateImage(xpTrack, "XpGainFill", null, BywaterUiHelpers.BrassHighlight);
+                Image gainFill = BywaterUiHelpers.CreateImage(xpTrack, "XpGainFill", BywaterUiHelpers.BarFillSprite, BywaterUiHelpers.BrassHighlight, preserveAspect: false);
+                if (BywaterUiHelpers.BarFillSprite != null)
+                {
+                    gainFill.type = Image.Type.Sliced;
+                    gainFill.pixelsPerUnitMultiplier = BywaterUiHelpers.ChromePpuMultiplier;
+                }
                 gainFill.rectTransform.anchorMin = new Vector2(0.2f, 0f);
                 gainFill.rectTransform.anchorMax = new Vector2(0.4f, 1f);
                 gainFill.rectTransform.offsetMin = Vector2.zero;
@@ -2075,6 +2110,7 @@ namespace Realmz.Game
             _outcomeModalRoot.SetActive(true);
             _outcomeModalRoot.transform.SetAsLastSibling();
             PlayModalPopIn(_outcomeModalRoot, 0.90f, 0.18f);
+            SyncModalScrim();
 
             if (immediate)
             {
@@ -2374,16 +2410,27 @@ namespace Realmz.Game
             }
             if (tile.SelectBoxBg != null)
             {
-                tile.SelectBoxBg.color = isSelected
-                    ? new Color(0.14f, 0.38f, 0.20f, 0.98f)
-                    : new Color(0.06f, 0.08f, 0.13f, 0.94f);
+                if (BywaterUiHelpers.HasChromeSprites && BywaterUiHelpers.GemPipEmeraldSprite != null)
+                {
+                    tile.SelectBoxBg.sprite = isSelected
+                        ? BywaterUiHelpers.GemPipEmeraldSprite
+                        : (BywaterUiHelpers.GemPipOffSprite ?? BywaterUiHelpers.StoneWellSprite);
+                    bool useSimple = isSelected || BywaterUiHelpers.GemPipOffSprite != null;
+                    tile.SelectBoxBg.type = useSimple ? Image.Type.Simple : Image.Type.Sliced;
+                    tile.SelectBoxBg.preserveAspect = useSimple;
+                    tile.SelectBoxBg.color = Color.white;
+                }
+                else
+                {
+                    tile.SelectBoxBg.color = isSelected
+                        ? new Color(0.14f, 0.38f, 0.20f, 0.98f)
+                        : new Color(0.06f, 0.08f, 0.13f, 0.94f);
+                }
                 BywaterUiHelpers.SetBorderColor(tile.SelectBoxBg.transform, isSelected ? BywaterUiHelpers.SuccessGreen : BywaterUiHelpers.MutedSlate);
             }
             if (tile.FrameBg != null)
             {
-                tile.FrameBg.color = isSelected
-                    ? new Color(0.085f, 0.145f, 0.110f, 0.96f)
-                    : new Color(0.050f, 0.060f, 0.090f, 0.85f);
+                BywaterUiHelpers.ApplySurfaceState(tile.FrameBg, isSelected);
             }
             Color border = !isSelected
                 ? new Color(0.28f, 0.32f, 0.40f, 0.85f)

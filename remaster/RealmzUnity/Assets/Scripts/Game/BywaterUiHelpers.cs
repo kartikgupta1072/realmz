@@ -13,30 +13,243 @@ namespace Realmz.Game
     /// </summary>
     public static class BywaterUiHelpers
     {
-        // Crisp dark-fantasy RPG palette (BG3 / DOS2 inspired dark slate + brushed bronze)
-        public static readonly Color PanelBg = new Color(0.047f, 0.067f, 0.118f, 0.94f);        // #0C111E
-        public static readonly Color PanelDarkBg = new Color(0.031f, 0.047f, 0.086f, 0.97f);    // #080C16
-        public static readonly Color CardBg = new Color(0.075f, 0.106f, 0.184f, 0.96f);
-        public static readonly Color CardSelectedBg = new Color(0.200f, 0.160f, 0.078f, 0.98f);
-        public static readonly Color BrassAccent = new Color(0.753f, 0.569f, 0.259f, 1.0f);     // #C09142 brushed bronze
-        public static readonly Color BrassHighlight = new Color(0.961f, 0.800f, 0.388f, 1.0f);  // #F5CC63
-        public static readonly Color ParchmentText = new Color(0.965f, 0.933f, 0.867f, 1.0f);   // #F6EEDD
-        public static readonly Color MutedSlate = new Color(0.710f, 0.765f, 0.840f, 1.0f);      // #B5C3D6
-        public static readonly Color ButtonBg = new Color(0.106f, 0.149f, 0.251f, 0.96f);
-        public static readonly Color ButtonActiveBg = new Color(0.275f, 0.215f, 0.090f, 0.98f);
-        public static readonly Color InputBg = new Color(0.043f, 0.063f, 0.118f, 0.98f);
-        public static readonly Color HpFillColor = new Color(0.130f, 0.510f, 0.240f, 1.0f);
-        public static readonly Color HpLowColor = new Color(0.760f, 0.190f, 0.170f, 1.0f);
-        public static readonly Color SpFillColor = new Color(0.110f, 0.450f, 0.660f, 1.0f);
-        public static readonly Color ApBarFillColor = new Color(0.753f, 0.569f, 0.259f, 0.90f);
-        public static readonly Color BarTrackColor = new Color(0.024f, 0.035f, 0.065f, 0.96f);
-        public static readonly Color DangerRed = new Color(0.920f, 0.320f, 0.280f, 1.0f);
-        public static readonly Color SuccessGreen = new Color(0.280f, 0.850f, 0.450f, 1.0f);
-        public static readonly Color InfoCyan = new Color(0.350f, 0.820f, 0.960f, 1.0f);
+        // Realmz Heritage Chiseled Warm-Granite & Forged Gold palette
+        public static readonly Color PanelBg = new Color(0.133f, 0.129f, 0.125f, 0.96f);        // #222120
+        public static readonly Color PanelDarkBg = new Color(0.094f, 0.090f, 0.086f, 0.98f);    // #181716
+        public static readonly Color CardBg = new Color(0.149f, 0.141f, 0.133f, 0.96f);         // #262422
+        public static readonly Color CardSelectedBg = new Color(0.200f, 0.153f, 0.078f, 0.98f); // #332714
+        public static readonly Color BrassAccent = new Color(0.769f, 0.584f, 0.275f, 1.0f);     // #C49546
+        public static readonly Color BrassHighlight = new Color(0.953f, 0.800f, 0.424f, 1.0f);  // #F3CC6C
+        public static readonly Color ParchmentText = new Color(0.957f, 0.925f, 0.863f, 1.0f);   // #F4ECDC
+        public static readonly Color MutedSlate = new Color(0.737f, 0.718f, 0.678f, 1.0f);      // #BCB7AD
+        public static readonly Color ButtonBg = new Color(0.200f, 0.188f, 0.176f, 0.98f);       // #33302D
+        public static readonly Color ButtonActiveBg = new Color(0.357f, 0.251f, 0.102f, 0.98f); // #5B401A
+        public static readonly Color InputBg = new Color(0.086f, 0.082f, 0.078f, 0.98f);        // #161514
+        public static readonly Color HpFillColor = new Color(0.173f, 0.608f, 0.306f, 1.0f);     // #2C9B4E
+        public static readonly Color HpLowColor = new Color(0.812f, 0.227f, 0.204f, 1.0f);      // #CF3A34
+        public static readonly Color SpFillColor = new Color(0.204f, 0.659f, 0.800f, 1.0f);     // #34A8CC
+        public static readonly Color ApBarFillColor = new Color(0.851f, 0.643f, 0.263f, 0.95f); // #D9A443
+        public static readonly Color BarTrackColor = new Color(0.067f, 0.063f, 0.059f, 0.98f);  // #11100F
+        public static readonly Color DangerRed = new Color(0.886f, 0.345f, 0.302f, 1.0f);       // #E2584D
+        public static readonly Color SuccessGreen = new Color(0.345f, 0.839f, 0.502f, 1.0f);    // #58D680
+        public static readonly Color InfoCyan = new Color(0.408f, 0.831f, 0.910f, 1.0f);        // #68D4E8
+
+        public static TMP_FontAsset DisplayFont { get; private set; }
+        public static Sprite StonePanelSprite { get; private set; }
+        public static Sprite StoneBarSprite { get; private set; }
+        public static Sprite StoneWellSprite { get; private set; }
+        public static Sprite TintPanelSprite { get; private set; }
+        public static Sprite ButtonStoneSprite { get; private set; }
+        public static Sprite ButtonGoldSprite { get; private set; }
+        public static Sprite BarTrackSprite { get; private set; }
+        public static Sprite BarFillSprite { get; private set; }
+        public static Sprite HeaderRuleSprite { get; private set; }
+        public static Sprite GemPipOffSprite { get; private set; }
+        public static Sprite GemPipGoldSprite { get; private set; }
+        public static Sprite GemPipCyanSprite { get; private set; }
+        public static Sprite GemPipEmeraldSprite { get; private set; }
+        public static Sprite ModalScrimSprite { get; private set; }
+
+        public static bool HasChromeSprites => StonePanelSprite != null && ButtonStoneSprite != null;
+
+        public static void ApplyTheme(Realmz.Data.BywaterAssetCatalog catalog)
+        {
+            if (catalog == null)
+            {
+                DisplayFont = null;
+                StonePanelSprite = null;
+                StoneBarSprite = null;
+                StoneWellSprite = null;
+                TintPanelSprite = null;
+                ButtonStoneSprite = null;
+                ButtonGoldSprite = null;
+                BarTrackSprite = null;
+                BarFillSprite = null;
+                HeaderRuleSprite = null;
+                GemPipOffSprite = null;
+                GemPipGoldSprite = null;
+                GemPipCyanSprite = null;
+                GemPipEmeraldSprite = null;
+                ModalScrimSprite = null;
+                return;
+            }
+
+            DisplayFont = catalog.uiDisplayFont;
+            StonePanelSprite = catalog.uiStonePanelSprite;
+            StoneBarSprite = catalog.uiStoneBarSprite;
+            StoneWellSprite = catalog.uiStoneWellSprite;
+            TintPanelSprite = catalog.uiTintPanelSprite;
+            ButtonStoneSprite = catalog.uiButtonStoneSprite;
+            ButtonGoldSprite = catalog.uiButtonGoldSprite;
+            BarTrackSprite = catalog.uiBarTrackSprite;
+            BarFillSprite = catalog.uiBarFillSprite;
+            HeaderRuleSprite = catalog.uiHeaderRuleSprite;
+            GemPipOffSprite = catalog.uiGemPipOffSprite;
+            GemPipGoldSprite = catalog.uiGemPipGoldSprite;
+            GemPipCyanSprite = catalog.uiGemPipCyanSprite;
+            GemPipEmeraldSprite = catalog.uiGemPipEmeraldSprite;
+            ModalScrimSprite = catalog.uiModalScrimSprite;
+        }
 
         public static TMP_FontAsset ResolveFont(TMP_FontAsset font)
         {
             return font != null ? font : TMP_Settings.defaultFontAsset;
+        }
+
+        public static TMP_FontAsset ResolveDisplayFont(TMP_FontAsset bodyFallback)
+        {
+            return DisplayFont != null ? DisplayFont : ResolveFont(bodyFallback);
+        }
+
+        private static bool IsCloseColor(Color a, Color b, float tolerance = 0.04f)
+        {
+            return Mathf.Abs(a.r - b.r) <= tolerance &&
+                   Mathf.Abs(a.g - b.g) <= tolerance &&
+                   Mathf.Abs(a.b - b.b) <= tolerance;
+        }
+
+        private static bool IsSemanticChromaticColor(Color c)
+        {
+            float max = Mathf.Max(c.r, Mathf.Max(c.g, c.b));
+            float min = Mathf.Min(c.r, Mathf.Min(c.g, c.b));
+            if (max - min <= 0.085f)
+            {
+                return false;
+            }
+
+            // Exclude our neutral slate theme colors even if slightly cool-tinted.
+            if (IsCloseColor(c, PanelBg, 0.04f) ||
+                IsCloseColor(c, PanelDarkBg, 0.04f) ||
+                IsCloseColor(c, CardBg, 0.04f) ||
+                IsCloseColor(c, ButtonBg, 0.04f) ||
+                IsCloseColor(c, InputBg, 0.04f) ||
+                IsCloseColor(c, BarTrackColor, 0.04f))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private static bool IsDefaultChromeBorder(Color borderCol)
+        {
+            if (IsCloseColor(borderCol, BrassAccent, 0.08f) ||
+                IsCloseColor(borderCol, BrassHighlight, 0.08f) ||
+                IsCloseColor(borderCol, MutedSlate, 0.12f))
+            {
+                return true;
+            }
+
+            // Dark track / muted neutral borders on inactive slots/cards
+            float max = Mathf.Max(borderCol.r, Mathf.Max(borderCol.g, borderCol.b));
+            float min = Mathf.Min(borderCol.r, Mathf.Min(borderCol.g, borderCol.b));
+            if (max <= 0.48f && (max - min) <= 0.18f)
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        public static Color BoostSemanticTint(Color bg)
+        {
+            Color boosted = Color.Lerp(bg, Color.white, 0.18f);
+            boosted.a = bg.a;
+            return boosted;
+        }
+
+        private static bool NameContainsAny(string name, params string[] tokens)
+        {
+            if (string.IsNullOrEmpty(name))
+            {
+                return false;
+            }
+
+            for (int i = 0; i < tokens.Length; i++)
+            {
+                if (name.IndexOf(tokens[i], System.StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        public const float ChromePpuMultiplier = 0.78125f;
+
+        public static void ApplySurfaceState(Image img, bool selected, bool isButton = false)
+        {
+            if (img == null)
+            {
+                return;
+            }
+
+            if (HasChromeSprites)
+            {
+                Sprite targetSprite = isButton
+                    ? (selected ? (ButtonGoldSprite ?? ButtonStoneSprite) : ButtonStoneSprite)
+                    : (selected ? (ButtonGoldSprite ?? StoneBarSprite ?? StonePanelSprite) : (StoneBarSprite ?? StonePanelSprite));
+                img.sprite = targetSprite;
+                img.type = Image.Type.Sliced;
+                img.pixelsPerUnitMultiplier = ChromePpuMultiplier;
+                img.color = Color.white;
+                return;
+            }
+
+            img.color = isButton
+                ? (selected ? ButtonActiveBg : ButtonBg)
+                : (selected ? CardSelectedBg : CardBg);
+        }
+
+        public static void ApplyTintedChrome(Image img, Color bgColor, bool preferBar = true)
+        {
+            if (img == null)
+            {
+                return;
+            }
+
+            if (HasChromeSprites)
+            {
+                img.sprite = TintPanelSprite ?? (preferBar ? (StoneBarSprite ?? StonePanelSprite) : StonePanelSprite);
+                img.type = Image.Type.Sliced;
+                img.pixelsPerUnitMultiplier = ChromePpuMultiplier;
+                img.color = BoostSemanticTint(bgColor);
+                return;
+            }
+
+            img.color = bgColor;
+        }
+
+        public static RectTransform CreateHeaderDivider(Transform parent, string name = "HeaderRule")
+        {
+            GameObject go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            go.transform.SetParent(parent, false);
+
+            Image img = go.GetComponent<Image>();
+            img.raycastTarget = false;
+
+            LayoutElement le = go.GetComponent<LayoutElement>();
+            le.flexibleWidth = 1f;
+            le.flexibleHeight = 0f;
+
+            if (HeaderRuleSprite != null)
+            {
+                img.sprite = HeaderRuleSprite;
+                img.type = Image.Type.Sliced;
+                img.pixelsPerUnitMultiplier = ChromePpuMultiplier;
+                img.color = Color.white;
+                le.preferredHeight = 6f;
+                le.minHeight = 6f;
+            }
+            else
+            {
+                img.color = new Color(BrassAccent.r, BrassAccent.g, BrassAccent.b, 0.55f);
+                le.preferredHeight = 2f;
+                le.minHeight = 2f;
+            }
+
+            return go.GetComponent<RectTransform>();
         }
 
         public static void AddBrassBorder(RectTransform target, Color color, float thickness = 1.5f)
@@ -89,7 +302,80 @@ namespace Realmz.Game
 
             RectTransform rt = go.GetComponent<RectTransform>();
             Image img = go.GetComponent<Image>();
-            img.color = bgColor ?? PanelBg;
+            Color resolvedBg = bgColor ?? PanelBg;
+
+            if (HasChromeSprites)
+            {
+                bool isModal = !string.IsNullOrEmpty(name) && (
+                    name.EndsWith("Modal", System.StringComparison.OrdinalIgnoreCase) ||
+                    NameContainsAny(
+                        name,
+                        "PartyDrawerModal",
+                        "TownShopModal",
+                        "TempleShrineModal",
+                        "SettingsModal",
+                        "QuickResolveModal",
+                        "EncounterInterceptModal",
+                        "OutcomeModal",
+                        "LevelUpModal",
+                        "DiceRollModal"));
+
+                if (isModal)
+                {
+                    img.sprite = StonePanelSprite;
+                    img.color = Color.white;
+                }
+                else if (IsCloseColor(resolvedBg, ButtonActiveBg) || IsCloseColor(resolvedBg, CardSelectedBg))
+                {
+                    img.sprite = ButtonGoldSprite ?? StoneBarSprite ?? StonePanelSprite;
+                    img.color = Color.white;
+                }
+                else if (IsCloseColor(resolvedBg, ButtonBg))
+                {
+                    img.sprite = ButtonStoneSprite ?? StoneBarSprite ?? StonePanelSprite;
+                    img.color = Color.white;
+                }
+                else if (IsSemanticChromaticColor(resolvedBg))
+                {
+                    img.sprite = TintPanelSprite ?? StoneBarSprite ?? StonePanelSprite;
+                    img.color = BoostSemanticTint(resolvedBg);
+                }
+                else if (IsCloseColor(resolvedBg, InputBg) ||
+                         IsCloseColor(resolvedBg, BarTrackColor) ||
+                         NameContainsAny(
+                             name,
+                             "Well",
+                             "Tray",
+                             "IconBox",
+                             "CheckBox",
+                             "PreviewBox",
+                             "XpTrack",
+                             "EnemyStrip",
+                             "PaperDollPanel",
+                             "CharacterSheetPanel",
+                             "LevelUpStat",
+                             "Stat_",
+                             "Hint",
+                             "Tip",
+                             "Col",
+                             "Body",
+                             "PartyConditionStatus"))
+                {
+                    img.sprite = StoneWellSprite ?? StoneBarSprite ?? StonePanelSprite;
+                    img.color = Color.white;
+                }
+                else
+                {
+                    img.sprite = StoneBarSprite ?? StonePanelSprite;
+                    img.color = Color.white;
+                }
+
+                img.type = Image.Type.Sliced;
+                img.pixelsPerUnitMultiplier = ChromePpuMultiplier;
+                return rt;
+            }
+
+            img.color = resolvedBg;
 
             if (withBrassOutline)
             {
@@ -132,7 +418,6 @@ namespace Realmz.Game
             frameRt.sizeDelta = new Vector2(sizePx, sizePx);
 
             Image frameImg = frameGo.GetComponent<Image>();
-            frameImg.color = PanelDarkBg;
             frameImg.raycastTarget = false;
 
             LayoutElement frameLe = frameGo.GetComponent<LayoutElement>();
@@ -146,15 +431,32 @@ namespace Realmz.Game
             RectTransform imgRt = imgGo.GetComponent<RectTransform>();
             imgRt.anchorMin = Vector2.zero;
             imgRt.anchorMax = Vector2.one;
-            imgRt.offsetMin = new Vector2(3f, 3f);
-            imgRt.offsetMax = new Vector2(-3f, -3f);
+
+            if (HasChromeSprites)
+            {
+                frameImg.sprite = StoneWellSprite ?? StonePanelSprite;
+                frameImg.type = Image.Type.Sliced;
+                frameImg.pixelsPerUnitMultiplier = ChromePpuMultiplier;
+                frameImg.color = Color.white;
+                imgRt.offsetMin = new Vector2(2f, 2f);
+                imgRt.offsetMax = new Vector2(-2f, -2f);
+            }
+            else
+            {
+                frameImg.color = PanelDarkBg;
+                imgRt.offsetMin = new Vector2(3f, 3f);
+                imgRt.offsetMax = new Vector2(-3f, -3f);
+            }
 
             portraitImage = imgGo.GetComponent<Image>();
             portraitImage.color = Color.white;
             portraitImage.preserveAspect = true;
             portraitImage.raycastTarget = false;
 
-            AddBrassBorder(frameRt, borderColor ?? BrassAccent, 1.8f);
+            if (!HasChromeSprites || (borderColor.HasValue && !IsDefaultChromeBorder(borderColor.Value)))
+            {
+                AddBrassBorder(frameRt, borderColor ?? BrassAccent, 1.8f);
+            }
             return frameRt;
         }
 
@@ -180,12 +482,37 @@ namespace Realmz.Game
             }
 
             tmp.text = text ?? string.Empty;
-            tmp.fontSize = fontSize;
+            tmp.fontSize = Mathf.Max(15f, fontSize);
             tmp.color = color ?? ParchmentText;
             tmp.alignment = alignment;
             tmp.fontStyle = style;
             tmp.textWrappingMode = wrap ? TextWrappingModes.Normal : TextWrappingModes.NoWrap;
             tmp.raycastTarget = false;
+            return tmp;
+        }
+
+        public static TextMeshProUGUI CreateDisplayLabel(
+            Transform parent,
+            string name,
+            string text,
+            TMP_FontAsset font,
+            float fontSize = 18f,
+            Color? color = null,
+            TextAlignmentOptions alignment = TextAlignmentOptions.Left,
+            FontStyles style = FontStyles.Bold,
+            bool wrap = true)
+        {
+            TextMeshProUGUI tmp = CreateLabel(
+                parent,
+                name,
+                text,
+                ResolveDisplayFont(font),
+                Mathf.Max(15f, fontSize),
+                color,
+                alignment,
+                style,
+                wrap);
+            AddTextDropShadow(tmp);
             return tmp;
         }
 
@@ -203,18 +530,36 @@ namespace Realmz.Game
             go.transform.SetParent(parent, false);
 
             Image img = go.GetComponent<Image>();
-            img.color = bgColor ?? ButtonBg;
+            if (HasChromeSprites)
+            {
+                bool useGold = bgColor.HasValue && (IsCloseColor(bgColor.Value, ButtonActiveBg) || IsCloseColor(bgColor.Value, CardSelectedBg));
+                bool useTint = bgColor.HasValue && !useGold && IsSemanticChromaticColor(bgColor.Value);
+                img.sprite = useTint
+                    ? (TintPanelSprite ?? ButtonStoneSprite)
+                    : (useGold ? (ButtonGoldSprite ?? ButtonStoneSprite) : ButtonStoneSprite);
+                img.type = Image.Type.Sliced;
+                img.pixelsPerUnitMultiplier = ChromePpuMultiplier;
+                img.color = useTint ? BoostSemanticTint(bgColor.Value) : Color.white;
 
-            AddBrassBorder(go.GetComponent<RectTransform>(), outlineColor ?? BrassAccent, 1.2f);
+                if (outlineColor.HasValue && !IsDefaultChromeBorder(outlineColor.Value))
+                {
+                    AddBrassBorder(go.GetComponent<RectTransform>(), outlineColor.Value, 1.5f);
+                }
+            }
+            else
+            {
+                img.color = bgColor ?? ButtonBg;
+                AddBrassBorder(go.GetComponent<RectTransform>(), outlineColor ?? BrassAccent, 1.2f);
+            }
 
             Button btn = go.GetComponent<Button>();
             btn.targetGraphic = img;
             ColorBlock colors = btn.colors;
             colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(1.18f, 1.12f, 0.96f, 1f);
-            colors.pressedColor = new Color(0.82f, 0.78f, 0.70f, 1f);
+            colors.highlightedColor = new Color(1.16f, 1.08f, 0.92f, 1f);
+            colors.pressedColor = new Color(0.84f, 0.78f, 0.68f, 1f);
             colors.disabledColor = new Color(0.55f, 0.55f, 0.58f, 0.65f);
-            colors.colorMultiplier = 1f;
+            colors.colorMultiplier = ChromePpuMultiplier;
             btn.colors = colors;
 
             if (onClick != null)
@@ -254,9 +599,18 @@ namespace Realmz.Game
             root.transform.SetParent(parent, false);
 
             Image bg = root.GetComponent<Image>();
-            bg.color = InputBg;
-
-            AddBrassBorder(root.GetComponent<RectTransform>(), BrassAccent, 1.2f);
+            if (HasChromeSprites)
+            {
+                bg.sprite = StoneWellSprite ?? StonePanelSprite;
+                bg.type = Image.Type.Sliced;
+                bg.pixelsPerUnitMultiplier = ChromePpuMultiplier;
+                bg.color = Color.white;
+            }
+            else
+            {
+                bg.color = InputBg;
+                AddBrassBorder(root.GetComponent<RectTransform>(), BrassAccent, 1.2f);
+            }
 
             GameObject textArea = new GameObject("Text Area", typeof(RectTransform), typeof(RectMask2D));
             textArea.transform.SetParent(root.transform, false);
@@ -341,9 +695,18 @@ namespace Realmz.Game
             root.transform.SetParent(parent, false);
 
             Image rootBg = root.GetComponent<Image>();
-            rootBg.color = new Color(0.031f, 0.047f, 0.086f, 0.90f);
-
-            AddBrassBorder(root.GetComponent<RectTransform>(), new Color(BrassAccent.r, BrassAccent.g, BrassAccent.b, 0.65f), 1.0f);
+            if (HasChromeSprites)
+            {
+                rootBg.sprite = StoneWellSprite ?? StonePanelSprite;
+                rootBg.type = Image.Type.Sliced;
+                rootBg.pixelsPerUnitMultiplier = ChromePpuMultiplier;
+                rootBg.color = Color.white;
+            }
+            else
+            {
+                rootBg.color = new Color(0.031f, 0.047f, 0.086f, 0.90f);
+                AddBrassBorder(root.GetComponent<RectTransform>(), new Color(BrassAccent.r, BrassAccent.g, BrassAccent.b, 0.65f), 1.0f);
+            }
 
             GameObject viewport = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(Mask));
             viewport.transform.SetParent(root.transform, false);
@@ -404,7 +767,6 @@ namespace Realmz.Game
             bgGo.transform.SetParent(parent, false);
             barRoot = bgGo.GetComponent<RectTransform>();
             Image bgImg = bgGo.GetComponent<Image>();
-            bgImg.color = BarTrackColor;
             bgImg.raycastTarget = false;
 
             GameObject fillGo = new GameObject("Fill", typeof(RectTransform), typeof(Image));
@@ -412,14 +774,35 @@ namespace Realmz.Game
             RectTransform fillRt = fillGo.GetComponent<RectTransform>();
             fillRt.anchorMin = Vector2.zero;
             fillRt.anchorMax = Vector2.one;
-            fillRt.offsetMin = new Vector2(1f, 1f);
-            fillRt.offsetMax = new Vector2(-1f, -1f);
 
             Image fillImg = fillGo.GetComponent<Image>();
             fillImg.color = fillColor;
             fillImg.raycastTarget = false;
 
-            AddBrassBorder(barRoot, new Color(0.01f, 0.015f, 0.03f, 0.95f), 1f);
+            if (HasChromeSprites)
+            {
+                bgImg.sprite = BarTrackSprite ?? StoneWellSprite;
+                bgImg.type = Image.Type.Sliced;
+                bgImg.pixelsPerUnitMultiplier = ChromePpuMultiplier;
+                bgImg.color = Color.white;
+
+                fillRt.offsetMin = new Vector2(2f, 2f);
+                fillRt.offsetMax = new Vector2(-2f, -2f);
+                if (BarFillSprite != null)
+                {
+                    fillImg.sprite = BarFillSprite;
+                    fillImg.type = Image.Type.Sliced;
+                    fillImg.pixelsPerUnitMultiplier = ChromePpuMultiplier;
+                }
+            }
+            else
+            {
+                bgImg.color = BarTrackColor;
+                fillRt.offsetMin = new Vector2(1f, 1f);
+                fillRt.offsetMax = new Vector2(-1f, -1f);
+                AddBrassBorder(barRoot, new Color(0.01f, 0.015f, 0.03f, 0.95f), 1f);
+            }
+
             return fillImg;
         }
 
@@ -430,14 +813,30 @@ namespace Realmz.Game
                 return;
             }
 
+            bool isSlicedChrome = target.TryGetComponent<Image>(out var targetImg) &&
+                                  targetImg.sprite != null &&
+                                  targetImg.type == Image.Type.Sliced;
+            bool suppressBorder = isSlicedChrome && IsDefaultChromeBorder(borderCol);
+
             string[] edgeNames = { "BorderTop", "BorderBottom", "BorderLeft", "BorderRight" };
+            bool foundAnyEdge = false;
             for (int i = 0; i < edgeNames.Length; i++)
             {
                 Transform edge = target.Find(edgeNames[i]);
                 if (edge != null && edge.TryGetComponent<Image>(out var edgeImg))
                 {
-                    edgeImg.color = borderCol;
+                    foundAnyEdge = true;
+                    edge.gameObject.SetActive(!suppressBorder);
+                    if (!suppressBorder)
+                    {
+                        edgeImg.color = borderCol;
+                    }
                 }
+            }
+
+            if (!foundAnyEdge && isSlicedChrome && !suppressBorder && target is RectTransform rt)
+            {
+                AddBrassBorder(rt, borderCol, 2f);
             }
         }
 
@@ -449,11 +848,7 @@ namespace Realmz.Game
             }
 
             Image img = btn.GetComponent<Image>();
-            if (img != null)
-            {
-                img.color = active ? ButtonActiveBg : ButtonBg;
-            }
-
+            ApplySurfaceState(img, active, isButton: true);
             SetBorderColor(btn.transform, active ? BrassHighlight : BrassAccent);
         }
 
@@ -517,8 +912,18 @@ namespace Realmz.Game
             bgRt.offsetMin = Vector2.zero;
             bgRt.offsetMax = Vector2.zero;
             Image bgImg = bgGo.GetComponent<Image>();
-            bgImg.color = BarTrackColor;
-            AddBrassBorder(bgRt, new Color(BrassAccent.r, BrassAccent.g, BrassAccent.b, 0.55f), 1f);
+            if (HasChromeSprites)
+            {
+                bgImg.sprite = BarTrackSprite ?? StoneWellSprite;
+                bgImg.type = Image.Type.Sliced;
+                bgImg.pixelsPerUnitMultiplier = ChromePpuMultiplier;
+                bgImg.color = Color.white;
+            }
+            else
+            {
+                bgImg.color = BarTrackColor;
+                AddBrassBorder(bgRt, new Color(BrassAccent.r, BrassAccent.g, BrassAccent.b, 0.55f), 1f);
+            }
 
             GameObject fillArea = new GameObject("Fill Area", typeof(RectTransform));
             fillArea.transform.SetParent(root.transform, false);
@@ -536,6 +941,12 @@ namespace Realmz.Game
             fillRt.offsetMin = Vector2.zero;
             fillRt.offsetMax = Vector2.zero;
             Image fillImg = fillGo.GetComponent<Image>();
+            if (HasChromeSprites && BarFillSprite != null)
+            {
+                fillImg.sprite = BarFillSprite;
+                fillImg.type = Image.Type.Sliced;
+                fillImg.pixelsPerUnitMultiplier = ChromePpuMultiplier;
+            }
             fillImg.color = BrassAccent;
 
             GameObject handleArea = new GameObject("Handle Slide Area", typeof(RectTransform));
@@ -551,8 +962,27 @@ namespace Realmz.Game
             RectTransform handleRt = handleGo.GetComponent<RectTransform>();
             handleRt.sizeDelta = new Vector2(18f, 24f);
             Image handleImg = handleGo.GetComponent<Image>();
-            handleImg.color = BrassHighlight;
-            AddBrassBorder(handleRt, PanelDarkBg, 1f);
+            if (HasChromeSprites && (GemPipGoldSprite != null || ButtonGoldSprite != null))
+            {
+                if (GemPipGoldSprite != null)
+                {
+                    handleImg.sprite = GemPipGoldSprite;
+                    handleImg.type = Image.Type.Simple;
+                    handleImg.preserveAspect = true;
+                }
+                else
+                {
+                    handleImg.sprite = ButtonGoldSprite;
+                    handleImg.type = Image.Type.Sliced;
+                    handleImg.pixelsPerUnitMultiplier = ChromePpuMultiplier;
+                }
+                handleImg.color = Color.white;
+            }
+            else
+            {
+                handleImg.color = BrassHighlight;
+                AddBrassBorder(handleRt, PanelDarkBg, 1f);
+            }
 
             Slider slider = root.GetComponent<Slider>();
             slider.fillRect = fillRt;

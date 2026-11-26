@@ -36,6 +36,23 @@ namespace Realmz.Data
         public Sprite torchSprite;
         public TMP_FontAsset uiFont;
 
+        [Header("M1.15 Realmz Heritage UI Chrome & Display Font")]
+        public TMP_FontAsset uiDisplayFont;
+        public Sprite uiStonePanelSprite;
+        public Sprite uiStoneBarSprite;
+        public Sprite uiStoneWellSprite;
+        public Sprite uiTintPanelSprite;
+        public Sprite uiButtonStoneSprite;
+        public Sprite uiButtonGoldSprite;
+        public Sprite uiBarTrackSprite;
+        public Sprite uiBarFillSprite;
+        public Sprite uiHeaderRuleSprite;
+        public Sprite uiGemPipOffSprite;
+        public Sprite uiGemPipGoldSprite;
+        public Sprite uiGemPipCyanSprite;
+        public Sprite uiGemPipEmeraldSprite;
+        public Sprite uiModalScrimSprite;
+
         [Header("M1.5 Tile Variant Materials")]
         public Material[] grassVariantMaterials = new Material[3];
         public Material[] cobblestoneVariantMaterials = new Material[3];

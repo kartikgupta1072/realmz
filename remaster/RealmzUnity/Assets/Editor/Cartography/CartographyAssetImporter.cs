@@ -173,6 +173,12 @@ namespace Realmz.EditorTools.Cartography
 
         public static void ConfigurePngImporter(string assetPath)
         {
+            if (string.IsNullOrEmpty(assetPath) ||
+                assetPath.IndexOf("/UI/", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return;
+            }
+
             TextureImporter importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
             if (importer == null)
             {
