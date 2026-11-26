@@ -1694,6 +1694,11 @@ namespace Realmz.Game
                     isAllyOverride: true,
                     catalog: assetCatalog);
                 view.UpdateStats(member.Hp, member.MaxHp, member.Sp, member.MaxSp, string.Empty, livingViewIdx == 0, true);
+                if (biomeAtmosphere != null)
+                {
+                    bool isDungeon = ExploreSession.CurrentMap != null && ExploreSession.CurrentMap.IsDungeon;
+                    view.UpdateSunShadowAngle(biomeAtmosphere.CurrentSunRotation, isDungeon);
+                }
                 _exploreHeroViews.Add(view);
                 livingViewIdx++;
             }
@@ -3616,6 +3621,11 @@ namespace Realmz.Game
                     isAllyOverride: c.Side == CombatSide.Hero,
                     catalog: assetCatalog);
                 view.SetWorldPosition(GridToWorldAtElevation(LocalToWorld(c.Position)));
+                if (biomeAtmosphere != null)
+                {
+                    bool isDungeon = ExploreSession?.CurrentMap != null && ExploreSession.CurrentMap.IsDungeon;
+                    view.UpdateSunShadowAngle(biomeAtmosphere.CurrentSunRotation, isDungeon);
+                }
                 _combatUnitViews[c.Id] = view;
             }
 
@@ -3669,7 +3679,103 @@ namespace Realmz.Game
                     : (c.Id == currentId && c.IsAlive);
                 view.UpdateStats(c.Hp, c.MaxHp, c.Sp, c.MaxSp, badge, isHighlighted, c.IsAlive);
                 view.UpdateConditionBadgeIcon(ResolveUnitConditionBadgeSprite(c));
+                UpdateCombatUnitStanceAura(c, view);
             }
+        }
+
+        private void UpdateCombatUnitStanceAura(CombatantState unit, BywaterUnitView view)
+        {
+            if (view == null || unit == null || !unit.IsAlive)
+            {
+                view?.SetStanceAura(Color.clear, 0f);
+                return;
+            }
+
+            if (unit.IsGuarding)
+            {
+                view.SetStanceAura(new Color(0.38f, 0.80f, 1.0f, 1f), 0.78f);
+                return;
+            }
+
+            if (unit.Side == CombatSide.Hero && (HasHeroActiveBuff(unit) || HasHeroCompletedThreePieceSet(unit)))
+            {
+                view.SetStanceAura(new Color(0.98f, 0.80f, 0.28f, 1f), 0.52f);
+                return;
+            }
+
+            view.SetStanceAura(Color.clear, 0f);
+        }
+
+        private static bool HasHeroActiveBuff(CombatantState unit)
+        {
+            if (unit == null || unit.Side != CombatSide.Hero)
+            {
+                return false;
+            }
+
+            if (unit.Conditions.Has(CharConditionId.Strong) ||
+                unit.Conditions.Has(CharConditionId.AttackBonus) ||
+                unit.Conditions.Has(CharConditionId.DefenseBonus) ||
+                unit.Conditions.Has(CharConditionId.MagicAura) ||
+                unit.Conditions.Has(CharConditionId.ShieldFromHits) ||
+                unit.Conditions.Has(CharConditionId.ShieldFromProjectiles) ||
+                unit.Conditions.Has(CharConditionId.Regenerating) ||
+                unit.Conditions.Has(CharConditionId.Speedy) ||
+                unit.Conditions.Has(CharConditionId.ProtectionFromEvil) ||
+                unit.Conditions.Has(CharConditionId.ReflectingSpells) ||
+                unit.Conditions.Has(CharConditionId.ReflectingAttacks))
+            {
+                return true;
+            }
+
+            IReadOnlyList<ConditionDisplayEffect> effects = unit.Conditions.GetDisplayEffects();
+            for (int i = 0; i < effects.Count; i++)
+            {
+                if (effects[i] != null && effects[i].IsBeneficial)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool HasHeroCompletedThreePieceSet(CombatantState unit)
+        {
+            if (unit == null || unit.Side != CombatSide.Hero)
+            {
+                return false;
+            }
+
+            if (unit.EquipApBonus > 0)
+            {
+                return true;
+            }
+
+            IReadOnlyList<PartyMemberState> members = ExploreSession?.Party?.Members;
+            if (members == null)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < members.Count; i++)
+            {
+                PartyMemberState member = members[i];
+                if (member != null && string.Equals(member.Id, unit.Id, StringComparison.Ordinal))
+                {
+                    IReadOnlyList<EquipmentSetProgress> sets = member.GetActiveEquipmentSets();
+                    for (int s = 0; s < sets.Count; s++)
+                    {
+                        if (sets[s].EquippedPieces >= 3)
+                        {
+                            return true;
+                        }
+                    }
+                    break;
+                }
+            }
+
+            return false;
         }
 
         private Sprite ResolveUnitConditionBadgeSprite(CombatantState unit)
@@ -7932,6 +8038,33 @@ namespace Realmz.Game
             Vector3 resolvedTorchWorld = _isInCombat ? GetCombatPartyTorchWorldPos() : focusWorldPos;
             biomeAtmosphere?.UpdateFocusPosition(resolvedTorchWorld);
             worldRenderer?.SetPartyTorchPosition(resolvedTorchWorld, map.IsDungeon, isNightOrDark, hasLitTorch);
+            UpdateAllUnitSunShadows(map.IsDungeon);
+        }
+
+        private void UpdateAllUnitSunShadows(bool isDungeon)
+        {
+            if (biomeAtmosphere == null)
+            {
+                return;
+            }
+
+            Quaternion sunRotation = biomeAtmosphere.CurrentSunRotation;
+            for (int i = 0; i < _exploreHeroViews.Count; i++)
+            {
+                BywaterUnitView view = _exploreHeroViews[i];
+                if (view != null && view.gameObject.activeInHierarchy)
+                {
+                    view.UpdateSunShadowAngle(sunRotation, isDungeon);
+                }
+            }
+
+            foreach (BywaterUnitView view in _combatUnitViews.Values)
+            {
+                if (view != null && view.gameObject.activeInHierarchy)
+                {
+                    view.UpdateSunShadowAngle(sunRotation, isDungeon);
+                }
+            }
         }
 
         private void HandleQuickResolveFight()

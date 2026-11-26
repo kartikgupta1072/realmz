@@ -53,9 +53,14 @@ Material:
     - _ReceiveRootShadowOnly: 1
     - _Rows: 1
     - _SrcBlend: 1
+    - _StanceAuraStrength: 0
     - _TrampleRadius: 0.9
     - _TrampleStrength: 0.28
     - _Translucency: 0.28
+    - _UnitDepthSculpt: 0
+    - _UnitFootAO: 0
+    - _UnitSpecStrength: 0
+    - _UnitSunRimStrength: 0
     - _VariantIndex: 0
     - _WindFreq: 0.45
     - _WindGustInfluence: 0.16
@@ -70,6 +75,7 @@ Material:
     - _LanternPoolColor: {r: 1, g: 0.62, b: 0.23999995, a: 1}
     - _NightRimColor: {r: 0.6589999, g: 0.733, b: 0.878, a: 1}
     - _RootTint: {r: 0.28, g: 0.34, b: 0.38, a: 1}
+    - _StanceAuraColor: {r: 0.37999994, g: 0.78, b: 1, a: 1}
     - _TintColor: {r: 1, g: 1, b: 1, a: 1}
     - _WindDir: {r: 0.86, g: 0.51, b: 0, a: 0}
   m_BuildTextureStacks: []

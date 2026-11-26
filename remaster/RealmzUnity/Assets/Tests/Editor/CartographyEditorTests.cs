@@ -1516,5 +1516,40 @@ namespace Realmz.EditorTests
                 Object.DestroyImmediate(tempProfile);
             }
         }
+
+        [Test]
+        public void M110_CharacterDepthSculpt_AndUnitStanceVisuals_ContractsHold()
+        {
+            Shader billboardShader = Shader.Find("Realmz/CartographyBillboard");
+            Assert.That(billboardShader, Is.Not.Null, "Realmz/CartographyBillboard shader not found.");
+            Assert.That(ShaderUtil.ShaderHasError(billboardShader), Is.False, "Realmz/CartographyBillboard has shader compile errors.");
+
+            AssertShaderHasProperty(billboardShader, "_UnitDepthSculpt");
+            AssertShaderHasProperty(billboardShader, "_UnitSunRimStrength");
+            AssertShaderHasProperty(billboardShader, "_UnitSpecStrength");
+            AssertShaderHasProperty(billboardShader, "_UnitFootAO");
+            AssertShaderHasProperty(billboardShader, "_StanceAuraColor");
+            AssertShaderHasProperty(billboardShader, "_StanceAuraStrength");
+
+            Material heroMat = AssetDatabase.LoadAssetAtPath<Material>("Assets/Art/Cartography/Materials/Cartography_Unit_hero_knight.mat");
+            Assert.That(heroMat, Is.Not.Null, "Cartography_Unit_hero_knight.mat not found.");
+            Assert.That(heroMat.HasProperty("_UnitDepthSculpt"), Is.True, "Cartography_Unit_hero_knight.mat missing _UnitDepthSculpt.");
+            Assert.That(heroMat.GetFloat("_UnitDepthSculpt"), Is.GreaterThan(0.5f), "_UnitDepthSculpt must exceed 0.5f.");
+            Assert.That(heroMat.HasProperty("_UnitSunRimStrength"), Is.True, "Cartography_Unit_hero_knight.mat missing _UnitSunRimStrength.");
+            Assert.That(heroMat.GetFloat("_UnitSunRimStrength"), Is.GreaterThan(0.4f), "_UnitSunRimStrength must exceed 0.4f.");
+
+            GameObject unitGo = new GameObject("TempM110UnitView");
+            try
+            {
+                BywaterUnitView view = unitGo.AddComponent<BywaterUnitView>();
+                Assert.That(view, Is.Not.Null);
+                view.SetStanceAura(new Color(0.38f, 0.80f, 1.0f, 1f), 0.78f);
+                view.UpdateSunShadowAngle(Quaternion.Euler(28f, -45f, 0f), false);
+            }
+            finally
+            {
+                Object.DestroyImmediate(unitGo);
+            }
+        }
     }
 }

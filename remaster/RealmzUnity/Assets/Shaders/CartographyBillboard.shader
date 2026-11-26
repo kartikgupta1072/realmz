@@ -46,6 +46,14 @@ Shader "Realmz/CartographyBillboard"
         _HoverOutlineColor ("Hover Outline Color", Color) = (0.98, 0.80, 0.08, 1)
         _HoverOutlineStrength ("Hover Outline Strength", Range(0, 1)) = 0.0
 
+        [Header(Character 3D Depth and Stance)]
+        _UnitDepthSculpt ("Unit Cylindrical 3D Sculpt (0..1)", Range(0, 1)) = 0.0
+        _UnitSunRimStrength ("Unit Alpha-Edge Sun Rim", Range(0, 1.5)) = 0.0
+        _UnitSpecStrength ("Unit Armor Specular Glint", Range(0, 1.5)) = 0.0
+        _UnitFootAO ("Unit Ground Contact Foot AO", Range(0, 0.6)) = 0.0
+        _StanceAuraColor ("Unit Guard/Buff Aura Color", Color) = (0.38, 0.78, 1.0, 1)
+        _StanceAuraStrength ("Unit Guard/Buff Aura Strength", Range(0, 1)) = 0.0
+
         [HideInInspector] _SrcBlend ("SrcBlend", Float) = 1.0
         [HideInInspector] _DstBlend ("DstBlend", Float) = 0.0
         [HideInInspector] _ZWrite ("ZWrite", Float) = 1.0
@@ -113,6 +121,12 @@ Shader "Realmz/CartographyBillboard"
             half _NightRimStrength;
             half4 _HoverOutlineColor;
             half _HoverOutlineStrength;
+            half _UnitDepthSculpt;
+            half _UnitSunRimStrength;
+            half _UnitSpecStrength;
+            half _UnitFootAO;
+            half4 _StanceAuraColor;
+            half _StanceAuraStrength;
         #if !defined(UNITY_INSTANCING_ENABLED)
             float _VariantIndex;
             float _WindPhase;
@@ -358,6 +372,7 @@ Shader "Realmz/CartographyBillboard"
                 half fogFactor : TEXCOORD5;
                 float4 shadowCoord : TEXCOORD6;
                 float3 rootWS : TEXCOORD7;
+                float2 localUV : TEXCOORD8;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -379,6 +394,7 @@ Shader "Realmz/CartographyBillboard"
                 output.rootWS = rootWS;
                 output.positionCS = TransformWorldToHClip(positionWS);
                 output.uv = ComputeBillboardAtlasUV(input.uv0, rootWS);
+                output.localUV = float2(input.uv0.x, input.uv0.y);
                 output.rootInfo = input.uv1;
                 output.normalWS = SafeNormalize(lerp(facingNormalWS, float3(0.0, 1.0, 0.0), _NormalUpBias));
                 output.tangentWS = rightXZ;
@@ -410,10 +426,26 @@ Shader "Realmz/CartographyBillboard"
                 half3 rootAO = lerp(_RootTint.rgb, half3(1.0h, 1.0h, 1.0h), tipFactor);
                 half3 albedo = albedoAlpha.rgb * rootAO;
 
+                if (_UnitFootAO > 0.001h)
+                {
+                    half footMask = smoothstep(0.0h, 0.24h, (half)input.localUV.y);
+                    albedo *= lerp(1.0h - _UnitFootAO, 1.0h, footMask);
+                }
+
                 half3 normalTS = UnpackNormalScale(SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, input.uv), _BumpScale);
-                if (CARTO_INST_PROP(_FlipX) > 0.5)
+                float flipXVal = CARTO_INST_PROP(_FlipX);
+                if (flipXVal > 0.5)
                 {
                     normalTS.x = -normalTS.x;
+                }
+                if (_UnitDepthSculpt > 0.001h)
+                {
+                    half xNorm = (half)(input.localUV.x * 2.0 - 1.0);
+                    half yNorm = (half)input.localUV.y;
+                    half cylX = clamp(xNorm * 0.72h, -0.78h, 0.78h);
+                    half cylY = clamp((yNorm - 0.52h) * 0.36h, -0.24h, 0.34h);
+                    half3 macroN = normalize(half3(cylX, cylY, sqrt(max(0.18h, 1.0h - cylX * cylX - cylY * cylY))));
+                    normalTS = SafeNormalize(lerp(normalTS, SafeNormalize(normalTS + macroN * 0.85h), _UnitDepthSculpt));
                 }
                 float3 baseN = SafeNormalize(input.normalWS);
                 float3 tang = SafeNormalize(input.tangentWS);
@@ -451,6 +483,29 @@ Shader "Realmz/CartographyBillboard"
                 half backLit = pow(saturate(dot(-mainLight.direction, viewDirWS)), 2.5h) * _Translucency * tipFactor;
                 half3 mainContrib = mainLight.color * mainAtten * topDownLM.rgb;
                 half3 directLight = albedo * mainContrib * (wrapDiffuse + backLit);
+
+                if (_UnitSpecStrength > 0.001h)
+                {
+                    half maxC = max(albedoAlpha.r, max(albedoAlpha.g, albedoAlpha.b));
+                    half minC = min(albedoAlpha.r, min(albedoAlpha.g, albedoAlpha.b));
+                    half steelMask = smoothstep(0.32h, 0.72h, maxC) * (1.0h - smoothstep(0.18h, 0.50h, maxC - minC) * 0.65h);
+                    half3 mainHalf = SafeNormalize((half3)mainLight.direction + (half3)viewDirWS);
+                    half specTerm = pow(saturate(dot(normalWS, mainHalf)), 28.0h);
+                    directLight += mainContrib * (specTerm * steelMask * _UnitSpecStrength * 0.40h);
+                }
+
+                if (_UnitSunRimStrength > 0.001h)
+                {
+                    float2 sunDir2D = float2(dot(mainLight.direction, tang), dot(mainLight.direction, bitang));
+                    if (dot(sunDir2D, sunDir2D) > 0.0001)
+                    {
+                        sunDir2D = normalize(sunDir2D);
+                        float2 stepUV = float2((flipXVal > 0.5 ? -sunDir2D.x : sunDir2D.x) * _BaseMap_TexelSize.x, sunDir2D.y * _BaseMap_TexelSize.y) * 1.25;
+                        half sunNeighborA = SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_BaseMap, input.uv + stepUV, 0).a;
+                        half sunRimMask = (sunNeighborA < _Cutoff) ? 1.0h : 0.0h;
+                        directLight += mainContrib * (sunRimMask * _UnitSunRimStrength * smoothstep(0.16h, 0.52h, (half)input.localUV.y) * 0.48h);
+                    }
+                }
 
                 half3 ambientSH = SampleSH(normalWS);
                 half3 ambientCloudMod = lerp(half3(1.0h, 1.0h, 1.0h), topDownLM.rgb, 0.40h);
@@ -496,6 +551,17 @@ Shader "Realmz/CartographyBillboard"
                 half rim = pow(1.0h - saturate(dot(normalWS, (half3)viewDirWS)), 2.2h) * (half)(max(0.0, _GlobalNightRimStrength) * max(0.0, (float)_NightRimStrength));
                 rim = min(rim, 0.55h);
                 color += albedo * _NightRimColor.rgb * rim;
+
+                if (_StanceAuraStrength > 0.001h)
+                {
+                    half saL = SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_BaseMap, input.uv - float2(_BaseMap_TexelSize.x, 0.0), 0).a;
+                    half saR = SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_BaseMap, input.uv + float2(_BaseMap_TexelSize.x, 0.0), 0).a;
+                    half saD = SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_BaseMap, input.uv - float2(0.0, _BaseMap_TexelSize.y), 0).a;
+                    half saU = SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_BaseMap, input.uv + float2(0.0, _BaseMap_TexelSize.y), 0).a;
+                    half stanceEdge = (min(min(saL, saR), min(saD, saU)) < _Cutoff) ? 1.0h : 0.0h;
+                    half pulse = (half)(0.65 + 0.35 * sin(_Time.y * 4.2));
+                    color = lerp(color, max(color, _StanceAuraColor.rgb), saturate(stanceEdge * _StanceAuraStrength * pulse * 0.55h));
+                }
 
                 if (_HoverOutlineStrength > 0.001h)
                 {

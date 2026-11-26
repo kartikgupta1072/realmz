@@ -22,6 +22,8 @@ namespace Realmz.World
         private static readonly int FlipXId = Shader.PropertyToID("_FlipX");
         private static readonly int HoverOutlineStrengthId = Shader.PropertyToID("_HoverOutlineStrength");
         private static readonly int HoverOutlineColorId = Shader.PropertyToID("_HoverOutlineColor");
+        private static readonly int StanceAuraColorId = Shader.PropertyToID("_StanceAuraColor");
+        private static readonly int StanceAuraStrengthId = Shader.PropertyToID("_StanceAuraStrength");
         private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
         private static readonly int SrcBlendId = Shader.PropertyToID("_SrcBlend");
         private static readonly int DstBlendId = Shader.PropertyToID("_DstBlend");
@@ -97,6 +99,8 @@ namespace Realmz.World
         private bool _facingRight = true;
         private bool _hoverRimActive;
         private Color _hoverRimColor = Color.clear;
+        private Color _stanceAuraColor = Color.clear;
+        private float _stanceAuraStrength;
         private bool _registeredDustUser;
 
         private TMP_FontAsset _font;
@@ -117,6 +121,7 @@ namespace Realmz.World
         private float _windPhaseNorm;
         private bool _hpTrailInitialized;
         private float _hpCurrentRatio = 1f;
+        private float _lastHpRatio = 1f;
         private float _hpTrailRatio = 1f;
         private float _hpTrailStartRatio = 1f;
         private float _hpTrailTimer;
@@ -241,6 +246,56 @@ namespace Realmz.World
             ApplySpritePropertyBlock(_isHitFlashing ? _activeFlashTint : GetNormalSpriteTint());
         }
 
+        public void SetStanceAura(Color color, float strength)
+        {
+            EnsureHierarchy();
+            _stanceAuraColor = color;
+            _stanceAuraStrength = Mathf.Clamp01(strength);
+            ApplySpritePropertyBlock(_isHitFlashing ? _activeFlashTint : GetNormalSpriteTint());
+        }
+
+        public void UpdateSunShadowAngle(Quaternion sunRotation, bool isDungeon)
+        {
+            if (_contactShadowRenderer == null)
+            {
+                return;
+            }
+
+            const float baseShadowY = 0.012f;
+            const float baseShadowWidth = 0.92f;
+            const float baseShadowDepth = 0.56f;
+            Transform shadowTf = _contactShadowRenderer.transform;
+
+            if (isDungeon)
+            {
+                shadowTf.localPosition = new Vector3(0f, baseShadowY, 0f);
+                shadowTf.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                shadowTf.localScale = new Vector3(baseShadowWidth, baseShadowDepth, 1f);
+                return;
+            }
+
+            Vector3 lightRay = sunRotation * Vector3.forward;
+            float sunElevationSin = Mathf.Clamp01(-lightRay.y);
+            float lowSunFactor = Mathf.InverseLerp(0.92f, 0.20f, sunElevationSin);
+            Vector3 horiz = new Vector3(lightRay.x, 0f, lightRay.z);
+            if (horiz.sqrMagnitude <= 0.0001f)
+            {
+                shadowTf.localPosition = new Vector3(0f, baseShadowY, 0f);
+                shadowTf.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                shadowTf.localScale = new Vector3(baseShadowWidth, baseShadowDepth, 1f);
+                return;
+            }
+
+            horiz.Normalize();
+            float offsetDist = Mathf.Lerp(0f, 0.22f, lowSunFactor);
+            float elongation = Mathf.Lerp(1f, 1.28f, lowSunFactor);
+            float yawDeg = Mathf.Atan2(horiz.x, horiz.z) * Mathf.Rad2Deg;
+
+            shadowTf.localPosition = new Vector3(horiz.x * offsetDist, baseShadowY, horiz.z * offsetDist);
+            shadowTf.localRotation = Quaternion.Euler(90f, yawDeg, 0f);
+            shadowTf.localScale = new Vector3(baseShadowWidth, baseShadowDepth * elongation, 1f);
+        }
+
         private void ResolveStateMaterials(Material fallback)
         {
             if (_catalog != null && !string.IsNullOrEmpty(_unitId))
@@ -325,10 +380,13 @@ namespace Realmz.World
             _facingRight = true;
             _hoverRimActive = false;
             _hoverRimColor = Color.clear;
+            _stanceAuraColor = Color.clear;
+            _stanceAuraStrength = 0f;
             _idlePhase = ComputeDeterministicPhase(UnitId);
             _windPhaseNorm = _idlePhase / (Mathf.PI * 2f);
             _hpTrailInitialized = false;
             _hpCurrentRatio = 1f;
+            _lastHpRatio = 1f;
             _hpTrailRatio = 1f;
             _hpTrailStartRatio = 1f;
             _hpTrailTimer = 0f;
@@ -585,7 +643,23 @@ namespace Realmz.World
             }
             if (_spriteBillboardTransform != null)
             {
-                _spriteBillboardTransform.localScale = new Vector3(punchScale, punchScale, 1f);
+                float breathScaleX = 1f;
+                float breathScaleY = 1f;
+                if (Application.isPlaying && _isAlive && !_isDyingTopple)
+                {
+                    bool isWounded = _lastHpRatio <= 0.35f;
+                    float breathFreq = isWounded ? 1.4f : 2.2f;
+                    float breathAmpY = isWounded ? 0.030f : 0.022f;
+                    float breathAmpX = breathAmpY * 0.5f;
+                    float breathWave = Mathf.Sin(Time.time * breathFreq + _idlePhase);
+                    breathScaleX = 1f - breathWave * breathAmpX;
+                    breathScaleY = 1f + breathWave * breathAmpY;
+                }
+
+                _spriteBillboardTransform.localScale = new Vector3(
+                    punchScale * breathScaleX,
+                    punchScale * breathScaleY,
+                    1f);
             }
 
             if (_animState == UnitAnimState.Attack &&
@@ -619,14 +693,11 @@ namespace Realmz.World
             }
 
             float t = Time.time * 2.15f + _idlePhase;
-            float breathWave = Mathf.Sin(t);
             float swayWave = Mathf.Sin(t * 0.68f + 0.85f);
-
-            float breathScale = 1.0f + breathWave * 0.025f;
             float tiltDeg = swayWave * 1.4f;
 
             Transform spriteTf = _spriteRenderer.transform;
-            spriteTf.localScale = new Vector3(_spriteWidth, _spriteHeight * breathScale, 1f);
+            spriteTf.localScale = new Vector3(_spriteWidth, _spriteHeight, 1f);
             spriteTf.localPosition = Vector3.zero;
             spriteTf.localRotation = Quaternion.Euler(0f, 0f, tiltDeg);
         }
@@ -745,6 +816,7 @@ namespace Realmz.World
             EnsureHierarchy();
             float safeMaxHp = Mathf.Max(1, maxHp);
             float hpRatio = Mathf.Clamp01(hp / safeMaxHp);
+            _lastHpRatio = hpRatio;
             _hpFill.rectTransform.anchorMax = new Vector2(hpRatio, 1f);
 
             if (!_hpTrailInitialized)
@@ -1820,6 +1892,9 @@ namespace Realmz.World
             _spritePropBlock.SetFloat(FlipXId, _facingRight ? 0f : 1f);
             _spritePropBlock.SetFloat(HoverOutlineStrengthId, _hoverRimActive ? 0.8f : 0f);
             _spritePropBlock.SetColor(HoverOutlineColorId, _hoverRimActive ? _hoverRimColor : Color.clear);
+            float effectiveAuraStrength = _isAlive ? _stanceAuraStrength : 0f;
+            _spritePropBlock.SetColor(StanceAuraColorId, effectiveAuraStrength > 0f ? _stanceAuraColor : Color.clear);
+            _spritePropBlock.SetFloat(StanceAuraStrengthId, effectiveAuraStrength);
 
             if (_isHitFlashing)
             {

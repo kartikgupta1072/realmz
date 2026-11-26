@@ -556,6 +556,10 @@ namespace Realmz.EditorTools.Cartography
             if (mat.HasProperty("_ReceiveRootShadowOnly")) mat.SetFloat("_ReceiveRootShadowOnly", 0f);
             if (mat.HasProperty("_HorizonHazeStrength")) mat.SetFloat("_HorizonHazeStrength", 0.08f);
             if (mat.HasProperty("_EmissionColor")) mat.SetColor("_EmissionColor", Color.black);
+            if (mat.HasProperty("_UnitDepthSculpt")) mat.SetFloat("_UnitDepthSculpt", 0.85f);
+            if (mat.HasProperty("_UnitSunRimStrength")) mat.SetFloat("_UnitSunRimStrength", 0.72f);
+            if (mat.HasProperty("_UnitSpecStrength")) mat.SetFloat("_UnitSpecStrength", 0.65f);
+            if (mat.HasProperty("_UnitFootAO")) mat.SetFloat("_UnitFootAO", 0.22f);
 
             EditorUtility.SetDirty(mat);
             return mat;
