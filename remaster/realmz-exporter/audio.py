@@ -404,7 +404,8 @@ def convert_madg_to_mod(raw: bytes) -> Tuple[bytes, str]:
             if note in (0, 0xFF):
                 period = 0
             else:
-                clamped_note = max(0, min(len(PROTRACKER_PERIODS_5OCT) - 1, note))
+                # PlayerPRO MADG note bytes are +12 semitones above 5-octave ProTracker period indexing.
+                clamped_note = max(0, min(len(PROTRACKER_PERIODS_5OCT) - 1, note - 12))
                 period = PROTRACKER_PERIODS_5OCT[clamped_note]
             eff = cmd & 0x0F
             b0 = (mod_ins & 0xF0) | ((period >> 8) & 0x0F)

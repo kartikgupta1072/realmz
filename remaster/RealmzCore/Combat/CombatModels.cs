@@ -789,6 +789,7 @@ namespace RealmzCore.Combat
             _specialAbilities = specialAbilities != null ? new List<string>(specialAbilities) : new List<string>();
             Conditions = new ConditionTracker();
             Economy = new CombatActionEconomy();
+            Economy.ResetDndTurn(GetDndBaseMoveBudget(), GetDndBonusMoveTiles(), UsesBonusActionGuard);
         }
 
         public static CombatantState FromHero(
@@ -863,12 +864,10 @@ namespace RealmzCore.Combat
             state.GuardApDiscount = hero.GetSetGuardApDiscount();
             state.MeleeApCost = hero.GetMeleeWeaponApCost(catalog);
             state.RangedApCost = hero.GetRangedWeaponApCost(catalog);
-            state.Economy.ResetUnifiedTurn(
-                CombatActionEconomy.DefaultBaseApPerTurn,
-                state.EquipApBonus,
-                state.FreeMoveTiles,
-                state.GuardApDiscount,
-                applyCarryover: false);
+            state.Economy.ResetDndTurn(
+                state.GetDndBaseMoveBudget(),
+                state.GetDndBonusMoveTiles(),
+                state.UsesBonusActionGuard);
 
             if (hero.Conditions.Has(CharConditionId.Poisoned)) state.Conditions.Apply(CharConditionId.Poisoned);
             if (hero.Conditions.Has(CharConditionId.Diseased)) state.Conditions.Apply(CharConditionId.Diseased);
@@ -1024,6 +1023,10 @@ namespace RealmzCore.Combat
         public int GuardApDiscount { get; set; }
         public int MeleeApCost { get; set; } = CombatActionEconomy.StandardWeaponApCost;
         public int RangedApCost { get; set; } = CombatActionEconomy.StandardWeaponApCost;
+        public int GetDndBaseMoveBudget() => Math.Clamp(MovementMax > 0 ? MovementMax : 6, 4, 10);
+        public int GetDndBonusMoveTiles() => Math.Max(0, FreeMoveTiles) + Math.Max(0, EquipApBonus);
+        public int GetDndTotalMoveBudget() => GetDndBaseMoveBudget() + GetDndBonusMoveTiles();
+        public bool UsesBonusActionGuard => GuardApDiscount > 0;
         public int ExhaustionStacks { get; set; }
         public int CurseStacks { get; set; }
         public bool IsGuarding { get; set; }
@@ -1372,7 +1375,8 @@ namespace RealmzCore.Combat
             int defenderAc,
             IReadOnlyList<string> conditionTags,
             int elevationModifierPct = 0,
-            int apCost = 3)
+            int apCost = 3,
+            RollAdvantageState advantageState = RollAdvantageState.Normal)
         {
             CanExecute = canExecute;
             Reason = reason ?? string.Empty;
@@ -1389,6 +1393,7 @@ namespace RealmzCore.Combat
             ConditionTags = conditionTags ?? Array.Empty<string>();
             ElevationModifierPct = elevationModifierPct;
             ApCost = apCost;
+            AdvantageState = advantageState;
         }
 
         public bool CanExecute { get; }
@@ -1406,6 +1411,7 @@ namespace RealmzCore.Combat
         public IReadOnlyList<string> ConditionTags { get; }
         public int ElevationModifierPct { get; }
         public int ApCost { get; }
+        public RollAdvantageState AdvantageState { get; }
     }
 
     public sealed class TacticalSpellPreview

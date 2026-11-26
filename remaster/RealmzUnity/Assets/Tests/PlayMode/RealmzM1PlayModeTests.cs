@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using NUnit.Framework;
 using Realmz.Cartography;
@@ -117,20 +118,19 @@ namespace Realmz.PlayModeTests
                 ctrl.hudController.TogglePartyPanel(false);
                 yield return null;
 
-                // 3. Verify clicking Borin navigates from (11,9) to adjacent tile cleanly (never onto Borin's tile) and shows compact prompt / opens Shop
+                // 3. Verify clicking Shop #1 doorway navigates cleanly and opens Shop modal (indoor shopkeepers)
                 ctrl.ExploreSession.MoveAlongPath(new GridCoord(11, 9), autoHaltOnEvents: false);
                 typeof(BywaterGameController).GetMethod("SyncExploreHeroViewsToTrail", BindingFlags.Instance | BindingFlags.NonPublic)
                     ?.Invoke(ctrl, new object[] { true });
                 yield return null;
 
-                CartographyNpcPlacement borin = ctrl.worldRenderer.ActiveNpcs[0];
-                GridCoord borinCoord = new GridCoord(borin.TileX, borin.TileY);
+                MapPointOfInterest shopPoi = ctrl.Bundle.Land0.PointsOfInterest.First(p => string.Equals(p.ShopId, "1", StringComparison.OrdinalIgnoreCase));
+                GridCoord shopCoord = shopPoi.Coord;
                 typeof(BywaterGameController).GetMethod("UpdateExplorationInput", BindingFlags.Instance | BindingFlags.NonPublic)
-                    ?.Invoke(ctrl, new object[] { borinCoord, true });
+                    ?.Invoke(ctrl, new object[] { shopCoord, true });
                 ctrl.ForceCompleteWalkForTest();
                 yield return null;
-                Assert.That(ctrl.ExploreSession.Position, Is.Not.EqualTo(borinCoord));
-                Assert.That(ctrl.ExploreSession.Position.ChebyshevDistance(borinCoord), Is.LessThanOrEqualTo(1));
+                Assert.That(ctrl.ExploreSession.Position.ChebyshevDistance(shopCoord), Is.LessThanOrEqualTo(1));
                 Assert.That(ctrl.hudController.IsShopOpen, Is.True);
                 ctrl.hudController.CloseShopModal();
                 yield return null;
@@ -139,7 +139,7 @@ namespace Realmz.PlayModeTests
                 if (captureProofs)
                 {
                     typeof(BywaterGameController).GetMethod("UpdateExplorationHoverVisuals", BindingFlags.Instance | BindingFlags.NonPublic)
-                        ?.Invoke(ctrl, new object[] { borinCoord });
+                        ?.Invoke(ctrl, new object[] { shopCoord });
                     yield return null;
                     CaptureCameraToPng(Camera.main, ctrl.hudController,
                         ProofPath("M1_Bywater_Feet_And_Npc_Proof.png"), 1600, 900);
@@ -306,12 +306,12 @@ namespace Realmz.PlayModeTests
                     Assert.That(ctrl.ActiveCombatMode, Is.EqualTo(CombatActionMode.Smart));
                 }
 
-                // Exit combat -> confirm all 4 shopkeeper NPCs cleanly restored
+                // Exit combat -> confirm town exploration view cleanly restored (zero outdoor shopkeepers)
                 typeof(BywaterGameController).GetMethod("ExitCombatToExploration", BindingFlags.Instance | BindingFlags.NonPublic)
                     ?.Invoke(ctrl, new object[] { false });
                 yield return null;
                 Assert.That(ctrl.worldRenderer.AreTownNpcsHiddenForCombat, Is.False);
-                Assert.That(ctrl.worldRenderer.VisibleTownNpcCount, Is.EqualTo(4));
+                Assert.That(ctrl.worldRenderer.VisibleTownNpcCount, Is.EqualTo(0));
 
                 // 7. UX Overhaul #7-#10 Live Verification + Proof Captures
                 // Stage 9-slot gear, Camp bandages (1/2 after click), stacked potions/torches -> Paper-Doll & Camp proof
@@ -851,7 +851,8 @@ namespace Realmz.PlayModeTests
                 GameObject apRow = GameObject.Find("ApDiamondsRow");
                 Assert.That(apRow != null && apRow.activeInHierarchy, Is.True);
                 TMPro.TextMeshProUGUI apLbl = GameObject.Find("ApValueLabel")?.GetComponent<TMPro.TextMeshProUGUI>();
-                Assert.That(apLbl != null && apLbl.text.Contains("AP"), Is.True);
+                Assert.That(apLbl != null && apLbl.text.Contains("MP"), Is.True);
+                Assert.That(GameObject.Find("DashBtn"), Is.Not.Null);
 
                 if (captureProofs)
                 {
@@ -859,13 +860,13 @@ namespace Realmz.PlayModeTests
                         ProofPath("M1_Bywater_ActionPoints_Combat_Proof.png"), 1600, 900);
                 }
 
-                // Execute Guard / Overwatch and verify exact AP deduction
-                int apBeforeGuard = currentHero.Economy.CurrentAp;
-                int expectedGuardCost = currentHero.Economy.EffectiveGuardApCost;
+                // Execute Guard / Overwatch and verify exact Option A slot consumption
+                CombatActionSlot guardSlot = currentHero.Economy.GuardSlot;
+                Assert.That(currentHero.Economy.HasSlot(guardSlot), Is.True);
                 GameObject.Find("GuardBtn")?.GetComponent<UnityEngine.UI.Button>()?.onClick.Invoke();
                 yield return null;
                 Assert.That(currentHero.IsGuarding, Is.True);
-                Assert.That(currentHero.Economy.CurrentAp, Is.EqualTo(apBeforeGuard - expectedGuardCost));
+                Assert.That(currentHero.Economy.HasSlot(guardSlot), Is.False);
 
                 Assert.That(errors, Is.Empty, "PlayMode W-253 errors:\n" + string.Join("\n", errors));
             }

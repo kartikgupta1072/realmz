@@ -3,6 +3,14 @@ using System.Collections.Generic;
 
 namespace RealmzCore.Rules
 {
+    public enum CombatActionSlot
+    {
+        Move,
+        MainAction,
+        BonusAction,
+        Reaction
+    }
+
     public sealed class CombatActionEconomy
     {
         public const int DefaultBaseApPerTurn = 6;
@@ -35,6 +43,7 @@ namespace RealmzCore.Rules
         }
 
         public bool IsUnifiedApMode { get; private set; }
+        public bool IsDnd5eMode { get; private set; }
         public int BaseApPerTurn { get; private set; } = DefaultBaseApPerTurn;
         public int EquipApBonus { get; private set; }
         public int CarriedInAp { get; private set; }
@@ -45,13 +54,21 @@ namespace RealmzCore.Rules
         public int FreeMoveTilesMax { get; private set; }
         public int FreeMoveTilesRemaining { get; private set; }
         public int GuardApDiscount { get; private set; }
-        public int EffectiveGuardApCost => Math.Max(1, DefaultGuardApCost - GuardApDiscount);
+        public int EffectiveGuardApCost => IsDnd5eMode ? 0 : Math.Max(1, DefaultGuardApCost - GuardApDiscount);
         public bool MovementLocked { get; private set; }
+        public bool HasUsedDash { get; private set; }
+        public bool BonusActionGuardEnabled { get; private set; }
 
         public int MoveBudget => IsUnifiedApMode ? (MaxAp + FreeMoveTilesMax) : _legacyMoveBudget;
-        public int MoveRemaining => IsUnifiedApMode ? (MovementLocked ? 0 : (FreeMoveTilesRemaining + CurrentAp)) : _legacyMoveRemaining;
+        public int MoveRemaining => IsUnifiedApMode
+            ? (MovementLocked ? 0 : (FreeMoveTilesRemaining + CurrentAp))
+            : (MovementLocked ? 0 : _legacyMoveRemaining);
         public bool HasStandardAction => IsUnifiedApMode ? CurrentAp >= LightWeaponApCost : _legacyHasStandardAction;
         public bool HasSwiftAction => IsUnifiedApMode ? CurrentAp >= DefaultShoveApCost : _legacyHasSwiftAction;
+        public bool HasMainAction => HasStandardAction;
+        public bool HasBonusAction => HasSwiftAction;
+        public bool CanPerformDash => IsDnd5eMode && _legacyHasStandardAction && !HasUsedDash && !MovementLocked;
+        public CombatActionSlot GuardSlot => BonusActionGuardEnabled ? CombatActionSlot.BonusAction : CombatActionSlot.MainAction;
         public bool HasReaction { get; private set; }
         public bool CanUndoMove => _apMoveHistory.Count > 0 && !_undoLockedByAction;
 
@@ -63,10 +80,38 @@ namespace RealmzCore.Rules
             }
 
             IsUnifiedApMode = false;
+            IsDnd5eMode = false;
             _legacyMoveBudget = moveBudget;
             _legacyMoveRemaining = moveBudget;
             _legacyHasStandardAction = true;
             _legacyHasSwiftAction = true;
+            HasUsedDash = false;
+            BonusActionGuardEnabled = false;
+            _undoLockedByAction = false;
+            MovementLocked = false;
+            HasReaction = true;
+            _apMoveHistory.Clear();
+        }
+
+        public void ResetDndTurn(int moveBudget, int bonusMoveTiles = 0, bool bonusActionGuard = false)
+        {
+            int totalMove = Math.Max(1, moveBudget) + Math.Max(0, bonusMoveTiles);
+            IsUnifiedApMode = false;
+            IsDnd5eMode = true;
+            BaseApPerTurn = 0;
+            EquipApBonus = Math.Max(0, bonusMoveTiles);
+            CarriedInAp = 0;
+            MaxAp = 0;
+            CurrentAp = 0;
+            FreeMoveTilesMax = Math.Max(0, bonusMoveTiles);
+            FreeMoveTilesRemaining = 0;
+            GuardApDiscount = bonusActionGuard ? 1 : 0;
+            _legacyMoveBudget = totalMove;
+            _legacyMoveRemaining = totalMove;
+            _legacyHasStandardAction = true;
+            _legacyHasSwiftAction = true;
+            HasUsedDash = false;
+            BonusActionGuardEnabled = bonusActionGuard;
             _undoLockedByAction = false;
             MovementLocked = false;
             HasReaction = true;
@@ -81,6 +126,7 @@ namespace RealmzCore.Rules
             bool applyCarryover = true)
         {
             IsUnifiedApMode = true;
+            IsDnd5eMode = false;
             BaseApPerTurn = Math.Max(1, baseAp);
             EquipApBonus = Math.Max(0, equipApBonus);
             CarriedInAp = applyCarryover ? Math.Clamp(_carryoverBankAp, 0, DefaultMaxCarryoverAp) : 0;
@@ -90,10 +136,94 @@ namespace RealmzCore.Rules
             FreeMoveTilesMax = Math.Max(0, freeMoveTiles);
             FreeMoveTilesRemaining = FreeMoveTilesMax;
             GuardApDiscount = Math.Max(0, guardApDiscount);
+            BonusActionGuardEnabled = false;
+            HasUsedDash = false;
             MovementLocked = false;
             _undoLockedByAction = false;
             HasReaction = true;
             _apMoveHistory.Clear();
+        }
+
+        public bool HasSlot(CombatActionSlot slot)
+        {
+            return slot switch
+            {
+                CombatActionSlot.MainAction => HasMainAction,
+                CombatActionSlot.BonusAction => HasBonusAction,
+                CombatActionSlot.Reaction => HasReaction,
+                CombatActionSlot.Move => MoveRemaining > 0,
+                _ => false
+            };
+        }
+
+        public bool CommitSlot(CombatActionSlot slot, bool lockMoveUndo = true)
+        {
+            switch (slot)
+            {
+                case CombatActionSlot.MainAction:
+                    if (!IsUnifiedApMode)
+                    {
+                        if (!_legacyHasStandardAction)
+                        {
+                            return false;
+                        }
+
+                        _legacyHasStandardAction = false;
+                        if (lockMoveUndo)
+                        {
+                            _undoLockedByAction = true;
+                            _apMoveHistory.Clear();
+                        }
+
+                        return true;
+                    }
+
+                    return SpendAp(StandardWeaponApCost, lockMoveUndo);
+
+                case CombatActionSlot.BonusAction:
+                    if (!IsUnifiedApMode)
+                    {
+                        if (!_legacyHasSwiftAction)
+                        {
+                            return false;
+                        }
+
+                        _legacyHasSwiftAction = false;
+                        if (lockMoveUndo)
+                        {
+                            _undoLockedByAction = true;
+                            _apMoveHistory.Clear();
+                        }
+
+                        return true;
+                    }
+
+                    return SpendAp(DefaultShoveApCost, lockMoveUndo);
+
+                case CombatActionSlot.Reaction:
+                    return CommitReaction();
+
+                default:
+                    return false;
+            }
+        }
+
+        public bool PerformDash(int baseMoveBudget)
+        {
+            if (!CanPerformDash)
+            {
+                return false;
+            }
+
+            _legacyHasStandardAction = false;
+            HasUsedDash = true;
+            _undoLockedByAction = true;
+            _apMoveHistory.Clear();
+
+            int bonusMove = Math.Max(1, baseMoveBudget);
+            _legacyMoveBudget += bonusMove;
+            _legacyMoveRemaining += bonusMove;
+            return true;
         }
 
         public bool HasApFor(int apCost)
@@ -153,27 +283,26 @@ namespace RealmzCore.Rules
                 _legacyMoveRemaining = 0;
                 _legacyHasStandardAction = false;
                 _legacyHasSwiftAction = false;
+                MovementLocked = true;
+                HasReaction = false;
                 _apMoveHistory.Clear();
             }
         }
 
         public void LockMovementForTurn()
         {
-            if (IsUnifiedApMode)
-            {
-                MovementLocked = true;
-                _apMoveHistory.Clear();
-            }
-            else
+            MovementLocked = true;
+            if (!IsUnifiedApMode)
             {
                 _legacyMoveRemaining = 0;
-                _apMoveHistory.Clear();
             }
+
+            _apMoveHistory.Clear();
         }
 
         public bool TryStep(int cost = 1)
         {
-            if (cost <= 0)
+            if (cost <= 0 || MovementLocked)
             {
                 return false;
             }
@@ -188,11 +317,6 @@ namespace RealmzCore.Rules
                 _legacyMoveRemaining -= cost;
                 _apMoveHistory.Push((cost, 0));
                 return true;
-            }
-
-            if (MovementLocked)
-            {
-                return false;
             }
 
             if (FreeMoveTilesRemaining > 0)
@@ -519,7 +643,8 @@ namespace RealmzCore.Rules
             bool weaponBonusAlreadyIncluded = false,
             bool defenderIsProne = false,
             bool attackerIsProne = false,
-            int attackerCritBonusPct = 0)
+            int attackerCritBonusPct = 0,
+            RollAdvantageState advantageState = RollAdvantageState.Normal)
         {
             if (roller == null)
             {
@@ -542,7 +667,7 @@ namespace RealmzCore.Rules
                 attackerIsProne: attackerIsProne,
                 attackerCritBonusPct: attackerCritBonusPct);
 
-            int roll = roller.NextInt(1, 101);
+            int roll = RollAdvantageHelper.RollD100RollUnderWithAdvantage(roller, advantageState, out _, out _);
             AttackOutcomeKind kind;
 
             if (preview.TargetIsHelpless)

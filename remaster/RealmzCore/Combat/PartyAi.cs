@@ -118,7 +118,11 @@ namespace RealmzCore.Combat
                 if (session.Outcome != CombatOutcome.InProgress ||
                     !string.Equals(session.CurrentActorId, actor.Id, StringComparison.Ordinal) ||
                     !actor.IsConscious ||
-                    actor.Economy.CurrentAp <= 0 ||
+                    (actor.Economy.IsUnifiedApMode
+                        ? actor.Economy.CurrentAp <= 0
+                        : (!actor.Economy.HasSlot(CombatActionSlot.MainAction) &&
+                           !actor.Economy.HasSlot(CombatActionSlot.BonusAction) &&
+                           actor.Economy.MoveRemaining <= 0)) ||
                     actor.IsGuarding)
                 {
                     break;
@@ -126,6 +130,9 @@ namespace RealmzCore.Combat
 
                 int apBefore = actor.Economy.CurrentAp;
                 int freeBefore = actor.Economy.FreeMoveTilesRemaining;
+                int moveBefore = actor.Economy.MoveRemaining;
+                bool mainBefore = actor.Economy.HasSlot(CombatActionSlot.MainAction);
+                bool bonusBefore = actor.Economy.HasSlot(CombatActionSlot.BonusAction);
 
                 // Priority 1: Cleric healing spells (<65% HP) and critical swift potion (<50% HP).
                 if (TryExecutePriority1Healing(session, actor, out CombatActionResult healResult))
@@ -143,12 +150,19 @@ namespace RealmzCore.Combat
                         }
                     }
 
-                    if (!anyStillLow || actor.Economy.CurrentAp < 2)
+                    bool outOfFollowUpHeal = actor.Economy.IsUnifiedApMode
+                        ? (!anyStillLow || actor.Economy.CurrentAp < 2)
+                        : (!anyStillLow || (!actor.Economy.HasSlot(CombatActionSlot.MainAction) && !actor.Economy.HasSlot(CombatActionSlot.BonusAction)));
+                    if (outOfFollowUpHeal)
                     {
                         break;
                     }
 
-                    if (actor.Economy.CurrentAp == apBefore && actor.Economy.FreeMoveTilesRemaining == freeBefore)
+                    if (actor.Economy.CurrentAp == apBefore &&
+                        actor.Economy.FreeMoveTilesRemaining == freeBefore &&
+                        actor.Economy.MoveRemaining == moveBefore &&
+                        actor.Economy.HasSlot(CombatActionSlot.MainAction) == mainBefore &&
+                        actor.Economy.HasSlot(CombatActionSlot.BonusAction) == bonusBefore)
                     {
                         break;
                     }
@@ -167,8 +181,8 @@ namespace RealmzCore.Combat
                     break;
                 }
 
-                // Priority 2: Shove hazard/ledge opportunity (2 AP).
-                if (actor.Economy.HasApFor(CombatActionEconomy.DefaultShoveApCost) &&
+                // Priority 2: Shove hazard/ledge opportunity (Bonus Action).
+                if (actor.Economy.HasSlot(CombatActionSlot.BonusAction) &&
                     TryOpportunisticSwiftShove(session, actor, enemies, out CombatActionResult shoveResult))
                 {
                     finalResult = shoveResult;
@@ -177,14 +191,30 @@ namespace RealmzCore.Combat
                     continue;
                 }
 
-                // Bank <= 2 AP cleanly if already acted this turn and out of immediate melee/caster range.
+                // Bank <= 2 AP cleanly in unified mode, or stop cleanly in D&D 5e mode once Main Action is spent
+                // (allowing Iron Vanguard Bonus Action Guard when still holding Bonus Action).
                 if (tookOffensiveOrMajorAction &&
-                    actor.Economy.CurrentAp <= CombatActionEconomy.DefaultMaxCarryoverAp &&
-                    MinChebyshevDistance(actor.Position, enemies) > 1 &&
-                    actor.MeleeApCost > actor.Economy.CurrentAp &&
-                    (actor.RangedRange <= 1 || string.IsNullOrWhiteSpace(actor.RangedDice) || actor.RangedApCost > actor.Economy.CurrentAp) &&
-                    (actor.SpellIds.Count == 0 || actor.Sp <= 0))
+                    (actor.Economy.IsUnifiedApMode
+                        ? (actor.Economy.CurrentAp <= CombatActionEconomy.DefaultMaxCarryoverAp &&
+                           MinChebyshevDistance(actor.Position, enemies) > 1 &&
+                           actor.MeleeApCost > actor.Economy.CurrentAp &&
+                           (actor.RangedRange <= 1 || string.IsNullOrWhiteSpace(actor.RangedDice) || actor.RangedApCost > actor.Economy.CurrentAp) &&
+                           (actor.SpellIds.Count == 0 || actor.Sp <= 0))
+                        : !actor.Economy.HasSlot(CombatActionSlot.MainAction)))
                 {
+                    if (actor.Economy.IsDnd5eMode &&
+                        actor.Economy.BonusActionGuardEnabled &&
+                        actor.Economy.HasSlot(CombatActionSlot.BonusAction) &&
+                        !actor.IsGuarding)
+                    {
+                        CombatActionResult bonusGuard = session.GuardOverwatch();
+                        if (bonusGuard.Success)
+                        {
+                            finalResult = bonusGuard;
+                            Accumulate(bonusGuard);
+                        }
+                    }
+
                     break;
                 }
 
@@ -206,13 +236,23 @@ namespace RealmzCore.Combat
                 {
                     finalResult = subResult;
                     Accumulate(subResult);
-                    if (subResult.DamageDealt > 0 || subResult.HealingDone > 0 || subResult.AttackOutcomes.Count > 0 || subResult.ApSpent > 0)
+                    if (subResult.DamageDealt > 0 ||
+                        subResult.HealingDone > 0 ||
+                        subResult.AttackOutcomes.Count > 0 ||
+                        subResult.ApSpent > 0 ||
+                        actor.Economy.MoveRemaining != moveBefore ||
+                        actor.Economy.HasSlot(CombatActionSlot.MainAction) != mainBefore ||
+                        actor.Economy.HasSlot(CombatActionSlot.BonusAction) != bonusBefore)
                     {
                         tookOffensiveOrMajorAction = true;
                     }
                 }
 
-                if (actor.Economy.CurrentAp == apBefore && actor.Economy.FreeMoveTilesRemaining == freeBefore)
+                if (actor.Economy.CurrentAp == apBefore &&
+                    actor.Economy.FreeMoveTilesRemaining == freeBefore &&
+                    actor.Economy.MoveRemaining == moveBefore &&
+                    actor.Economy.HasSlot(CombatActionSlot.MainAction) == mainBefore &&
+                    actor.Economy.HasSlot(CombatActionSlot.BonusAction) == bonusBefore)
                 {
                     break;
                 }
@@ -309,8 +349,8 @@ namespace RealmzCore.Combat
                 }
             }
 
-            // Fallback potion (2 AP) when no heal spell was cast and an ally is critically injured (<50% HP).
-            if (actor.Economy.HasApFor(CombatActionEconomy.DefaultPotionApCost) && session.Party != null)
+            // Fallback potion (Bonus Action) when no heal spell was cast and an ally is critically injured (<50% HP).
+            if (actor.Economy.HasSlot(CombatActionSlot.BonusAction) && session.Party != null)
             {
                 CombatantState? criticalAlly = null;
                 for (int i = 0; i < injuredAllies.Count; i++)
@@ -339,7 +379,7 @@ namespace RealmzCore.Combat
             out CombatActionResult result)
         {
             result = new CombatActionResult(false, string.Empty);
-            if (!actor.Economy.HasApFor(CombatActionEconomy.DefaultShoveApCost))
+            if (!actor.Economy.HasSlot(CombatActionSlot.BonusAction))
             {
                 return false;
             }
@@ -570,7 +610,7 @@ namespace RealmzCore.Combat
                 return session.ExecuteMeleeAttack(meleeHere.Id);
             }
 
-            if (actor.Economy.HasApFor(actor.Economy.EffectiveGuardApCost))
+            if (actor.Economy.HasSlot(actor.Economy.GuardSlot))
             {
                 return session.GuardOverwatch();
             }
@@ -652,7 +692,9 @@ namespace RealmzCore.Combat
                     continue;
                 }
 
-                if (tile.PathCost + actor.RangedApCost > actor.Economy.CurrentAp)
+                if (actor.Economy.IsUnifiedApMode
+                    ? (tile.PathCost + actor.RangedApCost > actor.Economy.CurrentAp)
+                    : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasSlot(CombatActionSlot.MainAction)))
                 {
                     continue;
                 }
@@ -702,7 +744,10 @@ namespace RealmzCore.Combat
             {
                 ReachableTileInfo tile = reachable[r];
                 CombatantState? target = PickBestRangedTarget(session, actor, tile.Coord, enemies, ignoreActionBudget: true, out int targetScore, out TacticalAttackPreview? preview);
-                if (target == null || preview == null || tile.PathCost + actor.RangedApCost > actor.Economy.CurrentAp)
+                if (target == null || preview == null ||
+                    (actor.Economy.IsUnifiedApMode
+                        ? (tile.PathCost + actor.RangedApCost > actor.Economy.CurrentAp)
+                        : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasSlot(CombatActionSlot.MainAction))))
                 {
                     continue;
                 }
@@ -755,7 +800,7 @@ namespace RealmzCore.Combat
                 }
             }
 
-            if (actor.Economy.HasApFor(actor.Economy.EffectiveGuardApCost))
+            if (actor.Economy.HasSlot(actor.Economy.GuardSlot))
             {
                 return session.GuardOverwatch();
             }
@@ -820,8 +865,8 @@ namespace RealmzCore.Combat
                     }
                 }
 
-                // Check Shove opportunity (2 AP) after moving adjacent to an enemy.
-                if (actor.Economy.HasApFor(CombatActionEconomy.DefaultShoveApCost) &&
+                // Check Shove opportunity (Bonus Action) after moving adjacent to an enemy.
+                if (actor.Economy.HasSlot(CombatActionSlot.BonusAction) &&
                     TryOpportunisticSwiftShove(session, actor, enemies, out CombatActionResult shoveResult))
                 {
                     if (session.Outcome != CombatOutcome.InProgress || !actor.IsConscious)
@@ -856,7 +901,7 @@ namespace RealmzCore.Combat
                     }
                 }
 
-                if (actor.Economy.HasApFor(actor.Economy.EffectiveGuardApCost))
+                if (actor.Economy.HasSlot(actor.Economy.GuardSlot))
                 {
                     return session.GuardOverwatch();
                 }
@@ -864,7 +909,7 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, $"{actor.Name} holds position.");
             }
 
-            // No melee target reachable this turn: try ranged weapon if available, else safe approach + GuardOverwatch.
+            // No melee target reachable this turn: try ranged weapon if available, else safe approach (+ Dash if D&D 5e) + GuardOverwatch.
             if (actor.RangedRange > 1 && !string.IsNullOrWhiteSpace(actor.RangedDice))
             {
                 CombatantState? rangedHere = PickBestRangedTarget(session, actor, actor.Position, enemies, ignoreActionBudget: false, out _, out _);
@@ -885,7 +930,18 @@ namespace RealmzCore.Combat
                 }
             }
 
-            if (actor.Economy.HasApFor(actor.Economy.EffectiveGuardApCost))
+            if (actor.Economy.IsDnd5eMode &&
+                actor.Economy.CanPerformDash &&
+                MinChebyshevDistance(actor.Position, enemies) > 1)
+            {
+                CombatActionResult dashRes = session.ExecuteDash();
+                if (dashRes.Success)
+                {
+                    return dashRes;
+                }
+            }
+
+            if (actor.Economy.HasSlot(actor.Economy.GuardSlot))
             {
                 return session.GuardOverwatch();
             }
@@ -932,7 +988,7 @@ namespace RealmzCore.Combat
                 bool isHighGround = session.Grid.GetElevation(coord) > session.Grid.GetElevation(foe.Position);
 
                 int shoveSetupBonus = 0;
-                if (actor.Economy.HasApFor(CombatActionEconomy.DefaultShoveApCost))
+                if (actor.Economy.HasSlot(CombatActionSlot.BonusAction))
                 {
                     TacticalShovePreview shovePreview = session.PreviewShove(actor.Id, foe.Id, coord);
                     if (shovePreview.CanExecute && shovePreview.SuccessChancePct >= 50)
@@ -956,9 +1012,13 @@ namespace RealmzCore.Combat
                 int targetFinishBonus = (isKillingBlow ? 80 : 0) + (100 - Math.Min(99, foe.Hp)) + threatBonus;
                 int stayBonus = isCurrentPos ? 5 : 0;
 
+                bool canAttackAfterMove = actor.Economy.IsUnifiedApMode
+                    ? (actor.Economy.CurrentAp - pathCost >= actor.MeleeApCost)
+                    : (pathCost <= actor.Economy.MoveRemaining && actor.Economy.HasSlot(CombatActionSlot.MainAction));
+
                 int score = preview.HitChancePct +
                             (preview.IsFlanking ? 30 : 0) +
-                            (actor.Economy.CurrentAp - pathCost >= actor.MeleeApCost ? 500 : -500) +
+                            (canAttackAfterMove ? 500 : -500) +
                             (isHighGround ? 25 : 0) +
                             (foe.IsProne ? 20 : 0) +
                             aooPenalty +
@@ -1270,7 +1330,10 @@ namespace RealmzCore.Combat
                 }
 
                 SpellCandidate? candidate = TryFindBestCasterSpell(session, actor, tile.Coord, enemies, ignoreActionBudget: true);
-                if (candidate == null || tile.PathCost + candidate.ApCost > actor.Economy.CurrentAp)
+                if (candidate == null ||
+                    (actor.Economy.IsUnifiedApMode
+                        ? (tile.PathCost + candidate.ApCost > actor.Economy.CurrentAp)
+                        : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasSlot(CombatActionSlot.MainAction))))
                 {
                     continue;
                 }
@@ -1305,14 +1368,20 @@ namespace RealmzCore.Combat
             {
                 ReachableTileInfo tile = reachable[r];
                 int minDist = MinChebyshevDistance(tile.Coord, enemies);
-                if (minDist < 2 || tile.PathCost + actor.RangedApCost > actor.Economy.CurrentAp)
+                if (minDist < 2 ||
+                    (actor.Economy.IsUnifiedApMode
+                        ? (tile.PathCost + actor.RangedApCost > actor.Economy.CurrentAp)
+                        : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasSlot(CombatActionSlot.MainAction))))
                 {
                     continue;
                 }
 
                 bool hazardous = IsHazardousSurface(session.Grid.GetSurface(tile.Coord));
                 CombatantState? target = PickBestRangedTarget(session, actor, tile.Coord, enemies, ignoreActionBudget: true, out int targetScore, out TacticalAttackPreview? preview);
-                if (target == null || preview == null || tile.PathCost + actor.RangedApCost > actor.Economy.CurrentAp)
+                if (target == null || preview == null ||
+                    (actor.Economy.IsUnifiedApMode
+                        ? (tile.PathCost + actor.RangedApCost > actor.Economy.CurrentAp)
+                        : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasSlot(CombatActionSlot.MainAction))))
                 {
                     continue;
                 }
@@ -1358,7 +1427,9 @@ namespace RealmzCore.Combat
                 }
 
                 bool hazardous = IsHazardousSurface(session.Grid.GetSurface(tile.Coord));
-                bool leavesGuardAp = (actor.Economy.CurrentAp - tile.PathCost) >= actor.Economy.EffectiveGuardApCost;
+                bool leavesGuardAp = actor.Economy.IsUnifiedApMode
+                    ? ((actor.Economy.CurrentAp - tile.PathCost) >= actor.Economy.EffectiveGuardApCost)
+                    : actor.Economy.HasSlot(actor.Economy.GuardSlot);
                 int score = (leavesGuardAp ? 200 : 0) +
                             (minDist * 20) +
                             (session.Grid.GetElevation(tile.Coord) * 10) +

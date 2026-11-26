@@ -8,7 +8,7 @@ Scope: `C:\Users\karti\realmz\remaster\RealmzCore\`
 - All Unity-side scripts consume the compiled Release assembly at `remaster/RealmzUnity/Assets/Plugins/RealmzCore/RealmzCore.dll`.
 
 ## 2. Locked Gameplay Contracts
-- **Fixed 6-AP Combat Contract:** `BaseApPerTurn = 6` and `MaxCarryoverAp = 2` (`CombatActionEconomy` in `Rules/CombatRules.cs`). Zero Agility or Fatigue AP modifiers; only Equipment Sets (`Scout's Leather`, `Iron Vanguard`) and gear may modify AP or Free Move.
+- **D&D 5e Option A Combat Contract:** Separate `MP` movement + `1 Main Action` + `1 Bonus Action` + `1 Reaction` + `Dash` (`CombatActionEconomy.ResetDndTurn` in `Rules/CombatRules.cs`), with D&D `Advantage`/`Disadvantage` (`RollAdvantageState`) and Equipment Set perks (`Scout's Leather` `+2 MP`, `Iron Vanguard` Bonus Action `Guard/Overwatch`).
 - **Deterministic Simulation:** Use `RealmzCore.Rules.Dice` / explicit seeds for encounter rolls, combat math, and arena generation.
 - **Zero GC Churn in Hot Paths:** Avoid LINQ allocations and per-step heap churn inside exploration step rolls, `FogOfWarMap` LOS evaluation, and combat turn resolution.
 

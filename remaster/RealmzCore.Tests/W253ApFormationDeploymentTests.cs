@@ -36,55 +36,67 @@ namespace RealmzCore.Tests
         }
 
         [Fact]
-        public void BaseApPerTurn_IsFixedAt6_RegardlessOfAgilityOrFatigue_AndCarryoverCapsAt2()
+        public void OptionADndEconomy_SeparatesMoveMpFromMainAndBonusActions_AndSupportsDash()
         {
             BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(FindBywaterM1Dir());
             HeroPresetData slowExhaustedPreset = new HeroPresetData(
                 "hero_slow", "Sluggish", archetype: "Rogue", level: 1, hp: 20, maxHp: 20,
-                ac: 10, toHit: 18, agility: 5, movementMax: 4);
+                ac: 10, toHit: 18, agility: 5, movementMax: 5);
             HeroPresetData nimblePreset = new HeroPresetData(
                 "hero_fast", "Nimble", archetype: "Rogue", level: 1, hp: 20, maxHp: 20,
-                ac: 10, toHit: 18, agility: 25, movementMax: 10);
+                ac: 10, toHit: 18, agility: 25, movementMax: 7);
 
             PartyMemberState slowHero = new PartyMemberState(slowExhaustedPreset, bundle.Items);
-            slowHero.ExhaustionStacks = 4; // Heavy fatigue must NEVER reduce AP!
+            slowHero.ExhaustionStacks = 4;
             PartyMemberState fastHero = new PartyMemberState(nimblePreset, bundle.Items);
 
             CombatantState cSlow = CombatantState.FromHero(slowHero, new GridCoord(1, 3), bundle.Items);
             CombatantState cFast = CombatantState.FromHero(fastHero, new GridCoord(1, 5), bundle.Items);
-            CombatantState goblin = new CombatantState("m1", "Goblin", CombatSide.Monster, new GridCoord(8, 4), 20, 20, dexterity: 3);
+            CombatantState goblin = new CombatantState("m1", "Goblin", CombatSide.Monster, new GridCoord(8, 5), 20, 20, ac: 0, dexterity: 3);
 
             CombatGrid grid = new CombatGrid(10, 10);
-            TacticalCombatSession session = new TacticalCombatSession(grid, new[] { cSlow, cFast, goblin }, bundle.Spells, bundle.Items);
+            TacticalCombatSession session = new TacticalCombatSession(grid, new[] { cSlow, cFast, goblin }, bundle.Spells, bundle.Items, roller: new QueuedDiceRoller(20, 4));
 
-            // Fast hero goes first because Agility governs Initiative! Both get strictly 6 AP.
+            // Fast hero goes first because Agility governs Initiative!
             Assert.Equal("hero_fast", session.CurrentActorId);
-            Assert.Equal(6, cFast.Economy.BaseApPerTurn);
-            Assert.Equal(6, cFast.Economy.CurrentAp);
+            Assert.True(cFast.Economy.IsDnd5eMode);
+            Assert.Equal(7, cFast.Economy.MoveBudget);
+            Assert.Equal(7, cFast.Economy.MoveRemaining);
+            Assert.True(cFast.Economy.HasSlot(CombatActionSlot.MainAction));
+            Assert.True(cFast.Economy.HasSlot(CombatActionSlot.BonusAction));
+            Assert.True(cFast.Economy.HasSlot(CombatActionSlot.Reaction));
 
-            // Fast hero moves 2 tiles (spends 2 AP, 4 left), ends turn -> banks MaxCarryoverAp (2).
-            Assert.True(session.TryMoveTo(new GridCoord(3, 5)).Success);
-            Assert.Equal(4, cFast.Economy.CurrentAp);
-            Assert.Equal(2, cFast.Economy.PendingCarryoverAp);
+            // Moving 4 tiles consumes ONLY MP, leaving both Main Action and Bonus Action intact!
+            Assert.True(session.TryMoveTo(new GridCoord(5, 5)).Success);
+            Assert.Equal(3, cFast.Economy.MoveRemaining);
+            Assert.True(cFast.Economy.HasSlot(CombatActionSlot.MainAction));
+            Assert.True(cFast.Economy.HasSlot(CombatActionSlot.BonusAction));
+
+            // Dash consumes Main Action to grant +BaseMoveBudget MP.
+            CombatActionResult dashRes = session.ExecuteDash();
+            Assert.True(dashRes.Success);
+            Assert.False(cFast.Economy.HasSlot(CombatActionSlot.MainAction));
+            Assert.True(cFast.Economy.HasUsedDash);
+            Assert.Equal(3 + cFast.GetDndBaseMoveBudget(), cFast.Economy.MoveRemaining);
+            Assert.True(cFast.Economy.HasSlot(CombatActionSlot.BonusAction));
+
             session.EndTurn();
-
-            // Exhausted slow hero gets strictly 6 AP (zero fatigue penalty, zero agility penalty).
             Assert.Equal("hero_slow", session.CurrentActorId);
-            Assert.Equal(6, cSlow.Economy.BaseApPerTurn);
-            Assert.Equal(6, cSlow.Economy.CurrentAp);
-            Assert.True(session.TryMoveTo(new GridCoord(5, 3)).Success); // 4 tiles -> 2 AP left
-            Assert.Equal(2, cSlow.Economy.CurrentAp);
-            session.EndTurn();
+            Assert.Equal(5, cSlow.Economy.MoveBudget);
+            Assert.True(cSlow.Economy.HasSlot(CombatActionSlot.MainAction));
+            Assert.True(cSlow.Economy.HasSlot(CombatActionSlot.BonusAction));
 
-            // Goblin ends turn (wait: goblin moves/ends).
             session.EndTurn();
+            session.EndTurn(); // goblin
 
-            // Round 2: both heroes get 6 + 2 = 8 AP carryover cap!
+            // Round 2 resets fresh MP, Main Action, Bonus Action, and Reaction cleanly.
             Assert.Equal(2, session.RoundNumber);
             Assert.Equal("hero_fast", session.CurrentActorId);
-            Assert.Equal(8, cFast.Economy.MaxAp);
-            Assert.Equal(8, cFast.Economy.CurrentAp);
-            Assert.Equal(2, cFast.Economy.CarriedInAp);
+            Assert.Equal(7, cFast.Economy.MoveBudget);
+            Assert.Equal(7, cFast.Economy.MoveRemaining);
+            Assert.True(cFast.Economy.HasSlot(CombatActionSlot.MainAction));
+            Assert.True(cFast.Economy.HasSlot(CombatActionSlot.BonusAction));
+            Assert.False(cFast.Economy.HasUsedDash);
         }
 
         [Fact]
@@ -127,40 +139,38 @@ namespace RealmzCore.Tests
             CombatGrid grid = new CombatGrid(10, 10);
             TacticalCombatSession session = new TacticalCombatSession(grid, new[] { cVex, cAldric, goblin }, bundle.Spells, bundle.Items);
 
-            // Vex starts with 6 + 1 = 7 AP and 1 Free Move Tile!
+            // Vex starts with BaseMoveBudget + 2 bonus MP from Scout's Leather 3pc!
             Assert.Equal("hero_rogue", session.CurrentActorId);
-            Assert.Equal(7, cVex.Economy.CurrentAp);
-            Assert.Equal(1, cVex.Economy.FreeMoveTilesRemaining);
+            int expectedVexMove = cVex.GetDndBaseMoveBudget() + 2;
+            Assert.Equal(expectedVexMove, cVex.Economy.MoveBudget);
+            Assert.Equal(expectedVexMove, cVex.Economy.MoveRemaining);
 
-            // Moving 2 tiles consumes 1 Free Move Tile (0 AP) + 1 AP -> 6 AP remaining!
+            // Moving 2 tiles spends 2 MP cleanly and UndoMove restores full MP!
             CombatActionResult moveRes = session.TryMoveTo(new GridCoord(3, 5));
             Assert.True(moveRes.Success);
-            Assert.Equal(1, moveRes.ApSpent);
-            Assert.Equal(0, cVex.Economy.FreeMoveTilesRemaining);
-            Assert.Equal(6, cVex.Economy.CurrentAp);
+            Assert.Equal(2, moveRes.ApSpent);
+            Assert.Equal(expectedVexMove - 2, cVex.Economy.MoveRemaining);
 
-            // UndoMove restores both CurrentAp AND FreeMoveTilesRemaining!
             Assert.True(session.UndoMove());
-            Assert.Equal(1, cVex.Economy.FreeMoveTilesRemaining);
-            Assert.Equal(7, cVex.Economy.CurrentAp);
+            Assert.Equal(expectedVexMove, cVex.Economy.MoveRemaining);
 
-            // Switch to Aldric -> Iron Vanguard 3pc gives Guard = 1 AP & triggers Overwatch reaction!
+            // Switch to Aldric -> Iron Vanguard 3pc upgrades Guard/Overwatch to Bonus Action!
             session.EndTurn();
             Assert.Equal("hero_knight", session.CurrentActorId);
-            Assert.Equal(7, cAldric.Economy.CurrentAp);
-            Assert.Equal(1, cAldric.Economy.EffectiveGuardApCost);
+            Assert.True(cAldric.Economy.BonusActionGuardEnabled);
+            Assert.Equal(CombatActionSlot.BonusAction, cAldric.Economy.GuardSlot);
             CombatActionResult guardRes = session.GuardOverwatch();
             Assert.True(guardRes.Success);
-            Assert.Equal(1, guardRes.ApSpent);
-            Assert.Equal(6, cAldric.Economy.CurrentAp);
+            Assert.False(cAldric.Economy.HasSlot(CombatActionSlot.BonusAction));
+            Assert.True(cAldric.Economy.HasSlot(CombatActionSlot.MainAction));
         }
 
         [Fact]
-        public void MultipleLightAttacks_MudPenalty_And_OverwatchReactionWork()
+        public void OneMainAction_BonusActionShoveTorchPotion_AndMud2MpWork()
         {
             BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(FindBywaterM1Dir());
             PartyState party = PartyState.FromBundle(bundle);
-            PartyMemberState vexMember = party.Members.First(m => m.Name == "Vex"); // Short Sword = 2 AP
+            PartyMemberState vexMember = party.Members.First(m => m.Name == "Vex");
             CombatantState vex = CombatantState.FromHero(vexMember, new GridCoord(3, 4), bundle.Items);
             CombatantState goblin = new CombatantState("m1", "Goblin", CombatSide.Monster, new GridCoord(4, 4), 40, 40, ac: 0, dexterity: 8);
 
@@ -173,29 +183,27 @@ namespace RealmzCore.Tests
                 new[] { vex, goblin },
                 bundle.Spells,
                 bundle.Items,
-                roller: new QueuedDiceRoller(20, 4, 20, 4, 20, 4, 20, 3));
+                roller: new QueuedDiceRoller(20, 4, 15));
 
-            Assert.Equal(2, vex.MeleeApCost);
-
-            // 3 consecutive Short Sword attacks in 1 turn (3 x 2 AP = 6 AP)!
+            // 1 Main Action attack per turn + Bonus Action Shove still available!
             Assert.True(session.ExecuteMeleeAttack("m1").Success);
-            Assert.Equal(4, vex.Economy.CurrentAp);
-            Assert.True(session.ExecuteMeleeAttack("m1").Success);
-            Assert.Equal(2, vex.Economy.CurrentAp);
-            Assert.True(session.ExecuteMeleeAttack("m1").Success);
-            Assert.Equal(0, vex.Economy.CurrentAp);
+            Assert.False(vex.Economy.HasSlot(CombatActionSlot.MainAction));
             Assert.False(session.ExecuteMeleeAttack("m1").Success);
-            Assert.Equal(28, goblin.Hp); // 40 - 3*4
+            Assert.True(vex.Economy.HasSlot(CombatActionSlot.BonusAction));
+            Assert.True(session.TryShove("m1").Success);
+            Assert.False(vex.Economy.HasSlot(CombatActionSlot.BonusAction));
+            Assert.Equal(36, goblin.Hp);
 
-            // Next hero turn: check Mud/Water 2 AP movement cost.
+            // Next hero turn: check Mud/Water 2 MP movement cost.
             session.EndTurn();
             session.EndTurn();
             Assert.Equal("hero_rogue", session.CurrentActorId);
+            int mpBefore = vex.Economy.MoveRemaining;
             CombatActionResult mudMove = session.TryMoveTo(new GridCoord(2, 4));
             Assert.True(mudMove.Success);
-            Assert.Equal(2, mudMove.ApSpent); // 2 AP for Mud
-            Assert.Equal(4, vex.Economy.CurrentAp);
-            Assert.Equal(2, session.GetTileMoveApCost(2, 5)); // Shallow Water = 2 AP
+            Assert.Equal(2, mudMove.ApSpent); // 2 MP for Mud
+            Assert.Equal(mpBefore - 2, vex.Economy.MoveRemaining);
+            Assert.Equal(2, session.GetTileMoveApCost(2, 5)); // Shallow Water = 2 MP
         }
 
         [Fact]
@@ -217,7 +225,6 @@ namespace RealmzCore.Tests
             Assert.True(party.SetFormationRank(kaelenIdx, FormationRank.Mid));
             Assert.Equal(FormationRank.Mid, party.GetFormationRank(kaelenIdx));
 
-            // Normal / PartyAmbush combat enters CombatPhase.Deployment, allowing swap & reposition before StartBattleFromDeployment.
             CombatGrid grid = new CombatGrid(12, 10);
             grid.SetElevation(5, 4, 1); // Forward High Ground unlocked by PartyAmbush deployment zone!
 
@@ -233,7 +240,9 @@ namespace RealmzCore.Tests
                 surpriseMode: CombatInitiativeSurpriseMode.PartyAmbush,
                 startInDeployment: true);
 
+            // Curated compact deployment zone (<= 12 tiles including hero positions + PartyAmbush High Ground)
             Assert.Equal(CombatPhase.Deployment, deploySession.Phase);
+            Assert.InRange(deploySession.DeploymentZoneTiles.Count, 4, 12);
             Assert.Contains(new GridCoord(5, 4), deploySession.DeploymentZoneTiles); // Widened High Ground!
             Assert.False(deploySession.TryMoveTo(new GridCoord(3, 4)).Success); // Cannot execute turn actions before StartBattle
 
@@ -249,7 +258,7 @@ namespace RealmzCore.Tests
             // Start Battle transitions to CombatPhase.Combat!
             Assert.True(deploySession.StartBattleFromDeployment());
             Assert.Equal(CombatPhase.Combat, deploySession.Phase);
-            Assert.True(deploySession.CurrentActor != null && deploySession.CurrentActor.Economy.CurrentAp >= 6);
+            Assert.True(deploySession.CurrentActor != null && deploySession.CurrentActor.Economy.HasSlot(CombatActionSlot.MainAction));
 
             // AMBUSHED IN THE DARK! skips Deployment immediately!
             TacticalCombatSession ambushDark = new TacticalCombatSession(
@@ -263,16 +272,9 @@ namespace RealmzCore.Tests
         }
 
         [Fact]
-        public void SpellApTiers_And_AiMultiActionExecution_WorkEndToEnd()
+        public void OptionAAiSingleMainAction_And_AdvantageDisadvantageAndD20Checks_WorkEndToEnd()
         {
             BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(FindBywaterM1Dir());
-            Assert.Equal(2, CombatWeaponCosts.GetSpellApCost(bundle.Spells[1108])); // Magic Darts
-            Assert.Equal(2, CombatWeaponCosts.GetSpellApCost(bundle.Spells[2105])); // Heal Small Wounds
-            Assert.Equal(3, CombatWeaponCosts.GetSpellApCost(bundle.Spells[1104])); // Flame Hands
-            Assert.Equal(4, CombatWeaponCosts.GetSpellApCost(bundle.Spells[1306])); // Fireball
-            Assert.Equal(4, CombatWeaponCosts.GetSpellApCost(bundle.Spells[3202])); // Daze
-            Assert.Equal(4, CombatWeaponCosts.GetSpellApCost(bundle.Spells[2310])); // Sandman
-
             CombatGrid grid = new CombatGrid(10, 10);
             CombatantState theron = new CombatantState(
                 "h1", "Theron", CombatSide.Hero, new GridCoord(1, 5),
@@ -289,15 +291,59 @@ namespace RealmzCore.Tests
 
             CombatActionResult aiRes = session.ExecutePartyAiTurn();
             Assert.True(aiRes.Success);
-            // Theron casts Fireball (4 AP) AND Magic Darts (2 AP) in 1 turn!
-            Assert.True(session.Log.Count(e => e.ActorId == "h1" && e.ActionType == "CastSpell") == 2);
+            // Option A: Theron uses 1 Main Action to cast Fireball.
+            Assert.Equal(1, session.Log.Count(e => e.ActorId == "h1" && e.ActionType == "CastSpell"));
             Assert.True(ogre.Hp < 50);
 
-            // Monster stationary turn can swing twice (3 AP + 3 AP = 6 AP) when adjacent!
+            // Monster stationary turn uses 1 Main Action per turn when adjacent.
             ogre.Position = new GridCoord(2, 5);
-            int theronHpBefore = theron.Hp;
             session.ExecuteMonsterAiTurn();
-            Assert.True(session.Log.Count(e => e.ActorId == "m1" && e.ActionType == "MeleeAttack") == 2);
+            Assert.Equal(1, session.Log.Count(e => e.ActorId == "m1" && e.ActionType == "MeleeAttack"));
+
+            // Combat Advantage (target Prone) and Disadvantage (ranged threatened in melee)
+            CombatGrid advGrid = new CombatGrid(8, 8);
+            CombatantState hero = new CombatantState("h_adv", "Kaelen", CombatSide.Hero, new GridCoord(2, 2), 20, 20, toHit: 60, rangedDice: "1d6", rangedRange: 5, missileSkill: 60, dexterity: 18);
+            CombatantState foe = new CombatantState("m_adv", "Goblin", CombatSide.Monster, new GridCoord(3, 2), 20, 20, ac: 15, dexterity: 8) { IsProne = true };
+            TacticalCombatSession advSession = new TacticalCombatSession(advGrid, new[] { hero, foe });
+            Assert.Equal(RollAdvantageState.Advantage, advSession.PreviewMeleeAttack("h_adv", "m_adv").AdvantageState);
+            Assert.Equal(RollAdvantageState.Disadvantage, advSession.PreviewRangedAttack("h_adv", "m_adv").AdvantageState);
+        }
+
+        [Fact]
+        public void HauntedQuartersCobblestone_ResolvesRuinsOutskirts_AndD20ChecksWork()
+        {
+            EncounterGeographyInfo hauntedGeo = new EncounterGeographyInfo(
+                EncounterBiomeKind.Ruins,
+                "Haunted Quarters",
+                "Cracked Cobbles",
+                distanceToWater: 8,
+                isOnRoad: true,
+                isCobblestone: true,
+                isDeepForest: false,
+                isNearRuins: true,
+                isNearDungeonEntrance: false,
+                isTownSafeZone: false,
+                probabilityMultiplier: 1.35);
+
+            Assert.Equal(CombatArenaArchetype.RuinsOutskirts, EncounterDirector.ResolveArenaArchetype(hauntedGeo));
+
+            CombatGrid ruinsGrid = new CombatGrid(14, 10);
+            EncounterDirector.ApplyBiomeArenaFeatures(ruinsGrid, hauntedGeo, null, new DeterministicDiceRoller(9UL));
+            Assert.DoesNotContain(ruinsGrid.ArenaLayout!.Features, f => f.ObstacleKind == CombatArenaObstacleKind.SupplyWagon);
+
+            PartyState party = PartyState.FromBundle(BywaterJsonLoader.LoadFromDirectory(FindBywaterM1Dir()));
+            QuickResolveSummary summary = new QuickResolveSummary(true, 100, 40, 2.5, "Overwhelming");
+            EncounterCheckSpec qrSpec = EncounterDirector.BuildQuickResolveCheckSpec(summary, party);
+            Assert.Equal(7, qrSpec.Dc);
+            Assert.Equal("Overwhelming", qrSpec.TierLabel);
+
+            EncounterCheckRollResult nat20 = EncounterDirector.RollQuickResolveCheck(summary, party, new QueuedDiceRoller(20));
+            Assert.True(nat20.Success);
+            Assert.True(nat20.IsNatural20);
+
+            EncounterCheckRollResult nat1 = EncounterDirector.RollQuickResolveCheck(summary, party, new QueuedDiceRoller(1));
+            Assert.False(nat1.Success);
+            Assert.True(nat1.IsNatural1);
         }
     }
 }

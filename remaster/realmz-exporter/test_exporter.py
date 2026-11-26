@@ -369,6 +369,17 @@ class TestAudioExtraction(unittest.TestCase):
         self.assertEqual(mod_bytes[950], 30)  # 30 song positions
         self.assertGreater(len(mod_bytes), 50000)
 
+        # Verify MADG -12 semitone shift: cell 0 has MADG note 46 -> period index 34 (240), not index 46 (120).
+        cell0 = mod_bytes[1084:1088]
+        period0 = ((cell0[0] & 0x0F) << 8) | cell0[1]
+        self.assertEqual(period0, 240)
+
+        # Cell 10 has MADG note 49 -> period index 37 (202), not index 49 (101).
+        cell10_off = 1084 + 10 * 4
+        cell10 = mod_bytes[cell10_off : cell10_off + 4]
+        period10 = ((cell10[0] & 0x0F) << 8) | cell10[1]
+        self.assertEqual(period10, 202)
+
     def test_extracted_audio_manifest_and_assets_on_disk(self) -> None:
         audio_root = Path(r"C:\Users\karti\realmz\remaster\extracted\audio")
         manifest_path = audio_root / "audio_manifest.json"

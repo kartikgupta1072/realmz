@@ -223,8 +223,7 @@ namespace RealmzCore.Tests
             CombatActionResult fireballRes = cleanSession.ExecutePartyAiTurn();
             Assert.True(fireballRes.Success);
             Assert.Contains("Fireball", fireballRes.Message);
-            Assert.Contains("Magic Darts", fireballRes.Message);
-            Assert.Equal(10, mage1.Sp); // Paid 8 SP for Fireball (4 AP) + 2 SP for Magic Darts (2 AP)
+            Assert.Equal(12, mage1.Sp); // Paid 8 SP for 1 Main Action Fireball in Option A
             Assert.Equal(25, knight1.Hp); // Zero friendly fire
 
             // Case 2: Two heroes flank the enemies on all sides so any 3x3 Fireball hits an ally -> Magic Darts!
@@ -248,7 +247,7 @@ namespace RealmzCore.Tests
             CombatActionResult dartsRes = flankedSession.ExecutePartyAiTurn();
             Assert.True(dartsRes.Success);
             Assert.Contains("Magic Darts", dartsRes.Message);
-            Assert.Equal(14, mage2.Sp); // Paid 3 x 2 SP for 3x Magic Darts (3 x 2 AP = 6 AP)
+            Assert.Equal(18, mage2.Sp); // Paid 2 SP for 1 Main Action Magic Darts in Option A
             Assert.Equal(25, heroNorth.Hp);
             Assert.Equal(20, heroSouth.Hp);
         }

@@ -116,7 +116,11 @@ namespace RealmzCore.Combat
                 if (session.Outcome != CombatOutcome.InProgress ||
                     !string.Equals(session.CurrentActorId, actor.Id, StringComparison.Ordinal) ||
                     !actor.IsConscious ||
-                    actor.Economy.CurrentAp <= 0 ||
+                    (actor.Economy.IsUnifiedApMode
+                        ? actor.Economy.CurrentAp <= 0
+                        : (!actor.Economy.HasSlot(CombatActionSlot.MainAction) &&
+                           !actor.Economy.HasSlot(CombatActionSlot.BonusAction) &&
+                           actor.Economy.MoveRemaining <= 0)) ||
                     actor.IsGuarding)
                 {
                     break;
@@ -132,19 +136,36 @@ namespace RealmzCore.Combat
 
                 int apBefore = actor.Economy.CurrentAp;
                 int freeBefore = actor.Economy.FreeMoveTilesRemaining;
+                int moveBefore = actor.Economy.MoveRemaining;
+                bool mainBefore = actor.Economy.HasSlot(CombatActionSlot.MainAction);
+                bool bonusBefore = actor.Economy.HasSlot(CombatActionSlot.BonusAction);
 
-                // If already attacked/cast this turn and only <= 2 AP remains (cannot afford another attack/cast without wasting carryover), bank it cleanly.
+                // If already attacked/cast this turn and only <= 2 AP (or no Main/Bonus action left), finish cleanly.
                 if (tookAttackOrCast)
                 {
-                    bool canFollowUpCast = TryFindBestSpell(session, actor, actor.Position, ignoreActionBudget: false, out _, out _, out _, out _, out _);
-                    bool canFollowUpRanged = actor.RangedRange > 1 && !string.IsNullOrWhiteSpace(actor.RangedDice) &&
-                                             PickBestRangedTarget(session, actor, actor.Position, enemies, ignoreActionBudget: false, out _) != null;
-                    bool canFollowUpMelee = PickBestMeleeTarget(session, actor, actor.Position, enemies, ignoreActionBudget: false, out _) != null;
-                    bool canFollowUpPull = !tookTonguePull && actor.HasSpecialAbility("tongue_pull") &&
-                                           TryPickBestTonguePull(session, actor, enemies, ignoreBudget: false, out _, out _);
-                    if (!canFollowUpCast && !canFollowUpRanged && !canFollowUpMelee && !canFollowUpPull)
+                    if (actor.Economy.IsDnd5eMode)
                     {
-                        break;
+                        bool canFollowUpPull = !tookTonguePull &&
+                                               actor.Economy.HasSlot(CombatActionSlot.BonusAction) &&
+                                               actor.HasSpecialAbility("tongue_pull") &&
+                                               TryPickBestTonguePull(session, actor, enemies, ignoreBudget: false, out _, out _);
+                        if (!actor.Economy.HasSlot(CombatActionSlot.MainAction) && !canFollowUpPull)
+                        {
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        bool canFollowUpCast = TryFindBestSpell(session, actor, actor.Position, ignoreActionBudget: false, out _, out _, out _, out _, out _);
+                        bool canFollowUpRanged = actor.RangedRange > 1 && !string.IsNullOrWhiteSpace(actor.RangedDice) &&
+                                                 PickBestRangedTarget(session, actor, actor.Position, enemies, ignoreActionBudget: false, out _) != null;
+                        bool canFollowUpMelee = PickBestMeleeTarget(session, actor, actor.Position, enemies, ignoreActionBudget: false, out _) != null;
+                        bool canFollowUpPull = !tookTonguePull && actor.HasSpecialAbility("tongue_pull") &&
+                                               TryPickBestTonguePull(session, actor, enemies, ignoreBudget: false, out _, out _);
+                        if (!canFollowUpCast && !canFollowUpRanged && !canFollowUpMelee && !canFollowUpPull)
+                        {
+                            break;
+                        }
                     }
                 }
 
@@ -275,18 +296,37 @@ namespace RealmzCore.Combat
                     continue;
                 }
 
-                if (!tookAttackOrCast && actor.Economy.HasApFor(actor.Economy.EffectiveGuardApCost))
+                // In D&D 5e Option A, if a melee monster could not reach an enemy after its normal Move, Dash once to close the gap.
+                if (actor.Economy.IsDnd5eMode &&
+                    !tookAttackOrCast &&
+                    !actor.PrefersRanged &&
+                    actor.Economy.CanPerformDash &&
+                    MinChebyshevDistance(actor.Position, enemies) > 1)
+                {
+                    CombatActionResult dashRes = session.ExecuteDash();
+                    if (dashRes.Success)
+                    {
+                        finalResult = dashRes;
+                        continue;
+                    }
+                }
+
+                if (!tookAttackOrCast && actor.Economy.HasSlot(actor.Economy.GuardSlot))
                 {
                     finalResult = session.GuardOverwatch();
                     break;
                 }
 
-                if (moved && actor.Economy.CurrentAp != apBefore)
+                if (moved && (actor.Economy.CurrentAp != apBefore || actor.Economy.MoveRemaining != moveBefore))
                 {
                     continue;
                 }
 
-                if (actor.Economy.CurrentAp == apBefore && actor.Economy.FreeMoveTilesRemaining == freeBefore)
+                if (actor.Economy.CurrentAp == apBefore &&
+                    actor.Economy.FreeMoveTilesRemaining == freeBefore &&
+                    actor.Economy.MoveRemaining == moveBefore &&
+                    actor.Economy.HasSlot(CombatActionSlot.MainAction) == mainBefore &&
+                    actor.Economy.HasSlot(CombatActionSlot.BonusAction) == bonusBefore)
                 {
                     break;
                 }
@@ -708,7 +748,9 @@ namespace RealmzCore.Combat
                         if (!ignoreBudget)
                         {
                             TacticalSpellPreview spCheck = session.PreviewSpellInternal(actor.Id, spellKey, spellCenter, tile.Coord, ignoreActionBudget: true);
-                            if (tile.PathCost + spCheck.ApCost > actor.Economy.CurrentAp)
+                            if (actor.Economy.IsUnifiedApMode
+                                ? (tile.PathCost + spCheck.ApCost > actor.Economy.CurrentAp)
+                                : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasSlot(CombatActionSlot.MainAction)))
                             {
                                 continue;
                             }
@@ -737,7 +779,10 @@ namespace RealmzCore.Combat
                         enemies,
                         ignoreActionBudget: true,
                         out int rangedScore);
-                    if (rangedTarget != null && (ignoreBudget || tile.PathCost + actor.RangedApCost <= actor.Economy.CurrentAp))
+                    if (rangedTarget != null &&
+                        (ignoreBudget || (actor.Economy.IsUnifiedApMode
+                            ? tile.PathCost + actor.RangedApCost <= actor.Economy.CurrentAp
+                            : (tile.PathCost <= actor.Economy.MoveRemaining && actor.Economy.HasSlot(CombatActionSlot.MainAction)))))
                     {
                         int totalScore = rangedScore + elevBonus + aooPenalty - surfacePenalty - tile.PathCost;
                         if (totalScore > bestScore)
@@ -825,7 +870,9 @@ namespace RealmzCore.Combat
                     continue;
                 }
 
-                if (requireApForShot && tile.PathCost + actor.RangedApCost > actor.Economy.CurrentAp)
+                if (requireApForShot && (actor.Economy.IsUnifiedApMode
+                    ? tile.PathCost + actor.RangedApCost > actor.Economy.CurrentAp
+                    : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasSlot(CombatActionSlot.MainAction))))
                 {
                     continue;
                 }
@@ -940,7 +987,9 @@ namespace RealmzCore.Combat
             for (int r = 0; r < reachable.Count; r++)
             {
                 ReachableTileInfo tile = reachable[r];
-                if (!ignoreBudget && tile.PathCost + actor.MeleeApCost > actor.Economy.CurrentAp)
+                if (!ignoreBudget && (actor.Economy.IsUnifiedApMode
+                    ? tile.PathCost + actor.MeleeApCost > actor.Economy.CurrentAp
+                    : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasSlot(CombatActionSlot.MainAction))))
                 {
                     continue;
                 }
@@ -994,7 +1043,7 @@ namespace RealmzCore.Combat
             bestTarget = null;
             bestPullDest = actor.Position;
 
-            if (!ignoreBudget && !actor.Economy.HasApFor(CombatActionEconomy.DefaultShoveApCost))
+            if (!ignoreBudget && !actor.Economy.HasSlot(CombatActionSlot.BonusAction))
             {
                 return false;
             }

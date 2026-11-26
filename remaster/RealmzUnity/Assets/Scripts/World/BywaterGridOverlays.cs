@@ -206,6 +206,8 @@ namespace Realmz.World
         private Texture2D _pathDotTexture;
         private Material _aoeFillMaterial;
         private Texture2D _outlineFillTexture;
+        private Material _losBlockerXMaterial;
+        private Texture2D _losBlockerXTexture;
         private Material _fallbackOverlayMaterial;
         private float _intentScrollOffset;
         private float _intentSpellScrollOffset;
@@ -1168,38 +1170,61 @@ namespace Realmz.World
             TrimLayer(_combatHoverLayer);
         }
 
-        public void SetLosPreview(LosResult los, GridCoord from, GridCoord to)
+        public void SetLosPreview(LosResult los, GridCoord from, GridCoord to, bool hasDisadvantagePenalty = false)
         {
             EnsureLayers();
             _losLayer.ActiveCount = 0;
 
             if (los != null)
             {
-                Color rayColor = los.Kind == LosKind.Clear
-                    ? LosClearColor
-                    : (los.Kind == LosKind.PartialCover ? LosPartialColor : LosBlockedColor);
+                bool blocked = los.Kind == LosKind.Blocked;
+                bool penalized = !blocked && (los.Kind == LosKind.PartialCover || hasDisadvantagePenalty);
+                Color rayColor = blocked
+                    ? LosBlockedColor
+                    : (penalized ? LosPartialColor : LosClearColor);
 
-                IReadOnlyList<GridCoord> cells = los.RayCells;
-                if (cells != null)
+                GridCoord endCoord = blocked && los.BlockedBy.HasValue ? los.BlockedBy.Value : to;
+                Vector2 start2 = new Vector2(from.X + 0.5f, -(from.Y + 0.5f));
+                Vector2 end2 = new Vector2(endCoord.X + 0.5f, -(endCoord.Y + 0.5f));
+                float segLen = Vector2.Distance(start2, end2);
+
+                Material dotMat = GetOrCreatePathDotMaterial();
+                if (segLen > 0.2f)
                 {
-                    for (int i = 0; i < cells.Count; i++)
+                    const float dotSpacing = 0.42f;
+                    int dotCount = Mathf.Clamp(Mathf.FloorToInt(segLen / dotSpacing), 2, 42);
+                    for (int i = 1; i <= dotCount; i++)
                     {
-                        GridCoord c = cells[i];
-                        if (c == from)
-                        {
-                            continue;
-                        }
-
-                        float y = GetTileElevation(c.X, c.Y) + 0.025f + 0.012f;
-                        PlaceQuad(_losLayer, c.X + 0.5f, y, -(c.Y + 0.5f), 0.34f, 0.34f, rayColor);
+                        float u = i / (float)dotCount;
+                        float px = Mathf.Lerp(start2.x, end2.x, u);
+                        float pz = Mathf.Lerp(start2.y, end2.y, u);
+                        int gx = Mathf.FloorToInt(px);
+                        int gy = Mathf.FloorToInt(-pz);
+                        float py = GetTileElevation(gx, gy) + 0.025f + 0.015f;
+                        PlaceCustomQuad(
+                            _losLayer,
+                            new Vector3(px, py, pz),
+                            0.24f,
+                            0.24f,
+                            0f,
+                            dotMat,
+                            rayColor);
                     }
                 }
 
                 if (los.BlockedBy.HasValue)
                 {
                     GridCoord blocker = los.BlockedBy.Value;
-                    float blockerY = GetTileElevation(blocker.X, blocker.Y) + 0.025f + 0.013f;
-                    PlaceQuad(_losLayer, blocker.X + 0.5f, blockerY, -(blocker.Y + 0.5f), 0.80f, 0.80f, LosBlockedColor);
+                    float blockerY = GetTileElevation(blocker.X, blocker.Y) + 0.025f + 0.017f;
+                    Vector3 blockerPos = new Vector3(blocker.X + 0.5f, blockerY, -(blocker.Y + 0.5f));
+                    PlaceCustomQuad(
+                        _losLayer,
+                        blockerPos,
+                        0.82f,
+                        0.82f,
+                        0f,
+                        GetOrCreateLosBlockerXMaterial(),
+                        LosBlockedColor);
                 }
             }
 
@@ -2023,6 +2048,46 @@ namespace Realmz.World
             _outlineFillTexture = BuildOutlineFillTexture();
             _aoeFillMaterial = CreateTransparentOverlayMaterial("GridOutlineFill", _outlineFillTexture, Color.white);
             return _aoeFillMaterial;
+        }
+
+        private Material GetOrCreateLosBlockerXMaterial()
+        {
+            if (_losBlockerXMaterial != null)
+            {
+                return _losBlockerXMaterial;
+            }
+
+            const int size = 32;
+            Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                name = "GridLosBlockerX",
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave
+            };
+
+            Color32[] pixels = new Color32[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    int d1 = Mathf.Abs(x - y);
+                    int d2 = Mathf.Abs((size - 1 - x) - y);
+                    bool inMargin = x >= 4 && x <= size - 5 && y >= 4 && y <= size - 5;
+                    bool onCross = inMargin && (d1 <= 2 || d2 <= 2);
+                    bool onBorder = (x <= 1 || x >= size - 2 || y <= 1 || y >= size - 2) &&
+                                    ((x + y) & 1) == 0;
+                    pixels[y * size + x] = (onCross || onBorder)
+                        ? new Color32(255, 255, 255, 245)
+                        : new Color32(0, 0, 0, 0);
+                }
+            }
+
+            tex.SetPixels32(pixels);
+            tex.Apply(false, true);
+            _losBlockerXTexture = tex;
+            _losBlockerXMaterial = CreateTransparentOverlayMaterial("GridLosBlockerX", tex, Color.white);
+            return _losBlockerXMaterial;
         }
 
         private Material GetOrCreateFallbackOverlayMaterial()

@@ -562,6 +562,58 @@ namespace Realmz.World
             spriteTf.localRotation = Quaternion.Euler(0f, 0f, tiltDeg);
         }
 
+        public bool TryGetScreenBounds(Camera cam, out Rect screenRect)
+        {
+            screenRect = default;
+            if (cam == null || _spriteRenderer == null || !_spriteRenderer.gameObject.activeInHierarchy)
+            {
+                return false;
+            }
+
+            Bounds b = _spriteRenderer.bounds;
+            if (b.size.sqrMagnitude <= 0.0001f)
+            {
+                return false;
+            }
+
+            Vector3 c = b.center;
+            Vector3 e = b.extents;
+            float minX = float.MaxValue;
+            float minY = float.MaxValue;
+            float maxX = float.MinValue;
+            float maxY = float.MinValue;
+            bool anyInFront = false;
+
+            for (int sx = -1; sx <= 1; sx += 2)
+            {
+                for (int sy = -1; sy <= 1; sy += 2)
+                {
+                    for (int sz = -1; sz <= 1; sz += 2)
+                    {
+                        Vector3 p = new Vector3(c.x + e.x * sx, c.y + e.y * sy, c.z + e.z * sz);
+                        Vector3 sp = cam.WorldToScreenPoint(p);
+                        if (sp.z > 0.05f)
+                        {
+                            anyInFront = true;
+                            if (sp.x < minX) minX = sp.x;
+                            if (sp.x > maxX) maxX = sp.x;
+                            if (sp.y < minY) minY = sp.y;
+                            if (sp.y > maxY) maxY = sp.y;
+                        }
+                    }
+                }
+            }
+
+            if (!anyInFront || maxX <= minX || maxY <= minY)
+            {
+                return false;
+            }
+
+            // Slight generous padding so clicking weapons/heads feels crisp.
+            screenRect = Rect.MinMaxRect(minX - 6f, minY - 4f, maxX + 6f, maxY + 6f);
+            return true;
+        }
+
         public void SetWorldPosition(Vector3 pos)
         {
             StopMoveCoroutine();
@@ -1029,8 +1081,11 @@ namespace Realmz.World
                     dustTimer += dt;
 
                     float t = Mathf.Clamp01(elapsed / stepDuration);
+                    float moveT = points.Count == 1 && stepDuration <= 0.12f
+                        ? (1f - (1f - t) * (1f - t))
+                        : t;
                     // Fix #3: keep root transform.position flush on ground elevation so UnderRing and ContactShadow never lift.
-                    transform.position = Vector3.Lerp(start, end, t);
+                    transform.position = Vector3.Lerp(start, end, moveT);
 
                     float stridePhase = totalElapsed * 15.0f;
                     if (_spriteBillboardTransform != null && _lungeCoroutine == null)

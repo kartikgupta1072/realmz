@@ -451,13 +451,10 @@ namespace RealmzCore.Tests
         // =====================================================================
 
         [Fact]
-        public void Locked6ApBase_RemainsFixedAtSixWithMaxCarryoverTwo()
+        public void OptionADndEconomy_RemainsCleanAcrossTurnsDespiteAgilityOrFatigue()
         {
-            Assert.Equal(6, CombatActionEconomy.DefaultBaseApPerTurn);
-            Assert.Equal(2, CombatActionEconomy.DefaultMaxCarryoverAp);
-
-            HeroPresetData slowPreset = new HeroPresetData("h_slow", "Sluggish", archetype: "Knight", hp: 25, maxHp: 25, agility: 4);
-            HeroPresetData fastPreset = new HeroPresetData("h_fast", "Quick", archetype: "Rogue", hp: 25, maxHp: 25, agility: 24);
+            HeroPresetData slowPreset = new HeroPresetData("h_slow", "Sluggish", archetype: "Knight", hp: 25, maxHp: 25, agility: 4, movementMax: 5);
+            HeroPresetData fastPreset = new HeroPresetData("h_fast", "Quick", archetype: "Rogue", hp: 25, maxHp: 25, agility: 24, movementMax: 7);
             PartyMemberState slow = new PartyMemberState(slowPreset);
             slow.ExhaustionStacks = 5;
             PartyMemberState fast = new PartyMemberState(fastPreset);
@@ -469,20 +466,23 @@ namespace RealmzCore.Tests
             TacticalCombatSession session = new TacticalCombatSession(new CombatGrid(10, 10), new[] { cSlow, cFast, dummy });
 
             Assert.Equal("h_fast", session.CurrentActorId);
-            Assert.Equal(6, cFast.Economy.BaseApPerTurn);
-            Assert.Equal(6, cFast.Economy.CurrentAp);
+            Assert.True(cFast.Economy.IsDnd5eMode);
+            Assert.Equal(7, cFast.Economy.MoveBudget);
+            Assert.True(cFast.Economy.HasSlot(CombatActionSlot.MainAction));
+            Assert.True(cFast.Economy.HasSlot(CombatActionSlot.BonusAction));
             session.EndTurn();
 
             Assert.Equal("h_slow", session.CurrentActorId);
-            Assert.Equal(6, cSlow.Economy.BaseApPerTurn);
-            Assert.Equal(6, cSlow.Economy.CurrentAp);
+            Assert.Equal(5, cSlow.Economy.MoveBudget);
+            Assert.True(cSlow.Economy.HasSlot(CombatActionSlot.MainAction));
+            Assert.True(cSlow.Economy.HasSlot(CombatActionSlot.BonusAction));
             session.EndTurn();
             session.EndTurn(); // dummy
 
-            // Carryover is strictly capped at 2 AP -> 6 + 2 = 8 AP on Round 2.
             Assert.Equal(2, session.RoundNumber);
-            Assert.Equal(8, cFast.Economy.MaxAp);
-            Assert.Equal(8, cFast.Economy.CurrentAp);
+            Assert.Equal(7, cFast.Economy.MoveRemaining);
+            Assert.True(cFast.Economy.HasSlot(CombatActionSlot.MainAction));
+            Assert.True(cFast.Economy.HasSlot(CombatActionSlot.BonusAction));
         }
 
         [Fact]
@@ -583,6 +583,10 @@ namespace RealmzCore.Tests
             Assert.True(hit1.Success);
             Assert.False(crate.IsDestroyed);
             Assert.Equal(2, crate.Hp);
+
+            // End hero and orc turns to refresh hero's Main Action cleanly in Option A.
+            session.EndTurn();
+            session.EndTurn();
 
             CombatActionResult hit2 = session.TryAttackProp("crate1");
             Assert.True(hit2.Success);

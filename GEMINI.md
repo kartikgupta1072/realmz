@@ -7,10 +7,11 @@ You are working inside Kartik Gupta's dedicated gamedev workspace for **Realmz H
 ## 1. Locked `#direct` Game Design & Architectural Invariants
 
 1. **Creative North Star:** **Tactical Survival RPG** - classic *Realmz* Option B exploration encounters where geography, Day/Night torchlight cycles, biome/water ecology, party scouting, finite bandages/torches, and weather/resource tension make every journey meaningful.
-2. **Fixed 6-AP Combat Contract:**
-   - Base turn AP is strictly fixed at `BaseApPerTurn = 6` with zero Agility or Fatigue AP modifiers (`Agility` governs Initiative, Dodge AC, Ranged Hit, Scouting/Evade).
-   - Carryover is capped at `MaxCarryoverAp = 2` (max `8` without gear) via `CombatActionEconomy` (`remaster/RealmzCore/Rules/CombatRules.cs`).
-   - Only Equipment Sets and gear modify AP or Free Move (`Scout's Leather` `+1 FreeMove` / `+1 Max AP`, `Iron Vanguard` `+2 AC` / `1 AP Guard` / `+1 Max AP`).
+2. **D&D 5e Option A Split Combat Contract:**
+   - Every conscious unit gets separate `MP` movement (`GetDndBaseMoveBudget()` = `4..10` tiles; Mud/Water = `2 MP`), **`1 Main Action`** (Melee, Ranged, Spells, Dash, Overwatch/Guard), **`1 Bonus Action`** (Potion, Torch, Shove, Iron Vanguard Guard), and **`1 Reaction`** (Opportunity Attack / Overwatch) via `CombatActionEconomy` (`ResetDndTurn` in `remaster/RealmzCore/Rules/CombatRules.cs`).
+   - `Dash` (`[D]` / `ExecuteDash()`) spends `1 Main Action` to add `+BaseMoveBudget MP`.
+   - `Advantage` / `Disadvantage` (`RollAdvantageState` in `Dice.cs`, opposing sources cancel to `Normal`) rolls 2 dice for combat attacks and BG3-style `d20` exploration skill checks (`Evade [DEX DC X]` & `Quick Resolve [Tier | DC X]`).
+   - Equipment Sets modify `MP` / slot efficiency cleanly (`Scout's Leather` `+2 MP`, `Iron Vanguard` `+2 AC` + upgrades `Guard/Overwatch` to `Bonus Action`).
 3. **Victory Screen Contract:** Option 2 Pure Selectable Loot (`4`-across compact cards, default selected, inline stats, green up-arrow `Hero` class-valid tags, gold up-arrow & heart-cross symbols beside `Lv`, Gold Coins icon, zero `MVP`, manual equip in `[P]`).
 4. **Core Architecture (`RealmzCore`):** `C:\Users\karti\realmz\remaster\RealmzCore\RealmzCore.csproj` (`netstandard2.1`) MUST maintain strictly ZERO `UnityEngine` or external NuGet dependencies. All Unity gameplay glue communicates with the compiled Release DLL at `remaster/RealmzUnity/Assets/Plugins/RealmzCore/RealmzCore.dll`.
 5. **Standalone Player Safety:** Keep strictly one `MonoBehaviour` per `.cs` file named identically to its class so Windows Standalone builds (`Realmz.exe`) never hit `level0` deserialization corruption.

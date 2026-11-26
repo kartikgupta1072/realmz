@@ -885,10 +885,9 @@ namespace RealmzCore.Tests
             Assert.Equal(new GridCoord(5, 4), goblin.Position);
             Assert.Equal(16, goblin.Hp);
             Assert.True(goblin.IsProne);
-            Assert.Equal(2, res.ApSpent);
-            Assert.Equal(4, hero.Economy.CurrentAp);
-            Assert.True(hero.Economy.HasApFor(3));
-            Assert.True(hero.Economy.HasStandardAction);
+            Assert.False(hero.Economy.HasSlot(CombatActionSlot.BonusAction));
+            Assert.True(hero.Economy.HasSlot(CombatActionSlot.MainAction));
+            Assert.Equal(hero.GetDndTotalMoveBudget(), hero.Economy.MoveRemaining);
         }
 
         [Fact]

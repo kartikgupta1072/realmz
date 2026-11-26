@@ -31,7 +31,7 @@ namespace Realmz.Game
         private static readonly float[] CombatMoveStepDurations = { 0.25f, 0.125f, 0.0f };
         private static readonly float[] CombatAttackDurations = { 0.38f, 0.19f, 0.0f };
         private static readonly string[] SpeedLabels = { "1x", "2x", "Instant" };
-        private const float ExploreStepDurationSeconds = 0.11f;
+        private const float ExploreStepDurationSeconds = 0.085f;
         private const float CampSemicircleRadius = 1.15f;
         private const int MaxTrailingPartyViews = 6;
         private const int MaxSavedLogLines = 40;
@@ -146,12 +146,16 @@ namespace Realmz.Game
         private readonly List<BywaterUnitView> _nameplateStaggerViewsScratch = new List<BywaterUnitView>(16);
         private bool _wasTempleOpen;
         private CartographyNpcPlacement? _pendingNpcInteraction;
+        private MapPointOfInterest _pendingPoiInteraction;
         private readonly List<Vector3> _combatPathWorldScratch = new List<Vector3>(16);
         private readonly List<GridCoord> _aiPathStepsScratch = new List<GridCoord>(32);
         private readonly AStarPathfinder _combatAiPathfinder = new AStarPathfinder(16, 16);
         private float _keyboardStepCooldown;
         private int _lastHeldMoveDx;
         private int _lastHeldMoveDy;
+        private int _bufferedExploreDx;
+        private int _bufferedExploreDy;
+        private bool _hasBufferedExploreStep;
         private EventSystem _cachedEventSystem;
         private bool _hasCachedMouseRay;
         private Vector2 _cachedRayMousePos;
@@ -402,7 +406,12 @@ namespace Realmz.Game
 
             GridCoord worldCoord;
             bool rayHit;
-            if (needRaycast)
+            if (_isInCombat && TryPickCombatUnitUnderScreenPoint(mousePos, out GridCoord pickedUnitWorld))
+            {
+                rayHit = true;
+                worldCoord = pickedUnitWorld;
+            }
+            else if (needRaycast)
             {
                 rayHit = cameraRig.ScreenPointToGridCoord(mousePos, out worldCoord);
                 _hasCachedMouseRay = true;
@@ -892,7 +901,9 @@ namespace Realmz.Game
             _pendingQuickResolveZoneKey = zoneKey;
             _pendingQuickResolveZone = zone;
 
-            hudController.ShowEncounterInterceptModal(report, canQr, qrRatio);
+            EncounterCheckSpec evadeSpec = EncounterDirector.BuildEvadeCheckSpec(report, ExploreSession.Party);
+            EncounterCheckSpec qrSpec = canQr ? EncounterDirector.BuildQuickResolveCheckSpec(qrSummary, ExploreSession.Party) : null;
+            hudController.ShowEncounterInterceptModal(report, canQr, qrRatio, evadeSpec, qrSpec);
         }
 
         private void ResolveSceneReferences()
@@ -1009,6 +1020,7 @@ namespace Realmz.Game
 
             hudController.OnCombatModeSelected += HandleCombatModeSelected;
             hudController.OnUndoMoveRequested += HandleUndoMove;
+            hudController.OnDashRequested += HandleDash;
             hudController.OnGuardRequested += HandleGuard;
             hudController.OnEndTurnRequested += HandleEndTurn;
             hudController.OnCycleSpeedRequested += HandleCycleSpeed;
@@ -1257,6 +1269,12 @@ namespace Realmz.Game
                         return;
                     }
 
+                    if (kb.dKey.wasPressedThisFrame)
+                    {
+                        HandleDash();
+                        return;
+                    }
+
                     if (kb.gKey.wasPressedThisFrame)
                     {
                         HandleGuard();
@@ -1370,12 +1388,15 @@ namespace Realmz.Game
                 _lastHeldMoveDx = dx;
                 _lastHeldMoveDy = dy;
 
-                if (anyPressedThisFrame || dirChanged)
+                if (_keyboardStepCooldown > 0f)
                 {
-                    _keyboardStepCooldown = 0f;
-                }
-                else
-                {
+                    if (anyPressedThisFrame || dirChanged)
+                    {
+                        _bufferedExploreDx = dx;
+                        _bufferedExploreDy = dy;
+                        _hasBufferedExploreStep = true;
+                    }
+
                     _keyboardStepCooldown -= Time.unscaledDeltaTime;
                     if (_keyboardStepCooldown > 0f)
                     {
@@ -1383,25 +1404,46 @@ namespace Realmz.Game
                     }
                 }
 
-                _keyboardStepCooldown = ExploreStepDurationSeconds;
-                _pendingNpcInteraction = null;
-                if (_isCampActive)
+                if (_hasBufferedExploreStep)
                 {
-                    ExitCampMode();
+                    dx = _bufferedExploreDx;
+                    dy = _bufferedExploreDy;
+                    _hasBufferedExploreStep = false;
+                }
+            }
+            else if (_hasBufferedExploreStep)
+            {
+                _keyboardStepCooldown -= Time.unscaledDeltaTime;
+                if (_keyboardStepCooldown > 0f)
+                {
+                    return;
                 }
 
-                StopExploreWalkCoroutine();
-                GridCoord nextTile = new GridCoord(ExploreSession.Position.X + dx, ExploreSession.Position.Y + dy);
-                if (ExecuteSingleExploreStep(nextTile, animate: true, out ExplorationStepResult stepRes))
-                {
-                    HandleExplorationStepHalt(stepRes);
-                }
+                dx = _bufferedExploreDx;
+                dy = _bufferedExploreDy;
+                _hasBufferedExploreStep = false;
             }
             else
             {
                 _keyboardStepCooldown = 0f;
                 _lastHeldMoveDx = 0;
                 _lastHeldMoveDy = 0;
+                return;
+            }
+
+            _keyboardStepCooldown = ExploreStepDurationSeconds;
+            _pendingNpcInteraction = null;
+            _pendingPoiInteraction = null;
+            if (_isCampActive)
+            {
+                ExitCampMode();
+            }
+
+            StopExploreWalkCoroutine();
+            GridCoord nextTile = new GridCoord(ExploreSession.Position.X + dx, ExploreSession.Position.Y + dy);
+            if (ExecuteSingleExploreStep(nextTile, animate: true, out ExplorationStepResult stepRes))
+            {
+                HandleExplorationStepHalt(stepRes);
             }
         }
 
@@ -1537,8 +1579,21 @@ namespace Realmz.Game
                 return;
             }
 
-            string suite = ExploreSession.CurrentMap.IsDungeon ? "dungeon" : "outdoor";
-            audioDirector.PlayMusic(suite, 0.9f);
+            string suite;
+            if (ExploreSession.CurrentMap.IsDungeon)
+            {
+                suite = "dungeon";
+            }
+            else
+            {
+                EncounterGeographyInfo geo = ExploreSession.GetCurrentGeography();
+                suite = geo != null && geo.IsTownSafeZone ? "treasure" : "outdoor";
+            }
+
+            if (!string.Equals(audioDirector.CurrentMusicKey, suite, StringComparison.OrdinalIgnoreCase))
+            {
+                audioDirector.PlayMusic(suite, 0.9f);
+            }
         }
 
         private void EnsureExploreHeroViews()
@@ -1819,6 +1874,30 @@ namespace Realmz.Game
             }
 
             _pendingNpcInteraction = null;
+            _pendingPoiInteraction = null;
+
+            if (TryFindClickableExplorePoi(map, worldCoord, out MapPointOfInterest clickedPoi))
+            {
+                if (ExploreSession.Position.ChebyshevDistance(clickedPoi.Coord) <= 1)
+                {
+                    HandlePoiArrival(clickedPoi);
+                    return;
+                }
+
+                if (map.IsPassable(clickedPoi.X, clickedPoi.Y, ExploreSession.Party.HasBoat))
+                {
+                    _pendingPoiInteraction = clickedPoi;
+                    StartWalkToExploreTile(clickedPoi.Coord);
+                    return;
+                }
+
+                if (TryFindAdjacentPassableTile(map, ExploreSession.Position, clickedPoi.Coord, ExploreSession.Party.HasBoat, out GridCoord poiApproach))
+                {
+                    _pendingPoiInteraction = clickedPoi;
+                    StartWalkToExploreTile(poiApproach);
+                    return;
+                }
+            }
 
             if (worldCoord == ExploreSession.Position)
             {
@@ -1826,6 +1905,34 @@ namespace Realmz.Game
             }
 
             StartWalkToExploreTile(worldCoord);
+        }
+
+        private static bool TryFindClickableExplorePoi(TileMapData map, GridCoord clickedCoord, out MapPointOfInterest matchedPoi)
+        {
+            matchedPoi = null;
+            if (map == null || map.PointsOfInterest == null)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < map.PointsOfInterest.Count; i++)
+            {
+                MapPointOfInterest poi = map.PointsOfInterest[i];
+                if (poi == null) continue;
+                string kind = (poi.Kind ?? string.Empty).Trim().ToLowerInvariant();
+                if (kind != "shop" && kind != "temple" && kind != "tavern")
+                {
+                    continue;
+                }
+
+                if (poi.Coord.ChebyshevDistance(clickedCoord) <= 1)
+                {
+                    matchedPoi = poi;
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void StartWalkToExploreTile(GridCoord destCoord)
@@ -1922,6 +2029,15 @@ namespace Realmz.Game
             _exploreWalkCoroutine = null;
             _exploreHoverDirty = true;
             TryCompletePendingNpcInteraction();
+            if (_pendingPoiInteraction != null && ExploreSession != null)
+            {
+                MapPointOfInterest arrivedPoi = _pendingPoiInteraction;
+                _pendingPoiInteraction = null;
+                if (ExploreSession.Position.ChebyshevDistance(arrivedPoi.Coord) <= 1)
+                {
+                    HandlePoiArrival(arrivedPoi);
+                }
+            }
         }
 
         private bool ExecuteSingleExploreStep(GridCoord nextTile, bool animate, out ExplorationStepResult stepRes, bool markHoverDirty = true)
@@ -1955,7 +2071,7 @@ namespace Realmz.Game
             }
 
             if (audioDirector != null &&
-                string.Equals(audioDirector.CurrentMusicKey, "temple", StringComparison.OrdinalIgnoreCase))
+                !string.Equals(audioDirector.CurrentMusicKey, "battle", StringComparison.OrdinalIgnoreCase))
             {
                 PlayExploreMapMusic();
             }
@@ -2190,7 +2306,9 @@ namespace Realmz.Game
                         _pendingQuickResolveTitle = $"{scoutingReport.Geography.LocationLabel} Encounter";
                         _pendingQuickResolveZoneKey = zoneKey;
                         _pendingQuickResolveZone = zone;
-                        hudController.ShowEncounterInterceptModal(scoutingReport, canQr, qrRatioText);
+                        EncounterCheckSpec evadeSpec = EncounterDirector.BuildEvadeCheckSpec(scoutingReport, ExploreSession.Party);
+                        EncounterCheckSpec qrSpec = canQr ? EncounterDirector.BuildQuickResolveCheckSpec(qrSummary, ExploreSession.Party) : null;
+                        hudController.ShowEncounterInterceptModal(scoutingReport, canQr, qrRatioText, evadeSpec, qrSpec);
                         if (scoutingReport.IsAmbushedInDark)
                         {
                             audioDirector?.PlaySpell("fire");
@@ -3248,6 +3366,7 @@ namespace Realmz.Game
                 {
                     _selectedDeploymentHeroId = clicked.Id;
                     audioDirector?.PlayUiClick();
+                    SyncAllCombatUnitViews();
                     RefreshDeploymentOverlays();
                     hudController?.ShowToast($"Selected {clicked.Name}. Click another hero to swap or a cyan tile to move.", 2.2f);
                 }
@@ -3257,6 +3376,7 @@ namespace Realmz.Game
             if (clicked != null && string.Equals(clicked.Id, _selectedDeploymentHeroId, StringComparison.Ordinal))
             {
                 _selectedDeploymentHeroId = null;
+                SyncAllCombatUnitViews();
                 RefreshDeploymentOverlays();
                 return;
             }
@@ -3277,6 +3397,7 @@ namespace Realmz.Game
             {
                 _selectedDeploymentHeroId = clicked.Id;
                 audioDirector?.PlayUiClick();
+                SyncAllCombatUnitViews();
                 RefreshDeploymentOverlays();
                 hudController?.ShowToast($"Selected {clicked.Name}.", 1.8f);
             }
@@ -3466,6 +3587,7 @@ namespace Realmz.Game
                 return;
             }
 
+            bool inDeployment = CombatSession.Phase == CombatPhase.Deployment;
             string currentId = CombatSession.CurrentActorId;
             for (int i = 0; i < CombatSession.Combatants.Count; i++)
             {
@@ -3479,7 +3601,10 @@ namespace Realmz.Game
                 string badge = c.IsProne
                     ? "PRONE"
                     : (conds.Count > 0 ? conds[0].DisplayName : (c.IsGuarding ? "GUARD" : string.Empty));
-                view.UpdateStats(c.Hp, c.MaxHp, c.Sp, c.MaxSp, badge, c.Id == currentId && c.IsAlive, c.IsAlive);
+                bool isHighlighted = inDeployment
+                    ? (!string.IsNullOrEmpty(_selectedDeploymentHeroId) && string.Equals(c.Id, _selectedDeploymentHeroId, StringComparison.Ordinal) && c.IsAlive)
+                    : (c.Id == currentId && c.IsAlive);
+                view.UpdateStats(c.Hp, c.MaxHp, c.Sp, c.MaxSp, badge, isHighlighted, c.IsAlive);
                 view.UpdateConditionBadgeIcon(ResolveUnitConditionBadgeSprite(c));
             }
         }
@@ -3957,6 +4082,62 @@ namespace Realmz.Game
             }
         }
 
+        private bool TryPickCombatUnitUnderScreenPoint(Vector2 screenPos, out GridCoord worldCoord)
+        {
+            worldCoord = default;
+            if (CombatSession == null || cameraRig == null)
+            {
+                return false;
+            }
+
+            Camera cam = cameraRig.GetComponentInChildren<Camera>();
+            if (cam == null)
+            {
+                cam = Camera.main;
+            }
+            if (cam == null)
+            {
+                return false;
+            }
+
+            float closestDistSq = float.MaxValue;
+            GridCoord bestCoord = default;
+            bool found = false;
+
+            for (int i = 0; i < CombatSession.Combatants.Count; i++)
+            {
+                CombatantState c = CombatSession.Combatants[i];
+                if (c == null || !c.IsAlive)
+                {
+                    continue;
+                }
+
+                if (!_combatUnitViews.TryGetValue(c.Id, out BywaterUnitView view) || view == null)
+                {
+                    continue;
+                }
+
+                if (view.TryGetScreenBounds(cam, out Rect rect) && rect.Contains(screenPos))
+                {
+                    float distSq = (view.transform.position - cam.transform.position).sqrMagnitude;
+                    if (distSq < closestDistSq)
+                    {
+                        closestDistSq = distSq;
+                        bestCoord = LocalToWorld(c.Position);
+                        found = true;
+                    }
+                }
+            }
+
+            if (found)
+            {
+                worldCoord = bestCoord;
+                return true;
+            }
+
+            return false;
+        }
+
         private void UpdateCombatInput(GridCoord worldCoord, bool leftClick)
         {
             if (CombatSession == null || CombatSession.Outcome != CombatOutcome.InProgress)
@@ -3988,7 +4169,7 @@ namespace Realmz.Game
                             : (hoverUnit.Id == _selectedDeploymentHeroId ? "Currently selected. Click to deselect." : "Click to swap hero positions.");
                         hudController?.SetCombatHoverPreview(
                             $"{hoverUnit.Name} ({hoverUnit.FormationRank} Rank)",
-                            $"HP {hoverUnit.Hp}/{hoverUnit.MaxHp} | AC {hoverUnit.EffectiveAc} | 6 AP\n{hint}");
+                            $"HP {hoverUnit.Hp}/{hoverUnit.MaxHp} | AC {hoverUnit.EffectiveAc} | {hoverUnit.Economy.MoveBudget} MP\n{hint}");
                     }
                     else if (CombatSession.IsValidDeploymentTile(deployLocal))
                     {
@@ -4326,11 +4507,6 @@ namespace Realmz.Game
                  _activeCombatMode == CombatActionMode.Shove))
             {
                 gridOverlays?.SetHoveredAttackTarget(LocalToWorld(hoveredUnit.Position));
-                if (!_showAllEnemyIntentArcs && !_isHoveringHotbarUi)
-                {
-                    ShowSingleEnemyIntentArc(hoveredUnit);
-                }
-                hoveredEnemyIntentLine = FormatEnemyIntentSummary(hoveredUnit);
             }
 
             switch (_activeCombatMode)
@@ -4339,24 +4515,24 @@ namespace Realmz.Game
                 {
                     if (hoveredUnit != null && hoveredUnit.Side == CombatSide.Monster)
                     {
-                        bool canMeleeAp = actor.Economy.HasApFor(actor.MeleeApCost);
-                        bool canRangedAp = actor.Economy.HasApFor(actor.RangedApCost);
+                        bool canMeleeAction = actor.Economy.HasSlot(CombatActionSlot.MainAction);
+                        bool canRangedAction = actor.Economy.HasSlot(CombatActionSlot.MainAction);
                         bool isAdjacent = actor.Position.ChebyshevDistance(hoveredUnit.Position) <= 1;
                         bool hasRanged = actor.RangedRange > 1 && !string.IsNullOrWhiteSpace(actor.RangedDice);
                         TacticalAttackPreview meleePreview = CombatSession.PreviewMeleeAttack(actor.Id, hoveredUnit.Id);
                         TacticalAttackPreview rangedPreview = hasRanged ? CombatSession.PreviewRangedAttack(actor.Id, hoveredUnit.Id) : null;
                         ReachableTileInfo approachTile = null;
                         TacticalAttackPreview approachMelee = null;
-                        bool canApproachMelee = canMeleeAp &&
+                        bool canApproachMelee = canMeleeAction &&
                                                 actor.Economy.MoveRemaining > 0 &&
                                                 FindBestSmartApproachTile(actor, hoveredUnit, out approachTile, out approachMelee);
 
-                        if (isAdjacent && canMeleeAp)
+                        if (isAdjacent && canMeleeAction)
                         {
                             ShowAttackTooltip($"[{actor.Name}] Melee vs {hoveredUnit.Name}", meleePreview, isRanged: false, suffixLine: hoveredEnemyIntentLine);
                             UpdateFlankOverlay(actor, hoveredUnit, meleePreview.IsFlanking);
                         }
-                        else if (hasRanged && canRangedAp && rangedPreview != null && rangedPreview.CanExecute && (!canApproachMelee || actor.PrefersRanged))
+                        else if (hasRanged && canRangedAction && rangedPreview != null && rangedPreview.CanExecute && (!canApproachMelee || actor.PrefersRanged))
                         {
                             ShowAttackTooltip($"[{actor.Name}] Ranged vs {hoveredUnit.Name}", rangedPreview, isRanged: true, suffixLine: hoveredEnemyIntentLine);
                             if (rangedPreview.LosResult != null)
@@ -4364,11 +4540,12 @@ namespace Realmz.Game
                                 gridOverlays?.SetLosPreview(
                                     OffsetLosResult(rangedPreview.LosResult),
                                     LocalToWorld(actor.Position),
-                                    LocalToWorld(hoveredUnit.Position));
+                                    LocalToWorld(hoveredUnit.Position),
+                                    rangedPreview.AdvantageState == RollAdvantageState.Disadvantage);
                             }
                         }
                         else if (canApproachMelee && approachTile != null && approachMelee != null &&
-                                 approachTile.PathCost + actor.MeleeApCost <= actor.Economy.CurrentAp)
+                                 approachTile.PathCost <= actor.Economy.MoveRemaining)
                         {
                             List<GridCoord> worldPath = new List<GridCoord>(approachTile.Path.Count);
                             for (int i = 0; i < approachTile.Path.Count; i++)
@@ -4380,7 +4557,7 @@ namespace Realmz.Game
                                 $"[{actor.Name}] Approach & Melee: {hoveredUnit.Name}",
                                 approachMelee,
                                 isRanged: false,
-                                prefixLine: $"Cost: {approachTile.PathCost} Move + {approachMelee.ApCost} Melee AP (Total {approachTile.PathCost + approachMelee.ApCost} AP)\n",
+                                prefixLine: $"Move: {approachTile.PathCost} MP + Main Action Strike\n",
                                 suffixLine: hoveredEnemyIntentLine);
                             UpdateFlankOverlayFrom(approachTile.Coord, actor, hoveredUnit, approachMelee.IsFlanking);
                         }
@@ -4392,7 +4569,8 @@ namespace Realmz.Game
                                 gridOverlays?.SetLosPreview(
                                     OffsetLosResult(rangedPreview.LosResult),
                                     LocalToWorld(actor.Position),
-                                    LocalToWorld(hoveredUnit.Position));
+                                    LocalToWorld(hoveredUnit.Position),
+                                    rangedPreview.AdvantageState == RollAdvantageState.Disadvantage);
                             }
                         }
                         else
@@ -4438,13 +4616,10 @@ namespace Realmz.Game
                         string aooNote = match.ProvokesAoO
                             ? "WARNING: Path provokes Attack of Opportunity (AoO)!"
                             : "Safe path (no AoO provoked).";
-                        string tileCostTag = CombatSession.GetTileMoveApCost(localCoord.X, localCoord.Y) >= 2 ? " (Mud/Water 2 AP)" : string.Empty;
-                        string freeNote = match.PathCost == 0 && actor.Economy.FreeMoveTilesRemaining > 0
-                            ? " (Free Move)"
-                            : string.Empty;
+                        string tileCostTag = CombatSession.GetTileMoveApCost(localCoord.X, localCoord.Y) >= 2 ? " (Mud/Water 2 MP)" : string.Empty;
                         hudController?.SetCombatHoverPreview(
                             $"Move {actor.Name} to ({localCoord.X}, {localCoord.Y})",
-                            $"Cost: {match.PathCost} AP{freeNote} / {actor.Economy.CurrentAp} AP remaining{tileCostTag}\n{aooNote}\n\nClick to step.");
+                            $"Cost: {match.PathCost} MP / {actor.Economy.MoveRemaining} MP remaining{tileCostTag}\n{aooNote}\n\nClick to step.");
                     }
                     else if (!_isHoveringHotbarUi)
                     {
@@ -4475,7 +4650,7 @@ namespace Realmz.Game
                             : "Safe path.";
                         hudController?.SetCombatHoverPreview(
                             $"Move {actor.Name} to ({localCoord.X}, {localCoord.Y})",
-                            $"Cost: {meleeMoveMatch.PathCost} AP / {actor.Economy.CurrentAp} AP remaining\n{aooNote}\n\nClick tile to exit Melee and move.");
+                            $"Cost: {meleeMoveMatch.PathCost} MP / {actor.Economy.MoveRemaining} MP remaining\n{aooNote}\n\nClick tile to exit Melee and move.");
                     }
                     else if (!_isHoveringHotbarUi)
                     {
@@ -4495,12 +4670,26 @@ namespace Realmz.Game
                             gridOverlays?.SetLosPreview(
                                 OffsetLosResult(preview.LosResult),
                                 LocalToWorld(actor.Position),
-                                LocalToWorld(hoveredUnit.Position));
+                                LocalToWorld(hoveredUnit.Position),
+                                preview.AdvantageState == RollAdvantageState.Disadvantage);
                         }
                     }
-                    else if (!_isHoveringHotbarUi)
+                    else
                     {
-                        hudController?.SetCombatTooltip("Ranged Mode", GetIdleModeInstructions(CombatActionMode.Ranged));
+                        LosResult tileLos = CombatSession.CheckLineOfSight(actor.Position, localCoord, includeSteamObscuration: true);
+                        bool hasDisadv = CombatSession.IsInTheDark;
+                        gridOverlays?.SetLosPreview(
+                            OffsetLosResult(tileLos),
+                            LocalToWorld(actor.Position),
+                            LocalToWorld(localCoord),
+                            hasDisadv);
+                        if (!_isHoveringHotbarUi)
+                        {
+                            string losText = tileLos.Kind == LosKind.Blocked
+                                ? "Blocked Sightline (Obstacle in path)"
+                                : (tileLos.Kind == LosKind.PartialCover || hasDisadv ? "Penalized Sightline (Cover / Darkness)" : "Clear Line of Sight");
+                            hudController?.SetCombatTooltip("Ranged Mode", $"{losText}\n{GetIdleModeInstructions(CombatActionMode.Ranged)}");
+                        }
                     }
                     break;
                 }
@@ -4517,6 +4706,15 @@ namespace Realmz.Game
                     }
 
                     TacticalSpellPreview preview = CombatSession.PreviewSpell(actor.Id, spell.Id.ToString(), localCoord);
+                    if (spell.Range > 0)
+                    {
+                        LosResult spellLos = CombatSession.CheckLineOfSight(actor.Position, localCoord, includeSteamObscuration: false);
+                        gridOverlays?.SetLosPreview(
+                            OffsetLosResult(spellLos),
+                            LocalToWorld(actor.Position),
+                            LocalToWorld(localCoord),
+                            hasDisadvantagePenalty: false);
+                    }
                     HashSet<GridCoord> allyWorld = new HashSet<GridCoord>();
                     HashSet<GridCoord> enemyWorld = new HashSet<GridCoord>();
                     for (int i = 0; i < preview.AoeFootprint.AffectedAllyIds.Count; i++)
@@ -4541,10 +4739,10 @@ namespace Realmz.Game
                         isBeneficial);
 
                     string condText = preview.ConditionTags.Count > 0 ? string.Join(", ", preview.ConditionTags) : "None";
-                    string statusLine = preview.CanExecute ? $"Cost: {preview.ApCost} AP | READY TO CAST (Click to fire)" : $"Blocked: {preview.Reason}";
+                    string statusLine = preview.CanExecute ? $"Cost: Main Action | READY TO CAST (Click to fire)" : $"Blocked: {preview.Reason}";
                     hudController?.SetCombatTooltip(
-                        $"Spell: {spell.Name} ({preview.ApCost} AP | {spell.SpCost} SP)",
-                        $"Cost: {preview.ApCost} AP   |   Mana: {spell.SpCost} SP\n" +
+                        $"Spell: {spell.Name} (Action | {spell.SpCost} SP)",
+                        $"Cost: Main Action   |   Mana: {spell.SpCost} SP\n" +
                         $"Effect ({spell.EffectKind}): {preview.MinAmount} - {preview.MaxAmount}\n" +
                         $"Save%: {preview.SaveChancePct}%\n" +
                         $"AoE Hits: {preview.AoeFootprint.AffectedEnemyIds.Count} Foe(s) vs {preview.AoeFootprint.AffectedAllyIds.Count} Ally(s)\n" +
@@ -4560,8 +4758,8 @@ namespace Realmz.Game
                             ? $"Target: {hoveredUnit.Name} ({hoveredUnit.Hp}/{hoveredUnit.MaxHp} HP)"
                             : "Click any conscious or injured ally to heal.";
                         hudController?.SetCombatTooltip(
-                            $"Healing Potion: {potionDef.Name} ({CombatActionEconomy.DefaultPotionApCost} AP)",
-                            $"Heal Dice: {potionDef.HealDice}\nCost: {CombatActionEconomy.DefaultPotionApCost} AP\n\n{targetText}");
+                            $"Healing Potion: {potionDef.Name} (Bonus Action)",
+                            $"Heal Dice: {potionDef.HealDice}\nCost: Bonus Action\n\n{targetText}");
                     }
                     else if (!_isHoveringHotbarUi)
                     {
@@ -4660,7 +4858,7 @@ namespace Realmz.Game
                             ? CombatSession.PreviewRangedAttack(actor.Id, clickedUnit.Id)
                             : null;
                         ReachableTileInfo bestTile = null;
-                        bool canApproachMelee = actor.Economy.HasApFor(actor.MeleeApCost) &&
+                        bool canApproachMelee = actor.Economy.HasSlot(CombatActionSlot.MainAction) &&
                                                 actor.Economy.MoveRemaining > 0 &&
                                                 FindBestSmartApproachTile(actor, clickedUnit, out bestTile, out _);
 
@@ -4679,7 +4877,7 @@ namespace Realmz.Game
                             return;
                         }
 
-                        if (canApproachMelee && bestTile != null && bestTile.PathCost + actor.MeleeApCost <= actor.Economy.CurrentAp)
+                        if (canApproachMelee && bestTile != null && bestTile.PathCost <= actor.Economy.MoveRemaining)
                         {
                             CombatActionResult stepRes = ExecuteCombatMoveStep(actor, bestTile.Coord);
                             if (!stepRes.Success)
@@ -4696,7 +4894,7 @@ namespace Realmz.Game
 
                             if (actor.IsConscious &&
                                 actor.Position.ChebyshevDistance(clickedUnit.Position) <= 1 &&
-                                actor.Economy.HasApFor(actor.MeleeApCost) &&
+                                actor.Economy.HasSlot(CombatActionSlot.MainAction) &&
                                 clickedUnit.IsAlive)
                             {
                                 Dictionary<string, int> postMoveHps = CaptureCombatantHps();
@@ -5064,46 +5262,34 @@ namespace Realmz.Game
             CombatantState actor = CombatSession.CurrentActor;
             if (actor != null)
             {
-                if (res.ApSpent > 0 && _combatUnitViews.TryGetValue(actor.Id, out BywaterUnitView apActorView) && apActorView != null)
-                {
-                    apActorView.ShowArcingFloatingText($"-{res.ApSpent} AP", new Color(0.98f, 0.80f, 0.14f, 1f), isCrit: false);
-                }
-
-                if (_activeCombatMode == CombatActionMode.Melee && !actor.Economy.HasApFor(actor.MeleeApCost))
+                if (_activeCombatMode == CombatActionMode.Melee && !actor.Economy.HasSlot(CombatActionSlot.MainAction))
                 {
                     _activeCombatMode = CombatActionMode.Smart;
                 }
-                else if (_activeCombatMode == CombatActionMode.Ranged && !actor.Economy.HasApFor(actor.RangedApCost))
+                else if (_activeCombatMode == CombatActionMode.Ranged && !actor.Economy.HasSlot(CombatActionSlot.MainAction))
                 {
                     _activeCombatMode = CombatActionMode.Smart;
                 }
                 else if (_activeCombatMode == CombatActionMode.Spell)
                 {
-                    int spAp = 3;
                     int spCost = 0;
                     if (_selectedSpellId >= 0 && Bundle != null && Bundle.Spells.TryGetValue(_selectedSpellId, out SpellDefinition spDef))
                     {
-                        spAp = CombatWeaponCosts.GetSpellApCost(spDef);
                         spCost = spDef.SpCost;
                     }
-                    if (!actor.Economy.HasApFor(spAp) || actor.Sp < spCost)
+                    if (!actor.Economy.HasSlot(CombatActionSlot.MainAction) || actor.Sp < spCost)
                     {
                         _activeCombatMode = CombatActionMode.Smart;
                     }
                 }
                 else if ((_activeCombatMode == CombatActionMode.Shove || _activeCombatMode == CombatActionMode.Potion) &&
-                         !actor.Economy.HasApFor(CombatActionEconomy.DefaultShoveApCost))
+                         !actor.Economy.HasSlot(CombatActionSlot.BonusAction))
                 {
                     _activeCombatMode = CombatActionMode.Smart;
                 }
 
-                if (_autoEndTurn &&
-                    !_autoCombatEnabled &&
-                    CombatSession.Outcome == CombatOutcome.InProgress &&
-                    actor.Economy.CurrentAp == 0 &&
-                    actor.Economy.FreeMoveTilesRemaining == 0)
+                if (TryAutoEndTurnIfExhausted(actor))
                 {
-                    HandleEndTurn();
                     return;
                 }
 
@@ -5193,6 +5379,40 @@ namespace Realmz.Game
             }
         }
 
+        private void HandleDash()
+        {
+            if (!_isInCombat || CombatSession == null || CombatSession.Outcome != CombatOutcome.InProgress)
+            {
+                return;
+            }
+
+            CombatantState actor = CombatSession.CurrentActor;
+            if (actor == null || actor.Side != CombatSide.Hero || _autoCombatEnabled)
+            {
+                return;
+            }
+
+            audioDirector?.PlayUiClick();
+            CombatActionResult res = CombatSession.ExecuteDash();
+            if (res.Success)
+            {
+                if (_combatUnitViews.TryGetValue(actor.Id, out BywaterUnitView view) && view != null)
+                {
+                    view.ShowArcingFloatingText($"DASH (+{actor.GetDndBaseMoveBudget()} MP)", BywaterUiHelpers.InfoCyan, isCrit: false);
+                }
+
+                _activeCombatMode = CombatActionMode.Smart;
+                RefreshCombatStaticOverlays(actor);
+                _combatHoverDirty = true;
+                SyncAllCombatUnitViews();
+                RefreshCombatHudState();
+            }
+            else
+            {
+                hudController?.ShowToast(res.Message, 1.8f);
+            }
+        }
+
         private void HandleGuard()
         {
             if (!_isInCombat || CombatSession == null || CombatSession.Outcome != CombatOutcome.InProgress)
@@ -5212,7 +5432,7 @@ namespace Realmz.Game
             {
                 if (_combatUnitViews.TryGetValue(actor.Id, out BywaterUnitView view) && view != null)
                 {
-                    view.ShowArcingFloatingText($"OVERWATCH (-{res.ApSpent} AP)", BywaterUiHelpers.InfoCyan, isCrit: false);
+                    view.ShowArcingFloatingText("OVERWATCH (+4 AC)", BywaterUiHelpers.InfoCyan, isCrit: false);
                 }
 
                 SyncAllCombatUnitViews();
@@ -5452,13 +5672,24 @@ namespace Realmz.Game
             string losLine = isRanged && preview.LosResult != null
                 ? $"LOS: {preview.LosResult.Kind} (Cover -{preview.LosResult.CoverPenaltyPct}%)\n"
                 : string.Empty;
+            string advLine = preview.AdvantageState == RollAdvantageState.Advantage
+                ? "ADVANTAGE (Roll 2x, Keep Best)\n"
+                : (preview.AdvantageState == RollAdvantageState.Disadvantage ? "DISADVANTAGE (Roll 2x, Keep Worst)\n" : string.Empty);
             string flankLine = preview.IsFlanking ? "FLANKING (+20% Hit)\n" : string.Empty;
             string aooLine = preview.ProvokesAoO ? "AoO WARNING!\n" : string.Empty;
             string intentBlock = !string.IsNullOrWhiteSpace(suffixLine) ? $"\n{suffixLine}" : string.Empty;
             string actionHint = preview.CanExecute ? "Click target to attack." : $"Blocked: {preview.Reason}";
 
             string elevationBadge = null;
-            if (preview.ElevationModifierPct > 0)
+            if (preview.AdvantageState == RollAdvantageState.Advantage)
+            {
+                elevationBadge = "[ADVANTAGE]";
+            }
+            else if (preview.AdvantageState == RollAdvantageState.Disadvantage)
+            {
+                elevationBadge = "[DISADVANTAGE]";
+            }
+            else if (preview.ElevationModifierPct > 0)
             {
                 elevationBadge = "[HIGH GROUND +15% / +1 RNG]";
             }
@@ -5470,10 +5701,10 @@ namespace Realmz.Game
             hudController?.SetCombatHoverPreview(
                 title,
                 (prefixLine ?? string.Empty) +
-                $"Cost: {preview.ApCost} AP   |   Hit%: {preview.HitChancePct}% (Uncapped {preview.UncappedHitScore}%)\n" +
+                $"Cost: Main Action   |   Hit%: {preview.HitChancePct}% (Uncapped {preview.UncappedHitScore}%)\n" +
                 $"Dmg: {preview.MinDamage} - {preview.MaxDamage}   |   Defender AC: {preview.DefenderAc}\n" +
                 $"Crit%: {preview.CritChancePct}%   |   Graze%: {preview.GrazeChancePct}%\n" +
-                losLine + flankLine + aooLine +
+                advLine + losLine + flankLine + aooLine +
                 $"Tags: {tags}{intentBlock}\n\n{actionHint}",
                 elevationBadge);
         }
@@ -6986,8 +7217,9 @@ namespace Realmz.Game
                 CombatSession.Outcome == CombatOutcome.InProgress &&
                 CombatSession.CurrentActor == actor &&
                 actor != null &&
-                actor.Economy.CurrentAp == 0 &&
-                actor.Economy.FreeMoveTilesRemaining == 0)
+                !actor.Economy.HasSlot(CombatActionSlot.MainAction) &&
+                !actor.Economy.HasSlot(CombatActionSlot.BonusAction) &&
+                actor.Economy.MoveRemaining == 0)
             {
                 HandleEndTurn();
                 return true;
@@ -7391,31 +7623,82 @@ namespace Realmz.Game
                 return;
             }
 
-            int roll = _roller != null ? _roller.NextInt(1, 101) : 50;
-            bool evaded = report != null && report.CanEvade && roll <= report.EvadeChancePct;
-            if (evaded)
+            EncounterCheckSpec evadeSpec = EncounterDirector.BuildEvadeCheckSpec(report, ExploreSession.Party);
+            EncounterCheckRollResult rollRes = EncounterDirector.RollEvadeCheck(report, ExploreSession.Party, _roller);
+
+            void ApplyEvadeOutcome()
             {
-                ExploreSession.ApplyStealthEvade();
-                ApplyAtmosphereAndTorchLighting(GridToWorldAtElevation(ExploreSession.Position), forceImmediate: false);
-                hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false, _lastContextPoiLabel);
-                hudController?.ShowToast(
-                    $"Evaded the patrol! Slipped away ({report.EvadeChancePct}% chance, +{ExplorationSession.DefaultStealthEvadeTurns} turns).",
-                    2.6f);
-                return;
+                if (rollRes.Success)
+                {
+                    ExploreSession.ApplyStealthEvade();
+                    ApplyAtmosphereAndTorchLighting(GridToWorldAtElevation(ExploreSession.Position), forceImmediate: false);
+                    hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false, _lastContextPoiLabel);
+                    hudController?.ShowToast(
+                        $"Evaded the patrol! (Rolled {rollRes.Total} vs DC {rollRes.Dc}, +{ExplorationSession.DefaultStealthEvadeTurns} turns).",
+                        2.6f);
+                    return;
+                }
+
+                _activeEncounterZone = zone;
+                _activeEncounterZoneKey = zoneKey;
+                int bonusPct = report != null
+                    ? report.RewardBonusPct
+                    : (ExploreSession.CurrentWorldClock.IsNight ? EncounterDirector.NightRewardBonusPercent : 0);
+                hudController?.ShowToast($"Evade failed ({rollRes.Total} < DC {rollRes.Dc}) - patrol engages!", 2.4f);
+                StartTacticalCombat(monsters, title, CombatInitiativeSurpriseMode.None, bonusPct);
             }
 
-            _activeEncounterZone = zone;
-            _activeEncounterZoneKey = zoneKey;
-            int bonusPct = report != null
-                ? report.RewardBonusPct
-                : (ExploreSession.CurrentWorldClock.IsNight ? EncounterDirector.NightRewardBonusPercent : 0);
-            hudController?.ShowToast($"Evade failed ({roll} > {report?.EvadeChancePct ?? 0}%) - patrol engages!", 2.4f);
-            StartTacticalCombat(monsters, title, CombatInitiativeSurpriseMode.None, bonusPct);
+            if (hudController != null && Application.isPlaying && !Application.isBatchMode)
+            {
+                hudController.ShowDiceRollCheck(evadeSpec, rollRes, ApplyEvadeOutcome);
+            }
+            else
+            {
+                ApplyEvadeOutcome();
+            }
         }
 
         private void HandleEncounterInterceptQuickResolve()
         {
-            HandleQuickResolveAutoWin();
+            audioDirector?.PlayUiClick();
+            EncounterScoutingReport report = _pendingScoutingReport;
+            List<MonsterDefinition> monsters = _pendingQuickResolveMonsters;
+            string title = !string.IsNullOrWhiteSpace(_pendingQuickResolveTitle)
+                ? _pendingQuickResolveTitle
+                : (report?.Geography != null ? $"{report.Geography.LocationLabel} Battle" : "Encounter Zone Battle");
+
+            QuickResolveSummary qrSummary = null;
+            if (monsters != null && monsters.Count > 0)
+            {
+                CanOfferQuickResolveForEncounter(monsters, out qrSummary);
+            }
+
+            EncounterCheckSpec qrSpec = EncounterDirector.BuildQuickResolveCheckSpec(qrSummary, ExploreSession?.Party);
+            EncounterCheckRollResult rollRes = EncounterDirector.RollQuickResolveCheck(qrSummary, ExploreSession?.Party, _roller);
+
+            if (hudController != null && Application.isPlaying && !Application.isBatchMode)
+            {
+                hudController.ShowDiceRollCheck(qrSpec, rollRes, () =>
+                {
+                    if (rollRes.Success)
+                    {
+                        HandleQuickResolveAutoWin();
+                    }
+                    else
+                    {
+                        hudController.ShowToast($"Tactical rout failed ({rollRes.Total} < DC {rollRes.Dc}) - engage!", 2.4f);
+                        HandleEncounterInterceptEngage();
+                    }
+                });
+            }
+            else if (rollRes.Success)
+            {
+                HandleQuickResolveAutoWin();
+            }
+            else
+            {
+                HandleEncounterInterceptEngage();
+            }
         }
 
         private void HandleLightTorchFromHud()
@@ -7929,7 +8212,20 @@ namespace Realmz.Game
             {
                 bool enableFog = !_isInCombat && map != null;
                 FogOfWarMap fog = ExploreSession.FogOfWar;
-                worldRenderer.SetFogOfWarData(fog.ExportVisibilityStates(), fog.Width, fog.Height, enableFog);
+                byte[] fogStates = fog.ExportVisibilityStates();
+                worldRenderer.SetFogOfWarData(fogStates, fog.Width, fog.Height, enableFog);
+
+                float nightFactor = 0f;
+                if (ExploreSession.CurrentWorldClock.IsNight)
+                {
+                    nightFactor = 1f;
+                }
+                else if (ExploreSession.CurrentWorldClock.Phase == WorldTimePhase.Dusk ||
+                         ExploreSession.CurrentWorldClock.Phase == WorldTimePhase.Dawn)
+                {
+                    nightFactor = 0.45f;
+                }
+                worldRenderer.SetAtmosphereFogAndNight(fogStates, fog.Width, fog.Height, enableFog, nightFactor);
             }
 
             WeatherState weather = ExploreSession.Weather;

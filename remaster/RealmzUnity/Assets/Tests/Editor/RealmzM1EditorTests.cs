@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
 using Realmz.Audio;
@@ -1786,15 +1787,8 @@ namespace Realmz.EditorTests
                 Assert.That(portalPath.Found, Is.True, $"Portal {portal.Id} at {portal.Coord} must remain reachable from (10,9).");
             }
 
-            // Fix #5 NPCs placed beside venues on blocked tiles with walkable approach neighbors
-            Assert.That(landWorld.Npcs.Count, Is.EqualTo(4), "Expected 4 Town Shopkeeper/Priestess NPCs.");
-            for (int i = 0; i < landWorld.Npcs.Count; i++)
-            {
-                CartographyNpcPlacement npc = landWorld.Npcs[i];
-                Assert.That(bundle.Land0.IsPassable(npc.TileX, npc.TileY, hasBoat: false), Is.False, $"NPC {npc.NpcId} tile should be blocked.");
-                GridCoord adj = FindAdjacentPassableTile(bundle.Land0, new GridCoord(npc.TileX, npc.TileY), hasBoat: false);
-                Assert.That(adj, Is.Not.EqualTo(new GridCoord(npc.TileX, npc.TileY)), $"NPC {npc.NpcId} needs an approachable neighbor tile.");
-            }
+            // Enclosed shopkeepers/priestess live inside modals and are opened via walkable shop/temple doorways.
+            Assert.That(landWorld.Npcs.Count, Is.EqualTo(0), "Enclosed town merchants must live inside Shop/Temple modals.");
 
             // Fix #2: Shader has zero Bayer checkerboard clip and supports clean transparent fade
             string shaderText = File.ReadAllText(Path.GetFullPath("Assets/Shaders/CartographyBillboard.shader"));
@@ -1811,7 +1805,7 @@ namespace Realmz.EditorTests
                 BywaterWorldRenderer renderer = worldGo.AddComponent<BywaterWorldRenderer>();
                 renderer.Initialize(catalog);
                 renderer.RenderMap(bundle.Land0, new GridCoord(10, 9), forceRebuild: true);
-                Assert.That(renderer.ActiveNpcCount, Is.EqualTo(4));
+                Assert.That(renderer.ActiveNpcCount, Is.EqualTo(0));
 
                 // Fix #4: Wide zoom ceiling >= 32m & manual pan preservation across non-recentering target updates
                 Camera cam = camGo.AddComponent<Camera>();
@@ -2363,45 +2357,16 @@ namespace Realmz.EditorTests
                 ctrl.InitializeForTests(bundle, session, 555UL);
                 typeof(BywaterGameController).GetMethod("EnterExplorationView", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.Invoke(ctrl, new object[] { true });
 
-                Assert.That(renderer.ActiveNpcCount, Is.EqualTo(4));
-                for (int i = 0; i < renderer.ActiveNpcs.Count; i++)
-                {
-                    CartographyNpcPlacement npc = renderer.ActiveNpcs[i];
-                    GridCoord npcCoord = new GridCoord(npc.TileX, npc.TileY);
-                    Assert.That(renderer.CartographyData.IsNpcBlockedTile(npc.TileX, npc.TileY), Is.True, $"NPC {npc.NpcId} must be in NPC block set.");
-                    Assert.That(bundle.Land0.IsPassable(npc.TileX, npc.TileY, false), Is.False, $"NPC {npc.NpcId} tile must be impassable.");
-                    Assert.That(session.StepOneTile(npcCoord).Moved, Is.False, $"Party leader must never step onto {npc.NpcId} tile {npcCoord}.");
-                    Assert.That(session.PlanPath(npcCoord, true).Found, Is.False, $"Direct A* to NPC {npc.NpcId} tile must be blocked.");
-                }
+                Assert.That(renderer.ActiveNpcCount, Is.EqualTo(0));
 
-                // Test clicking Borin from spawn (10, 9): routes adjacent, stays off Borin's tile, opens Shop #1
-                CartographyNpcPlacement borin = renderer.ActiveNpcs[0];
-                GridCoord borinCoord = new GridCoord(borin.TileX, borin.TileY);
+                // Test clicking a Shop #1 doorway POI tile walks to doorway and opens Shop #1 modal.
+                MapPointOfInterest shop1Poi = bundle.Land0.PointsOfInterest.First(p => string.Equals(p.ShopId, "1", System.StringComparison.OrdinalIgnoreCase));
                 typeof(BywaterGameController).GetMethod("UpdateExplorationInput", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-                    ?.Invoke(ctrl, new object[] { borinCoord, true });
+                    ?.Invoke(ctrl, new object[] { shop1Poi.Coord, true });
                 ctrl.ForceCompleteWalkForTest();
-                Assert.That(session.Position, Is.Not.EqualTo(borinCoord), "Leader must not occupy Borin's tile.");
-                Assert.That(session.Position.ChebyshevDistance(borinCoord), Is.LessThanOrEqualTo(1), "Leader must stop adjacent to Borin.");
-                Assert.That(hud.IsShopOpen, Is.True, "Approaching Borin by click must open Shop #1 modal.");
+                Assert.That(session.Position.ChebyshevDistance(shop1Poi.Coord), Is.LessThanOrEqualTo(1), "Leader must arrive at Shop #1 doorway.");
+                Assert.That(hud.IsShopOpen, Is.True, "Clicking Shop #1 doorway must open Shop #1 modal.");
                 hud.CloseShopModal();
-
-                // Verify compact WorldSpace Canvas prompt pill (world width < 2.5m, raycastTarget == false)
-                Transform npc0 = FindDescendantByName(renderer.transform, "TownNpc_0");
-                Assert.That(npc0, Is.Not.Null);
-                Transform prompt = npc0.Find("NpcInteractPrompt");
-                Assert.That(prompt, Is.Not.Null);
-                Canvas promptCanvas = prompt.GetComponent<Canvas>();
-                Assert.That(promptCanvas, Is.Not.Null);
-                Assert.That(promptCanvas.renderMode, Is.EqualTo(RenderMode.WorldSpace));
-                Assert.That(prompt.GetComponent<UnityEngine.UI.GraphicRaycaster>(), Is.Null);
-                RectTransform promptRt = prompt.GetComponent<RectTransform>();
-                float worldWidth = promptRt.sizeDelta.x * prompt.localScale.x;
-                Assert.That(worldWidth, Is.GreaterThan(0.8f).And.LessThan(2.5f), $"Prompt pill world width {worldWidth} must be compact (<2.5m).");
-                UnityEngine.UI.Graphic[] graphics = prompt.GetComponentsInChildren<UnityEngine.UI.Graphic>(true);
-                for (int g = 0; g < graphics.Length; g++)
-                {
-                    Assert.That(graphics[g].raycastTarget, Is.False, "World prompt UI must not block pointer raycasts.");
-                }
             }
             finally
             {
@@ -2475,21 +2440,13 @@ namespace Realmz.EditorTests
                 hoverM?.Invoke(ctrl, new object[] { new GridCoord(12, 9) });
                 Assert.That(pathfinder.SearchCount, Is.EqualTo(searchesAfterFirst), "Identical hover tile must reuse cached path without re-running A*.");
 
-                // Bug #1: Enter combat in town square -> all 4 town NPCs & prompts hidden; exit -> restored
-                Assert.That(renderer.ActiveNpcCount, Is.EqualTo(4));
-                Assert.That(renderer.VisibleTownNpcCount, Is.EqualTo(4));
+                // Bug #1: Enter combat in town square -> zero standing town shopkeepers
+                Assert.That(renderer.ActiveNpcCount, Is.EqualTo(0));
+                Assert.That(renderer.VisibleTownNpcCount, Is.EqualTo(0));
                 ctrl.TriggerDemoSkirmish();
                 Assert.That(ctrl.IsInCombat, Is.True);
                 Assert.That(renderer.AreTownNpcsHiddenForCombat, Is.True);
                 Assert.That(renderer.VisibleTownNpcCount, Is.EqualTo(0));
-                for (int i = 0; i < 4; i++)
-                {
-                    Transform npcTf = renderer.transform.Find($"TownNpcs/TownNpc_{i}");
-                    if (npcTf != null)
-                    {
-                        Assert.That(npcTf.gameObject.activeInHierarchy, Is.False, $"TownNpc_{i} must remain hidden during combat.");
-                    }
-                }
 
                 // Bug #2: Combat speed timing checks (1x, 2x, Instant)
                 Assert.That(ctrl.SpeedIndex, Is.EqualTo(0));
@@ -2504,7 +2461,7 @@ namespace Realmz.EditorTests
                 typeof(BywaterGameController).GetMethod("HandleCycleSpeed", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.Invoke(ctrl, null);
                 Assert.That(ctrl.SpeedIndex, Is.EqualTo(0));
 
-                // Bug #3: Enemy intent arc directional arrowheads + unambiguous enemy intent tooltip on active hero turn
+                // M1.5 Bug #3 update: Red enemy intent arcs and telegraphs are intentionally hidden on enemy hover.
                 CombatantState activeHero = ctrl.CombatSession.CurrentActor;
                 CombatantState firstMonster = null;
                 for (int i = 0; i < ctrl.CombatSession.Combatants.Count; i++)
@@ -2517,11 +2474,9 @@ namespace Realmz.EditorTests
                 }
                 Assert.That(activeHero, Is.Not.Null);
                 Assert.That(firstMonster, Is.Not.Null);
-                string intentSummary = ctrl.FormatEnemyIntentSummary(firstMonster);
-                Assert.That(intentSummary, Does.StartWith("Next Enemy Intent:"));
                 typeof(BywaterGameController).GetMethod("UpdateCombatHoverVisuals", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
                     ?.Invoke(ctrl, new object[] { firstMonster.Position });
-                Assert.That(overlays.ActiveIntentArrowheadCount, Is.GreaterThanOrEqualTo(1), "Enemy intent arc must render a directional arrowhead.");
+                Assert.That(overlays.ActiveIntentArrowheadCount, Is.EqualTo(0), "Enemy intent arcs must remain hidden on enemy hover.");
 
                 // Bug #4: Dead combatant flat fallen corpse with ZWrite Off & renderQueue strictly beneath living units
                 var viewsField = typeof(BywaterGameController).GetField("_combatUnitViews", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
@@ -2597,11 +2552,11 @@ namespace Realmz.EditorTests
                 Assert.That(heroActor.Position, Is.EqualTo(emptyReachable), "Smart-clicking an empty reachable tile in Melee mode must move the hero.");
                 Assert.That(ctrl.ActiveCombatMode, Is.EqualTo(CombatActionMode.Smart), "Smart-clicking an empty reachable tile in Melee mode must auto-exit Melee mode.");
 
-                // Bug #1 exit combat -> Town NPCs cleanly restored
+                // Bug #1 exit combat -> exploration view cleanly restored
                 typeof(BywaterGameController).GetMethod("ExitCombatToExploration", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.Invoke(ctrl, new object[] { false });
                 Assert.That(ctrl.IsInCombat, Is.False);
                 Assert.That(renderer.AreTownNpcsHiddenForCombat, Is.False);
-                Assert.That(renderer.VisibleTownNpcCount, Is.EqualTo(4));
+                Assert.That(renderer.VisibleTownNpcCount, Is.EqualTo(0));
             }
             finally
             {
@@ -3229,9 +3184,10 @@ namespace Realmz.EditorTests
                 hud.RefreshCombatHud(session, bundle, CombatActionMode.Smart, -1, "1x");
                 Assert.That(deployBanner.gameObject.activeSelf, Is.False);
                 Assert.That(actionBar.gameObject.activeSelf, Is.True);
-                Assert.That(FindDescendantByName(actionBar, "ApValueLabel").GetComponent<TextMeshProUGUI>().text, Does.Contain("7/7 AP"));
-                Assert.That(FindDescendantByPathSuffix(actionBar, "GuardBtn/TopRow/ApBadge/ApBadgeLabel").GetComponent<TextMeshProUGUI>().text, Is.EqualTo("1 AP"));
-                Assert.That(FindDescendantByPathSuffix(actionBar, "HotbarSlot_0/TopRow/CostCol/ApCost").GetComponent<TextMeshProUGUI>().text, Is.EqualTo("3 AP"));
+                Assert.That(FindDescendantByName(actionBar, "ApValueLabel").GetComponent<TextMeshProUGUI>().text, Does.Contain("MP"));
+                Assert.That(FindDescendantByName(actionBar, "DashBtn"), Is.Not.Null);
+                Assert.That(FindDescendantByPathSuffix(actionBar, "GuardBtn/TopRow/ApBadge/ApBadgeLabel").GetComponent<TextMeshProUGUI>().text, Is.EqualTo("Bonus"));
+                Assert.That(FindDescendantByPathSuffix(actionBar, "HotbarSlot_0/TopRow/CostCol/ApCost").GetComponent<TextMeshProUGUI>().text, Is.EqualTo("Action"));
 
                 // 3. Compact 4-across Victory Loot grid (216x72, constraintCount == 4, 12 items = 3 visible rows)
                 List<HeroVictorySummary> hv = new List<HeroVictorySummary>();
@@ -3345,6 +3301,8 @@ namespace Realmz.EditorTests
                 renderer.Initialize(assetCatalog);
                 renderer.RenderMap(bundle.Land0, new GridCoord(10, 9), forceRebuild: true);
 
+                // M1.5 Decision #3: Enclosed shopkeepers stay indoors behind clickable shop doorways (0 outdoor shopkeeper views);
+                // outdoor quest NPCs render at 1.85f human-parity scale when present.
                 BywaterUnitView[] unitViews = worldGo.GetComponentsInChildren<BywaterUnitView>(true);
                 int checkedShopkeepers = 0;
                 for (int i = 0; i < unitViews.Length; i++)
@@ -3356,13 +3314,14 @@ namespace Realmz.EditorTests
                     }
 
                     Transform quad = uv.transform.Find("SpriteBillboard/SpriteQuad");
-                    Assert.That(quad, Is.Not.Null, $"Shopkeeper {uv.UnitId} missing SpriteQuad.");
-                    Assert.That(quad.localScale.x, Is.EqualTo(1.20f).Within(0.02f), $"Shopkeeper {uv.UnitId} width scale must be 1.20f.");
-                    Assert.That(quad.localScale.y, Is.EqualTo(1.20f).Within(0.02f), $"Shopkeeper {uv.UnitId} height scale must be 1.20f.");
+                    Assert.That(quad, Is.Not.Null, $"NPC {uv.UnitId} missing SpriteQuad.");
+                    Assert.That(quad.localScale.x, Is.EqualTo(1.85f).Within(0.02f), $"Outdoor NPC {uv.UnitId} width scale must match hero 1.85f scale.");
+                    Assert.That(quad.localScale.y, Is.EqualTo(1.85f).Within(0.02f), $"Outdoor NPC {uv.UnitId} height scale must match hero 1.85f scale.");
                     checkedShopkeepers++;
                 }
 
-                Assert.That(checkedShopkeepers, Is.GreaterThanOrEqualTo(1), "Expected at least 1 rendered town shopkeeper NPC view.");
+                Assert.That(checkedShopkeepers, Is.EqualTo(0), "Enclosed shopkeepers must reside inside shop/temple modals, not outdoors.");
+                Assert.That(bundle.Land0.PointsOfInterest.Any(p => string.Equals(p.Kind, "shop", System.StringComparison.OrdinalIgnoreCase)), Is.True);
             }
             finally
             {

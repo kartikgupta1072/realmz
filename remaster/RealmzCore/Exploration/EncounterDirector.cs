@@ -1221,6 +1221,12 @@ namespace RealmzCore.Exploration
                 return CombatArenaArchetype.DungeonChamber;
             }
 
+            if (geo.BiomeKind == EncounterBiomeKind.Ruins ||
+                geo.BiomeKind == EncounterBiomeKind.DungeonApproach)
+            {
+                return CombatArenaArchetype.RuinsOutskirts;
+            }
+
             if (geo.BiomeKind == EncounterBiomeKind.Riverbank ||
                 (geo.IsNearWater && !geo.IsOnRoad))
             {
@@ -1232,12 +1238,6 @@ namespace RealmzCore.Exploration
                 geo.BiomeKind == EncounterBiomeKind.TownSafe)
             {
                 return CombatArenaArchetype.RoadAmbush;
-            }
-
-            if (geo.BiomeKind == EncounterBiomeKind.Ruins ||
-                geo.BiomeKind == EncounterBiomeKind.DungeonApproach)
-            {
-                return CombatArenaArchetype.RuinsOutskirts;
             }
 
             if (geo.BiomeKind == EncounterBiomeKind.DeepForest || geo.IsDeepForest)
@@ -1509,21 +1509,26 @@ namespace RealmzCore.Exploration
                 }
             }
 
-            // Overturned Supply Wagon & Crate Cover creating central road bottleneck
-            int wagonX = Math.Clamp(midX - (variant == 2 ? 0 : 1), 3, w - 4);
-            if (isOpen(wagonX, roadY0))
+            // Roadside Supply Wagon & Crate Cover framing outer shoulders without choking center spawn corridor
+            int wagonX = Math.Clamp(midX + (variant == 2 ? 1 : -1), 3, w - 4);
+            int wagonY = southShoulderY;
+            if (isOpen(wagonX, wagonY) && !map[wagonX, wagonY].BlocksMovement)
+            {
+                SetObstacleFeature(grid, map, wagonX, wagonY, CombatArenaObstacleKind.SupplyWagon, blocksMove: true, blocksLos: true, providesCover: false, moveCost: 1);
+            }
+            else if (isOpen(wagonX, roadY0))
             {
                 SetObstacleFeature(grid, map, wagonX, roadY0, CombatArenaObstacleKind.SupplyWagon, blocksMove: true, blocksLos: true, providesCover: false, moveCost: 1);
             }
 
             int crateX = Math.Clamp(midX + 1, 3, w - 4);
-            if (isOpen(crateX, roadY1))
+            if (isOpen(crateX, southShoulderY) && !map[crateX, southShoulderY].BlocksMovement)
             {
-                SetObstacleFeature(grid, map, crateX, roadY1, CombatArenaObstacleKind.BarrelsCrates, blocksMove: false, blocksLos: false, providesCover: true, moveCost: 2);
+                SetObstacleFeature(grid, map, crateX, southShoulderY, CombatArenaObstacleKind.BarrelsCrates, blocksMove: false, blocksLos: false, providesCover: true, moveCost: 2);
             }
-            if (isOpen(Math.Max(3, wagonX - 1), roadY1))
+            if (isOpen(Math.Max(3, midX - 1), northShoulderY) && !map[Math.Max(3, midX - 1), northShoulderY].BlocksMovement)
             {
-                SetObstacleFeature(grid, map, Math.Max(3, wagonX - 1), roadY1, CombatArenaObstacleKind.BarrelsCrates, blocksMove: false, blocksLos: false, providesCover: true, moveCost: 2);
+                SetObstacleFeature(grid, map, Math.Max(3, midX - 1), northShoulderY, CombatArenaObstacleKind.BarrelsCrates, blocksMove: false, blocksLos: false, providesCover: true, moveCost: 2);
             }
 
             // Elevated roadside embankment ridges (north and south flanks)
@@ -1867,9 +1872,11 @@ namespace RealmzCore.Exploration
             {
                 SetObstacleFeature(grid, map, midX + 1, h - 3, CombatArenaObstacleKind.LitBrazier, blocksMove: true, blocksLos: false, providesCover: false);
             }
-            if (isOpen(midX + 1, midY + 1) && !map[midX + 1, midY + 1].BlocksMovement)
+            int crateX = Math.Clamp(midX + 2, 2, w - 3);
+            int crateY = Math.Clamp(midY, 2, h - 3);
+            if (isOpen(crateX, crateY) && !map[crateX, crateY].BlocksMovement)
             {
-                SetObstacleFeature(grid, map, midX + 1, midY + 1, CombatArenaObstacleKind.BarrelsCrates, blocksMove: false, blocksLos: false, providesCover: true, moveCost: 2);
+                SetObstacleFeature(grid, map, crateX, crateY, CombatArenaObstacleKind.BarrelsCrates, blocksMove: false, blocksLos: false, providesCover: true, moveCost: 2);
             }
 
             // Courtyard Oil and Poison puddles near doorway choke & flank bay
@@ -2382,6 +2389,148 @@ namespace RealmzCore.Exploration
             return null;
         }
 
+        public static EncounterCheckSpec BuildEvadeCheckSpec(EncounterScoutingReport? report, PartyState? party)
+        {
+            if (report == null)
+            {
+                return new EncounterCheckSpec("Evade Patrol", "DEX", 12, 0, "Base DEX +0", RollAdvantageState.Normal, "Even Odds");
+            }
+
+            int livingCount = 0;
+            int bestScoutScore = -1;
+            int sumAgility = 0;
+            bool hasRanger = false;
+            bool hasRogue = false;
+
+            if (party != null)
+            {
+                for (int i = 0; i < party.Members.Count; i++)
+                {
+                    PartyMemberState m = party.Members[i];
+                    if (m == null || !m.IsAlive)
+                    {
+                        continue;
+                    }
+
+                    livingCount++;
+                    sumAgility += m.Agility;
+                    string arch = (m.Archetype ?? string.Empty).Trim().ToLowerInvariant();
+                    bool isRanger = arch == "ranger" || arch == "archer" || string.Equals(m.Name, "Kaelen", StringComparison.OrdinalIgnoreCase);
+                    bool isRogue = arch == "rogue" || arch == "thief" || string.Equals(m.Name, "Vex", StringComparison.OrdinalIgnoreCase);
+                    if (isRanger) hasRanger = true;
+                    if (isRogue) hasRogue = true;
+
+                    int scout = m.Agility + ((isRanger || isRogue) ? 4 : 0);
+                    if (scout > bestScoutScore)
+                    {
+                        bestScoutScore = scout;
+                    }
+                }
+            }
+
+            int leadAgi = bestScoutScore >= 0
+                ? bestScoutScore
+                : (livingCount > 0 ? sumAgility / livingCount : 12);
+            int dexMod = Math.Clamp((leadAgi - 10) / 2, -2, 8);
+            int enemyCount = report.Monsters != null ? report.Monsters.Count : 0;
+            int dc = Math.Clamp(
+                12
+                + (enemyCount >= 3 ? 2 : 0)
+                + (report.Clock != null && report.Clock.IsNight ? 2 : 0)
+                + (report.Geography != null && report.Geography.IsDeepForest ? 1 : 0)
+                - (report.CanAmbush ? 3 : 0),
+                8,
+                22);
+
+            bool hasAdv = report.CanAmbush || (hasRanger && hasRogue);
+            bool hasDisadv = report.IsAmbushedInDark || (report.Clock != null && report.Clock.IsNight && !report.HasLitTorch);
+            RollAdvantageState adv = RollAdvantageHelper.ResolveAdvantage(hasAdv, hasDisadv);
+            string breakdown = (dexMod >= 0 ? $"DEX +{dexMod}" : $"DEX {dexMod}") +
+                               (hasAdv ? " | Scout Advantage" : string.Empty) +
+                               (hasDisadv ? " | Darkness Penalty" : string.Empty);
+            string tier = dc <= 10 ? "Favored" : (dc <= 14 ? "Even Odds" : "Risky");
+
+            return new EncounterCheckSpec("Evade Patrol", "DEX", dc, dexMod, breakdown, adv, tier);
+        }
+
+        public static EncounterCheckRollResult RollEvadeCheck(EncounterScoutingReport? report, PartyState? party, IDiceRoller? roller = null)
+        {
+            EncounterCheckSpec spec = BuildEvadeCheckSpec(report, party);
+            if (report == null || !report.CanEvade || report.IsAmbushedInDark)
+            {
+                return new EncounterCheckRollResult(false, spec.Dc, 1, 1, 1, spec.Modifier, 1 + spec.Modifier, false, true, spec.AdvantageState, "Cannot evade in total darkness!");
+            }
+
+            IDiceRoller rng = roller ?? new DeterministicDiceRoller(0x4556414445UL);
+            return ResolveD20Check(spec, rng, "Evaded the patrol!", "Patrol spotted the party!");
+        }
+
+        public static EncounterCheckSpec BuildQuickResolveCheckSpec(QuickResolveSummary? summary, PartyState? party)
+        {
+            double ratio = summary != null ? summary.PowerRatio : 1.0;
+            int dc = ratio >= 2.5
+                ? 7
+                : ratio >= 2.0
+                    ? 11
+                    : ratio >= 1.5
+                        ? 15
+                        : 19;
+            string tier = ratio >= 2.5
+                ? "Overwhelming"
+                : ratio >= 2.0
+                    ? "Favored"
+                    : ratio >= 1.5
+                        ? "Even Odds"
+                        : "Risky";
+
+            int bestLeaderStat = 12;
+            if (party != null)
+            {
+                for (int i = 0; i < party.Members.Count; i++)
+                {
+                    PartyMemberState m = party.Members[i];
+                    if (m == null || !m.IsAlive) continue;
+                    int tactical = Math.Max(m.Brawn, Math.Max(m.Judgment, m.Agility));
+                    if (tactical > bestLeaderStat)
+                    {
+                        bestLeaderStat = tactical;
+                    }
+                }
+            }
+
+            int mod = Math.Clamp((bestLeaderStat - 10) / 2, -1, 6);
+            string breakdown = mod >= 0 ? $"Tactics +{mod}" : $"Tactics {mod}";
+            return new EncounterCheckSpec("Tactical Rout", "TAC", dc, mod, breakdown, RollAdvantageState.Normal, tier);
+        }
+
+        public static EncounterCheckRollResult RollQuickResolveCheck(QuickResolveSummary? summary, PartyState? party, IDiceRoller? roller = null)
+        {
+            EncounterCheckSpec spec = BuildQuickResolveCheckSpec(summary, party);
+            IDiceRoller rng = roller ?? new DeterministicDiceRoller(0x515549434BUL);
+            return ResolveD20Check(spec, rng, "Decisive tactical rout!", "Foes stood their ground!");
+        }
+
+        private static EncounterCheckRollResult ResolveD20Check(EncounterCheckSpec spec, IDiceRoller roller, string successMsg, string failMsg)
+        {
+            int selected = RollAdvantageHelper.RollD20WithAdvantage(roller, spec.AdvantageState, out int r1, out int r2);
+            bool nat20 = selected == 20;
+            bool nat1 = selected == 1;
+            int total = selected + spec.Modifier;
+            bool success = nat20 || (!nat1 && total >= spec.Dc);
+            return new EncounterCheckRollResult(
+                success: success,
+                dc: spec.Dc,
+                d20Roll1: r1,
+                d20Roll2: r2,
+                selectedD20: selected,
+                modifier: spec.Modifier,
+                total: total,
+                isNatural20: nat20,
+                isNatural1: nat1,
+                advantageState: spec.AdvantageState,
+                summary: success ? successMsg : failMsg);
+        }
+
         private static MonsterDefinition? FindMonsterByIndex(IReadOnlyList<MonsterDefinition> catalog, int index)
         {
             for (int i = 0; i < catalog.Count; i++)
@@ -2394,5 +2543,75 @@ namespace RealmzCore.Exploration
 
             return null;
         }
+    }
+
+    public sealed class EncounterCheckSpec
+    {
+        public EncounterCheckSpec(
+            string checkTitle,
+            string statLabel,
+            int dc,
+            int modifier,
+            string modifierBreakdown,
+            RollAdvantageState advantageState,
+            string tierLabel)
+        {
+            CheckTitle = checkTitle ?? string.Empty;
+            StatLabel = statLabel ?? "DEX";
+            Dc = dc;
+            Modifier = modifier;
+            ModifierBreakdown = modifierBreakdown ?? string.Empty;
+            AdvantageState = advantageState;
+            TierLabel = tierLabel ?? "Even Odds";
+        }
+
+        public string CheckTitle { get; }
+        public string StatLabel { get; }
+        public int Dc { get; }
+        public int Modifier { get; }
+        public string ModifierBreakdown { get; }
+        public RollAdvantageState AdvantageState { get; }
+        public string TierLabel { get; }
+    }
+
+    public sealed class EncounterCheckRollResult
+    {
+        public EncounterCheckRollResult(
+            bool success,
+            int dc,
+            int d20Roll1,
+            int d20Roll2,
+            int selectedD20,
+            int modifier,
+            int total,
+            bool isNatural20,
+            bool isNatural1,
+            RollAdvantageState advantageState,
+            string summary)
+        {
+            Success = success;
+            Dc = dc;
+            D20Roll1 = d20Roll1;
+            D20Roll2 = d20Roll2;
+            SelectedD20 = selectedD20;
+            Modifier = modifier;
+            Total = total;
+            IsNatural20 = isNatural20;
+            IsNatural1 = isNatural1;
+            AdvantageState = advantageState;
+            Summary = summary ?? string.Empty;
+        }
+
+        public bool Success { get; }
+        public int Dc { get; }
+        public int D20Roll1 { get; }
+        public int D20Roll2 { get; }
+        public int SelectedD20 { get; }
+        public int Modifier { get; }
+        public int Total { get; }
+        public bool IsNatural20 { get; }
+        public bool IsNatural1 { get; }
+        public RollAdvantageState AdvantageState { get; }
+        public string Summary { get; }
     }
 }

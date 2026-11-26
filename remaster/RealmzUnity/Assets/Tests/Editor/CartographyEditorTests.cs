@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using NUnit.Framework;
 using Realmz.Cartography;
 using Realmz.Data;
@@ -1031,31 +1032,9 @@ namespace Realmz.EditorTests
                 }
             }
 
-            // Check all 4 Shopkeeper/Priestess NPCs have >= 1 BFS-reachable adjacent tile
-            Assert.That(landWorld.Npcs.Count, Is.EqualTo(4), "All 4 Shopkeeper/Priestess NPCs must be placed.");
-            for (int n = 0; n < landWorld.Npcs.Count; n++)
-            {
-                CartographyNpcPlacement npc = landWorld.Npcs[n];
-                bool reachedAdjacent = false;
-                for (int dy = -1; dy <= 1 && !reachedAdjacent; dy++)
-                {
-                    for (int dx = -1; dx <= 1; dx++)
-                    {
-                        if (dx == 0 && dy == 0) continue;
-                        int ax = npc.TileX + dx;
-                        int ay = npc.TileY + dy;
-                        if (bundle.Land0.InBounds(ax, ay) && bundle.Land0.IsPassable(ax, ay, false))
-                        {
-                            if (session.PlanPath(new GridCoord(ax, ay), allowDiagonal: true).Found)
-                            {
-                                reachedAdjacent = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-                Assert.That(reachedAdjacent, Is.True, $"Shopkeeper NPC {npc.DisplayName} at ({npc.TileX}, {npc.TileY}) must have BFS-reachable approach.");
-            }
+            // Enclosed town merchants live inside Shop/Temple modals (0 outdoor shopkeeper sprites).
+            Assert.That(landWorld.Npcs.Count, Is.EqualTo(0), "Enclosed shopkeepers reside inside modals, not standing outdoors.");
+            Assert.That(bundle.Land0.PointsOfInterest.Any(p => string.Equals(p.Kind, "shop", System.StringComparison.OrdinalIgnoreCase)), Is.True);
 
             // Check town POIs (Armory (7,11), Tavern (9,13), Temple (9,17), Tannery (38,13), Apothecary (88,12)) & key town doorways
             GridCoord[] keyDoorsAndPois =

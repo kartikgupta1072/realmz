@@ -3343,64 +3343,10 @@ namespace Realmz.Cartography
             bool[,] isBuildingTile,
             List<Vector2Int> placedOutdoorProps)
         {
-            HashSet<Vector2Int> npcTiles = new HashSet<Vector2Int>();
-
-            (string shopId, string kindMatch, string npcId, string displayName, string venueKind, string greeting)[] specs =
-            {
-                ("1", null, "npc_blacksmith", "Master Blacksmith Borin", "shop", "Fine steel and shieldcraft for the road ahead."),
-                ("4", null, "npc_tanner", "Tanner Mira", "shop", "Hardened leather, hides, and rugged trail gear."),
-                ("10", null, "npc_apothecary", "Alchemist Orin", "shop", "Elixirs, poultices, and warding draughts brewed fresh."),
-                (null, "temple", "npc_priestess", "High Priestess Elara", "temple", "Peace upon your band. Seek healing, cleansing, or arcane renewal.")
-            };
-
-            for (int s = 0; s < specs.Length; s++)
-            {
-                MapPointOfInterest targetPoi = null;
-                for (int i = 0; i < map.PointsOfInterest.Count; i++)
-                {
-                    MapPointOfInterest poi = map.PointsOfInterest[i];
-                    if (specs[s].shopId != null)
-                    {
-                        if (string.Equals(poi.ShopId, specs[s].shopId, StringComparison.OrdinalIgnoreCase))
-                        {
-                            targetPoi = poi;
-                            break;
-                        }
-                    }
-                    else if (string.Equals(poi.Kind, specs[s].kindMatch, StringComparison.OrdinalIgnoreCase))
-                    {
-                        targetPoi = poi;
-                        break;
-                    }
-                }
-
-                if (targetPoi == null)
-                {
-                    continue;
-                }
-
-                if (TryFindNpcSpotNear(map, kinds, isBuildingTile, npcTiles, targetPoi.X, targetPoi.Y, out int nx, out int ny))
-                {
-                    Vector2Int coord = new Vector2Int(nx, ny);
-                    npcTiles.Add(coord);
-                    placedOutdoorProps.Add(coord);
-                    _npcBlockedTiles.Add(coord);
-                    _blockedPropTiles.Add(coord);
-                    _npcs.Add(new CartographyNpcPlacement
-                    {
-                        NpcId = specs[s].npcId,
-                        DisplayName = specs[s].displayName,
-                        ShopId = specs[s].shopId ?? string.Empty,
-                        VenueKind = specs[s].venueKind,
-                        TileX = nx,
-                        TileY = ny,
-                        WorldPosition = GridToWorld(nx, ny, GetElevation(nx, ny)),
-                        Greeting = specs[s].greeting
-                    });
-                }
-            }
-
-            return npcTiles;
+            // Enclosed town merchants (Blacksmith, Tanner, Apothecary, Priestess) live inside their
+            // Shop and Temple modals and are accessed via clickable building doorways / [E] prompts.
+            // Outdoor street NPCs are reserved for future non-building quest givers and open-air stalls.
+            return new HashSet<Vector2Int>();
         }
 
         private bool TryFindNpcSpotNear(

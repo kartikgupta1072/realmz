@@ -5012,10 +5012,10 @@
       "sample_rate": 44100,
       "channels": 2,
       "duration_sec": 187.06,
-      "mean_volume_db": -16.0,
+      "mean_volume_db": -15.0,
       "max_volume_db": -3.6,
-      "bytes": 2854718,
-      "sha256": "a6753ec4c1a0970b42d2c5349b7a38474677a559e9f37e5686ed4096235feb79"
+      "bytes": 2377532,
+      "sha256": "2563f36d269ff22ac784f485753c5dd91c4935c09e181a4bba4eda5281f8c2e6"
     },
     {
       "key": "shop",
@@ -5179,10 +5179,10 @@
       "sample_rate": 44100,
       "channels": 2,
       "duration_sec": 187.06,
-      "mean_volume_db": -16.0,
+      "mean_volume_db": -15.0,
       "max_volume_db": -3.6,
-      "bytes": 2854718,
-      "sha256": "a6753ec4c1a0970b42d2c5349b7a38474677a559e9f37e5686ed4096235feb79"
+      "bytes": 2377532,
+      "sha256": "2563f36d269ff22ac784f485753c5dd91c4935c09e181a4bba4eda5281f8c2e6"
     },
     "shop": {
       "key": "shop",

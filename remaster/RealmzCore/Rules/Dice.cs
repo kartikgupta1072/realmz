@@ -342,4 +342,73 @@ namespace RealmzCore.Rules
             return next;
         }
     }
+
+    public enum RollAdvantageState
+    {
+        Disadvantage = -1,
+        Normal = 0,
+        Advantage = 1
+    }
+
+    public static class RollAdvantageHelper
+    {
+        public static RollAdvantageState ResolveAdvantage(bool hasAdvantage, bool hasDisadvantage)
+        {
+            if (hasAdvantage == hasDisadvantage)
+            {
+                return RollAdvantageState.Normal;
+            }
+
+            return hasAdvantage ? RollAdvantageState.Advantage : RollAdvantageState.Disadvantage;
+        }
+
+        public static int RollD20WithAdvantage(
+            IDiceRoller roller,
+            RollAdvantageState advantage,
+            out int roll1,
+            out int roll2)
+        {
+            if (roller == null)
+            {
+                throw new ArgumentNullException(nameof(roller));
+            }
+
+            roll1 = roller.NextInt(1, 21);
+            if (advantage == RollAdvantageState.Normal)
+            {
+                roll2 = roll1;
+                return roll1;
+            }
+
+            roll2 = roller.NextInt(1, 21);
+            return advantage == RollAdvantageState.Advantage
+                ? Math.Max(roll1, roll2)
+                : Math.Min(roll1, roll2);
+        }
+
+        public static int RollD100RollUnderWithAdvantage(
+            IDiceRoller roller,
+            RollAdvantageState advantage,
+            out int roll1,
+            out int roll2)
+        {
+            if (roller == null)
+            {
+                throw new ArgumentNullException(nameof(roller));
+            }
+
+            roll1 = roller.NextInt(1, 101);
+            if (advantage == RollAdvantageState.Normal)
+            {
+                roll2 = roll1;
+                return roll1;
+            }
+
+            roll2 = roller.NextInt(1, 101);
+            // Roll-under checks succeed on lower numbers, so Advantage keeps Min and Disadvantage keeps Max.
+            return advantage == RollAdvantageState.Advantage
+                ? Math.Min(roll1, roll2)
+                : Math.Max(roll1, roll2);
+        }
+    }
 }

@@ -23,6 +23,9 @@ namespace Realmz.World
         }
 
         private readonly ParticleSystem[] _smokeEmitters = new ParticleSystem[SmokePoolSize];
+        private readonly Vector2Int[] _smokeTileCoords = new Vector2Int[SmokePoolSize];
+        private readonly Vector3[] _smokeWorldPositions = new Vector3[SmokePoolSize];
+        private readonly bool[] _smokeHasAnchor = new bool[SmokePoolSize];
         private readonly ParticleSystem[] _emberEmitters = new ParticleSystem[EmberPoolSize];
         private ParticleSystem _rainEmitter;
 
@@ -41,6 +44,11 @@ namespace Realmz.World
         private bool _isDungeon;
         private bool _isRaining;
         private float _windScale = 1f;
+        private float _nightFactor;
+        private bool _fogEnabled;
+        private int _fogWidth;
+        private int _fogHeight;
+        private byte[] _fogStates;
         private bool _hasRuntimeCampfire;
         private Vector3 _runtimeCampfirePos;
         private Vector3 _focusWorldPos;
@@ -91,6 +99,11 @@ namespace Realmz.World
                     if (!isDungeon && smokeIdx < SmokePoolSize && IsChimneyBuilding(prop.Kind))
                     {
                         Vector3 chimneyPos = ResolveChimneyWorldPosition(prop);
+                        _smokeWorldPositions[smokeIdx] = chimneyPos;
+                        _smokeTileCoords[smokeIdx] = new Vector2Int(
+                            Mathf.FloorToInt(chimneyPos.x),
+                            Mathf.FloorToInt(-chimneyPos.z));
+                        _smokeHasAnchor[smokeIdx] = true;
                         ConfigureSmokeEmitter(_smokeEmitters[smokeIdx], chimneyPos, enabled: true);
                         smokeIdx++;
                     }
@@ -109,11 +122,71 @@ namespace Realmz.World
             ActiveSmokeEmitterCount = smokeIdx;
             for (int i = smokeIdx; i < SmokePoolSize; i++)
             {
+                _smokeHasAnchor[i] = false;
                 ConfigureSmokeEmitter(_smokeEmitters[i], Vector3.zero, enabled: false);
             }
 
             RefreshEmberSelection();
             ApplyWeatherState();
+            RefreshSmokeVisibilityAndTint();
+        }
+
+        public void UpdateFogAndNightState(byte[] fogStates, int width, int height, bool enableFog, float nightFactor)
+        {
+            EnsurePoolsAllocated();
+            _fogEnabled = enableFog && fogStates != null && width > 0 && height > 0 && fogStates.Length >= width * height;
+            _fogWidth = _fogEnabled ? width : 0;
+            _fogHeight = _fogEnabled ? height : 0;
+            _fogStates = _fogEnabled ? fogStates : null;
+            _nightFactor = Mathf.Clamp01(nightFactor);
+            RefreshSmokeVisibilityAndTint();
+        }
+
+        private void RefreshSmokeVisibilityAndTint()
+        {
+            Color dayTint = new Color(0.863f, 0.843f, 0.808f, 0.66f);
+            Color nightTint = new Color(0.38f, 0.42f, 0.52f, 0.44f);
+            Color baseColor = Color.Lerp(dayTint, nightTint, _nightFactor);
+
+            for (int i = 0; i < SmokePoolSize; i++)
+            {
+                ParticleSystem ps = _smokeEmitters[i];
+                if (ps == null)
+                {
+                    continue;
+                }
+
+                if (!_smokeHasAnchor[i] || _isDungeon)
+                {
+                    ConfigureSmokeEmitter(ps, Vector3.zero, enabled: false);
+                    continue;
+                }
+
+                byte visState = 2;
+                if (_fogEnabled && _fogStates != null)
+                {
+                    Vector2Int tc = _smokeTileCoords[i];
+                    if (tc.x >= 0 && tc.x < _fogWidth && tc.y >= 0 && tc.y < _fogHeight)
+                    {
+                        visState = _fogStates[tc.y * _fogWidth + tc.x];
+                    }
+                }
+
+                if (visState == 0)
+                {
+                    // Completely mute smoke inside pitch-black Unseen Fog-of-War so plumes never glow in darkness.
+                    ConfigureSmokeEmitter(ps, _smokeWorldPositions[i], enabled: false);
+                    continue;
+                }
+
+                float alphaMul = visState == 1 ? 0.32f : 1.0f;
+                ParticleSystem.MainModule main = ps.main;
+                Color c = baseColor;
+                c.a = baseColor.a * alphaMul;
+                main.startColor = c;
+
+                ConfigureSmokeEmitter(ps, _smokeWorldPositions[i], enabled: true);
+            }
         }
 
         public void UpdateFocusPosition(Vector3 worldPos)
@@ -342,15 +415,16 @@ namespace Realmz.World
             main.loop = true;
             main.maxParticles = 32;
             main.simulationSpace = ParticleSystemSimulationSpace.World;
-            main.startLifetime = 2.8f;
-            main.startSpeed = 0.05f;
-            main.startSize = 0.45f;
-            main.startColor = new Color(0.863f, 0.843f, 0.808f, 0.68f);
+            main.startLifetime = new ParticleSystem.MinMaxCurve(2.2f + (index * 0.15f), 3.4f + (index * 0.18f));
+            main.startSpeed = new ParticleSystem.MinMaxCurve(0.03f, 0.09f);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.32f, 0.56f);
+            main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+            main.startColor = new Color(0.863f, 0.843f, 0.808f, 0.66f);
             main.gravityModifier = 0f;
 
             ParticleSystem.EmissionModule emission = ps.emission;
             emission.enabled = false;
-            emission.rateOverTime = 5f;
+            emission.rateOverTime = 3.8f + ((index % 3) * 0.85f);
 
             ParticleSystem.ShapeModule shape = ps.shape;
             shape.enabled = true;
@@ -360,16 +434,39 @@ namespace Realmz.World
             ParticleSystem.VelocityOverLifetimeModule vel = ps.velocityOverLifetime;
             vel.enabled = true;
             vel.space = ParticleSystemSimulationSpace.World;
-            vel.x = new ParticleSystem.MinMaxCurve(0.86f * 0.42f * _windScale, 0.86f * 0.62f * _windScale);
-            vel.y = new ParticleSystem.MinMaxCurve(0.65f, 0.92f);
-            vel.z = new ParticleSystem.MinMaxCurve(0.51f * 0.42f * _windScale, 0.51f * 0.62f * _windScale);
+            vel.x = new ParticleSystem.MinMaxCurve(0.86f * 0.36f * _windScale, 0.86f * 0.68f * _windScale);
+            vel.y = new ParticleSystem.MinMaxCurve(0.58f, 0.96f);
+            vel.z = new ParticleSystem.MinMaxCurve(0.51f * 0.36f * _windScale, 0.51f * 0.68f * _windScale);
+
+            ParticleSystem.NoiseModule noise = ps.noise;
+            noise.enabled = true;
+            noise.separateAxes = true;
+            noise.strengthX = 0.34f;
+            noise.strengthY = 0.12f;
+            noise.strengthZ = 0.28f;
+            noise.frequency = 0.65f;
+            noise.scrollSpeed = 0.45f;
+            noise.damping = true;
+            noise.octaveCount = 2;
+
+            ParticleSystem.RotationOverLifetimeModule rot = ps.rotationOverLifetime;
+            rot.enabled = true;
+            rot.z = new ParticleSystem.MinMaxCurve(-0.55f, 0.55f);
 
             ParticleSystem.SizeOverLifetimeModule sizeLife = ps.sizeOverLifetime;
             sizeLife.enabled = true;
             AnimationCurve sizeCurve = new AnimationCurve(
-                new Keyframe(0f, 0.333f),
-                new Keyframe(1f, 1.0f));
+                new Keyframe(0f, 0.35f),
+                new Keyframe(0.5f, 0.85f),
+                new Keyframe(1f, 1.15f));
             sizeLife.size = new ParticleSystem.MinMaxCurve(1f, sizeCurve);
+
+            ParticleSystem.TextureSheetAnimationModule sheet = ps.textureSheetAnimation;
+            sheet.enabled = true;
+            sheet.mode = ParticleSystemAnimationMode.Grid;
+            sheet.numTilesX = 2;
+            sheet.numTilesY = 2;
+            sheet.frameOverTime = new ParticleSystem.MinMaxCurve(0f, 3.99f);
 
             ParticleSystem.ColorOverLifetimeModule colorLife = ps.colorOverLifetime;
             colorLife.enabled = true;
@@ -378,13 +475,13 @@ namespace Realmz.World
                 new[]
                 {
                     new GradientColorKey(new Color(0.863f, 0.843f, 0.808f), 0f),
-                    new GradientColorKey(new Color(0.863f, 0.843f, 0.808f), 1f)
+                    new GradientColorKey(new Color(0.78f, 0.78f, 0.80f), 1f)
                 },
                 new[]
                 {
                     new GradientAlphaKey(0f, 0f),
-                    new GradientAlphaKey(0.75f, 0.18f),
-                    new GradientAlphaKey(0.45f, 0.65f),
+                    new GradientAlphaKey(0.72f, 0.16f),
+                    new GradientAlphaKey(0.42f, 0.65f),
                     new GradientAlphaKey(0f, 1f)
                 });
             colorLife.color = new ParticleSystem.MinMaxGradient(grad);
@@ -507,7 +604,7 @@ namespace Realmz.World
         {
             if (_smokePixelTexture == null)
             {
-                _smokePixelTexture = CreatePixelQuadTexture(8, softEdge: true);
+                _smokePixelTexture = CreateSmokePuffFlipbookTexture();
             }
 
             if (_smokeMaterial == null)
@@ -584,6 +681,55 @@ namespace Realmz.World
             }
 
             return mat;
+        }
+
+        private static Texture2D CreateSmokePuffFlipbookTexture()
+        {
+            const int tile = 8;
+            const int size = tile * 2;
+            Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave
+            };
+
+            Color32[] pixels = new Color32[size * size];
+            Vector2[] offsets =
+            {
+                new Vector2(0f, 0f),
+                new Vector2(0.55f, -0.35f),
+                new Vector2(-0.45f, 0.40f),
+                new Vector2(0.25f, 0.50f)
+            };
+
+            for (int ty = 0; ty < 2; ty++)
+            {
+                for (int tx = 0; tx < 2; tx++)
+                {
+                    int idx = ty * 2 + tx;
+                    Vector2 lobe = offsets[idx];
+                    float half = (tile - 1) * 0.5f;
+                    for (int y = 0; y < tile; y++)
+                    {
+                        for (int x = 0; x < tile; x++)
+                        {
+                            float dx = (x - half) / half;
+                            float dy = (y - half) / half;
+                            float r0 = Mathf.Sqrt(dx * dx + dy * dy);
+                            float r1 = Mathf.Sqrt((dx - lobe.x) * (dx - lobe.x) + (dy - lobe.y) * (dy - lobe.y));
+                            float r = Mathf.Min(r0, r1 * 1.15f);
+                            float a = r <= 0.58f ? 1f : (r <= 1.02f ? Mathf.Lerp(0.75f, 0.18f, (r - 0.58f) / 0.44f) : 0f);
+                            byte ab = (byte)Mathf.RoundToInt(Mathf.Clamp01(a) * 255f);
+                            pixels[(ty * tile + y) * size + (tx * tile + x)] = new Color32(255, 255, 255, ab);
+                        }
+                    }
+                }
+            }
+
+            tex.SetPixels32(pixels);
+            tex.Apply(false, true);
+            return tex;
         }
 
         private static Texture2D CreatePixelQuadTexture(int size, bool softEdge)

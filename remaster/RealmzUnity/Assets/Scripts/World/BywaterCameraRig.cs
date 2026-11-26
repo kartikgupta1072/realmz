@@ -146,11 +146,12 @@ namespace Realmz.World
             UpdateTacticalPitchBlend(dt);
             UpdateFocusBeat(dt);
 
+            float activeSmoothTime = _isCombatMode ? followSmoothTime : Mathf.Min(followSmoothTime, 0.085f);
             _currentFollowPos = Vector3.SmoothDamp(
                 _currentFollowPos,
                 _followTarget,
                 ref _followVelocity,
-                followSmoothTime,
+                activeSmoothTime,
                 Mathf.Infinity,
                 dt);
 

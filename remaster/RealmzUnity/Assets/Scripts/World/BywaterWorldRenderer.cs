@@ -1448,7 +1448,7 @@ namespace Realmz.World
                         npcMat,
                         npcRingColor,
                         font,
-                        spriteSize: 1.20f,
+                        spriteSize: 1.85f,
                         showHud: false,
                         isAllyOverride: true,
                         catalog: _catalog);
@@ -1662,6 +1662,12 @@ namespace Realmz.World
             }
 
             RefreshPortalFogVisibility();
+        }
+
+        public void SetAtmosphereFogAndNight(byte[] states, int width, int height, bool enableFog, float nightFactor)
+        {
+            EnsureCartographyComponents();
+            _atmosphereVfx?.UpdateFogAndNightState(states, width, height, enableFog, nightFactor);
         }
 
         private bool IsTileVisibleUnderFog(int x, int y)

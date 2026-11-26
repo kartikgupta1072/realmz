@@ -17,24 +17,23 @@ If you want to capture your own session notes or log issues, note the **tile `(x
 
 ## 2. 10-Minute Vertical-Slice Checklist (7 Beats)
 
-### Beat 1: Town Arrival & NPC Trade (`City of Bywater`)
-- Walk through Bywater (`WASD` / click-to-move) and check cobblestone road edges, building solidity, and `Borin`'s human scale next to `Sir Aldric`.
-- Hover/click `Master Blacksmith Borin`: verify the `[E / Click] Trade` prompt fits cleanly and opens the Shop modal.
+### Beat 1: Town Arrival & Indoor Shops (`City of Bywater`)
+- Walk through Bywater (`WASD` / click-to-move) and test crisp step responsiveness + `Mystic highlands` town music crossfading cleanly to fixed-pitch `after-the-rain` music outside town gates.
+- Click a Shop/Temple doorway (e.g., Armory/Blacksmith, Tanner, Apothecary, Shrine) or press `[E]` nearby: verify the Shop/Temple modal opens with merchant portrait/dialogue cleanly inside.
 - **Check:** Mouse-wheel scroll zoom and keyboard pan stay locked while Shop is open; closing restores camera control cleanly.
 
 ### Beat 2: Overworld Exploration, Day/Night & 3-State Fog-of-War
-- Leave the Bywater safe zone onto the wild road / meadow.
-- Confirm Bywater town tiles never trigger ambushes, while wild roads/woods advance the `1,440`-minute clock (`+2` min/step) and update 3-state Fog-of-War (`Unseen` -> `Explored` -> `CurrentlyVisible`).
+- Leave the Bywater safe zone onto the wild road / Haunted Quarters / meadow.
+- Confirm Bywater town tiles never trigger ambushes, while wild roads/woods advance the `1,440`-minute clock (`+2` min/step) and update 3-state Fog-of-War (`Unseen` -> `Explored` -> `CurrentlyVisible`), keeping distant chimney smoke hidden inside pitch-black `Unseen` tiles.
 - **Check:** Dusk river water reads naturally (tinted glints, soft bank foam) with zero 1px skybox hairlines along cobble/grass borders.
 
-### Beat 3: Scouting & Night Torchlight Tension
-- Continue until dusk/night or rest/step into darkness; toggle Aldric's Torch and observe warm light radius vs dark outskirts.
-- Trigger an encounter (or Scouting Intercept Modal): check `AMBUSHED IN THE DARK!` penalty when unlit vs scouting advantages when lit.
+### Beat 3: Spoiler-Free Intercept & BG3 `d20` Rolls
+- Continue until an encounter triggers (or Dusk/Night ambush): verify the intercept modal shows terrain flavor without revealing clock/torch spoilers, displays `Evade [DEX DC X]` / `Quick Resolve [Tier | DC X]`, and animates a BG3-style `d20` check modal!
 
-### Beat 4: Pre-Battle Deployment & 6-AP Tactical Combat
-- In Pre-Battle Deployment, swap two heroes across Front/Mid/Back tiles and press `Start Battle [Space]`.
-- Test `[T]` tactical pitch toggle (`48 <-> 64 deg`), corner-tick grid brackets, subtle move-path `1 AP` pips, and `Combat Log [L]` (confirm `[R1]` prefix clears the bottom hotbar even on `Theron`'s wide caster bar).
-- Test `Shove [V]` and trigger an `oil_keg_cluster` or `LitBrazier` / oil slick hazard; check hit-stop, Cinemachine impulse, sound jitter, and ragged (non-square) oil puddle borders.
+### Beat 4: Pre-Battle Deployment & Option A D&D 5e Tactical Combat
+- In Pre-Battle Deployment, verify only the selected hero shows the active ring (not unselected heroes), click hero sprites (head/body) or tiles in the curated 8-slot zone to swap/reposition, and press `Start Battle [Space]`.
+- In **Haunted Quarters** combat, verify ruins stone features (`RuinsOutskirts`) instead of road supply wagons.
+- Verify **Option A** resources (`MP` movement + `ACT` Main Action + `BON` Bonus Action + `RCT` Reaction + **`Dash [D]`** + Iron Vanguard Bonus Action `Guard`), zero distracting red enemy intent arcs, and **Green / Yellow / Red + `X` dotted LOS sightlines** when aiming Ranged attacks or Spells!
 
 ### Beat 5: Option 2 Victory Screen & `[P]` Paper-Doll
 - Finish the encounter and verify the Victory modal:
