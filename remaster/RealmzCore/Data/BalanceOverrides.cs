@@ -22,7 +22,9 @@ namespace RealmzCore.Data
             int? hpDefault = null,
             int? xpReward = null,
             string role = "",
-            IReadOnlyList<string>? specialAbilities = null)
+            IReadOnlyList<string>? specialAbilities = null,
+            int? baseMp = null,
+            int? baseAp = null)
         {
             Id = id ?? string.Empty;
             Name = name ?? string.Empty;
@@ -35,6 +37,8 @@ namespace RealmzCore.Data
             XpReward = xpReward;
             Role = role ?? string.Empty;
             _specialAbilities = CopyStringList(specialAbilities);
+            BaseMp = baseMp;
+            BaseAp = baseAp;
         }
 
         public string Id { get; }
@@ -48,6 +52,8 @@ namespace RealmzCore.Data
         public int? XpReward { get; }
         public string Role { get; }
         public IReadOnlyList<string> SpecialAbilities => _specialAbilities;
+        public int? BaseMp { get; }
+        public int? BaseAp { get; }
 
         private static string[] CopyStringList(IReadOnlyList<string>? source)
         {
@@ -106,7 +112,7 @@ namespace RealmzCore.Data
         public SurvivalBalanceConfig(
             int torchPrice = 12,
             int rationPrice = 5,
-            int torchTurnDuration = 30,
+            int torchTurnDuration = 120,
             int bandageMaxCharges = 2,
             VisionRadiusConfig? visionRadii = null,
             float minutesPerRealSecond = 1.0f)
@@ -187,8 +193,10 @@ namespace RealmzCore.Data
                     hpMax: 24,
                     hpDefault: 21,
                     xpReward: 65,
-                    role: "bruiser",
-                    specialAbilities: new[] { "cleave_2tile" }),
+                    role: "Bruiser",
+                    specialAbilities: new[] { "cleave_2tile" },
+                    baseMp: 4,
+                    baseAp: 6),
                 new MonsterBalanceOverride(
                     id: "giant_frog",
                     name: "Giant Frog",
@@ -199,8 +207,10 @@ namespace RealmzCore.Data
                     hpMax: 19,
                     hpDefault: 17,
                     xpReward: 70,
-                    role: "ambusher",
-                    specialAbilities: new[] { "tongue_pull" }),
+                    role: "Controller",
+                    specialAbilities: new[] { "tongue_pull" },
+                    baseMp: 5,
+                    baseAp: 6),
                 new MonsterBalanceOverride(
                     id: "goblin",
                     name: "Goblin",
@@ -210,7 +220,9 @@ namespace RealmzCore.Data
                     hpMin: 8,
                     hpMax: 11,
                     hpDefault: 9,
-                    role: "skirmisher"),
+                    role: "Skirmisher",
+                    baseMp: 4,
+                    baseAp: 4),
                 new MonsterBalanceOverride(
                     id: "goblin_archer",
                     name: "Goblin Archer",
@@ -220,14 +232,88 @@ namespace RealmzCore.Data
                     hpMin: 6,
                     hpMax: 9,
                     hpDefault: 8,
-                    role: "ranged",
-                    specialAbilities: new[] { "high_ground_seeker" })
+                    role: "Ranged",
+                    specialAbilities: new[] { "high_ground_seeker" },
+                    baseMp: 4,
+                    baseAp: 4),
+                new MonsterBalanceOverride(
+                    id: "giant_rat",
+                    name: "Giant Rat",
+                    hpMin: 6,
+                    hpMax: 8,
+                    hpDefault: 7,
+                    role: "Skirmisher",
+                    baseMp: 3,
+                    baseAp: 4),
+                new MonsterBalanceOverride(
+                    id: "zombie",
+                    name: "Zombie",
+                    hpMin: 18,
+                    hpMax: 23,
+                    hpDefault: 20,
+                    role: "Skirmisher",
+                    baseMp: 3,
+                    baseAp: 4),
+                new MonsterBalanceOverride(
+                    id: "skeletal_warrior",
+                    name: "Skeletal Warrior",
+                    hpMin: 12,
+                    hpMax: 16,
+                    hpDefault: 14,
+                    role: "Skirmisher",
+                    baseMp: 4,
+                    baseAp: 4),
+                new MonsterBalanceOverride(
+                    id: "orc_archer",
+                    name: "Orc Archer",
+                    hpMin: 10,
+                    hpMax: 14,
+                    hpDefault: 12,
+                    role: "Ranged",
+                    baseMp: 4,
+                    baseAp: 4),
+                new MonsterBalanceOverride(
+                    id: "monstrous_rat",
+                    name: "Monstrous Rat",
+                    hpMin: 16,
+                    hpMax: 20,
+                    hpDefault: 18,
+                    role: "Skirmisher",
+                    baseMp: 4,
+                    baseAp: 5),
+                new MonsterBalanceOverride(
+                    id: "giant_spider",
+                    name: "Giant Spider",
+                    hpMin: 11,
+                    hpMax: 15,
+                    hpDefault: 13,
+                    role: "Skirmisher",
+                    baseMp: 4,
+                    baseAp: 5),
+                new MonsterBalanceOverride(
+                    id: "goblin_champion",
+                    name: "Goblin Champion",
+                    hpMin: 20,
+                    hpMax: 25,
+                    hpDefault: 22,
+                    role: "Skirmisher",
+                    baseMp: 4,
+                    baseAp: 6),
+                new MonsterBalanceOverride(
+                    id: "goblin_shaman",
+                    name: "Goblin Shaman",
+                    hpMin: 16,
+                    hpMax: 20,
+                    hpDefault: 18,
+                    role: "Caster",
+                    baseMp: 4,
+                    baseAp: 6)
             };
 
             SurvivalBalanceConfig survival = new SurvivalBalanceConfig(
                 torchPrice: 12,
                 rationPrice: 5,
-                torchTurnDuration: 30,
+                torchTurnDuration: 120,
                 bandageMaxCharges: 2,
                 visionRadii: new VisionRadiusConfig(),
                 minutesPerRealSecond: 1.0f);
@@ -367,6 +453,8 @@ namespace RealmzCore.Data
             IReadOnlyList<string> specialAbilities = ov.SpecialAbilities.Count > 0
                 ? ov.SpecialAbilities
                 : monster.SpecialAbilities;
+            int baseMp = ov.BaseMp ?? monster.BaseMp;
+            int baseAp = ov.BaseAp ?? monster.BaseAp;
 
             return new MonsterDefinition(
                 index: monster.Index,
@@ -401,7 +489,9 @@ namespace RealmzCore.Data
                 goldMax: monster.GoldMax,
                 lootItemIds: monster.LootItemIds,
                 role: role,
-                specialAbilities: specialAbilities);
+                specialAbilities: specialAbilities,
+                baseMp: baseMp,
+                baseAp: baseAp);
         }
 
         private MonsterBalanceOverride? FindOverrideForMonster(MonsterDefinition monster)
@@ -451,6 +541,8 @@ namespace RealmzCore.Data
                 if (m.HpMax.HasValue) obj["hp_max"] = m.HpMax.Value;
                 if (m.HpDefault.HasValue) obj["hp_default"] = m.HpDefault.Value;
                 if (m.XpReward.HasValue) obj["xp_reward"] = m.XpReward.Value;
+                if (m.BaseMp.HasValue) obj["base_mp"] = m.BaseMp.Value;
+                if (m.BaseAp.HasValue) obj["base_ap"] = m.BaseAp.Value;
 
                 obj["role"] = m.Role;
                 List<string> abilities = new List<string>(m.SpecialAbilities);
@@ -504,6 +596,14 @@ namespace RealmzCore.Data
                         ["ap_bonus"] = tier.ApBonus,
                         ["free_move_tiles"] = tier.FreeMoveTiles,
                         ["guard_ap_discount"] = tier.GuardApDiscount,
+                        ["crit_bonus_pct"] = tier.CritBonusPct,
+                        ["ranged_range_bonus"] = tier.RangedRangeBonus,
+                        ["ignore_half_cover"] = tier.IgnoreHalfCover,
+                        ["sp_cost_discount"] = tier.SpCostDiscount,
+                        ["spell_damage_bonus"] = tier.SpellDamageBonus,
+                        ["healing_bonus"] = tier.HealingBonus,
+                        ["support_spell_ap_discount"] = tier.SupportSpellApDiscount,
+                        ["undead_damage_bonus_pct"] = tier.UndeadDamageBonusPct,
                         ["summary"] = tier.Summary
                     });
                 }
@@ -539,7 +639,8 @@ namespace RealmzCore.Data
                     ["gold_reward"] = q.GoldReward,
                     ["xp_reward"] = q.XpReward,
                     ["location_hint"] = q.LocationHint,
-                    ["is_notice_board_bounty"] = q.IsNoticeBoardBounty
+                    ["is_notice_board_bounty"] = q.IsNoticeBoardBounty,
+                    ["reward_item_id"] = q.RewardItemId
                 });
             }
 
@@ -563,7 +664,9 @@ namespace RealmzCore.Data
                     hpDefault: GetOptionalInt(obj, "hp_default", "hpDefault"),
                     xpReward: GetOptionalInt(obj, "xp_reward", "xpReward"),
                     role: GetFirstString(obj, string.Empty, "role"),
-                    specialAbilities: ParseStringArray(obj, "special_abilities", "specialAbilities")));
+                    specialAbilities: ParseStringArray(obj, "special_abilities", "specialAbilities"),
+                    baseMp: GetOptionalInt(obj, "base_mp", "baseMp"),
+                    baseAp: GetOptionalInt(obj, "base_ap", "baseAp")));
             }
 
             return list;
@@ -622,7 +725,15 @@ namespace RealmzCore.Data
                             apBonus: GetFirstInt(tObj, 0, "ap_bonus", "apBonus"),
                             freeMoveTiles: GetFirstInt(tObj, 0, "free_move_tiles", "freeMoveTiles"),
                             guardApDiscount: GetFirstInt(tObj, 0, "guard_ap_discount", "guardApDiscount"),
-                            summary: GetFirstString(tObj, string.Empty, "summary")));
+                            summary: GetFirstString(tObj, string.Empty, "summary"),
+                            critBonusPct: GetFirstInt(tObj, 0, "crit_bonus_pct", "critBonusPct"),
+                            rangedRangeBonus: GetFirstInt(tObj, 0, "ranged_range_bonus", "rangedRangeBonus"),
+                            ignoreHalfCover: GetFirstBool(tObj, false, "ignore_half_cover", "ignoreHalfCover"),
+                            spCostDiscount: GetFirstInt(tObj, 0, "sp_cost_discount", "spCostDiscount"),
+                            spellDamageBonus: GetFirstInt(tObj, 0, "spell_damage_bonus", "spellDamageBonus"),
+                            healingBonus: GetFirstInt(tObj, 0, "healing_bonus", "healingBonus"),
+                            supportSpellApDiscount: GetFirstInt(tObj, 0, "support_spell_ap_discount", "supportSpellApDiscount"),
+                            undeadDamageBonusPct: GetFirstInt(tObj, 0, "undead_damage_bonus_pct", "undeadDamageBonusPct")));
                     }
                 }
 
@@ -648,7 +759,8 @@ namespace RealmzCore.Data
                     goldReward: GetFirstInt(obj, 0, "gold_reward", "goldReward"),
                     xpReward: GetFirstInt(obj, 0, "xp_reward", "xpReward"),
                     locationHint: GetFirstString(obj, string.Empty, "location_hint", "locationHint"),
-                    isNoticeBoardBounty: GetFirstBool(obj, false, "is_notice_board_bounty", "isNoticeBoardBounty")));
+                    isNoticeBoardBounty: GetFirstBool(obj, false, "is_notice_board_bounty", "isNoticeBoardBounty"),
+                    rewardItemId: GetFirstInt(obj, 0, "reward_item_id", "rewardItemId")));
             }
 
             return quests;

@@ -33,6 +33,8 @@ namespace Realmz.Data
             public int hpMax;
             public int hpDefault;
             public int xpReward;
+            public int baseMp;
+            public int baseAp;
             public string role = string.Empty;
             public string[] specialAbilities = Array.Empty<string>();
         }
@@ -55,7 +57,7 @@ namespace Realmz.Data
         {
             public int torchPrice = 12;
             public int rationPrice = 5;
-            public int torchTurnDuration = 30;
+            public int torchTurnDuration = 120;
             public int bandageMaxCharges = 2;
             public float minutesPerRealSecond = 1.0f;
             public VisionRadiiConfig visionRadii = new VisionRadiiConfig();
@@ -69,6 +71,14 @@ namespace Realmz.Data
             public int apBonus;
             public int freeMoveTiles;
             public int guardApDiscount;
+            public int critBonusPct;
+            public int rangedRangeBonus;
+            public bool ignoreHalfCover;
+            public int spCostDiscount;
+            public int spellDamageBonus;
+            public int healingBonus;
+            public int supportSpellApDiscount;
+            public int undeadDamageBonusPct;
             public string summary = string.Empty;
         }
 
@@ -96,6 +106,7 @@ namespace Realmz.Data
             public int xpReward;
             public string locationHint = string.Empty;
             public bool isNoticeBoardBounty;
+            public int rewardItemId;
         }
 
         private void OnEnable()
@@ -232,7 +243,9 @@ namespace Realmz.Data
                     hpDefault: m.hpDefault > 0 ? m.hpDefault : (int?)null,
                     xpReward: m.xpReward > 0 ? m.xpReward : (int?)null,
                     role: m.role ?? string.Empty,
-                    specialAbilities: m.specialAbilities));
+                    specialAbilities: m.specialAbilities,
+                    baseMp: m.baseMp > 0 ? m.baseMp : (int?)null,
+                    baseAp: m.baseAp > 0 ? m.baseAp : (int?)null));
             }
 
             SurvivalBalanceEntry s = survival ?? CreateDefaultSurvival();
@@ -282,7 +295,15 @@ namespace Realmz.Data
                         apBonus: tier.apBonus,
                         freeMoveTiles: tier.freeMoveTiles,
                         guardApDiscount: tier.guardApDiscount,
-                        summary: tier.summary ?? string.Empty));
+                        summary: tier.summary ?? string.Empty,
+                        critBonusPct: tier.critBonusPct,
+                        rangedRangeBonus: tier.rangedRangeBonus,
+                        ignoreHalfCover: tier.ignoreHalfCover,
+                        spCostDiscount: tier.spCostDiscount,
+                        spellDamageBonus: tier.spellDamageBonus,
+                        healingBonus: tier.healingBonus,
+                        supportSpellApDiscount: tier.supportSpellApDiscount,
+                        undeadDamageBonusPct: tier.undeadDamageBonusPct));
                 }
 
                 setDefinitions.Add(new EquipmentSetDefinition(
@@ -314,7 +335,8 @@ namespace Realmz.Data
                     goldReward: Math.Max(0, q.goldReward),
                     xpReward: Math.Max(0, q.xpReward),
                     locationHint: q.locationHint ?? string.Empty,
-                    isNoticeBoardBounty: q.isNoticeBoardBounty));
+                    isNoticeBoardBounty: q.isNoticeBoardBounty,
+                    rewardItemId: Math.Max(0, q.rewardItemId)));
             }
 
             return new BalanceOverrides(
@@ -368,6 +390,8 @@ namespace Realmz.Data
                 if (m.hpMax > 0) obj["hp_max"] = m.hpMax;
                 if (m.hpDefault > 0) obj["hp_default"] = m.hpDefault;
                 if (m.xpReward > 0) obj["xp_reward"] = m.xpReward;
+                if (m.baseMp > 0) obj["base_mp"] = m.baseMp;
+                if (m.baseAp > 0) obj["base_ap"] = m.baseAp;
 
                 obj["role"] = m.role ?? string.Empty;
 
@@ -450,6 +474,14 @@ namespace Realmz.Data
                         ["ap_bonus"] = tier.apBonus,
                         ["free_move_tiles"] = tier.freeMoveTiles,
                         ["guard_ap_discount"] = tier.guardApDiscount,
+                        ["crit_bonus_pct"] = tier.critBonusPct,
+                        ["ranged_range_bonus"] = tier.rangedRangeBonus,
+                        ["ignore_half_cover"] = tier.ignoreHalfCover,
+                        ["sp_cost_discount"] = tier.spCostDiscount,
+                        ["spell_damage_bonus"] = tier.spellDamageBonus,
+                        ["healing_bonus"] = tier.healingBonus,
+                        ["support_spell_ap_discount"] = tier.supportSpellApDiscount,
+                        ["undead_damage_bonus_pct"] = tier.undeadDamageBonusPct,
                         ["summary"] = tier.summary ?? string.Empty
                     });
                 }
@@ -491,7 +523,8 @@ namespace Realmz.Data
                     ["gold_reward"] = Math.Max(0, q.goldReward),
                     ["xp_reward"] = Math.Max(0, q.xpReward),
                     ["location_hint"] = q.locationHint ?? string.Empty,
-                    ["is_notice_board_bounty"] = q.isNoticeBoardBounty
+                    ["is_notice_board_bounty"] = q.isNoticeBoardBounty,
+                    ["reward_item_id"] = Math.Max(0, q.rewardItemId)
                 });
             }
 
@@ -520,6 +553,8 @@ namespace Realmz.Data
                     hpMax = GetFirstInt(obj, 0, "hp_max", "hpMax"),
                     hpDefault = GetFirstInt(obj, 0, "hp_default", "hpDefault"),
                     xpReward = GetFirstInt(obj, 0, "xp_reward", "xpReward"),
+                    baseMp = GetFirstInt(obj, 0, "base_mp", "baseMp"),
+                    baseAp = GetFirstInt(obj, 0, "base_ap", "baseAp"),
                     role = GetFirstString(obj, string.Empty, "role"),
                     specialAbilities = ParseStringArray(obj, "special_abilities", "specialAbilities")
                 });
@@ -604,6 +639,14 @@ namespace Realmz.Data
                             apBonus = GetFirstInt(tObj, 0, "ap_bonus", "apBonus"),
                             freeMoveTiles = GetFirstInt(tObj, 0, "free_move_tiles", "freeMoveTiles"),
                             guardApDiscount = GetFirstInt(tObj, 0, "guard_ap_discount", "guardApDiscount"),
+                            critBonusPct = GetFirstInt(tObj, 0, "crit_bonus_pct", "critBonusPct"),
+                            rangedRangeBonus = GetFirstInt(tObj, 0, "ranged_range_bonus", "rangedRangeBonus"),
+                            ignoreHalfCover = GetFirstBool(tObj, false, "ignore_half_cover", "ignoreHalfCover"),
+                            spCostDiscount = GetFirstInt(tObj, 0, "sp_cost_discount", "spCostDiscount"),
+                            spellDamageBonus = GetFirstInt(tObj, 0, "spell_damage_bonus", "spellDamageBonus"),
+                            healingBonus = GetFirstInt(tObj, 0, "healing_bonus", "healingBonus"),
+                            supportSpellApDiscount = GetFirstInt(tObj, 0, "support_spell_ap_discount", "supportSpellApDiscount"),
+                            undeadDamageBonusPct = GetFirstInt(tObj, 0, "undead_damage_bonus_pct", "undeadDamageBonusPct"),
                             summary = GetFirstString(tObj, string.Empty, "summary")
                         });
                     }
@@ -645,7 +688,8 @@ namespace Realmz.Data
                     goldReward = Math.Max(0, GetFirstInt(obj, 0, "gold_reward", "goldReward")),
                     xpReward = Math.Max(0, GetFirstInt(obj, 0, "xp_reward", "xpReward")),
                     locationHint = GetFirstString(obj, string.Empty, "location_hint", "locationHint"),
-                    isNoticeBoardBounty = GetFirstBool(obj, false, "is_notice_board_bounty", "isNoticeBoardBounty")
+                    isNoticeBoardBounty = GetFirstBool(obj, false, "is_notice_board_bounty", "isNoticeBoardBounty"),
+                    rewardItemId = Math.Max(0, GetFirstInt(obj, 0, "reward_item_id", "rewardItemId"))
                 });
             }
 
@@ -796,6 +840,8 @@ namespace Realmz.Data
                     hpMax = 24,
                     hpDefault = 21,
                     xpReward = 65,
+                    baseMp = 4,
+                    baseAp = 6,
                     role = "Bruiser",
                     specialAbilities = new[] { "cleave_2tile" }
                 },
@@ -810,6 +856,8 @@ namespace Realmz.Data
                     hpMax = 19,
                     hpDefault = 17,
                     xpReward = 70,
+                    baseMp = 5,
+                    baseAp = 6,
                     role = "Controller",
                     specialAbilities = new[] { "tongue_pull" }
                 },
@@ -824,6 +872,8 @@ namespace Realmz.Data
                     hpMax = 11,
                     hpDefault = 9,
                     xpReward = 0,
+                    baseMp = 4,
+                    baseAp = 4,
                     role = "Skirmisher",
                     specialAbilities = Array.Empty<string>()
                 },
@@ -838,9 +888,19 @@ namespace Realmz.Data
                     hpMax = 9,
                     hpDefault = 8,
                     xpReward = 0,
+                    baseMp = 4,
+                    baseAp = 4,
                     role = "Ranged",
                     specialAbilities = new[] { "high_ground_seeker" }
-                }
+                },
+                new MonsterBalanceEntry { id = "giant_rat", name = "Giant Rat", hpMin = 6, hpMax = 8, hpDefault = 7, baseMp = 3, baseAp = 4, role = "Skirmisher" },
+                new MonsterBalanceEntry { id = "zombie", name = "Zombie", hpMin = 18, hpMax = 23, hpDefault = 20, baseMp = 3, baseAp = 4, role = "Skirmisher" },
+                new MonsterBalanceEntry { id = "skeletal_warrior", name = "Skeletal Warrior", hpMin = 12, hpMax = 16, hpDefault = 14, baseMp = 4, baseAp = 4, role = "Skirmisher" },
+                new MonsterBalanceEntry { id = "orc_archer", name = "Orc Archer", hpMin = 10, hpMax = 14, hpDefault = 12, baseMp = 4, baseAp = 4, role = "Ranged" },
+                new MonsterBalanceEntry { id = "monstrous_rat", name = "Monstrous Rat", hpMin = 16, hpMax = 20, hpDefault = 18, baseMp = 4, baseAp = 5, role = "Skirmisher" },
+                new MonsterBalanceEntry { id = "giant_spider", name = "Giant Spider", hpMin = 11, hpMax = 15, hpDefault = 13, baseMp = 4, baseAp = 5, role = "Skirmisher" },
+                new MonsterBalanceEntry { id = "goblin_champion", name = "Goblin Champion", hpMin = 20, hpMax = 25, hpDefault = 22, baseMp = 4, baseAp = 6, role = "Skirmisher" },
+                new MonsterBalanceEntry { id = "goblin_shaman", name = "Goblin Shaman", hpMin = 16, hpMax = 20, hpDefault = 18, baseMp = 4, baseAp = 6, role = "Caster" }
             };
         }
 
@@ -850,7 +910,7 @@ namespace Realmz.Data
             {
                 torchPrice = 12,
                 rationPrice = 5,
-                torchTurnDuration = 30,
+                torchTurnDuration = 120,
                 bandageMaxCharges = 2,
                 minutesPerRealSecond = 1.0f,
                 visionRadii = new VisionRadiiConfig
@@ -877,26 +937,21 @@ namespace Realmz.Data
                     name = "Scout's Leather",
                     isPreview = false,
                     displayMaxPieces = 3,
-                    itemIds = new[] { 209, 210, 211, 450, 452, 454 },
+                    itemIds = new[] { 209, 210, 211, 450, 452, 454, 902 },
                     tiers = new[]
                     {
                         new EquipmentSetTierEntry
                         {
                             requiredPieces = 2,
-                            acBonus = 0,
-                            apBonus = 0,
-                            freeMoveTiles = 1,
-                            guardApDiscount = 0,
-                            summary = "+1 Free Move Tile"
+                            freeMoveTiles = 2,
+                            summary = "+2 MP"
                         },
                         new EquipmentSetTierEntry
                         {
                             requiredPieces = 3,
-                            acBonus = 0,
                             apBonus = 1,
-                            freeMoveTiles = 0,
-                            guardApDiscount = 0,
-                            summary = "+1 Max AP"
+                            critBonusPct = 10,
+                            summary = "+1 Max AP & +10% Crit"
                         }
                     }
                 },
@@ -906,24 +961,19 @@ namespace Realmz.Data
                     name = "Iron Vanguard",
                     isPreview = false,
                     displayMaxPieces = 3,
-                    itemIds = new[] { 400, 418, 455, 20, 10, 11 },
+                    itemIds = new[] { 400, 418, 455, 219 },
                     tiers = new[]
                     {
                         new EquipmentSetTierEntry
                         {
                             requiredPieces = 2,
                             acBonus = 2,
-                            apBonus = 0,
-                            freeMoveTiles = 0,
-                            guardApDiscount = 0,
                             summary = "+2 AC"
                         },
                         new EquipmentSetTierEntry
                         {
                             requiredPieces = 3,
-                            acBonus = 0,
                             apBonus = 1,
-                            freeMoveTiles = 0,
                             guardApDiscount = 1,
                             summary = "Guard costs 1 AP & +1 Max AP"
                         }
@@ -933,28 +983,74 @@ namespace Realmz.Data
                 {
                     setId = "thornwood_stalker",
                     name = "Thornwood Stalker",
-                    isPreview = true,
+                    isPreview = false,
                     displayMaxPieces = 3,
-                    itemIds = new[] { 9101, 9102, 9103 },
+                    itemIds = new[] { 903, 904, 905 },
+                    tiers = new[]
+                    {
+                        new EquipmentSetTierEntry
+                        {
+                            requiredPieces = 2,
+                            freeMoveTiles = 1,
+                            rangedRangeBonus = 1,
+                            summary = "+1 MP & +1 Ranged Range"
+                        },
+                        new EquipmentSetTierEntry
+                        {
+                            requiredPieces = 3,
+                            apBonus = 1,
+                            ignoreHalfCover = true,
+                            summary = "+1 Max AP & Ignore Half-Cover"
+                        }
+                    }
+                },
+                new EquipmentSetEntry
+                {
+                    setId = "bywater_arcanist",
+                    name = "Bywater Arcanist",
+                    isPreview = false,
+                    displayMaxPieces = 3,
+                    itemIds = new[] { 906, 907, 908 },
+                    tiers = new[]
+                    {
+                        new EquipmentSetTierEntry
+                        {
+                            requiredPieces = 2,
+                            freeMoveTiles = 1,
+                            spCostDiscount = 1,
+                            summary = "-1 SP Cost & +1 MP"
+                        },
+                        new EquipmentSetTierEntry
+                        {
+                            requiredPieces = 3,
+                            apBonus = 1,
+                            spellDamageBonus = 2,
+                            summary = "+1 Max AP & +2 Spell Damage"
+                        }
+                    }
+                },
+                new EquipmentSetEntry
+                {
+                    setId = "sanctuary_acolyte",
+                    name = "Sanctuary Acolyte",
+                    isPreview = false,
+                    displayMaxPieces = 3,
+                    itemIds = new[] { 909, 910, 911 },
                     tiers = new[]
                     {
                         new EquipmentSetTierEntry
                         {
                             requiredPieces = 2,
                             acBonus = 1,
-                            apBonus = 0,
-                            freeMoveTiles = 1,
-                            guardApDiscount = 0,
-                            summary = "+1 AC & +1 Free Move Tile"
+                            healingBonus = 2,
+                            summary = "+2 Healing & +1 AC"
                         },
                         new EquipmentSetTierEntry
                         {
                             requiredPieces = 3,
-                            acBonus = 0,
                             apBonus = 1,
-                            freeMoveTiles = 0,
-                            guardApDiscount = 0,
-                            summary = "+1 Max AP"
+                            supportSpellApDiscount = 1,
+                            summary = "+1 Max AP & Cure/Bless -1 AP"
                         }
                     }
                 },
@@ -962,28 +1058,24 @@ namespace Realmz.Data
                 {
                     setId = "cryptbreaker",
                     name = "Cryptbreaker",
-                    isPreview = true,
+                    isPreview = false,
                     displayMaxPieces = 3,
-                    itemIds = new[] { 9201, 9202, 9203 },
+                    itemIds = new[] { 912, 913, 914 },
                     tiers = new[]
                     {
                         new EquipmentSetTierEntry
                         {
                             requiredPieces = 2,
                             acBonus = 2,
-                            apBonus = 0,
-                            freeMoveTiles = 0,
-                            guardApDiscount = 0,
-                            summary = "+2 AC"
+                            undeadDamageBonusPct = 25,
+                            summary = "+2 AC & +25% vs Undead"
                         },
                         new EquipmentSetTierEntry
                         {
                             requiredPieces = 3,
-                            acBonus = 0,
                             apBonus = 1,
-                            freeMoveTiles = 0,
-                            guardApDiscount = 1,
-                            summary = "Guard costs 1 AP & +1 Max AP"
+                            freeMoveTiles = 1,
+                            summary = "+1 Max AP & +1 MP"
                         }
                     }
                 }
@@ -1005,7 +1097,8 @@ namespace Realmz.Data
                     goldReward = 120,
                     xpReward = 150,
                     locationHint = "Bywater Riverbanks (East & South Meadows)",
-                    isNoticeBoardBounty = true
+                    isNoticeBoardBounty = true,
+                    rewardItemId = 905
                 },
                 new QuestBountyEntry
                 {
@@ -1018,7 +1111,8 @@ namespace Realmz.Data
                     goldReward = 140,
                     xpReward = 180,
                     locationHint = "Bywater Trade Road & Foothills",
-                    isNoticeBoardBounty = true
+                    isNoticeBoardBounty = true,
+                    rewardItemId = 902
                 },
                 new QuestBountyEntry
                 {
@@ -1031,7 +1125,8 @@ namespace Realmz.Data
                     goldReward = 180,
                     xpReward = 220,
                     locationHint = "Thornwood Forest & Outlying Woods",
-                    isNoticeBoardBounty = true
+                    isNoticeBoardBounty = true,
+                    rewardItemId = 455
                 },
                 new QuestBountyEntry
                 {
@@ -1044,7 +1139,8 @@ namespace Realmz.Data
                     goldReward = 200,
                     xpReward = 250,
                     locationHint = "Bywater Cavern (Dungeon Level 0)",
-                    isNoticeBoardBounty = true
+                    isNoticeBoardBounty = true,
+                    rewardItemId = 912
                 }
             };
         }

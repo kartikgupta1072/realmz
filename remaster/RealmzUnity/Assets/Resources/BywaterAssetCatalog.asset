@@ -1274,10 +1274,10 @@ MonoBehaviour:
     sprite: {fileID: 4028654748672563809, guid: 9983ee5cdb413f545967f6844fa05cd9, type: 3}
     portraitPixelRect:
       serializedVersion: 2
-      x: 40
-      y: 42
-      width: 47
-      height: 47
+      x: 38
+      y: 49
+      width: 49
+      height: 49
     archetypeKey: monster_zombie
   archetypeMappings:
   - monsterIndex: 0
@@ -2896,6 +2896,84 @@ MonoBehaviour:
     category: Supply
     iconKey: rope
     sprite: {fileID: 21300000, guid: 3d47d12eaf122f14d9b63fe0bf6c9837, type: 3}
+  - id: 902
+    key: shadowstep_boots
+    name: Shadowstep Boots
+    category: Boots
+    iconKey: leather_boots
+    sprite: {fileID: 21300000, guid: 145d2d4fcf28858479c7106b372ed901, type: 3}
+  - id: 903
+    key: thornwood_bow
+    name: Thornwood Bow
+    category: Weapon
+    iconKey: bow
+    sprite: {fileID: 21300000, guid: c808fa3fdbf3a3d41aa61583c36e723d, type: 3}
+  - id: 904
+    key: thornwood_cloak
+    name: Thornwood Cloak
+    category: Cloak
+    iconKey: padded_cloak
+    sprite: {fileID: 21300000, guid: 4b22e55a8d6b5ed4d8562aad95da1032, type: 3}
+  - id: 905
+    key: stalker_boots
+    name: Stalker Boots
+    category: Boots
+    iconKey: leather_boots
+    sprite: {fileID: 21300000, guid: 145d2d4fcf28858479c7106b372ed901, type: 3}
+  - id: 906
+    key: apprentice_focus_staff
+    name: Apprentice Focus Staff
+    category: Weapon
+    iconKey: quarter_staff
+    sprite: {fileID: 21300000, guid: a1be8f9137e438c48bdfc3ab4b9e3177, type: 3}
+  - id: 907
+    key: runed_scholar_robe
+    name: Runed Scholar Robe
+    category: Armor
+    iconKey: robe
+    sprite: {fileID: 21300000, guid: 75b34c3419948444ca874f7e92e24b55, type: 3}
+  - id: 908
+    key: arcanist_signet
+    name: Arcanist Signet
+    category: Accessory
+    iconKey: luck_stone
+    sprite: {fileID: 21300000, guid: d29184328bbfbfb4a97159c1acb6f12a, type: 3}
+  - id: 909
+    key: blessed_mace
+    name: Blessed Mace
+    category: Weapon
+    iconKey: mace
+    sprite: {fileID: 21300000, guid: f81e1e311b8029441ae720c131852c7d, type: 3}
+  - id: 910
+    key: acolyte_vestments
+    name: Acolyte Vestments
+    category: Armor
+    iconKey: chain_armor
+    sprite: {fileID: 21300000, guid: 9734b613342febb4a811fc39cad5173e, type: 3}
+  - id: 911
+    key: silver_sun_amulet
+    name: Silver Sun Amulet
+    category: Accessory
+    iconKey: luck_stone
+    sprite: {fileID: 21300000, guid: d29184328bbfbfb4a97159c1acb6f12a, type: 3}
+  - id: 912
+    key: silvered_longsword
+    name: Silvered Longsword
+    category: Weapon
+    iconKey: longsword
+    sprite: {fileID: 21300000, guid: e4190e9bd84678344a64efa240534063, type: 3}
+  - id: 913
+    key: consecrated_buckler
+    name: Consecrated Buckler
+    category: Shield
+    iconKey: shield
+    sprite: {fileID: 21300000, guid: f6818b2d4da05ee44a97552c1d496437, type: 3}
+  - id: 914
+    key: crypt_ward_ring
+    name: Crypt Ward Ring
+    category: Accessory
+    iconKey: luck_stone
+    sprite: {fileID: 21300000, guid: d29184328bbfbfb4a97159c1acb6f12a, type: 3}
   spellIdIconMappings:
   - id: 1108
     key: magic_missile

@@ -36,6 +36,8 @@ MONSTER_BALANCE_OVERRIDES: Dict[str, Dict[str, Any]] = {
         "hp_max": 24,
         "hp_default": 21,
         "xp_reward": 65,
+        "base_mp": 4,
+        "base_ap": 6,
         "role": "Bruiser",
         "special_abilities": ["cleave_2tile"],
     },
@@ -44,6 +46,8 @@ MONSTER_BALANCE_OVERRIDES: Dict[str, Dict[str, Any]] = {
         "hp_max": 19,
         "hp_default": 17,
         "xp_reward": 70,
+        "base_mp": 5,
+        "base_ap": 6,
         "role": "Controller",
         "special_abilities": ["tongue_pull"],
     },
@@ -51,6 +55,8 @@ MONSTER_BALANCE_OVERRIDES: Dict[str, Dict[str, Any]] = {
         "hp_min": 8,
         "hp_max": 11,
         "hp_default": 9,
+        "base_mp": 4,
+        "base_ap": 4,
         "role": "Skirmisher",
         "special_abilities": [],
     },
@@ -58,8 +64,82 @@ MONSTER_BALANCE_OVERRIDES: Dict[str, Dict[str, Any]] = {
         "hp_min": 6,
         "hp_max": 9,
         "hp_default": 8,
+        "base_mp": 4,
+        "base_ap": 4,
         "role": "Ranged",
         "special_abilities": ["high_ground_seeker"],
+    },
+    "giant_rat": {
+        "hp_min": 6,
+        "hp_max": 8,
+        "hp_default": 7,
+        "base_mp": 3,
+        "base_ap": 4,
+        "role": "Skirmisher",
+        "special_abilities": [],
+    },
+    "zombie": {
+        "hp_min": 18,
+        "hp_max": 23,
+        "hp_default": 20,
+        "base_mp": 3,
+        "base_ap": 4,
+        "role": "Skirmisher",
+        "special_abilities": [],
+    },
+    "skeletal_warrior": {
+        "hp_min": 12,
+        "hp_max": 16,
+        "hp_default": 14,
+        "base_mp": 4,
+        "base_ap": 4,
+        "role": "Skirmisher",
+        "special_abilities": [],
+    },
+    "orc_archer": {
+        "hp_min": 10,
+        "hp_max": 14,
+        "hp_default": 12,
+        "base_mp": 4,
+        "base_ap": 4,
+        "role": "Ranged",
+        "special_abilities": [],
+    },
+    "monstrous_rat": {
+        "hp_min": 16,
+        "hp_max": 20,
+        "hp_default": 18,
+        "base_mp": 4,
+        "base_ap": 5,
+        "role": "Skirmisher",
+        "special_abilities": [],
+    },
+    "giant_spider": {
+        "hp_min": 11,
+        "hp_max": 15,
+        "hp_default": 13,
+        "base_mp": 4,
+        "base_ap": 5,
+        "role": "Skirmisher",
+        "special_abilities": [],
+    },
+    "goblin_champion": {
+        "hp_min": 20,
+        "hp_max": 25,
+        "hp_default": 22,
+        "base_mp": 4,
+        "base_ap": 6,
+        "role": "Skirmisher",
+        "special_abilities": [],
+    },
+    "goblin_shaman": {
+        "hp_min": 16,
+        "hp_max": 20,
+        "hp_default": 18,
+        "base_mp": 4,
+        "base_ap": 6,
+        "role": "Caster",
+        "special_abilities": [],
     },
 }
 
@@ -73,7 +153,7 @@ STARTER_PARTY_SPECS = [
         "icon_id": 9018,
         "portrait_id": 275,
         "base_attrs": [16, 10, 10, 13, 15, 11],
-        "equipped_ids": [20, 209, 418, 400],
+        "equipped_ids": [20, 209, 418],
         "known_spell_ids": [],
     },
     {
@@ -85,7 +165,7 @@ STARTER_PARTY_SPECS = [
         "icon_id": 9072,
         "portrait_id": 329,
         "base_attrs": [14, 12, 17, 11, 14, 12],
-        "equipped_ids": [37, 215, 418, 400],
+        "equipped_ids": [37, 215, 418],
         "known_spell_ids": [2105, 2207, 2106, 2103, 2310],
     },
     {
@@ -121,7 +201,7 @@ STARTER_PARTY_SPECS = [
         "icon_id": 9054,
         "portrait_id": 311,
         "base_attrs": [16, 12, 15, 12, 15, 11],
-        "equipped_ids": [10, 215, 418, 400],
+        "equipped_ids": [10, 215, 418],
         "known_spell_ids": [2105, 2106],
     },
     {
@@ -325,6 +405,38 @@ CORE_ITEM_IDS = [
     602, 611, 612, 622, 723,
     803, 805, 806,
 ]
+
+CUSTOM_M1_SET_ITEMS: List[Dict[str, Any]] = [
+    {"id": 902, "name": "Shadowstep Boots", "description": "Soft-soled rogue boots stitched for silent approaches.", "category": "Boots", "slot": "Feet", "damage_dice": "", "weapon_bonus": 0, "armor_class_bonus": 2, "movement_mod": 0, "range": 1, "weight": 2, "base_price": 160, "charges": 0, "linked_spell_id": 0, "heal_dice": "", "is_two_handed": False, "is_junk": False},
+    {"id": 903, "name": "Thornwood Bow", "description": "Balanced yew recurve tuned for long-range woodland skirmishes.", "category": "Weapon", "slot": "MissileWeapon", "damage_dice": "1d8", "weapon_bonus": 1, "armor_class_bonus": 0, "movement_mod": 0, "range": 8, "weight": 4, "base_price": 260, "charges": 0, "linked_spell_id": 0, "heal_dice": "", "is_two_handed": True, "is_junk": False},
+    {"id": 904, "name": "Thornwood Cloak", "description": "Moss-dyed ranger mantle woven for brush and rain.", "category": "Cloak", "slot": "Accessory2", "damage_dice": "", "weapon_bonus": 0, "armor_class_bonus": 2, "movement_mod": 0, "range": 1, "weight": 2, "base_price": 120, "charges": 0, "linked_spell_id": 0, "heal_dice": "", "is_two_handed": False, "is_junk": False},
+    {"id": 905, "name": "Stalker Boots", "description": "Supple trail boots of the Thornwood trackers.", "category": "Boots", "slot": "Feet", "damage_dice": "", "weapon_bonus": 0, "armor_class_bonus": 2, "movement_mod": 0, "range": 1, "weight": 2, "base_price": 180, "charges": 0, "linked_spell_id": 0, "heal_dice": "", "is_two_handed": False, "is_junk": False},
+    {"id": 906, "name": "Apprentice Focus Staff", "description": "Ashwood channeling staff capped with Bywater river quartz.", "category": "Weapon", "slot": "Weapon", "damage_dice": "1d6", "weapon_bonus": 1, "armor_class_bonus": 0, "movement_mod": 0, "range": 1, "weight": 4, "base_price": 110, "charges": 0, "linked_spell_id": 0, "heal_dice": "", "is_two_handed": True, "is_junk": False},
+    {"id": 907, "name": "Runed Scholar Robe", "description": "Deep-indigo vestments threaded with protective arcane sigils.", "category": "Armor", "slot": "Armor", "damage_dice": "", "weapon_bonus": 0, "armor_class_bonus": 6, "movement_mod": 0, "range": 1, "weight": 4, "base_price": 150, "charges": 0, "linked_spell_id": 0, "heal_dice": "", "is_two_handed": False, "is_junk": False},
+    {"id": 908, "name": "Arcanist Signet", "description": "Silver ring etched to steady spell focus under fire.", "category": "Accessory", "slot": "Accessory1", "damage_dice": "", "weapon_bonus": 0, "armor_class_bonus": 1, "movement_mod": 0, "range": 1, "weight": 1, "base_price": 200, "charges": 0, "linked_spell_id": 0, "heal_dice": "", "is_two_handed": False, "is_junk": False},
+    {"id": 909, "name": "Blessed Mace", "description": "Flanged temple mace consecrated at Bywater Sanctuary.", "category": "Weapon", "slot": "Weapon", "damage_dice": "1d6", "weapon_bonus": 1, "armor_class_bonus": 0, "movement_mod": 0, "range": 1, "weight": 5, "base_price": 120, "charges": 0, "linked_spell_id": 0, "heal_dice": "", "is_two_handed": False, "is_junk": False},
+    {"id": 910, "name": "Acolyte Vestments", "description": "Reinforced sanctuary mail beneath white-trimmed vestments.", "category": "Armor", "slot": "Armor", "damage_dice": "", "weapon_bonus": 0, "armor_class_bonus": 11, "movement_mod": 0, "range": 1, "weight": 8, "base_price": 160, "charges": 0, "linked_spell_id": 0, "heal_dice": "", "is_two_handed": False, "is_junk": False},
+    {"id": 911, "name": "Silver Sun Amulet", "description": "Sunburst talisman amplifying restorative prayers.", "category": "Accessory", "slot": "Accessory1", "damage_dice": "", "weapon_bonus": 0, "armor_class_bonus": 2, "movement_mod": 0, "range": 1, "weight": 1, "base_price": 200, "charges": 0, "linked_spell_id": 0, "heal_dice": "", "is_two_handed": False, "is_junk": False},
+    {"id": 912, "name": "Silvered Longsword", "description": "Silver-inlaid blade forged to cleave through restless dead.", "category": "Weapon", "slot": "Weapon", "damage_dice": "1d10", "weapon_bonus": 1, "armor_class_bonus": 0, "movement_mod": 0, "range": 1, "weight": 5, "base_price": 300, "charges": 0, "linked_spell_id": 0, "heal_dice": "", "is_two_handed": False, "is_junk": False},
+    {"id": 913, "name": "Consecrated Buckler", "description": "Ward-engraved shield that turns skeletal blades aside.", "category": "Shield", "slot": "Shield", "damage_dice": "", "weapon_bonus": 0, "armor_class_bonus": 8, "movement_mod": 0, "range": 1, "weight": 5, "base_price": 220, "charges": 0, "linked_spell_id": 0, "heal_dice": "", "is_two_handed": False, "is_junk": False},
+    {"id": 914, "name": "Crypt Ward Ring", "description": "Cold-iron ring inscribed with ancient crypt-watcher runes.", "category": "Accessory", "slot": "Accessory1", "damage_dice": "", "weapon_bonus": 0, "armor_class_bonus": 2, "movement_mod": 0, "range": 1, "weight": 1, "base_price": 240, "charges": 0, "linked_spell_id": 0, "heal_dice": "", "is_two_handed": False, "is_junk": False},
+]
+
+BASE_PRICE_OVERRIDES: Dict[int, int] = {450: 35, 452: 40, 454: 75, 455: 110}
+SHOP_PRICE_OVERRIDES: Dict[int, int] = {450: 65, 452: 75, 454: 140, 455: 190}
+SHOP_EXTRA_ITEMS: Dict[int, List[Dict[str, int]]] = {
+    1: [{"item_id": 400, "price": 80, "quantity": -1}, {"item_id": 903, "price": 260, "quantity": 1}, {"item_id": 909, "price": 120, "quantity": 1}],
+    4: [{"item_id": 904, "price": 120, "quantity": 1}],
+    10: [{"item_id": 906, "price": 110, "quantity": 1}, {"item_id": 907, "price": 150, "quantity": 1}, {"item_id": 910, "price": 160, "quantity": 1}],
+}
+MONSTER_EXTRA_LOOT: Dict[str, List[int]] = {
+    "goblin_champion": [902],
+    "orc_archer": [905],
+    "goblin_shaman": [908, 911],
+    "skeletal_warrior": [913, 911],
+    "zombie": [914],
+    "monstrous_rat": [914],
+}
 
 
 def _slugify(text: str, fallback: str) -> str:
@@ -613,6 +725,15 @@ def build_bywater_m1_payloads(realmz_base: Path) -> Dict[str, Any]:
         for iid in sorted(referenced_item_ids)
         if iid in raw_items
     ]
+    for it in formatted_items:
+        if it["id"] in BASE_PRICE_OVERRIDES:
+            it["base_price"] = BASE_PRICE_OVERRIDES[it["id"]]
+    existing_item_ids = {it["id"] for it in formatted_items}
+    for custom_it in CUSTOM_M1_SET_ITEMS:
+        if custom_it["id"] not in existing_item_ids:
+            formatted_items.append(dict(custom_it))
+            existing_item_ids.add(custom_it["id"])
+    formatted_items.sort(key=lambda x: x["id"])
     item_price_map = {it["id"]: it["base_price"] for it in formatted_items}
 
     formatted_shops: List[Dict[str, Any]] = []
@@ -634,8 +755,12 @@ def build_bywater_m1_payloads(realmz_base: Path) -> Dict[str, Any]:
             if iid in item_price_map and iid not in seen_stock:
                 seen_stock.add(iid)
                 base_p = item_price_map[iid]
-                price = max(1, (base_p * (100 + infl)) // 100)
+                price = SHOP_PRICE_OVERRIDES.get(iid, max(1, (base_p * (100 + infl)) // 100))
                 stock.append({"item_id": iid, "price": price, "quantity": entry["quantity"]})
+        for extra in SHOP_EXTRA_ITEMS.get(sid, []):
+            if extra["item_id"] not in seen_stock:
+                seen_stock.add(extra["item_id"])
+                stock.append(dict(extra))
         formatted_shops.append(
             {
                 "shop_id": str(sid),
@@ -770,6 +895,10 @@ def build_bywater_m1_payloads(realmz_base: Path) -> Dict[str, Any]:
             if (m["cast_chance_pct"] > 0 or len(spell_ids) > 0)
             else ("Ranged" if ranged_range > 0 else "Skirmisher")
         )
+        loot_ids = [iid for iid in m["loot_item_ids"] if iid in item_price_map]
+        for extra_iid in MONSTER_EXTRA_LOOT.get(mon_slug, []):
+            if extra_iid not in loot_ids:
+                loot_ids.append(extra_iid)
         mon_entry: Dict[str, Any] = {
             "index": m["index"],
             "id": mon_slug,
@@ -801,7 +930,7 @@ def build_bywater_m1_payloads(realmz_base: Path) -> Dict[str, Any]:
             "xp_reward": xp_val,
             "gold_min": mon_gold_min,
             "gold_max": mon_gold_max,
-            "loot_item_ids": [iid for iid in m["loot_item_ids"] if iid in item_price_map],
+            "loot_item_ids": loot_ids,
             "role": inferred_role,
             "special_abilities": [],
         }

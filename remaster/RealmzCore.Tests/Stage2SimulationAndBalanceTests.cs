@@ -802,21 +802,28 @@ namespace RealmzCore.Tests
                 "{\"version\":1,\"survival\":{\"minutes_per_real_second\":25.0}}");
             Assert.Equal(10.0f, clampedHigh.Survival.MinutesPerRealSecond, 3);
 
-            // Equipment sets: M1 intact + M2 preview sets
-            Assert.Equal(4, overrides.EquipmentSets.Count);
+            // Equipment sets: all 6 M1 sets are live with zero preview stubs remaining
+            Assert.Equal(6, overrides.EquipmentSets.Count);
             EquipmentSetDefinition scouts = overrides.EquipmentSets.First(s => s.SetId == EquipmentSetCatalog.ScoutsLeatherSetId);
             EquipmentSetDefinition vanguard = overrides.EquipmentSets.First(s => s.SetId == EquipmentSetCatalog.IronVanguardSetId);
             EquipmentSetDefinition thornwood = overrides.EquipmentSets.First(s => s.SetId == EquipmentSetCatalog.ThornwoodStalkerSetId);
+            EquipmentSetDefinition arcanist = overrides.EquipmentSets.First(s => s.SetId == EquipmentSetCatalog.BywaterArcanistSetId);
+            EquipmentSetDefinition acolyte = overrides.EquipmentSets.First(s => s.SetId == EquipmentSetCatalog.SanctuaryAcolyteSetId);
             EquipmentSetDefinition cryptbreaker = overrides.EquipmentSets.First(s => s.SetId == EquipmentSetCatalog.CryptbreakerSetId);
 
             Assert.False(scouts.IsPreview);
             Assert.False(vanguard.IsPreview);
-            Assert.True(thornwood.IsPreview);
-            Assert.True(cryptbreaker.IsPreview);
-            Assert.Equal(new[] { 9101, 9102, 9103 }, thornwood.ItemIds);
-            Assert.Equal(new[] { 9201, 9202, 9203 }, cryptbreaker.ItemIds);
+            Assert.False(thornwood.IsPreview);
+            Assert.False(arcanist.IsPreview);
+            Assert.False(acolyte.IsPreview);
+            Assert.False(cryptbreaker.IsPreview);
+            Assert.Equal(new[] { 903, 904, 905 }, thornwood.ItemIds);
+            Assert.Equal(new[] { 906, 907, 908 }, arcanist.ItemIds);
+            Assert.Equal(new[] { 909, 910, 911 }, acolyte.ItemIds);
+            Assert.Equal(new[] { 912, 913, 914 }, cryptbreaker.ItemIds);
+            Assert.Equal(120, overrides.Survival.TorchTurnDuration);
 
-            // Notice board bounties: all 4 quests present in both QuestCatalog and BalanceOverrides.Quests
+            // Notice board bounties: all 4 quests present in both QuestCatalog and BalanceOverrides.Quests with item rewards
             IReadOnlyList<QuestDefinition> bounties = QuestCatalog.GetNoticeBoardBounties(overrides);
             string[] expectedQuestIds =
             {
@@ -829,7 +836,7 @@ namespace RealmzCore.Tests
             Assert.Equal(4, bounties.Count);
             foreach (string qid in expectedQuestIds)
             {
-                Assert.Contains(bounties, q => q.QuestId == qid && q.Source == "BywaterNoticeBoard" && q.IsNoticeBoardBounty);
+                Assert.Contains(bounties, q => q.QuestId == qid && q.Source == "BywaterNoticeBoard" && q.IsNoticeBoardBounty && q.RewardItemId > 0);
                 Assert.NotNull(QuestCatalog.GetById(qid));
             }
         }

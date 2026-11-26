@@ -117,7 +117,7 @@ namespace RealmzCore.Combat
                     !string.Equals(session.CurrentActorId, actor.Id, StringComparison.Ordinal) ||
                     !actor.IsConscious ||
                     (actor.Economy.UsesApForActions
-                        ? (actor.Economy.CurrentAp < CombatActionEconomy.LightWeaponApCost && actor.Economy.MoveRemaining <= 0)
+                        ? (actor.Economy.CurrentAp < CombatActionEconomy.DefaultGuardApCost && actor.Economy.MoveRemaining <= 0)
                         : (!actor.Economy.HasSlot(CombatActionSlot.MainAction) &&
                            !actor.Economy.HasSlot(CombatActionSlot.BonusAction) &&
                            actor.Economy.MoveRemaining <= 0)) ||

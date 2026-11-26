@@ -46,6 +46,12 @@ namespace Realmz.EditorTools
             base.OnInspectorGUI();
         }
 
+        public static void BatchSyncBalanceAndArtCatalogs()
+        {
+            M1AssetImporter.ImportAndBuildCatalog();
+            CreateOrSyncAsset();
+        }
+
         [MenuItem("Realmz/Balance/Create or Sync RealmzBalanceCatalog")]
         public static RealmzBalanceCatalog CreateOrSyncAsset()
         {

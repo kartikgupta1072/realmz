@@ -18,8 +18,8 @@ namespace RealmzCore.Rules
         public const int DefaultMaxCarryoverAp = 2;
         public const int NormalTileMoveApCost = 1;
         public const int RoughTileMoveApCost = 2;
-        public const int LightWeaponApCost = 2;
-        public const int StandardWeaponApCost = 3;
+        public const int LightWeaponApCost = 3;
+        public const int StandardWeaponApCost = 4;
         public const int DefaultShoveApCost = 2;
         public const int DefaultPotionApCost = 2;
         public const int DefaultTorchApCost = 2;

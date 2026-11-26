@@ -1,6 +1,6 @@
 {
   "scenario": "City of Bywater",
-  "item_count": 58,
+  "item_count": 71,
   "spell_count": 12,
   "total_icons_authored": 82,
   "by_item_id": {
@@ -409,6 +409,97 @@
       "category": "Supply",
       "slot": "Utility",
       "icon_path": "icons/icon_rope.png"
+    },
+    "902": {
+      "id": 902,
+      "name": "Shadowstep Boots",
+      "category": "Boots",
+      "slot": "Feet",
+      "icon_path": "icons/icon_leather_boots.png"
+    },
+    "903": {
+      "id": 903,
+      "name": "Thornwood Bow",
+      "category": "Weapon",
+      "slot": "MissileWeapon",
+      "icon_path": "icons/icon_bow.png"
+    },
+    "904": {
+      "id": 904,
+      "name": "Thornwood Cloak",
+      "category": "Cloak",
+      "slot": "Accessory2",
+      "icon_path": "icons/icon_padded_cloak.png"
+    },
+    "905": {
+      "id": 905,
+      "name": "Stalker Boots",
+      "category": "Boots",
+      "slot": "Feet",
+      "icon_path": "icons/icon_leather_boots.png"
+    },
+    "906": {
+      "id": 906,
+      "name": "Apprentice Focus Staff",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_quarter_staff.png"
+    },
+    "907": {
+      "id": 907,
+      "name": "Runed Scholar Robe",
+      "category": "Armor",
+      "slot": "Armor",
+      "icon_path": "icons/icon_robe.png"
+    },
+    "908": {
+      "id": 908,
+      "name": "Arcanist Signet",
+      "category": "Accessory",
+      "slot": "Accessory1",
+      "icon_path": "icons/icon_luck_stone.png"
+    },
+    "909": {
+      "id": 909,
+      "name": "Blessed Mace",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_mace.png"
+    },
+    "910": {
+      "id": 910,
+      "name": "Acolyte Vestments",
+      "category": "Armor",
+      "slot": "Armor",
+      "icon_path": "icons/icon_chain_armor.png"
+    },
+    "911": {
+      "id": 911,
+      "name": "Silver Sun Amulet",
+      "category": "Accessory",
+      "slot": "Accessory1",
+      "icon_path": "icons/icon_luck_stone.png"
+    },
+    "912": {
+      "id": 912,
+      "name": "Silvered Longsword",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_longsword.png"
+    },
+    "913": {
+      "id": 913,
+      "name": "Consecrated Buckler",
+      "category": "Shield",
+      "slot": "Shield",
+      "icon_path": "icons/icon_shield.png"
+    },
+    "914": {
+      "id": 914,
+      "name": "Crypt Ward Ring",
+      "category": "Accessory",
+      "slot": "Accessory1",
+      "icon_path": "icons/icon_luck_stone.png"
     }
   },
   "items": [
@@ -817,6 +908,97 @@
       "category": "Supply",
       "slot": "Utility",
       "icon_path": "icons/icon_rope.png"
+    },
+    {
+      "id": 902,
+      "name": "Shadowstep Boots",
+      "category": "Boots",
+      "slot": "Feet",
+      "icon_path": "icons/icon_leather_boots.png"
+    },
+    {
+      "id": 903,
+      "name": "Thornwood Bow",
+      "category": "Weapon",
+      "slot": "MissileWeapon",
+      "icon_path": "icons/icon_bow.png"
+    },
+    {
+      "id": 904,
+      "name": "Thornwood Cloak",
+      "category": "Cloak",
+      "slot": "Accessory2",
+      "icon_path": "icons/icon_padded_cloak.png"
+    },
+    {
+      "id": 905,
+      "name": "Stalker Boots",
+      "category": "Boots",
+      "slot": "Feet",
+      "icon_path": "icons/icon_leather_boots.png"
+    },
+    {
+      "id": 906,
+      "name": "Apprentice Focus Staff",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_quarter_staff.png"
+    },
+    {
+      "id": 907,
+      "name": "Runed Scholar Robe",
+      "category": "Armor",
+      "slot": "Armor",
+      "icon_path": "icons/icon_robe.png"
+    },
+    {
+      "id": 908,
+      "name": "Arcanist Signet",
+      "category": "Accessory",
+      "slot": "Accessory1",
+      "icon_path": "icons/icon_luck_stone.png"
+    },
+    {
+      "id": 909,
+      "name": "Blessed Mace",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_mace.png"
+    },
+    {
+      "id": 910,
+      "name": "Acolyte Vestments",
+      "category": "Armor",
+      "slot": "Armor",
+      "icon_path": "icons/icon_chain_armor.png"
+    },
+    {
+      "id": 911,
+      "name": "Silver Sun Amulet",
+      "category": "Accessory",
+      "slot": "Accessory1",
+      "icon_path": "icons/icon_luck_stone.png"
+    },
+    {
+      "id": 912,
+      "name": "Silvered Longsword",
+      "category": "Weapon",
+      "slot": "Weapon",
+      "icon_path": "icons/icon_longsword.png"
+    },
+    {
+      "id": 913,
+      "name": "Consecrated Buckler",
+      "category": "Shield",
+      "slot": "Shield",
+      "icon_path": "icons/icon_shield.png"
+    },
+    {
+      "id": 914,
+      "name": "Crypt Ward Ring",
+      "category": "Accessory",
+      "slot": "Accessory1",
+      "icon_path": "icons/icon_luck_stone.png"
     }
   ],
   "by_spell_id": {

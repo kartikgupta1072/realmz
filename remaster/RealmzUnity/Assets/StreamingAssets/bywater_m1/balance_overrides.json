@@ -10,6 +10,8 @@
       "hp_max": 24,
       "hp_default": 21,
       "xp_reward": 65,
+      "base_mp": 4,
+      "base_ap": 6,
       "role": "Bruiser",
       "special_abilities": [
         "cleave_2tile"
@@ -22,6 +24,8 @@
       "hp_max": 19,
       "hp_default": 17,
       "xp_reward": 70,
+      "base_mp": 5,
+      "base_ap": 6,
       "role": "Controller",
       "special_abilities": [
         "tongue_pull"
@@ -34,6 +38,8 @@
       "hp_min": 8,
       "hp_max": 11,
       "hp_default": 9,
+      "base_mp": 4,
+      "base_ap": 4,
       "role": "Skirmisher",
       "special_abilities": []
     },
@@ -43,16 +49,106 @@
       "hp_min": 6,
       "hp_max": 9,
       "hp_default": 8,
+      "base_mp": 4,
+      "base_ap": 4,
       "role": "Ranged",
       "special_abilities": [
         "high_ground_seeker"
       ]
+    },
+    {
+      "id": "giant_rat",
+      "name": "Giant Rat",
+      "hp_min": 6,
+      "hp_max": 8,
+      "hp_default": 7,
+      "base_mp": 3,
+      "base_ap": 4,
+      "role": "Skirmisher",
+      "special_abilities": []
+    },
+    {
+      "id": "zombie",
+      "name": "Zombie",
+      "hp_min": 18,
+      "hp_max": 23,
+      "hp_default": 20,
+      "base_mp": 3,
+      "base_ap": 4,
+      "role": "Skirmisher",
+      "special_abilities": []
+    },
+    {
+      "id": "skeletal_warrior",
+      "name": "Skeletal Warrior",
+      "hp_min": 12,
+      "hp_max": 16,
+      "hp_default": 14,
+      "base_mp": 4,
+      "base_ap": 4,
+      "role": "Skirmisher",
+      "special_abilities": []
+    },
+    {
+      "id": "orc_archer",
+      "name": "Orc Archer",
+      "hp_min": 10,
+      "hp_max": 14,
+      "hp_default": 12,
+      "base_mp": 4,
+      "base_ap": 4,
+      "role": "Ranged",
+      "special_abilities": []
+    },
+    {
+      "id": "monstrous_rat",
+      "name": "Monstrous Rat",
+      "hp_min": 16,
+      "hp_max": 20,
+      "hp_default": 18,
+      "base_mp": 4,
+      "base_ap": 5,
+      "role": "Skirmisher",
+      "special_abilities": []
+    },
+    {
+      "id": "giant_spider",
+      "name": "Giant Spider",
+      "hp_min": 11,
+      "hp_max": 15,
+      "hp_default": 13,
+      "base_mp": 4,
+      "base_ap": 5,
+      "role": "Skirmisher",
+      "special_abilities": []
+    },
+    {
+      "id": "goblin_champion",
+      "name": "Goblin Champion",
+      "hp_min": 20,
+      "hp_max": 25,
+      "hp_default": 22,
+      "base_mp": 4,
+      "base_ap": 6,
+      "role": "Skirmisher",
+      "special_abilities": []
+    },
+    {
+      "id": "goblin_shaman",
+      "name": "Goblin Shaman",
+      "hp_min": 16,
+      "hp_max": 20,
+      "hp_default": 18,
+      "base_mp": 4,
+      "base_ap": 6,
+      "role": "Caster",
+      "special_abilities": []
     }
   ],
   "survival": {
     "torch_price": 12,
     "ration_price": 5,
-    "torch_turn_duration": 30,
+    "torch_turn_duration": 120,
     "bandage_max_charges": 2,
     "minutes_per_real_second": 1.0,
     "vision_radii": {
@@ -78,16 +174,17 @@
         211,
         450,
         452,
-        454
+        454,
+        902
       ],
       "tiers": [
         {
           "required_pieces": 2,
           "ac_bonus": 0,
           "ap_bonus": 0,
-          "free_move_tiles": 1,
+          "free_move_tiles": 2,
           "guard_ap_discount": 0,
-          "summary": "+1 Free Move Tile"
+          "summary": "+2 MP"
         },
         {
           "required_pieces": 3,
@@ -95,7 +192,8 @@
           "ap_bonus": 1,
           "free_move_tiles": 0,
           "guard_ap_discount": 0,
-          "summary": "+1 Max AP"
+          "crit_bonus_pct": 10,
+          "summary": "+1 Max AP & +10% Crit"
         }
       ]
     },
@@ -108,9 +206,7 @@
         400,
         418,
         455,
-        20,
-        10,
-        11
+        219
       ],
       "tiers": [
         {
@@ -134,21 +230,22 @@
     {
       "set_id": "thornwood_stalker",
       "name": "Thornwood Stalker",
-      "is_preview": true,
+      "is_preview": false,
       "display_max_pieces": 3,
       "item_ids": [
-        9101,
-        9102,
-        9103
+        903,
+        904,
+        905
       ],
       "tiers": [
         {
           "required_pieces": 2,
-          "ac_bonus": 1,
+          "ac_bonus": 0,
           "ap_bonus": 0,
           "free_move_tiles": 1,
           "guard_ap_discount": 0,
-          "summary": "+1 AC & +1 Free Move Tile"
+          "ranged_range_bonus": 1,
+          "summary": "+1 MP & +1 Ranged Range"
         },
         {
           "required_pieces": 3,
@@ -156,19 +253,82 @@
           "ap_bonus": 1,
           "free_move_tiles": 0,
           "guard_ap_discount": 0,
-          "summary": "+1 Max AP"
+          "ignore_half_cover": true,
+          "summary": "+1 Max AP & Ignore Half-Cover"
+        }
+      ]
+    },
+    {
+      "set_id": "bywater_arcanist",
+      "name": "Bywater Arcanist",
+      "is_preview": false,
+      "display_max_pieces": 3,
+      "item_ids": [
+        906,
+        907,
+        908
+      ],
+      "tiers": [
+        {
+          "required_pieces": 2,
+          "ac_bonus": 0,
+          "ap_bonus": 0,
+          "free_move_tiles": 1,
+          "guard_ap_discount": 0,
+          "sp_cost_discount": 1,
+          "summary": "-1 SP Cost & +1 MP"
+        },
+        {
+          "required_pieces": 3,
+          "ac_bonus": 0,
+          "ap_bonus": 1,
+          "free_move_tiles": 0,
+          "guard_ap_discount": 0,
+          "spell_damage_bonus": 2,
+          "summary": "+1 Max AP & +2 Spell Damage"
+        }
+      ]
+    },
+    {
+      "set_id": "sanctuary_acolyte",
+      "name": "Sanctuary Acolyte",
+      "is_preview": false,
+      "display_max_pieces": 3,
+      "item_ids": [
+        909,
+        910,
+        911
+      ],
+      "tiers": [
+        {
+          "required_pieces": 2,
+          "ac_bonus": 1,
+          "ap_bonus": 0,
+          "free_move_tiles": 0,
+          "guard_ap_discount": 0,
+          "healing_bonus": 2,
+          "summary": "+2 Healing & +1 AC"
+        },
+        {
+          "required_pieces": 3,
+          "ac_bonus": 0,
+          "ap_bonus": 1,
+          "free_move_tiles": 0,
+          "guard_ap_discount": 0,
+          "support_spell_ap_discount": 1,
+          "summary": "+1 Max AP & Cure/Bless -1 AP"
         }
       ]
     },
     {
       "set_id": "cryptbreaker",
       "name": "Cryptbreaker",
-      "is_preview": true,
+      "is_preview": false,
       "display_max_pieces": 3,
       "item_ids": [
-        9201,
-        9202,
-        9203
+        912,
+        913,
+        914
       ],
       "tiers": [
         {
@@ -177,15 +337,16 @@
           "ap_bonus": 0,
           "free_move_tiles": 0,
           "guard_ap_discount": 0,
-          "summary": "+2 AC"
+          "undead_damage_bonus_pct": 25,
+          "summary": "+2 AC & +25% vs Undead"
         },
         {
           "required_pieces": 3,
           "ac_bonus": 0,
           "ap_bonus": 1,
-          "free_move_tiles": 0,
-          "guard_ap_discount": 1,
-          "summary": "Guard costs 1 AP & +1 Max AP"
+          "free_move_tiles": 1,
+          "guard_ap_discount": 0,
+          "summary": "+1 Max AP & +1 MP"
         }
       ]
     }
@@ -201,7 +362,8 @@
       "gold_reward": 120,
       "xp_reward": 150,
       "location_hint": "Bywater Riverbanks (East & South Meadows)",
-      "is_notice_board_bounty": true
+      "is_notice_board_bounty": true,
+      "reward_item_id": 905
     },
     {
       "quest_id": "bounty_road_goblins",
@@ -213,7 +375,8 @@
       "gold_reward": 140,
       "xp_reward": 180,
       "location_hint": "Bywater Trade Road & Foothills",
-      "is_notice_board_bounty": true
+      "is_notice_board_bounty": true,
+      "reward_item_id": 902
     },
     {
       "quest_id": "bounty_thornwood_orcs",
@@ -225,7 +388,8 @@
       "gold_reward": 180,
       "xp_reward": 220,
       "location_hint": "Thornwood Forest & Outlying Woods",
-      "is_notice_board_bounty": true
+      "is_notice_board_bounty": true,
+      "reward_item_id": 455
     },
     {
       "quest_id": "bounty_cavern_undead",
@@ -237,7 +401,8 @@
       "gold_reward": 200,
       "xp_reward": 250,
       "location_hint": "Bywater Cavern (Dungeon Level 0)",
-      "is_notice_board_bounty": true
+      "is_notice_board_bounty": true,
+      "reward_item_id": 912
     }
   ]
 }

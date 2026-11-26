@@ -455,7 +455,7 @@ namespace RealmzCore.Tests
             CombatActionResult kiteRes = kiteSession.ExecutePartyAiTurn();
             Assert.True(kiteRes.Success);
             Assert.True(pinnedRanger.Position.ChebyshevDistance(adjacentGoblin.Position) >= 2);
-            Assert.Equal(5, adjacentGoblin.Hp); // 15 - (6 + 4) across two 3-AP ranged shots from 6 AP pool
+            Assert.Equal(9, adjacentGoblin.Hp); // 15 - 6 from one 4-AP ranged shot under Direction A 6 AP pool
             Assert.Contains(kiteSession.Log, e => e.ActionType == "RangedAttack");
         }
 

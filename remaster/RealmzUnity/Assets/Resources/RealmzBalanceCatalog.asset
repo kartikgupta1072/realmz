@@ -23,6 +23,8 @@ MonoBehaviour:
     hpMax: 24
     hpDefault: 21
     xpReward: 65
+    baseMp: 4
+    baseAp: 6
     role: Bruiser
     specialAbilities:
     - cleave_2tile
@@ -35,6 +37,8 @@ MonoBehaviour:
     hpMax: 19
     hpDefault: 17
     xpReward: 70
+    baseMp: 5
+    baseAp: 6
     role: Controller
     specialAbilities:
     - tongue_pull
@@ -47,6 +51,8 @@ MonoBehaviour:
     hpMax: 11
     hpDefault: 9
     xpReward: 0
+    baseMp: 4
+    baseAp: 4
     role: Skirmisher
     specialAbilities: []
   - id: goblin_archer
@@ -58,13 +64,119 @@ MonoBehaviour:
     hpMax: 9
     hpDefault: 8
     xpReward: 0
+    baseMp: 4
+    baseAp: 4
     role: Ranged
     specialAbilities:
     - high_ground_seeker
+  - id: giant_rat
+    name: Giant Rat
+    alias: 
+    hitDice: 0
+    hpBonus: 0
+    hpMin: 6
+    hpMax: 8
+    hpDefault: 7
+    xpReward: 0
+    baseMp: 3
+    baseAp: 4
+    role: Skirmisher
+    specialAbilities: []
+  - id: zombie
+    name: Zombie
+    alias: 
+    hitDice: 0
+    hpBonus: 0
+    hpMin: 18
+    hpMax: 23
+    hpDefault: 20
+    xpReward: 0
+    baseMp: 3
+    baseAp: 4
+    role: Skirmisher
+    specialAbilities: []
+  - id: skeletal_warrior
+    name: Skeletal Warrior
+    alias: 
+    hitDice: 0
+    hpBonus: 0
+    hpMin: 12
+    hpMax: 16
+    hpDefault: 14
+    xpReward: 0
+    baseMp: 4
+    baseAp: 4
+    role: Skirmisher
+    specialAbilities: []
+  - id: orc_archer
+    name: Orc Archer
+    alias: 
+    hitDice: 0
+    hpBonus: 0
+    hpMin: 10
+    hpMax: 14
+    hpDefault: 12
+    xpReward: 0
+    baseMp: 4
+    baseAp: 4
+    role: Ranged
+    specialAbilities: []
+  - id: monstrous_rat
+    name: Monstrous Rat
+    alias: 
+    hitDice: 0
+    hpBonus: 0
+    hpMin: 16
+    hpMax: 20
+    hpDefault: 18
+    xpReward: 0
+    baseMp: 4
+    baseAp: 5
+    role: Skirmisher
+    specialAbilities: []
+  - id: giant_spider
+    name: Giant Spider
+    alias: 
+    hitDice: 0
+    hpBonus: 0
+    hpMin: 11
+    hpMax: 15
+    hpDefault: 13
+    xpReward: 0
+    baseMp: 4
+    baseAp: 5
+    role: Skirmisher
+    specialAbilities: []
+  - id: goblin_champion
+    name: Goblin Champion
+    alias: 
+    hitDice: 0
+    hpBonus: 0
+    hpMin: 20
+    hpMax: 25
+    hpDefault: 22
+    xpReward: 0
+    baseMp: 4
+    baseAp: 6
+    role: Skirmisher
+    specialAbilities: []
+  - id: goblin_shaman
+    name: Goblin Shaman
+    alias: 
+    hitDice: 0
+    hpBonus: 0
+    hpMin: 16
+    hpMax: 20
+    hpDefault: 18
+    xpReward: 0
+    baseMp: 4
+    baseAp: 6
+    role: Caster
+    specialAbilities: []
   survival:
     torchPrice: 12
     rationPrice: 5
-    torchTurnDuration: 30
+    torchTurnDuration: 120
     bandageMaxCharges: 2
     minutesPerRealSecond: 1
     visionRadii:
@@ -81,74 +193,206 @@ MonoBehaviour:
     name: Scout's Leather
     isPreview: 0
     displayMaxPieces: 3
-    itemIds: d1000000d2000000d3000000c2010000c4010000c6010000
+    itemIds: d1000000d2000000d3000000c2010000c4010000c601000086030000
     tiers:
     - requiredPieces: 2
       acBonus: 0
       apBonus: 0
-      freeMoveTiles: 1
+      freeMoveTiles: 2
       guardApDiscount: 0
-      summary: +1 Free Move Tile
+      critBonusPct: 0
+      rangedRangeBonus: 0
+      ignoreHalfCover: 0
+      spCostDiscount: 0
+      spellDamageBonus: 0
+      healingBonus: 0
+      supportSpellApDiscount: 0
+      undeadDamageBonusPct: 0
+      summary: +2 MP
     - requiredPieces: 3
       acBonus: 0
       apBonus: 1
       freeMoveTiles: 0
       guardApDiscount: 0
-      summary: +1 Max AP
+      critBonusPct: 10
+      rangedRangeBonus: 0
+      ignoreHalfCover: 0
+      spCostDiscount: 0
+      spellDamageBonus: 0
+      healingBonus: 0
+      supportSpellApDiscount: 0
+      undeadDamageBonusPct: 0
+      summary: +1 Max AP & +10% Crit
   - setId: iron_vanguard
     name: Iron Vanguard
     isPreview: 0
     displayMaxPieces: 3
-    itemIds: 90010000a2010000c7010000140000000a0000000b000000
+    itemIds: 90010000a2010000c7010000db000000
     tiers:
     - requiredPieces: 2
       acBonus: 2
       apBonus: 0
       freeMoveTiles: 0
       guardApDiscount: 0
+      critBonusPct: 0
+      rangedRangeBonus: 0
+      ignoreHalfCover: 0
+      spCostDiscount: 0
+      spellDamageBonus: 0
+      healingBonus: 0
+      supportSpellApDiscount: 0
+      undeadDamageBonusPct: 0
       summary: +2 AC
     - requiredPieces: 3
       acBonus: 0
       apBonus: 1
       freeMoveTiles: 0
       guardApDiscount: 1
+      critBonusPct: 0
+      rangedRangeBonus: 0
+      ignoreHalfCover: 0
+      spCostDiscount: 0
+      spellDamageBonus: 0
+      healingBonus: 0
+      supportSpellApDiscount: 0
+      undeadDamageBonusPct: 0
       summary: Guard costs 1 AP & +1 Max AP
   - setId: thornwood_stalker
     name: Thornwood Stalker
-    isPreview: 1
+    isPreview: 0
     displayMaxPieces: 3
-    itemIds: 8d2300008e2300008f230000
+    itemIds: 870300008803000089030000
+    tiers:
+    - requiredPieces: 2
+      acBonus: 0
+      apBonus: 0
+      freeMoveTiles: 1
+      guardApDiscount: 0
+      critBonusPct: 0
+      rangedRangeBonus: 1
+      ignoreHalfCover: 0
+      spCostDiscount: 0
+      spellDamageBonus: 0
+      healingBonus: 0
+      supportSpellApDiscount: 0
+      undeadDamageBonusPct: 0
+      summary: +1 MP & +1 Ranged Range
+    - requiredPieces: 3
+      acBonus: 0
+      apBonus: 1
+      freeMoveTiles: 0
+      guardApDiscount: 0
+      critBonusPct: 0
+      rangedRangeBonus: 0
+      ignoreHalfCover: 1
+      spCostDiscount: 0
+      spellDamageBonus: 0
+      healingBonus: 0
+      supportSpellApDiscount: 0
+      undeadDamageBonusPct: 0
+      summary: +1 Max AP & Ignore Half-Cover
+  - setId: bywater_arcanist
+    name: Bywater Arcanist
+    isPreview: 0
+    displayMaxPieces: 3
+    itemIds: 8a0300008b0300008c030000
+    tiers:
+    - requiredPieces: 2
+      acBonus: 0
+      apBonus: 0
+      freeMoveTiles: 1
+      guardApDiscount: 0
+      critBonusPct: 0
+      rangedRangeBonus: 0
+      ignoreHalfCover: 0
+      spCostDiscount: 1
+      spellDamageBonus: 0
+      healingBonus: 0
+      supportSpellApDiscount: 0
+      undeadDamageBonusPct: 0
+      summary: -1 SP Cost & +1 MP
+    - requiredPieces: 3
+      acBonus: 0
+      apBonus: 1
+      freeMoveTiles: 0
+      guardApDiscount: 0
+      critBonusPct: 0
+      rangedRangeBonus: 0
+      ignoreHalfCover: 0
+      spCostDiscount: 0
+      spellDamageBonus: 2
+      healingBonus: 0
+      supportSpellApDiscount: 0
+      undeadDamageBonusPct: 0
+      summary: +1 Max AP & +2 Spell Damage
+  - setId: sanctuary_acolyte
+    name: Sanctuary Acolyte
+    isPreview: 0
+    displayMaxPieces: 3
+    itemIds: 8d0300008e0300008f030000
     tiers:
     - requiredPieces: 2
       acBonus: 1
       apBonus: 0
-      freeMoveTiles: 1
+      freeMoveTiles: 0
       guardApDiscount: 0
-      summary: +1 AC & +1 Free Move Tile
+      critBonusPct: 0
+      rangedRangeBonus: 0
+      ignoreHalfCover: 0
+      spCostDiscount: 0
+      spellDamageBonus: 0
+      healingBonus: 2
+      supportSpellApDiscount: 0
+      undeadDamageBonusPct: 0
+      summary: +2 Healing & +1 AC
     - requiredPieces: 3
       acBonus: 0
       apBonus: 1
       freeMoveTiles: 0
       guardApDiscount: 0
-      summary: +1 Max AP
+      critBonusPct: 0
+      rangedRangeBonus: 0
+      ignoreHalfCover: 0
+      spCostDiscount: 0
+      spellDamageBonus: 0
+      healingBonus: 0
+      supportSpellApDiscount: 1
+      undeadDamageBonusPct: 0
+      summary: +1 Max AP & Cure/Bless -1 AP
   - setId: cryptbreaker
     name: Cryptbreaker
-    isPreview: 1
+    isPreview: 0
     displayMaxPieces: 3
-    itemIds: f1230000f2230000f3230000
+    itemIds: 900300009103000092030000
     tiers:
     - requiredPieces: 2
       acBonus: 2
       apBonus: 0
       freeMoveTiles: 0
       guardApDiscount: 0
-      summary: +2 AC
+      critBonusPct: 0
+      rangedRangeBonus: 0
+      ignoreHalfCover: 0
+      spCostDiscount: 0
+      spellDamageBonus: 0
+      healingBonus: 0
+      supportSpellApDiscount: 0
+      undeadDamageBonusPct: 25
+      summary: +2 AC & +25% vs Undead
     - requiredPieces: 3
       acBonus: 0
       apBonus: 1
-      freeMoveTiles: 0
-      guardApDiscount: 1
-      summary: Guard costs 1 AP & +1 Max AP
+      freeMoveTiles: 1
+      guardApDiscount: 0
+      critBonusPct: 0
+      rangedRangeBonus: 0
+      ignoreHalfCover: 0
+      spCostDiscount: 0
+      spellDamageBonus: 0
+      healingBonus: 0
+      supportSpellApDiscount: 0
+      undeadDamageBonusPct: 0
+      summary: +1 Max AP & +1 MP
   quests:
   - questId: bounty_river_frogs
     title: Clear the Riverbed Frogs
@@ -161,6 +405,7 @@ MonoBehaviour:
     xpReward: 150
     locationHint: Bywater Riverbanks (East & South Meadows)
     isNoticeBoardBounty: 1
+    rewardItemId: 905
   - questId: bounty_road_goblins
     title: Break the Road Goblin Ambush
     source: BywaterNoticeBoard
@@ -172,6 +417,7 @@ MonoBehaviour:
     xpReward: 180
     locationHint: Bywater Trade Road & Foothills
     isNoticeBoardBounty: 1
+    rewardItemId: 902
   - questId: bounty_thornwood_orcs
     title: Push Back the Thornwood Orcs
     source: BywaterNoticeBoard
@@ -183,6 +429,7 @@ MonoBehaviour:
     xpReward: 220
     locationHint: Thornwood Forest & Outlying Woods
     isNoticeBoardBounty: 1
+    rewardItemId: 455
   - questId: bounty_cavern_undead
     title: Purge the Cavern Undead
     source: BywaterNoticeBoard
@@ -194,3 +441,4 @@ MonoBehaviour:
     xpReward: 250
     locationHint: Bywater Cavern (Dungeon Level 0)
     isNoticeBoardBounty: 1
+    rewardItemId: 912

@@ -600,6 +600,96 @@ namespace RealmzCore.Exploration
             return bonus;
         }
 
+        public int GetSetCritBonusPct()
+        {
+            int bonus = 0;
+            IReadOnlyList<EquipmentSetProgress> sets = GetActiveEquipmentSets();
+            for (int i = 0; i < sets.Count; i++)
+            {
+                bonus += sets[i].CritBonusPct;
+            }
+            return bonus;
+        }
+
+        public int GetSetRangedRangeBonus()
+        {
+            int bonus = 0;
+            IReadOnlyList<EquipmentSetProgress> sets = GetActiveEquipmentSets();
+            for (int i = 0; i < sets.Count; i++)
+            {
+                bonus += sets[i].RangedRangeBonus;
+            }
+            return bonus;
+        }
+
+        public bool GetSetIgnoreHalfCover()
+        {
+            IReadOnlyList<EquipmentSetProgress> sets = GetActiveEquipmentSets();
+            for (int i = 0; i < sets.Count; i++)
+            {
+                if (sets[i].IgnoreHalfCover)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public int GetSetSpCostDiscount()
+        {
+            int bonus = 0;
+            IReadOnlyList<EquipmentSetProgress> sets = GetActiveEquipmentSets();
+            for (int i = 0; i < sets.Count; i++)
+            {
+                bonus += sets[i].SpCostDiscount;
+            }
+            return bonus;
+        }
+
+        public int GetSetSpellDamageBonus()
+        {
+            int bonus = 0;
+            IReadOnlyList<EquipmentSetProgress> sets = GetActiveEquipmentSets();
+            for (int i = 0; i < sets.Count; i++)
+            {
+                bonus += sets[i].SpellDamageBonus;
+            }
+            return bonus;
+        }
+
+        public int GetSetHealingBonus()
+        {
+            int bonus = 0;
+            IReadOnlyList<EquipmentSetProgress> sets = GetActiveEquipmentSets();
+            for (int i = 0; i < sets.Count; i++)
+            {
+                bonus += sets[i].HealingBonus;
+            }
+            return bonus;
+        }
+
+        public int GetSetSupportSpellApDiscount()
+        {
+            int bonus = 0;
+            IReadOnlyList<EquipmentSetProgress> sets = GetActiveEquipmentSets();
+            for (int i = 0; i < sets.Count; i++)
+            {
+                bonus += sets[i].SupportSpellApDiscount;
+            }
+            return bonus;
+        }
+
+        public int GetSetUndeadDamageBonusPct()
+        {
+            int bonus = 0;
+            IReadOnlyList<EquipmentSetProgress> sets = GetActiveEquipmentSets();
+            for (int i = 0; i < sets.Count; i++)
+            {
+                bonus += sets[i].UndeadDamageBonusPct;
+            }
+            return bonus;
+        }
+
         public int GetMeleeWeaponApCost(IReadOnlyDictionary<int, ItemDefinition>? catalog = null)
         {
             IReadOnlyDictionary<int, ItemDefinition>? lookup = catalog ?? _catalog;
@@ -701,7 +791,7 @@ namespace RealmzCore.Exploration
                 lookup.TryGetValue(missile.ItemId, out ItemDefinition? item) &&
                 item.Range > 1)
             {
-                return item.Range;
+                return item.Range + GetSetRangedRangeBonus();
             }
 
             return 0;

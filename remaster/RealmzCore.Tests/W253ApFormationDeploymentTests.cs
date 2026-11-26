@@ -101,8 +101,18 @@ namespace RealmzCore.Tests
             BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(FindBywaterM1Dir());
             PartyState party = PartyState.FromBundle(bundle);
 
-            // Starter heroes: Aldric & Seraphina wear Broadsword/Longsword + Shield + Helm (Iron Vanguard 3/3).
+            // Starter heroes: Aldric & Seraphina start with 1/3 Iron Vanguard (Shield) and reach 3/3 by equipping Helm + Steel Shod Boots.
             PartyMemberState aldric = party.Members.First(m => m.Name == "Aldric");
+            EquipmentSetProgress? aldricStarter = aldric.GetEquipmentSetProgress(EquipmentSetCatalog.IronVanguardSetId);
+            Assert.NotNull(aldricStarter);
+            Assert.Equal(1, aldricStarter!.EquippedPieces);
+
+            party.AddItemToStash(400, 1); // Helm
+            party.AddItemToStash(455, 1); // Steel Shod Boots
+            int aldricIdx = party.Members.ToList().IndexOf(aldric);
+            Assert.True(party.EquipFromStash(aldricIdx, party.Stash.ToList().FindIndex(s => s.ItemId == 400), bundle.Items));
+            Assert.True(party.EquipFromStash(aldricIdx, party.Stash.ToList().FindIndex(s => s.ItemId == 455), bundle.Items));
+
             EquipmentSetProgress? aldricVanguard = aldric.GetEquipmentSetProgress(EquipmentSetCatalog.IronVanguardSetId);
             Assert.NotNull(aldricVanguard);
             Assert.Equal(3, aldricVanguard!.EquippedPieces);
@@ -185,9 +195,9 @@ namespace RealmzCore.Tests
                 bundle.Items,
                 roller: new QueuedDiceRoller(20, 4, 15));
 
-            // 6 AP pool: Light weapon melee (2 AP x 2 = 4 AP) + Shove (2 AP) spends all 6 AP,
-            // OR Standard melee (3 AP) + Shove (2 AP) = 5 AP spent cleanly leaving 1 AP.
+            // 6 AP pool: Light weapon melee (3 AP) + Shove (2 AP) = 5 AP spent cleanly leaving 1 AP.
             Assert.Equal(6, vex.Economy.MaxAp);
+            Assert.Equal(CombatActionEconomy.LightWeaponApCost, vex.MeleeApCost);
             int apStart = vex.Economy.CurrentAp;
             Assert.True(session.ExecuteMeleeAttack("m1").Success);
             Assert.True(vex.Economy.CurrentAp < apStart);

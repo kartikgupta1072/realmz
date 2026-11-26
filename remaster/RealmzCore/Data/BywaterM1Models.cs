@@ -709,7 +709,9 @@ namespace RealmzCore.Data
             int goldMax = 0,
             IReadOnlyList<int>? lootItemIds = null,
             string role = "",
-            IReadOnlyList<string>? specialAbilities = null)
+            IReadOnlyList<string>? specialAbilities = null,
+            int baseMp = 0,
+            int baseAp = 0)
         {
             Index = index;
             Id = id ?? string.Empty;
@@ -744,6 +746,8 @@ namespace RealmzCore.Data
             _lootItemIds = CopyIntList(lootItemIds);
             Role = role ?? string.Empty;
             _specialAbilities = CopyStringList(specialAbilities);
+            BaseMp = Math.Max(0, baseMp);
+            BaseAp = Math.Max(0, baseAp);
         }
 
         public int Index { get; }
@@ -779,6 +783,8 @@ namespace RealmzCore.Data
         public IReadOnlyList<int> LootItemIds => _lootItemIds;
         public string Role { get; }
         public IReadOnlyList<string> SpecialAbilities => _specialAbilities;
+        public int BaseMp { get; }
+        public int BaseAp { get; }
 
         public bool HasSpecialAbility(string abilityId)
         {

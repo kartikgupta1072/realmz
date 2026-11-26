@@ -119,7 +119,7 @@ namespace RealmzCore.Combat
                     !string.Equals(session.CurrentActorId, actor.Id, StringComparison.Ordinal) ||
                     !actor.IsConscious ||
                     (actor.Economy.UsesApForActions
-                        ? (actor.Economy.CurrentAp < CombatActionEconomy.LightWeaponApCost && actor.Economy.MoveRemaining <= 0)
+                        ? (actor.Economy.CurrentAp < CombatActionEconomy.DefaultGuardApCost && actor.Economy.MoveRemaining <= 0)
                         : (!actor.Economy.HasSlot(CombatActionSlot.MainAction) &&
                            !actor.Economy.HasSlot(CombatActionSlot.BonusAction) &&
                            actor.Economy.MoveRemaining <= 0)) ||
@@ -1049,8 +1049,13 @@ namespace RealmzCore.Combat
             for (int i = 0; i < actor.SpellIds.Count; i++)
             {
                 if (!session.Spells.TryGetValue(actor.SpellIds[i], out SpellDefinition? spell) ||
-                    actor.Sp < spell.SpCost ||
                     !string.Equals(spell.EffectKind, "Heal", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                int effectiveSpCost = spell.SpCost <= 0 ? 0 : Math.Max(1, spell.SpCost - Math.Max(0, actor.SetSpCostDiscount));
+                if (actor.Sp < effectiveSpCost)
                 {
                     continue;
                 }
@@ -1104,7 +1109,8 @@ namespace RealmzCore.Combat
 
             for (int i = 0; i < actor.SpellIds.Count; i++)
             {
-                if (!session.Spells.TryGetValue(actor.SpellIds[i], out SpellDefinition? spell) || actor.Sp < spell.SpCost)
+                if (!session.Spells.TryGetValue(actor.SpellIds[i], out SpellDefinition? spell) ||
+                    actor.Sp < (spell.SpCost <= 0 ? 0 : Math.Max(1, spell.SpCost - Math.Max(0, actor.SetSpCostDiscount))))
                 {
                     continue;
                 }

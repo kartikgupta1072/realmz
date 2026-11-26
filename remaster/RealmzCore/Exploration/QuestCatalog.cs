@@ -16,7 +16,8 @@ namespace RealmzCore.Exploration
             int goldReward = 0,
             int xpReward = 0,
             string locationHint = "",
-            bool isNoticeBoardBounty = false)
+            bool isNoticeBoardBounty = false,
+            int rewardItemId = 0)
         {
             QuestId = questId ?? string.Empty;
             Title = title ?? string.Empty;
@@ -28,6 +29,7 @@ namespace RealmzCore.Exploration
             XpReward = Math.Max(0, xpReward);
             LocationHint = locationHint ?? string.Empty;
             IsNoticeBoardBounty = isNoticeBoardBounty;
+            RewardItemId = Math.Max(0, rewardItemId);
         }
 
         public string QuestId { get; }
@@ -40,6 +42,44 @@ namespace RealmzCore.Exploration
         public int XpReward { get; }
         public string LocationHint { get; }
         public bool IsNoticeBoardBounty { get; }
+        public int RewardItemId { get; }
+
+        public string ApplyRewardsToParty(PartyState party, IReadOnlyDictionary<int, ItemDefinition>? catalog = null)
+        {
+            if (party == null)
+            {
+                throw new ArgumentNullException(nameof(party));
+            }
+
+            if (GoldReward > 0)
+            {
+                party.Gold += GoldReward;
+            }
+
+            if (XpReward > 0 && party.Members.Count > 0)
+            {
+                int perMember = XpReward / party.Members.Count;
+                int rem = XpReward % party.Members.Count;
+                for (int i = 0; i < party.Members.Count; i++)
+                {
+                    party.Members[i].AddXp(perMember + (i < rem ? 1 : 0));
+                }
+            }
+
+            string itemLabel = string.Empty;
+            if (RewardItemId > 0)
+            {
+                ItemDefinition? def = null;
+                catalog?.TryGetValue(RewardItemId, out def);
+                int charges = def != null ? def.Charges : 0;
+                party.AddItemToStash(RewardItemId, 1, isIdentified: true, charges: charges);
+                itemLabel = def != null ? def.Name : $"Item #{RewardItemId}";
+            }
+
+            return string.IsNullOrEmpty(itemLabel)
+                ? $"Claimed {GoldReward}g and {XpReward} XP."
+                : $"Claimed {GoldReward}g, {XpReward} XP, and {itemLabel}.";
+        }
     }
 
     public static class QuestCatalog
@@ -54,7 +94,8 @@ namespace RealmzCore.Exploration
             goldReward: 120,
             xpReward: 150,
             locationHint: "Bywater Riverbanks (East & South Meadows)",
-            isNoticeBoardBounty: true);
+            isNoticeBoardBounty: true,
+            rewardItemId: 905);
 
         public static readonly QuestDefinition GoblinRaidersBounty = new QuestDefinition(
             questId: "bounty_road_goblins",
@@ -66,7 +107,8 @@ namespace RealmzCore.Exploration
             goldReward: 140,
             xpReward: 180,
             locationHint: "Bywater Trade Road & Foothills",
-            isNoticeBoardBounty: true);
+            isNoticeBoardBounty: true,
+            rewardItemId: 902);
 
         public static readonly QuestDefinition CryptBonesBounty = new QuestDefinition(
             questId: "bounty_cavern_undead",
@@ -78,7 +120,8 @@ namespace RealmzCore.Exploration
             goldReward: 200,
             xpReward: 250,
             locationHint: "Bywater Cavern (Dungeon Level 0)",
-            isNoticeBoardBounty: true);
+            isNoticeBoardBounty: true,
+            rewardItemId: 912);
 
         public static readonly QuestDefinition OrcVanguardBounty = new QuestDefinition(
             questId: "bounty_thornwood_orcs",
@@ -90,7 +133,8 @@ namespace RealmzCore.Exploration
             goldReward: 180,
             xpReward: 220,
             locationHint: "Thornwood Forest & Outlying Woods",
-            isNoticeBoardBounty: true);
+            isNoticeBoardBounty: true,
+            rewardItemId: 455);
 
         public static readonly IReadOnlyList<QuestDefinition> BywaterNoticeBoardBounties = new[]
         {

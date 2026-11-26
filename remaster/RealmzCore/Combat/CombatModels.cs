@@ -792,7 +792,7 @@ namespace RealmzCore.Combat
             Economy.ResetSplitMpApTurn(
                 GetDndBaseMoveBudget(),
                 GetDndBonusMoveTiles(),
-                CombatActionEconomy.DefaultBaseApPerTurn,
+                GetBaseApPerTurn(),
                 EquipApBonus,
                 GuardApDiscount);
         }
@@ -867,12 +867,21 @@ namespace RealmzCore.Combat
             state.EquipApBonus = hero.GetSetApBonus();
             state.FreeMoveTiles = hero.GetSetFreeMoveTiles();
             state.GuardApDiscount = hero.GetSetGuardApDiscount();
+            state.SetCritBonusPct = hero.GetSetCritBonusPct();
+            state.SetIgnoreHalfCover = hero.GetSetIgnoreHalfCover();
+            state.SetSpCostDiscount = hero.GetSetSpCostDiscount();
+            state.SetSpellDamageBonus = hero.GetSetSpellDamageBonus();
+            state.SetHealingBonus = hero.GetSetHealingBonus();
+            state.SetSupportSpellApDiscount = hero.GetSetSupportSpellApDiscount();
+            state.SetUndeadDamageBonusPct = hero.GetSetUndeadDamageBonusPct();
             state.MeleeApCost = hero.GetMeleeWeaponApCost(catalog);
             state.RangedApCost = hero.GetRangedWeaponApCost(catalog);
-            state.Economy.ResetDndTurn(
-                state.GetDndBaseMoveBudget(),
+            state.Economy.ResetSplitMpApTurn(
+                state.GetBaseMoveBudget(),
                 state.GetDndBonusMoveTiles(),
-                state.UsesBonusActionGuard);
+                state.GetBaseApPerTurn(),
+                state.EquipApBonus,
+                state.GuardApDiscount);
 
             if (hero.Conditions.Has(CharConditionId.Poisoned)) state.Conditions.Apply(CharConditionId.Poisoned);
             if (hero.Conditions.Has(CharConditionId.Diseased)) state.Conditions.Apply(CharConditionId.Diseased);
@@ -913,7 +922,7 @@ namespace RealmzCore.Combat
                                  monster.CastChancePct >= 50 ||
                                  (monster.RangedRange > 1 && !string.IsNullOrWhiteSpace(monster.RangedDice));
 
-            return new CombatantState(
+            CombatantState state = new CombatantState(
                 id: instanceId,
                 name: monster.Name,
                 side: CombatSide.Monster,
@@ -950,6 +959,15 @@ namespace RealmzCore.Combat
                 weaponBonusIncludedInToHit: false,
                 role: monster.Role,
                 specialAbilities: monster.SpecialAbilities);
+            state.BaseMpOverride = monster.BaseMp;
+            state.BaseApOverride = monster.BaseAp;
+            state.Economy.ResetSplitMpApTurn(
+                state.GetBaseMoveBudget(),
+                state.GetDndBonusMoveTiles(),
+                state.GetBaseApPerTurn(),
+                state.EquipApBonus,
+                state.GuardApDiscount);
+            return state;
         }
 
         public string Id { get; }
@@ -977,9 +995,9 @@ namespace RealmzCore.Combat
         public int Judgment { get; set; } = 10;
         public int Vitality { get; set; } = 10;
         public int Luck { get; set; } = 10;
-        public int CritBonusPct => Side == CombatSide.Hero ? Math.Max(0, (Luck - 10) / 2) : 0;
-        public int ArcaneSpellPowerBonus => Side == CombatSide.Hero ? Math.Max(0, (Knowledge - 10) / 4) : 0;
-        public int DivineHealingBonus => Side == CombatSide.Hero ? Math.Max(0, (Judgment - 10) / 4) : 0;
+        public int CritBonusPct => (Side == CombatSide.Hero ? Math.Max(0, (Luck - 10) / 2) : 0) + SetCritBonusPct;
+        public int ArcaneSpellPowerBonus => (Side == CombatSide.Hero ? Math.Max(0, (Knowledge - 10) / 4) : 0) + SetSpellDamageBonus;
+        public int DivineHealingBonus => (Side == CombatSide.Hero ? Math.Max(0, (Judgment - 10) / 4) : 0) + SetHealingBonus;
         public int SpellHitDcBonusPct => Side == CombatSide.Hero ? Knowledge - 10 : 0;
         public int ConditionSaveBonusPct => Side == CombatSide.Hero ? Math.Max(0, (Vitality - 10) * 2) + Math.Max(0, Luck - 10) : 0;
         public int CombatKills { get; internal set; }
@@ -1026,6 +1044,15 @@ namespace RealmzCore.Combat
         public int EquipApBonus { get; set; }
         public int FreeMoveTiles { get; set; }
         public int GuardApDiscount { get; set; }
+        public int SetCritBonusPct { get; set; }
+        public bool SetIgnoreHalfCover { get; set; }
+        public int SetSpCostDiscount { get; set; }
+        public int SetSpellDamageBonus { get; set; }
+        public int SetHealingBonus { get; set; }
+        public int SetSupportSpellApDiscount { get; set; }
+        public int SetUndeadDamageBonusPct { get; set; }
+        public int BaseMpOverride { get; set; }
+        public int BaseApOverride { get; set; }
         public int MeleeApCost { get; set; } = CombatActionEconomy.StandardWeaponApCost;
         public int RangedApCost { get; set; } = CombatActionEconomy.StandardWeaponApCost;
         public int GetBaseMoveBudget()
@@ -1038,7 +1065,41 @@ namespace RealmzCore.Combat
                     : CombatActionEconomy.DefaultBaseMpPerTurn;
             }
 
-            return Math.Clamp(MovementMax > 0 ? Math.Min(MovementMax, 5) : CombatActionEconomy.DefaultBaseMpPerTurn, 3, 5);
+            if (BaseMpOverride > 0)
+            {
+                return Math.Clamp(BaseMpOverride, 2, 6);
+            }
+
+            if (MovementMax <= 0)
+            {
+                return CombatActionEconomy.DefaultBaseMpPerTurn;
+            }
+
+            return MovementMax <= 7 ? 3 : (MovementMax <= 12 ? 4 : 5);
+        }
+
+        public int GetBaseApPerTurn()
+        {
+            if (Side == CombatSide.Hero)
+            {
+                return CombatActionEconomy.DefaultBaseApPerTurn;
+            }
+
+            if (BaseApOverride > 0)
+            {
+                return Math.Clamp(BaseApOverride, 2, 8);
+            }
+
+            if (string.Equals(Role, "Bruiser", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(Role, "Controller", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(Role, "Caster", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(Role, "Boss", StringComparison.OrdinalIgnoreCase) ||
+                MaxHp >= 15)
+            {
+                return 6;
+            }
+
+            return MaxHp >= 12 ? 5 : 4;
         }
 
         public int GetDndBaseMoveBudget() => GetBaseMoveBudget();

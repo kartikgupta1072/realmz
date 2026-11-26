@@ -80,8 +80,10 @@ namespace RealmzCore.Tests
             // FindBestUpgradeRecipient never tags incompatible heroes
             // All shield-users (Aldric, Liora, Seraphina) already start with Shield(418), and Ranger/Mage/Rogue cannot use shields -> null!
             Assert.Null(PartyState.FindBestUpgradeRecipient(party, items[418], items));
-            // Same for Helm(400): Aldric/Liora/Seraphina already wear Helm(400) and Ranger/Mage/Rogue cannot wear heavy metal Helm -> null!
-            Assert.Null(PartyState.FindBestUpgradeRecipient(party, items[400], items));
+            // Helm(400) is an earned 2nd piece of Iron Vanguard (not pre-equipped on starters), so frontline helm users are recommended!
+            HeroUpgradeRecommendation? helmRec = PartyState.FindBestUpgradeRecipient(party, items[400], items);
+            Assert.NotNull(helmRec);
+            Assert.True(helmRec!.Hero.Id == aldric.Id || helmRec.Hero.Id == seraphina.Id || helmRec.Hero.Id == liora.Id);
 
             // Bow +1 (108) targets Kaelen cleanly
             HeroUpgradeRecommendation? bowRec = PartyState.FindBestUpgradeRecipient(party, items[108], items);

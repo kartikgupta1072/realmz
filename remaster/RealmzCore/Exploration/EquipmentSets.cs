@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using RealmzCore.Data;
+using RealmzCore.Rules;
 
 namespace RealmzCore.Exploration
 {
@@ -19,13 +20,29 @@ namespace RealmzCore.Exploration
             int apBonus = 0,
             int freeMoveTiles = 0,
             int guardApDiscount = 0,
-            string summary = "")
+            string summary = "",
+            int critBonusPct = 0,
+            int rangedRangeBonus = 0,
+            bool ignoreHalfCover = false,
+            int spCostDiscount = 0,
+            int spellDamageBonus = 0,
+            int healingBonus = 0,
+            int supportSpellApDiscount = 0,
+            int undeadDamageBonusPct = 0)
         {
             RequiredPieces = Math.Max(1, requiredPieces);
             AcBonus = acBonus;
             ApBonus = apBonus;
             FreeMoveTiles = freeMoveTiles;
             GuardApDiscount = guardApDiscount;
+            CritBonusPct = critBonusPct;
+            RangedRangeBonus = rangedRangeBonus;
+            IgnoreHalfCover = ignoreHalfCover;
+            SpCostDiscount = spCostDiscount;
+            SpellDamageBonus = spellDamageBonus;
+            HealingBonus = healingBonus;
+            SupportSpellApDiscount = supportSpellApDiscount;
+            UndeadDamageBonusPct = undeadDamageBonusPct;
             Summary = summary ?? string.Empty;
         }
 
@@ -34,6 +51,14 @@ namespace RealmzCore.Exploration
         public int ApBonus { get; }
         public int FreeMoveTiles { get; }
         public int GuardApDiscount { get; }
+        public int CritBonusPct { get; }
+        public int RangedRangeBonus { get; }
+        public bool IgnoreHalfCover { get; }
+        public int SpCostDiscount { get; }
+        public int SpellDamageBonus { get; }
+        public int HealingBonus { get; }
+        public int SupportSpellApDiscount { get; }
+        public int UndeadDamageBonusPct { get; }
         public string Summary { get; }
     }
 
@@ -76,7 +101,15 @@ namespace RealmzCore.Exploration
             int acBonus,
             int apBonus,
             int freeMoveTiles,
-            int guardApDiscount)
+            int guardApDiscount,
+            int critBonusPct = 0,
+            int rangedRangeBonus = 0,
+            bool ignoreHalfCover = false,
+            int spCostDiscount = 0,
+            int spellDamageBonus = 0,
+            int healingBonus = 0,
+            int supportSpellApDiscount = 0,
+            int undeadDamageBonusPct = 0)
         {
             Definition = definition ?? throw new ArgumentNullException(nameof(definition));
             EquippedPieces = Math.Max(0, equippedPieces);
@@ -84,6 +117,14 @@ namespace RealmzCore.Exploration
             ApBonus = apBonus;
             FreeMoveTiles = freeMoveTiles;
             GuardApDiscount = guardApDiscount;
+            CritBonusPct = critBonusPct;
+            RangedRangeBonus = rangedRangeBonus;
+            IgnoreHalfCover = ignoreHalfCover;
+            SpCostDiscount = spCostDiscount;
+            SpellDamageBonus = spellDamageBonus;
+            HealingBonus = healingBonus;
+            SupportSpellApDiscount = supportSpellApDiscount;
+            UndeadDamageBonusPct = undeadDamageBonusPct;
         }
 
         public EquipmentSetDefinition Definition { get; }
@@ -93,7 +134,27 @@ namespace RealmzCore.Exploration
         public int ApBonus { get; }
         public int FreeMoveTiles { get; }
         public int GuardApDiscount { get; }
-        public bool HasAnyActiveTier => AcBonus != 0 || ApBonus != 0 || FreeMoveTiles != 0 || GuardApDiscount != 0;
+        public int CritBonusPct { get; }
+        public int RangedRangeBonus { get; }
+        public bool IgnoreHalfCover { get; }
+        public int SpCostDiscount { get; }
+        public int SpellDamageBonus { get; }
+        public int HealingBonus { get; }
+        public int SupportSpellApDiscount { get; }
+        public int UndeadDamageBonusPct { get; }
+        public bool HasAnyActiveTier =>
+            AcBonus != 0 ||
+            ApBonus != 0 ||
+            FreeMoveTiles != 0 ||
+            GuardApDiscount != 0 ||
+            CritBonusPct != 0 ||
+            RangedRangeBonus != 0 ||
+            IgnoreHalfCover ||
+            SpCostDiscount != 0 ||
+            SpellDamageBonus != 0 ||
+            HealingBonus != 0 ||
+            SupportSpellApDiscount != 0 ||
+            UndeadDamageBonusPct != 0;
 
         public string FormatProgressTag()
         {
@@ -120,12 +181,14 @@ namespace RealmzCore.Exploration
         public const string ScoutsLeatherSetId = "scouts_leather";
         public const string IronVanguardSetId = "iron_vanguard";
         public const string ThornwoodStalkerSetId = "thornwood_stalker";
+        public const string BywaterArcanistSetId = "bywater_arcanist";
+        public const string SanctuaryAcolyteSetId = "sanctuary_acolyte";
         public const string CryptbreakerSetId = "cryptbreaker";
 
         public static readonly EquipmentSetDefinition ScoutsLeather = new EquipmentSetDefinition(
             setId: ScoutsLeatherSetId,
             name: "Scout's Leather",
-            itemIds: new[] { 209, 210, 211, 450, 452, 454 },
+            itemIds: new[] { 209, 210, 211, 450, 452, 454, 902 },
             tiers: new[]
             {
                 new EquipmentSetBonusTier(
@@ -135,14 +198,15 @@ namespace RealmzCore.Exploration
                 new EquipmentSetBonusTier(
                     requiredPieces: 3,
                     apBonus: 1,
-                    summary: "+1 Max AP")
+                    critBonusPct: 10,
+                    summary: "+1 Max AP & +10% Crit")
             },
             displayMaxPieces: 3);
 
         public static readonly EquipmentSetDefinition IronVanguard = new EquipmentSetDefinition(
             setId: IronVanguardSetId,
             name: "Iron Vanguard",
-            itemIds: new[] { 400, 418, 455, 20, 10, 11 },
+            itemIds: new[] { 400, 418, 455, 219 },
             tiers: new[]
             {
                 new EquipmentSetBonusTier(
@@ -160,54 +224,90 @@ namespace RealmzCore.Exploration
         public static readonly EquipmentSetDefinition ThornwoodStalker = new EquipmentSetDefinition(
             setId: ThornwoodStalkerSetId,
             name: "Thornwood Stalker",
-            itemIds: new[] { 9101, 9102, 9103 },
+            itemIds: new[] { 903, 904, 905 },
+            tiers: new[]
+            {
+                new EquipmentSetBonusTier(
+                    requiredPieces: 2,
+                    freeMoveTiles: 1,
+                    rangedRangeBonus: 1,
+                    summary: "+1 MP & +1 Ranged Range"),
+                new EquipmentSetBonusTier(
+                    requiredPieces: 3,
+                    apBonus: 1,
+                    ignoreHalfCover: true,
+                    summary: "+1 Max AP & Ignore Half-Cover")
+            },
+            displayMaxPieces: 3);
+
+        public static readonly EquipmentSetDefinition BywaterArcanist = new EquipmentSetDefinition(
+            setId: BywaterArcanistSetId,
+            name: "Bywater Arcanist",
+            itemIds: new[] { 906, 907, 908 },
+            tiers: new[]
+            {
+                new EquipmentSetBonusTier(
+                    requiredPieces: 2,
+                    freeMoveTiles: 1,
+                    spCostDiscount: 1,
+                    summary: "-1 SP Cost & +1 MP"),
+                new EquipmentSetBonusTier(
+                    requiredPieces: 3,
+                    apBonus: 1,
+                    spellDamageBonus: 2,
+                    summary: "+1 Max AP & +2 Spell Damage")
+            },
+            displayMaxPieces: 3);
+
+        public static readonly EquipmentSetDefinition SanctuaryAcolyte = new EquipmentSetDefinition(
+            setId: SanctuaryAcolyteSetId,
+            name: "Sanctuary Acolyte",
+            itemIds: new[] { 909, 910, 911 },
             tiers: new[]
             {
                 new EquipmentSetBonusTier(
                     requiredPieces: 2,
                     acBonus: 1,
-                    freeMoveTiles: 1,
-                    summary: "+1 AC & +1 MP"),
+                    healingBonus: 2,
+                    summary: "+2 Healing & +1 AC"),
                 new EquipmentSetBonusTier(
                     requiredPieces: 3,
                     apBonus: 1,
-                    summary: "+1 Max AP")
+                    supportSpellApDiscount: 1,
+                    summary: "+1 Max AP & Cure/Bless -1 AP")
             },
-            displayMaxPieces: 3,
-            isPreview: true);
+            displayMaxPieces: 3);
 
         public static readonly EquipmentSetDefinition Cryptbreaker = new EquipmentSetDefinition(
             setId: CryptbreakerSetId,
             name: "Cryptbreaker",
-            itemIds: new[] { 9201, 9202, 9203 },
+            itemIds: new[] { 912, 913, 914 },
             tiers: new[]
             {
                 new EquipmentSetBonusTier(
                     requiredPieces: 2,
                     acBonus: 2,
-                    summary: "+2 AC"),
+                    undeadDamageBonusPct: 25,
+                    summary: "+2 AC & +25% vs Undead"),
                 new EquipmentSetBonusTier(
                     requiredPieces: 3,
                     apBonus: 1,
-                    guardApDiscount: 1,
-                    summary: "Guard costs 1 AP & +1 Max AP")
+                    freeMoveTiles: 1,
+                    summary: "+1 Max AP & +1 MP")
             },
-            displayMaxPieces: 3,
-            isPreview: true);
+            displayMaxPieces: 3);
 
         public static readonly IReadOnlyList<EquipmentSetDefinition> AllSets = new[]
         {
             ScoutsLeather,
             IronVanguard,
             ThornwoodStalker,
+            BywaterArcanist,
+            SanctuaryAcolyte,
             Cryptbreaker
         };
 
-        public static readonly IReadOnlyList<EquipmentSetDefinition> PreviewSets = new[]
-        {
-            ThornwoodStalker,
-            Cryptbreaker
-        };
+        public static readonly IReadOnlyList<EquipmentSetDefinition> PreviewSets = Array.Empty<EquipmentSetDefinition>();
 
         public static IReadOnlyList<EquipmentSetDefinition> GetSetsForItem(int itemId)
         {
@@ -252,6 +352,15 @@ namespace RealmzCore.Exploration
             int ap = 0;
             int freeMove = 0;
             int guardDiscount = 0;
+            int critBonusPct = 0;
+            int rangedRangeBonus = 0;
+            bool ignoreHalfCover = false;
+            int spCostDiscount = 0;
+            int spellDamageBonus = 0;
+            int healingBonus = 0;
+            int supportSpellApDiscount = 0;
+            int undeadDamageBonusPct = 0;
+
             for (int i = 0; i < definition.Tiers.Count; i++)
             {
                 EquipmentSetBonusTier tier = definition.Tiers[i];
@@ -261,10 +370,32 @@ namespace RealmzCore.Exploration
                     ap += tier.ApBonus;
                     freeMove += tier.FreeMoveTiles;
                     guardDiscount += tier.GuardApDiscount;
+                    critBonusPct += tier.CritBonusPct;
+                    rangedRangeBonus += tier.RangedRangeBonus;
+                    ignoreHalfCover |= tier.IgnoreHalfCover;
+                    spCostDiscount += tier.SpCostDiscount;
+                    spellDamageBonus += tier.SpellDamageBonus;
+                    healingBonus += tier.HealingBonus;
+                    supportSpellApDiscount += tier.SupportSpellApDiscount;
+                    undeadDamageBonusPct += tier.UndeadDamageBonusPct;
                 }
             }
 
-            return new EquipmentSetProgress(definition, pieces, ac, ap, freeMove, guardDiscount);
+            return new EquipmentSetProgress(
+                definition,
+                pieces,
+                ac,
+                ap,
+                freeMove,
+                guardDiscount,
+                critBonusPct,
+                rangedRangeBonus,
+                ignoreHalfCover,
+                spCostDiscount,
+                spellDamageBonus,
+                healingBonus,
+                supportSpellApDiscount,
+                undeadDamageBonusPct);
         }
 
         public static IReadOnlyList<EquipmentSetProgress> EvaluateHeroSets(
@@ -309,19 +440,41 @@ namespace RealmzCore.Exploration
         {
             if (item == null)
             {
-                return isRangedSlot ? 3 : 2;
+                return isRangedSlot
+                    ? CombatActionEconomy.StandardWeaponApCost
+                    : CombatActionEconomy.LightWeaponApCost;
             }
 
-            return IsLightWeaponName(item.Name) ? 2 : 3;
+            return IsLightWeaponName(item.Name)
+                ? CombatActionEconomy.LightWeaponApCost
+                : CombatActionEconomy.StandardWeaponApCost;
         }
 
-        public static int GetSpellApCost(SpellDefinition? spell)
+        public static bool IsSupportSpell(SpellDefinition? spell)
         {
             if (spell == null)
             {
-                return 3;
+                return false;
             }
 
+            string effectKind = spell.EffectKind ?? string.Empty;
+            string name = spell.Name ?? string.Empty;
+            return string.Equals(effectKind, "Heal", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(effectKind, "Buff", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(effectKind, "Cure", StringComparison.OrdinalIgnoreCase) ||
+                   name.IndexOf("Heal", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   name.IndexOf("Cure", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   name.IndexOf("Bless", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        public static int GetSpellApCost(SpellDefinition? spell, int supportSpellApDiscount = 0)
+        {
+            if (spell == null)
+            {
+                return 4;
+            }
+
+            int baseCost;
             string key = spell.Key ?? string.Empty;
             string name = spell.Name ?? string.Empty;
             if (spell.Id == 1108 ||
@@ -336,24 +489,32 @@ namespace RealmzCore.Exploration
                 name.IndexOf("Minor Heal", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 name.IndexOf("Heal Small", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                return 2;
+                baseCost = 3;
             }
-
-            if (spell.Id == 1306 ||
-                spell.Id == 3202 ||
-                spell.Id == 2310 ||
-                string.Equals(key, "fireball", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(key, "hold", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(key, "daze", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(key, "sleep", StringComparison.OrdinalIgnoreCase) ||
-                name.IndexOf("Fireball", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                name.IndexOf("Daze", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                name.IndexOf("Sandman", StringComparison.OrdinalIgnoreCase) >= 0)
+            else if (spell.Id == 1306 ||
+                     spell.Id == 3202 ||
+                     spell.Id == 2310 ||
+                     string.Equals(key, "fireball", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(key, "hold", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(key, "daze", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(key, "sleep", StringComparison.OrdinalIgnoreCase) ||
+                     name.IndexOf("Fireball", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                     name.IndexOf("Daze", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                     name.IndexOf("Sandman", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                return 4;
+                baseCost = 5;
+            }
+            else
+            {
+                baseCost = 4;
             }
 
-            return 3;
+            if (supportSpellApDiscount > 0 && IsSupportSpell(spell))
+            {
+                return Math.Max(2, baseCost - supportSpellApDiscount);
+            }
+
+            return baseCost;
         }
     }
 }

@@ -602,7 +602,7 @@ namespace RealmzCore.Combat
                 ? (ignoreMoveRemaining ? unit.FreeMoveTiles : unit.Economy.FreeMoveTilesRemaining)
                 : 0;
             int moveBudget = unit.Economy.IsUnifiedApMode
-                ? (ignoreMoveRemaining ? (CombatActionEconomy.DefaultBaseApPerTurn + unit.EquipApBonus) : unit.Economy.CurrentAp)
+                ? (ignoreMoveRemaining ? (unit.GetBaseApPerTurn() + unit.EquipApBonus) : unit.Economy.CurrentAp)
                 : (ignoreMoveRemaining ? unit.GetDndTotalMoveBudget() : unit.Economy.MoveRemaining);
             int searchBudget = (freeMoves * CombatActionEconomy.RoughTileMoveApCost) + moveBudget;
             if (moveBudget <= 0 && freeMoves <= 0)
@@ -1062,7 +1062,17 @@ namespace RealmzCore.Combat
                 attackerCritBonusPct: attacker.CritBonusPct);
 
             ComputeDamageRange(attacker.WeaponDice, attacker.DamageBonus, attacker.Conditions, out int minDmg, out int maxDmg);
+            if (defender.IsUndead && attacker.SetUndeadDamageBonusPct > 0)
+            {
+                minDmg = ApplyUndeadDamageBonus(attacker, defender, minDmg);
+                maxDmg = ApplyUndeadDamageBonus(attacker, defender, maxDmg);
+            }
+
             List<string> tags = CollectConditionTags(attacker, defender, flanking, los: null, hit.Modifiers);
+            if (defender.IsUndead && attacker.SetUndeadDamageBonusPct > 0)
+            {
+                tags.Add($"UNDEAD +{attacker.SetUndeadDamageBonusPct}%");
+            }
             RollAdvantageState advantageState = ComputeMeleeAdvantageState(attacker, defender, out List<string> advTags);
             tags.AddRange(advTags);
 
@@ -1135,7 +1145,10 @@ namespace RealmzCore.Combat
             LosResult los = CheckLineOfSight(pos, defender.Position, includeSteamObscuration: true);
 
             int darknessPenalty = IsInTheDark ? DarknessRangedHitPenaltyPct : 0;
-            int missileToHit = attacker.EffectiveMissileSkill - los.CoverPenaltyPct - darknessPenalty;
+            int rawCoverPenalty = los.CoverPenaltyPct;
+            bool coverIgnored = attacker.SetIgnoreHalfCover && rawCoverPenalty > 0 && rawCoverPenalty <= 25;
+            int effectiveCoverPenalty = coverIgnored ? 0 : rawCoverPenalty;
+            int missileToHit = attacker.EffectiveMissileSkill - effectiveCoverPenalty - darknessPenalty;
             if (defender.Conditions.Has(CharConditionId.ShieldFromProjectiles))
             {
                 missileToHit -= 15;
@@ -1159,7 +1172,21 @@ namespace RealmzCore.Combat
 
             string diceStr = hasRanged ? attacker.RangedDice : "1d4";
             ComputeDamageRange(diceStr, 0, null, out int minDmg, out int maxDmg);
+            if (defender.IsUndead && attacker.SetUndeadDamageBonusPct > 0)
+            {
+                minDmg = ApplyUndeadDamageBonus(attacker, defender, minDmg);
+                maxDmg = ApplyUndeadDamageBonus(attacker, defender, maxDmg);
+            }
+
             List<string> tags = CollectConditionTags(attacker, defender, isFlanking: false, los, hit.Modifiers);
+            if (coverIgnored)
+            {
+                tags.Add("COVER IGNORED");
+            }
+            if (defender.IsUndead && attacker.SetUndeadDamageBonusPct > 0)
+            {
+                tags.Add($"UNDEAD +{attacker.SetUndeadDamageBonusPct}%");
+            }
             if (darknessPenalty > 0)
             {
                 tags.Add($"In the Dark -{darknessPenalty}% Ranged");
@@ -1281,9 +1308,12 @@ namespace RealmzCore.Combat
                 tags.Add("IMMUNE");
             }
 
-            int apCost = caster.Economy.UsesApForActions ? CombatWeaponCosts.GetSpellApCost(spell) : 1;
+            int apCost = caster.Economy.UsesApForActions
+                ? CombatWeaponCosts.GetSpellApCost(spell, caster.SetSupportSpellApDiscount)
+                : 1;
+            int effectiveSpCost = GetEffectiveSpellSpCost(caster, spell);
             bool silenced = caster.Conditions.Has(CharConditionId.Silenced);
-            bool enoughSp = caster.Sp >= spell.SpCost;
+            bool enoughSp = caster.Sp >= effectiveSpCost;
             bool hasAction = ignoreActionBudget || (caster.Economy.UsesApForActions
                 ? caster.Economy.HasApFor(apCost)
                 : caster.Economy.HasSlot(CombatActionSlot.MainAction));
@@ -1304,7 +1334,7 @@ namespace RealmzCore.Combat
             return new TacticalSpellPreview(
                 canExecute: canExecute,
                 reason: reason,
-                spCost: spell.SpCost,
+                spCost: effectiveSpCost,
                 minAmount: minAmount,
                 maxAmount: maxAmount,
                 saveChancePct: saveChancePct,
@@ -1869,7 +1899,8 @@ namespace RealmzCore.Combat
             }
             actor.HasTriggeredIrreversibleEvent = true;
 
-            int coverPenalty = preview.LosResult != null ? preview.LosResult.CoverPenaltyPct : 0;
+            int rawCoverPenalty = preview.LosResult != null ? preview.LosResult.CoverPenaltyPct : 0;
+            int coverPenalty = (actor.SetIgnoreHalfCover && rawCoverPenalty > 0 && rawCoverPenalty <= 25) ? 0 : rawCoverPenalty;
             int darknessPenalty = IsInTheDark ? DarknessRangedHitPenaltyPct : 0;
             int missileToHit = actor.EffectiveMissileSkill - coverPenalty - darknessPenalty;
             if (target.Conditions.Has(CharConditionId.ShieldFromProjectiles))
@@ -1904,11 +1935,12 @@ namespace RealmzCore.Combat
                 attackerCritBonusPct: actor.CritBonusPct,
                 advantageState: preview.AdvantageState);
 
-            if (outcome.DamageDealt > 0)
+            int dealtDamage = ApplyUndeadDamageBonus(actor, target, outcome.DamageDealt);
+            if (dealtDamage > 0)
             {
                 bool wasAlive = target.IsAlive;
-                target.Hp = Math.Max(0, target.Hp - outcome.DamageDealt);
-                actor.CombatDamageDealt += outcome.DamageDealt;
+                target.Hp = Math.Max(0, target.Hp - dealtDamage);
+                actor.CombatDamageDealt += dealtDamage;
                 if (wasAlive && !target.IsAlive)
                 {
                     actor.CombatKills++;
@@ -1916,11 +1948,11 @@ namespace RealmzCore.Combat
             }
 
             string costLabel = actor.Economy.IsDnd5eMode ? "Main Action" : $"{preview.ApCost} AP";
-            string msg = $"{actor.Name} fires at {target.Name} ({costLabel}): {outcome.Kind} ({outcome.DamageDealt} dmg).";
-            AppendLog(actor.Id, actor.Name, "RangedAttack", msg, new[] { target.Id }, damageDealt: outcome.DamageDealt);
+            string msg = $"{actor.Name} fires at {target.Name} ({costLabel}): {outcome.Kind} ({dealtDamage} dmg).";
+            AppendLog(actor.Id, actor.Name, "RangedAttack", msg, new[] { target.Id }, damageDealt: dealtDamage);
             CheckOutcome();
 
-            return new CombatActionResult(true, msg, new[] { outcome }, damageDealt: outcome.DamageDealt, apSpent: preview.ApCost);
+            return new CombatActionResult(true, msg, new[] { outcome }, damageDealt: dealtDamage, apSpent: preview.ApCost);
         }
 
         public CombatDestructibleProp AddDestructibleProp(string propId, GridCoord coord, CombatArenaObstacleKind kind)
@@ -2492,9 +2524,16 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, preview.Reason);
             }
 
-            caster.Economy.CommitSlot(CombatActionSlot.MainAction, lockMoveUndo: true);
+            if (caster.Economy.UsesApForActions)
+            {
+                caster.Economy.SpendAp(preview.ApCost, lockMoveUndo: true);
+            }
+            else
+            {
+                caster.Economy.CommitSlot(CombatActionSlot.MainAction, lockMoveUndo: true);
+            }
             caster.HasTriggeredIrreversibleEvent = true;
-            caster.Sp = Math.Max(0, caster.Sp - spell.SpCost);
+            caster.Sp = Math.Max(0, caster.Sp - preview.SpCost);
 
             bool isHeal = string.Equals(spell.EffectKind, "Heal", StringComparison.OrdinalIgnoreCase);
             bool isBuff = string.Equals(spell.EffectKind, "Buff", StringComparison.OrdinalIgnoreCase);
@@ -2601,6 +2640,8 @@ namespace RealmzCore.Combat
                         {
                             dmg = Math.Max(1, dmg / 2);
                         }
+
+                        dmg = ApplyUndeadDamageBonus(caster, target, dmg);
 
                         bool wasAlive = target.IsAlive;
                         target.Hp = Math.Max(0, target.Hp - dmg);
@@ -3567,18 +3608,47 @@ namespace RealmzCore.Combat
                 attackerCritBonusPct: attacker.CritBonusPct,
                 advantageState: advantageState);
 
-            if (outcome.DamageDealt > 0)
+            int dealtDamage = ApplyUndeadDamageBonus(attacker, defender, outcome.DamageDealt);
+            if (dealtDamage > 0)
             {
                 bool wasAlive = defender.IsAlive;
-                defender.Hp = Math.Max(0, defender.Hp - outcome.DamageDealt);
-                attacker.CombatDamageDealt += outcome.DamageDealt;
+                defender.Hp = Math.Max(0, defender.Hp - dealtDamage);
+                attacker.CombatDamageDealt += dealtDamage;
                 if (wasAlive && !defender.IsAlive)
                 {
                     attacker.CombatKills++;
                 }
             }
 
-            return outcome;
+            return dealtDamage != outcome.DamageDealt
+                ? new AttackOutcome(
+                    outcome.Kind,
+                    outcome.Roll,
+                    outcome.HitChancePercent,
+                    outcome.BaseDamageRolled,
+                    dealtDamage)
+                : outcome;
+        }
+
+        private static int GetEffectiveSpellSpCost(CombatantState caster, SpellDefinition spell)
+        {
+            if (spell.SpCost <= 0)
+            {
+                return 0;
+            }
+
+            return Math.Max(1, spell.SpCost - Math.Max(0, caster.SetSpCostDiscount));
+        }
+
+        private static int ApplyUndeadDamageBonus(CombatantState attacker, CombatantState target, int rawDamage)
+        {
+            if (rawDamage <= 0 || !target.IsUndead || attacker.SetUndeadDamageBonusPct <= 0)
+            {
+                return rawDamage;
+            }
+
+            int bonus = Math.Max(1, (int)Math.Ceiling(rawDamage * (attacker.SetUndeadDamageBonusPct / 100.0)));
+            return rawDamage + bonus;
         }
 
         private int ApplyElementToTiles(
@@ -4628,7 +4698,7 @@ namespace RealmzCore.Combat
             actor.Economy.ResetSplitMpApTurn(
                 actor.GetDndBaseMoveBudget(),
                 actor.GetDndBonusMoveTiles(),
-                CombatActionEconomy.DefaultBaseApPerTurn,
+                actor.GetBaseApPerTurn(),
                 actor.EquipApBonus,
                 actor.GuardApDiscount);
             actor.TurnStartPosition = actor.Position;

@@ -2762,8 +2762,9 @@ namespace Realmz.Game
                             continue;
                         }
 
-                        int spellAp = usesAp ? CombatWeaponCosts.GetSpellApCost(spell) : 1;
-                        bool enoughSp = actor.Sp >= spell.SpCost;
+                        int spellAp = usesAp ? CombatWeaponCosts.GetSpellApCost(spell, actor.SetSupportSpellApDiscount) : 1;
+                        int effectiveSp = spell.SpCost <= 0 ? 0 : Mathf.Max(1, spell.SpCost - Mathf.Max(0, actor.SetSpCostDiscount));
+                        bool enoughSp = actor.Sp >= effectiveSp;
                         bool enoughAp = isHeroTurn && (usesAp ? actor.Economy.HasApFor(spellAp) : actor.Economy.HasSlot(CombatActionSlot.MainAction));
                         bool isSelectedSpell = isHeroTurn && activeMode == CombatActionMode.Spell && spell.Id == selectedSpellId;
                         string spellIcon = ResolveSpellIconKey(spell);
@@ -2786,11 +2787,11 @@ namespace Realmz.Game
                             iconKey: spellIcon,
                             label: ShortenSpellName(spell.Name),
                             apCost: spellAp,
-                            spCost: spell.SpCost,
+                            spCost: effectiveSp,
                             interactable: enoughAp && enoughSp,
                             selected: isSelectedSpell,
-                            tipTitle: $"{spell.Name} [{spellAp} AP | {spell.SpCost} SP]",
-                            tipBody: $"{scope} | Range {spell.Range} | {(string.IsNullOrWhiteSpace(spell.EffectDice) ? spell.EffectKind : spell.EffectDice)}. Cost: {spellAp} AP, {spell.SpCost} SP. {(string.IsNullOrWhiteSpace(spell.Description) ? string.Empty : spell.Description)}",
+                            tipTitle: $"{spell.Name} [{spellAp} AP | {effectiveSp} SP]",
+                            tipBody: $"{scope} | Range {spell.Range} | {(string.IsNullOrWhiteSpace(spell.EffectDice) ? spell.EffectKind : spell.EffectDice)}. Cost: {spellAp} AP, {effectiveSp} SP. {(string.IsNullOrWhiteSpace(spell.Description) ? string.Empty : spell.Description)}",
                             directIconSprite: spellSprite,
                             costLabelOverride: legacyDnd ? "Action" : null);
                     }
@@ -2905,7 +2906,7 @@ namespace Realmz.Game
                 if (_combatEndTurnBtnIcon != null) _combatEndTurnBtnIcon.color = isHeroTurn ? enabledIconTint : disabledIconTint;
                 _pulseEndTurn = isHeroTurn && actor != null &&
                     actor.Economy.MoveRemaining == 0 &&
-                    (usesAp ? actor.Economy.CurrentAp < CombatActionEconomy.LightWeaponApCost : !actor.Economy.HasSlot(CombatActionSlot.MainAction));
+                    (usesAp ? actor.Economy.CurrentAp < CombatActionEconomy.DefaultGuardApCost : !actor.Economy.HasSlot(CombatActionSlot.MainAction));
                 if (!_pulseEndTurn)
                 {
                     BywaterUiHelpers.SetButtonColors(_combatEndTurnBtn, false);

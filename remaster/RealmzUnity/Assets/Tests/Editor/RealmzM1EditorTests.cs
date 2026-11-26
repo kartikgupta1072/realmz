@@ -45,7 +45,7 @@ namespace Realmz.EditorTests
             Assert.That(bundle.Party.Count, Is.EqualTo(6));
             Assert.That(bundle.Monsters.Count, Is.EqualTo(12));
             Assert.That(bundle.Spells.Count, Is.EqualTo(12));
-            Assert.That(bundle.Items.Count, Is.EqualTo(58));
+            Assert.That(bundle.Items.Count, Is.EqualTo(71));
             Assert.That(bundle.Shops.Count, Is.EqualTo(3));
 
             MapPortal portal = bundle.Land0.GetPortalAt(89, 48);
@@ -1490,12 +1490,12 @@ namespace Realmz.EditorTests
         {
             BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
             Assert.That(catalog, Is.Not.Null, "BywaterAssetCatalog missing.");
-            Assert.That(catalog.itemIdIconMappings.Count, Is.EqualTo(58), "Expected 58 itemIdIconMappings.");
+            Assert.That(catalog.itemIdIconMappings.Count, Is.EqualTo(71), "Expected 71 itemIdIconMappings.");
             Assert.That(catalog.spellIdIconMappings.Count, Is.EqualTo(12), "Expected 12 spellIdIconMappings.");
 
             string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
             BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
-            Assert.That(bundle.Items.Count, Is.EqualTo(58));
+            Assert.That(bundle.Items.Count, Is.EqualTo(71));
             Assert.That(bundle.Spells.Count, Is.EqualTo(12));
 
             foreach (ItemDefinition item in bundle.Items.Values)
@@ -3149,7 +3149,7 @@ namespace Realmz.EditorTests
                 hud.RefreshPartyDrawer(party, bundle, 0);
                 Transform charExtra = FindDescendantByName(canvas.transform, "ExtraBody");
                 Assert.That(charExtra, Is.Not.Null);
-                Assert.That(charExtra.GetComponent<TextMeshProUGUI>().text, Does.Contain("Iron Vanguard [3/3]"));
+                Assert.That(charExtra.GetComponent<TextMeshProUGUI>().text, Does.Contain("Iron Vanguard [1/3]"));
 
                 FormationRank changedRank = FormationRank.Front;
                 int changedIdx = -1;

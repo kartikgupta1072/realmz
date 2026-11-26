@@ -51,7 +51,9 @@
       "role": "Controller",
       "special_abilities": [
         "tongue_pull"
-      ]
+      ],
+      "base_mp": 5,
+      "base_ap": 6
     },
     {
       "index": 133,
@@ -60,9 +62,9 @@
       "icon_id": 449,
       "hit_dice": 1,
       "hp_bonus": 0,
-      "hp_min": 1,
+      "hp_min": 6,
       "hp_max": 8,
-      "hp_default": 4,
+      "hp_default": 7,
       "ac": 12,
       "to_hit_bonus": 5,
       "dexterity": 15,
@@ -100,7 +102,9 @@
       "gold_max": 0,
       "loot_item_ids": [],
       "role": "Skirmisher",
-      "special_abilities": []
+      "special_abilities": [],
+      "base_mp": 3,
+      "base_ap": 4
     },
     {
       "index": 125,
@@ -109,9 +113,9 @@
       "icon_id": 511,
       "hit_dice": 3,
       "hp_bonus": 0,
-      "hp_min": 3,
-      "hp_max": 24,
-      "hp_default": 14,
+      "hp_min": 16,
+      "hp_max": 20,
+      "hp_default": 18,
       "ac": 12,
       "to_hit_bonus": 15,
       "dexterity": 15,
@@ -147,9 +151,13 @@
       "xp_reward": 75,
       "gold_min": 0,
       "gold_max": 0,
-      "loot_item_ids": [],
+      "loot_item_ids": [
+        914
+      ],
       "role": "Skirmisher",
-      "special_abilities": []
+      "special_abilities": [],
+      "base_mp": 4,
+      "base_ap": 5
     },
     {
       "index": 92,
@@ -202,7 +210,9 @@
         418
       ],
       "role": "Skirmisher",
-      "special_abilities": []
+      "special_abilities": [],
+      "base_mp": 4,
+      "base_ap": 4
     },
     {
       "index": 130,
@@ -259,7 +269,9 @@
       "role": "Ranged",
       "special_abilities": [
         "high_ground_seeker"
-      ]
+      ],
+      "base_mp": 4,
+      "base_ap": 4
     },
     {
       "index": 129,
@@ -268,9 +280,9 @@
       "icon_id": 390,
       "hit_dice": 3,
       "hp_bonus": 0,
-      "hp_min": 3,
-      "hp_max": 24,
-      "hp_default": 14,
+      "hp_min": 20,
+      "hp_max": 25,
+      "hp_default": 22,
       "ac": 25,
       "to_hit_bonus": 20,
       "dexterity": 14,
@@ -309,10 +321,13 @@
       "loot_item_ids": [
         209,
         1,
-        418
+        418,
+        902
       ],
       "role": "Skirmisher",
-      "special_abilities": []
+      "special_abilities": [],
+      "base_mp": 4,
+      "base_ap": 6
     },
     {
       "index": 116,
@@ -321,9 +336,9 @@
       "icon_id": 508,
       "hit_dice": 3,
       "hp_bonus": 0,
-      "hp_min": 3,
-      "hp_max": 24,
-      "hp_default": 14,
+      "hp_min": 16,
+      "hp_max": 20,
+      "hp_default": 18,
       "ac": 10,
       "to_hit_bonus": 15,
       "dexterity": 15,
@@ -365,10 +380,14 @@
       "gold_max": 25,
       "loot_item_ids": [
         98,
-        200
+        200,
+        908,
+        911
       ],
       "role": "Caster",
-      "special_abilities": []
+      "special_abilities": [],
+      "base_mp": 4,
+      "base_ap": 6
     },
     {
       "index": 76,
@@ -377,9 +396,9 @@
       "icon_id": 468,
       "hit_dice": 1,
       "hp_bonus": 2,
-      "hp_min": 3,
-      "hp_max": 10,
-      "hp_default": 6,
+      "hp_min": 11,
+      "hp_max": 15,
+      "hp_default": 13,
       "ac": 25,
       "to_hit_bonus": 5,
       "dexterity": 16,
@@ -417,7 +436,9 @@
       "gold_max": 0,
       "loot_item_ids": [],
       "role": "Skirmisher",
-      "special_abilities": []
+      "special_abilities": [],
+      "base_mp": 4,
+      "base_ap": 5
     },
     {
       "index": 70,
@@ -426,9 +447,9 @@
       "icon_id": 505,
       "hit_dice": 1,
       "hp_bonus": 0,
-      "hp_min": 1,
-      "hp_max": 8,
-      "hp_default": 4,
+      "hp_min": 12,
+      "hp_max": 16,
+      "hp_default": 14,
       "ac": 20,
       "to_hit_bonus": 5,
       "dexterity": 10,
@@ -468,10 +489,14 @@
         10,
         400,
         418,
-        622
+        622,
+        913,
+        911
       ],
       "role": "Skirmisher",
-      "special_abilities": []
+      "special_abilities": [],
+      "base_mp": 4,
+      "base_ap": 4
     },
     {
       "index": 78,
@@ -480,9 +505,9 @@
       "icon_id": 470,
       "hit_dice": 2,
       "hp_bonus": 0,
-      "hp_min": 2,
-      "hp_max": 16,
-      "hp_default": 9,
+      "hp_min": 18,
+      "hp_max": 23,
+      "hp_default": 20,
       "ac": 12,
       "to_hit_bonus": 10,
       "dexterity": 6,
@@ -518,9 +543,13 @@
       "xp_reward": 50,
       "gold_min": 0,
       "gold_max": 0,
-      "loot_item_ids": [],
+      "loot_item_ids": [
+        914
+      ],
       "role": "Skirmisher",
-      "special_abilities": []
+      "special_abilities": [],
+      "base_mp": 3,
+      "base_ap": 4
     },
     {
       "index": 91,
@@ -577,7 +606,9 @@
       "role": "Bruiser",
       "special_abilities": [
         "cleave_2tile"
-      ]
+      ],
+      "base_mp": 4,
+      "base_ap": 6
     },
     {
       "index": 126,
@@ -586,9 +617,9 @@
       "icon_id": 513,
       "hit_dice": 1,
       "hp_bonus": 0,
-      "hp_min": 1,
-      "hp_max": 8,
-      "hp_default": 4,
+      "hp_min": 10,
+      "hp_max": 14,
+      "hp_default": 12,
       "ac": 25,
       "to_hit_bonus": 5,
       "dexterity": 15,
@@ -630,10 +661,13 @@
         803,
         209,
         454,
-        452
+        452,
+        905
       ],
       "role": "Ranged",
-      "special_abilities": []
+      "special_abilities": [],
+      "base_mp": 4,
+      "base_ap": 4
     }
   ]
 }

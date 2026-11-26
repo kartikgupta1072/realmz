@@ -582,7 +582,7 @@ class TestStage2MonsterAndBalanceOverrides(unittest.TestCase):
         surv = data["survival"]
         self.assertEqual(surv["torch_price"], 12)
         self.assertEqual(surv["ration_price"], 5)
-        self.assertEqual(surv["torch_turn_duration"], 30)
+        self.assertEqual(surv["torch_turn_duration"], 120)
         self.assertEqual(surv["bandage_max_charges"], 2)
         self.assertEqual(
             surv["vision_radii"],
@@ -599,13 +599,27 @@ class TestStage2MonsterAndBalanceOverrides(unittest.TestCase):
         )
 
         sets_by_id = {s["set_id"]: s for s in data["equipment_sets"]}
-        self.assertEqual(set(sets_by_id.keys()), {"scouts_leather", "iron_vanguard", "thornwood_stalker", "cryptbreaker"})
-        self.assertEqual(sets_by_id["scouts_leather"]["item_ids"], [209, 210, 211, 450, 452, 454])
-        self.assertEqual(sets_by_id["iron_vanguard"]["item_ids"], [400, 418, 455, 20, 10, 11])
-        self.assertTrue(sets_by_id["thornwood_stalker"]["is_preview"])
-        self.assertEqual(sets_by_id["thornwood_stalker"]["item_ids"], [9101, 9102, 9103])
-        self.assertTrue(sets_by_id["cryptbreaker"]["is_preview"])
-        self.assertEqual(sets_by_id["cryptbreaker"]["item_ids"], [9201, 9202, 9203])
+        self.assertEqual(
+            set(sets_by_id.keys()),
+            {
+                "scouts_leather",
+                "iron_vanguard",
+                "thornwood_stalker",
+                "bywater_arcanist",
+                "sanctuary_acolyte",
+                "cryptbreaker",
+            },
+        )
+        self.assertEqual(sets_by_id["scouts_leather"]["item_ids"], [209, 210, 211, 450, 452, 454, 902])
+        self.assertEqual(sets_by_id["iron_vanguard"]["item_ids"], [400, 418, 455, 219])
+        for sid, expected_ids in (
+            ("thornwood_stalker", [903, 904, 905]),
+            ("bywater_arcanist", [906, 907, 908]),
+            ("sanctuary_acolyte", [909, 910, 911]),
+            ("cryptbreaker", [912, 913, 914]),
+        ):
+            self.assertFalse(sets_by_id[sid]["is_preview"])
+            self.assertEqual(sets_by_id[sid]["item_ids"], expected_ids)
 
         quests = data["quests"]
         self.assertEqual(len(quests), 4)
@@ -616,7 +630,8 @@ class TestStage2MonsterAndBalanceOverrides(unittest.TestCase):
         for q in quests:
             self.assertEqual(q["source"], "BywaterNoticeBoard")
             self.assertTrue(q["is_notice_board_bounty"])
-            for field in ("title", "description", "target_monster_id", "target_count", "gold_reward", "xp_reward", "location_hint"):
+            self.assertGreater(q.get("reward_item_id", 0), 0)
+            for field in ("title", "description", "target_monster_id", "target_count", "gold_reward", "xp_reward", "location_hint", "reward_item_id"):
                 self.assertIn(field, q)
 
 
