@@ -1568,12 +1568,14 @@ namespace Realmz.EditorTests
             Assert.That(innMat, Is.Not.Null, "Cartography_Prop_bywaterinn.mat not found.");
             Assert.That(innMat.HasProperty("_BuildingDepthSculpt"), Is.True, "Cartography_Prop_bywaterinn.mat missing _BuildingDepthSculpt.");
             Assert.That(innMat.GetFloat("_BuildingDepthSculpt"), Is.GreaterThan(0.5f));
+            Assert.That(innMat.GetFloat("_UnitSunRimStrength"), Is.EqualTo(0f));
             Assert.That(innMat.HasProperty("_UnitFootAO"), Is.True, "Cartography_Prop_bywaterinn.mat missing _UnitFootAO.");
             Assert.That(innMat.GetFloat("_UnitFootAO"), Is.GreaterThan(0.2f));
 
             Assert.That(smithMat, Is.Not.Null, "Cartography_Prop_blacksmith.mat not found.");
             Assert.That(smithMat.HasProperty("_BuildingDepthSculpt"), Is.True, "Cartography_Prop_blacksmith.mat missing _BuildingDepthSculpt.");
             Assert.That(smithMat.GetFloat("_BuildingDepthSculpt"), Is.GreaterThan(0.5f));
+            Assert.That(smithMat.GetFloat("_UnitSunRimStrength"), Is.EqualTo(0f));
             Assert.That(smithMat.HasProperty("_UnitFootAO"), Is.True, "Cartography_Prop_blacksmith.mat missing _UnitFootAO.");
             Assert.That(smithMat.GetFloat("_UnitFootAO"), Is.GreaterThan(0.2f));
 

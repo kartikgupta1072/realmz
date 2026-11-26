@@ -61,7 +61,7 @@ Material:
     - _UnitDepthSculpt: 0
     - _UnitFootAO: 0.28
     - _UnitSpecStrength: 0.34
-    - _UnitSunRimStrength: 0.56
+    - _UnitSunRimStrength: 0
     - _VariantIndex: 0
     - _WindFreq: 0.45
     - _WindGustInfluence: 0.16

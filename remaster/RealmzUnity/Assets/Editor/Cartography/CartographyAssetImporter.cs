@@ -1133,7 +1133,7 @@ namespace Realmz.EditorTools.Cartography
             if (isBuilding)
             {
                 if (mat.HasProperty("_BuildingDepthSculpt")) mat.SetFloat("_BuildingDepthSculpt", 0.90f);
-                if (mat.HasProperty("_UnitSunRimStrength")) mat.SetFloat("_UnitSunRimStrength", 0.56f);
+                if (mat.HasProperty("_UnitSunRimStrength")) mat.SetFloat("_UnitSunRimStrength", 0f);
                 if (mat.HasProperty("_UnitSpecStrength")) mat.SetFloat("_UnitSpecStrength", 0.34f);
                 if (mat.HasProperty("_UnitFootAO")) mat.SetFloat("_UnitFootAO", 0.28f);
                 if (mat.HasProperty("_BumpScale")) mat.SetFloat("_BumpScale", 0.85f);
