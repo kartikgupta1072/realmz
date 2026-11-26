@@ -7,11 +7,12 @@ You are working inside Kartik Gupta's dedicated gamedev workspace for **Realmz H
 ## 1. Locked `#direct` Game Design & Architectural Invariants
 
 1. **Creative North Star:** **Tactical Survival RPG** - classic *Realmz* Option B exploration encounters where geography, Day/Night torchlight cycles, biome/water ecology, party scouting, finite bandages/torches, and weather/resource tension make every journey meaningful.
-2. **D&D 5e Option A Split Combat Contract:**
-   - Every conscious unit gets separate `MP` movement (`GetDndBaseMoveBudget()` = `4..10` tiles; Mud/Water = `2 MP`), **`1 Main Action`** (Melee, Ranged, Spells, Dash, Overwatch/Guard), **`1 Bonus Action`** (Potion, Torch, Shove, Iron Vanguard Guard), and **`1 Reaction`** (Opportunity Attack / Overwatch) via `CombatActionEconomy` (`ResetDndTurn` in `remaster/RealmzCore/Rules/CombatRules.cs`).
-   - `Dash` (`[D]` / `ExecuteDash()`) spends `1 Main Action` to add `+BaseMoveBudget MP`.
-   - `Advantage` / `Disadvantage` (`RollAdvantageState` in `Dice.cs`, opposing sources cancel to `Normal`) rolls 2 dice for combat attacks and BG3-style `d20` exploration skill checks (`Evade [DEX DC X]` & `Quick Resolve [Tier | DC X]`).
-   - Equipment Sets modify `MP` / slot efficiency cleanly (`Scout's Leather` `+2 MP`, `Iron Vanguard` `+2 AC` + upgrades `Guard/Overwatch` to `Bonus Action`).
+2. **Split 4 MP + 6 AP Tactical Combat & Time-Based Torches:**
+   - Every conscious unit gets separate **`4 MP` base movement** (`GetDndBaseMoveBudget()` = `4` base for heroes, `3..5` for monsters; Mud/Water = `2 MP`), **`6 AP` base actions** (Melee/Ranged `2..3 AP`, Spells `2..4 AP`, Shove/Potion/Torch `2 AP`, Guard/Overwatch `2 AP`), and **`1 Reaction`** (Opportunity Attack / Overwatch) via `CombatActionEconomy` (`ResetSplitMpApTurn` in `remaster/RealmzCore/Rules/CombatRules.cs`).
+   - `Dash` (`[D]` / `ExecuteDash()`) spends `2 AP` to add `+BaseMoveBudget MP` (`+4 MP`).
+   - `Advantage` / `Disadvantage` (`RollAdvantageState` in `Dice.cs`, opposing sources cancel to `Normal`) rolls 2 dice for combat attacks and BG3-style `d20` exploration skill checks (`Evade (DC X)` & `Quick Resolve (DC X)`).
+   - Equipment Sets modify `MP` / `AP` / Guard efficiency cleanly (`Scout's Leather` 2pc `+2 MP` / 3pc `+1 Max AP`, `Iron Vanguard` 2pc `+2 AC` / 3pc `Guard 1 AP & +1 Max AP`).
+   - Torches burn for `120` in-game minutes (`DefaultTorchDurationMinutes = 120`, ticking with overland/dungeon exploration time, `+2m` per step, and `1m` per combat round).
 3. **Victory Screen Contract:** Option 2 Pure Selectable Loot (`4`-across compact cards, default selected, inline stats, green up-arrow `Hero` class-valid tags, gold up-arrow & heart-cross symbols beside `Lv`, Gold Coins icon, zero `MVP`, manual equip in `[P]`).
 4. **Core Architecture (`RealmzCore`):** `C:\Users\karti\realmz\remaster\RealmzCore\RealmzCore.csproj` (`netstandard2.1`) MUST maintain strictly ZERO `UnityEngine` or external NuGet dependencies. All Unity gameplay glue communicates with the compiled Release DLL at `remaster/RealmzUnity/Assets/Plugins/RealmzCore/RealmzCore.dll`.
 5. **Standalone Player Safety:** Keep strictly one `MonoBehaviour` per `.cs` file named identically to its class so Windows Standalone builds (`Realmz.exe`) never hit `level0` deserialization corruption.

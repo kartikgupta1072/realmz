@@ -94,6 +94,7 @@ namespace Realmz.Data
         public int gold;
         public bool hasBoat;
         public int torchTurnsRemaining;
+        public double torchMinutesRemaining = -1.0;
         public int quickBandageCharges = PartyState.MaxQuickBandageCharges;
         public int turnCount;
         public int worldTimeTurns = -1;
@@ -261,6 +262,7 @@ namespace Realmz.Data
                 gold = session.Party.Gold,
                 hasBoat = session.Party.HasBoat,
                 torchTurnsRemaining = session.Party.TorchTurnsRemaining,
+                torchMinutesRemaining = session.Party.TorchMinutesRemaining,
                 quickBandageCharges = session.Party.QuickBandageCharges,
                 turnCount = session.TurnCount,
                 worldTimeTurns = session.WorldClockTurns,
@@ -377,7 +379,9 @@ namespace Realmz.Data
             PartyState party = session.Party;
             party.Gold = Math.Max(0, data.gold);
             party.HasBoat = data.hasBoat;
-            party.TorchTurnsRemaining = Math.Max(0, data.torchTurnsRemaining);
+            party.TorchMinutesRemaining = data.torchMinutesRemaining >= 0.0
+                ? data.torchMinutesRemaining
+                : Math.Max(0, data.torchTurnsRemaining);
             party.QuickBandageCharges = data.version >= 3
                 ? Clamp(data.quickBandageCharges, 0, PartyState.MaxQuickBandageCharges)
                 : PartyState.MaxQuickBandageCharges;

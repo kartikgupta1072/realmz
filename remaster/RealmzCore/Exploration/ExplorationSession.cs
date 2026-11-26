@@ -298,6 +298,8 @@ namespace RealmzCore.Exploration
             GetFogMap(CurrentMap.MapId).RecomputeVisibility(CurrentMap, Position, radius);
         }
 
+        public bool LastClockAdvanceExpiredTorch { get; private set; }
+
         public bool TryLightTorchFromStash(
             out string feedbackMessage,
             IReadOnlyDictionary<int, ItemDefinition>? catalog = null)
@@ -310,8 +312,9 @@ namespace RealmzCore.Exploration
             int configuredDuration = Math.Max(1, BalanceOverrides.Survival.TorchTurnDuration);
             if (configuredDuration != 30)
             {
-                Party.TorchTurnsRemaining = Math.Max(1, Party.TorchTurnsRemaining + (configuredDuration - 30));
-                feedbackMessage = $"Lit a Torch (+{configuredDuration} turns; {Party.TorchTurnsRemaining} active).";
+                double delta = configuredDuration - PartyState.DefaultTorchDurationMinutes;
+                Party.TorchMinutesRemaining = Math.Max(1.0, Party.TorchMinutesRemaining + delta);
+                feedbackMessage = $"Lit a Torch (+{PartyState.FormatTorchDuration(configuredDuration)}; {PartyState.FormatTorchDuration(Party.TorchMinutesRemaining)} active).";
             }
 
             RefreshFogOfWar();
@@ -452,6 +455,7 @@ namespace RealmzCore.Exploration
 
         public bool AdvanceWorldClockMinutes(double deltaMinutes)
         {
+            LastClockAdvanceExpiredTorch = false;
             if (deltaMinutes <= 0.0 || double.IsNaN(deltaMinutes) || double.IsInfinity(deltaMinutes))
             {
                 return false;
@@ -459,9 +463,11 @@ namespace RealmzCore.Exploration
 
             WorldTimePhase prevPhase = CurrentWorldClock.Phase;
             WorldClockMinutes += deltaMinutes;
-            if (CurrentWorldClock.Phase != prevPhase)
+            bool torchExpired = Party.BurnTorchMinutes(deltaMinutes);
+            LastClockAdvanceExpiredTorch = torchExpired;
+            if (CurrentWorldClock.Phase != prevPhase || torchExpired)
             {
-                PruneExpiredCooldowns(phaseChanged: true);
+                PruneExpiredCooldowns(CurrentWorldClock.Phase != prevPhase);
                 RefreshFogOfWar();
                 return true;
             }
@@ -478,7 +484,9 @@ namespace RealmzCore.Exploration
 
             WorldTimePhase prevPhase = CurrentWorldClock.Phase;
             WorldClockTurns += turns;
-            WorldClockMinutes += turns * 20.0;
+            double deltaMinutes = turns * 20.0;
+            WorldClockMinutes += deltaMinutes;
+            LastClockAdvanceExpiredTorch = Party.BurnTorchMinutes(deltaMinutes);
             PruneExpiredCooldowns(CurrentWorldClock.Phase != prevPhase);
             RefreshFogOfWar();
         }
@@ -664,12 +672,7 @@ namespace RealmzCore.Exploration
                 PostCombatGraceStepsRemaining--;
             }
 
-            bool torchExpired = false;
-            if (Party.TorchTurnsRemaining > 0)
-            {
-                Party.TorchTurnsRemaining--;
-                torchExpired = Party.TorchTurnsRemaining == 0;
-            }
+            bool torchExpired = Party.BurnTorchMinutes(WorldClock.MinutesPerStep);
 
             RefreshFogOfWar();
 

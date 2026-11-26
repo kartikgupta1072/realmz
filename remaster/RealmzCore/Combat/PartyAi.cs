@@ -118,8 +118,8 @@ namespace RealmzCore.Combat
                 if (session.Outcome != CombatOutcome.InProgress ||
                     !string.Equals(session.CurrentActorId, actor.Id, StringComparison.Ordinal) ||
                     !actor.IsConscious ||
-                    (actor.Economy.IsUnifiedApMode
-                        ? actor.Economy.CurrentAp <= 0
+                    (actor.Economy.UsesApForActions
+                        ? (actor.Economy.CurrentAp < CombatActionEconomy.LightWeaponApCost && actor.Economy.MoveRemaining <= 0)
                         : (!actor.Economy.HasSlot(CombatActionSlot.MainAction) &&
                            !actor.Economy.HasSlot(CombatActionSlot.BonusAction) &&
                            actor.Economy.MoveRemaining <= 0)) ||
@@ -150,7 +150,7 @@ namespace RealmzCore.Combat
                         }
                     }
 
-                    bool outOfFollowUpHeal = actor.Economy.IsUnifiedApMode
+                    bool outOfFollowUpHeal = actor.Economy.UsesApForActions
                         ? (!anyStillLow || actor.Economy.CurrentAp < 2)
                         : (!anyStillLow || (!actor.Economy.HasSlot(CombatActionSlot.MainAction) && !actor.Economy.HasSlot(CombatActionSlot.BonusAction)));
                     if (outOfFollowUpHeal)
@@ -191,21 +191,19 @@ namespace RealmzCore.Combat
                     continue;
                 }
 
-                // Bank <= 2 AP cleanly in unified mode, or stop cleanly in D&D 5e mode once Main Action is spent
-                // (allowing Iron Vanguard Bonus Action Guard when still holding Bonus Action).
+                // Bank <= 2 AP cleanly in unified mode, follow up with multiple actions in Split MP/AP mode (spending AP down),
+                // or stop cleanly in D&D 5e mode once Main Action is spent.
                 if (tookOffensiveOrMajorAction &&
-                    (actor.Economy.IsUnifiedApMode
-                        ? (actor.Economy.CurrentAp <= CombatActionEconomy.DefaultMaxCarryoverAp &&
-                           MinChebyshevDistance(actor.Position, enemies) > 1 &&
-                           actor.MeleeApCost > actor.Economy.CurrentAp &&
-                           (actor.RangedRange <= 1 || string.IsNullOrWhiteSpace(actor.RangedDice) || actor.RangedApCost > actor.Economy.CurrentAp) &&
+                    (actor.Economy.UsesApForActions
+                        ? (actor.Economy.CurrentAp < Math.Min(actor.MeleeApCost, CombatActionEconomy.LightWeaponApCost) &&
+                           (actor.RangedRange <= 1 || string.IsNullOrWhiteSpace(actor.RangedDice) || !actor.Economy.HasApFor(actor.RangedApCost)) &&
                            (actor.SpellIds.Count == 0 || actor.Sp <= 0))
                         : !actor.Economy.HasSlot(CombatActionSlot.MainAction)))
                 {
-                    if (actor.Economy.IsDnd5eMode &&
-                        actor.Economy.BonusActionGuardEnabled &&
-                        actor.Economy.HasSlot(CombatActionSlot.BonusAction) &&
-                        !actor.IsGuarding)
+                    if ((actor.Economy.IsDnd5eMode || actor.Economy.IsSplitMpApMode) &&
+                        actor.Economy.HasApFor(actor.Economy.EffectiveGuardApCost) &&
+                        !actor.IsGuarding &&
+                        (actor.Economy.IsSplitMpApMode || (actor.Economy.BonusActionGuardEnabled && actor.Economy.HasSlot(CombatActionSlot.BonusAction))))
                     {
                         CombatActionResult bonusGuard = session.GuardOverwatch();
                         if (bonusGuard.Success)
@@ -694,7 +692,7 @@ namespace RealmzCore.Combat
 
                 if (actor.Economy.IsUnifiedApMode
                     ? (tile.PathCost + actor.RangedApCost > actor.Economy.CurrentAp)
-                    : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasSlot(CombatActionSlot.MainAction)))
+                    : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasApFor(actor.RangedApCost)))
                 {
                     continue;
                 }
@@ -747,7 +745,7 @@ namespace RealmzCore.Combat
                 if (target == null || preview == null ||
                     (actor.Economy.IsUnifiedApMode
                         ? (tile.PathCost + actor.RangedApCost > actor.Economy.CurrentAp)
-                        : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasSlot(CombatActionSlot.MainAction))))
+                        : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasApFor(actor.RangedApCost))))
                 {
                     continue;
                 }
@@ -930,7 +928,7 @@ namespace RealmzCore.Combat
                 }
             }
 
-            if (actor.Economy.IsDnd5eMode &&
+            if ((actor.Economy.IsDnd5eMode || actor.Economy.IsSplitMpApMode) &&
                 actor.Economy.CanPerformDash &&
                 MinChebyshevDistance(actor.Position, enemies) > 1)
             {
@@ -1014,7 +1012,7 @@ namespace RealmzCore.Combat
 
                 bool canAttackAfterMove = actor.Economy.IsUnifiedApMode
                     ? (actor.Economy.CurrentAp - pathCost >= actor.MeleeApCost)
-                    : (pathCost <= actor.Economy.MoveRemaining && actor.Economy.HasSlot(CombatActionSlot.MainAction));
+                    : (pathCost <= actor.Economy.MoveRemaining && actor.Economy.HasApFor(actor.MeleeApCost));
 
                 int score = preview.HitChancePct +
                             (preview.IsFlanking ? 30 : 0) +
@@ -1333,7 +1331,7 @@ namespace RealmzCore.Combat
                 if (candidate == null ||
                     (actor.Economy.IsUnifiedApMode
                         ? (tile.PathCost + candidate.ApCost > actor.Economy.CurrentAp)
-                        : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasSlot(CombatActionSlot.MainAction))))
+                        : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasApFor(candidate.ApCost))))
                 {
                     continue;
                 }
@@ -1371,7 +1369,7 @@ namespace RealmzCore.Combat
                 if (minDist < 2 ||
                     (actor.Economy.IsUnifiedApMode
                         ? (tile.PathCost + actor.RangedApCost > actor.Economy.CurrentAp)
-                        : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasSlot(CombatActionSlot.MainAction))))
+                        : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasApFor(actor.RangedApCost))))
                 {
                     continue;
                 }
@@ -1381,7 +1379,7 @@ namespace RealmzCore.Combat
                 if (target == null || preview == null ||
                     (actor.Economy.IsUnifiedApMode
                         ? (tile.PathCost + actor.RangedApCost > actor.Economy.CurrentAp)
-                        : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasSlot(CombatActionSlot.MainAction))))
+                        : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasApFor(actor.RangedApCost))))
                 {
                     continue;
                 }
@@ -1429,7 +1427,9 @@ namespace RealmzCore.Combat
                 bool hazardous = IsHazardousSurface(session.Grid.GetSurface(tile.Coord));
                 bool leavesGuardAp = actor.Economy.IsUnifiedApMode
                     ? ((actor.Economy.CurrentAp - tile.PathCost) >= actor.Economy.EffectiveGuardApCost)
-                    : actor.Economy.HasSlot(actor.Economy.GuardSlot);
+                    : (actor.Economy.IsSplitMpApMode
+                        ? actor.Economy.HasApFor(actor.Economy.EffectiveGuardApCost)
+                        : actor.Economy.HasSlot(actor.Economy.GuardSlot));
                 int score = (leavesGuardAp ? 200 : 0) +
                             (minDist * 20) +
                             (session.Grid.GetElevation(tile.Coord) * 10) +

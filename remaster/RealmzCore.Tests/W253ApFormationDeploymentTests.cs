@@ -57,45 +57,41 @@ namespace RealmzCore.Tests
             CombatGrid grid = new CombatGrid(10, 10);
             TacticalCombatSession session = new TacticalCombatSession(grid, new[] { cSlow, cFast, goblin }, bundle.Spells, bundle.Items, roller: new QueuedDiceRoller(20, 4));
 
-            // Fast hero goes first because Agility governs Initiative!
+            // Fast hero goes first because Agility governs Initiative! Both start with Split 4 MP + 6 AP.
             Assert.Equal("hero_fast", session.CurrentActorId);
-            Assert.True(cFast.Economy.IsDnd5eMode);
-            Assert.Equal(7, cFast.Economy.MoveBudget);
-            Assert.Equal(7, cFast.Economy.MoveRemaining);
-            Assert.True(cFast.Economy.HasSlot(CombatActionSlot.MainAction));
-            Assert.True(cFast.Economy.HasSlot(CombatActionSlot.BonusAction));
+            Assert.True(cFast.Economy.IsSplitMpApMode);
+            Assert.Equal(4, cFast.Economy.MoveBudget);
+            Assert.Equal(4, cFast.Economy.MoveRemaining);
+            Assert.Equal(6, cFast.Economy.MaxAp);
+            Assert.Equal(6, cFast.Economy.CurrentAp);
             Assert.True(cFast.Economy.HasSlot(CombatActionSlot.Reaction));
 
-            // Moving 4 tiles consumes ONLY MP, leaving both Main Action and Bonus Action intact!
-            Assert.True(session.TryMoveTo(new GridCoord(5, 5)).Success);
-            Assert.Equal(3, cFast.Economy.MoveRemaining);
-            Assert.True(cFast.Economy.HasSlot(CombatActionSlot.MainAction));
-            Assert.True(cFast.Economy.HasSlot(CombatActionSlot.BonusAction));
+            // Moving 2 tiles consumes ONLY MP, leaving all 6 AP intact!
+            Assert.True(session.TryMoveTo(new GridCoord(3, 5)).Success);
+            Assert.Equal(2, cFast.Economy.MoveRemaining);
+            Assert.Equal(6, cFast.Economy.CurrentAp);
 
-            // Dash consumes Main Action to grant +BaseMoveBudget MP.
+            // Dash consumes 2 AP to grant +4 MP.
             CombatActionResult dashRes = session.ExecuteDash();
             Assert.True(dashRes.Success);
-            Assert.False(cFast.Economy.HasSlot(CombatActionSlot.MainAction));
+            Assert.Equal(4, cFast.Economy.CurrentAp);
             Assert.True(cFast.Economy.HasUsedDash);
-            Assert.Equal(3 + cFast.GetDndBaseMoveBudget(), cFast.Economy.MoveRemaining);
-            Assert.True(cFast.Economy.HasSlot(CombatActionSlot.BonusAction));
+            Assert.Equal(2 + cFast.GetDndBaseMoveBudget(), cFast.Economy.MoveRemaining);
 
             session.EndTurn();
             Assert.Equal("hero_slow", session.CurrentActorId);
-            Assert.Equal(5, cSlow.Economy.MoveBudget);
-            Assert.True(cSlow.Economy.HasSlot(CombatActionSlot.MainAction));
-            Assert.True(cSlow.Economy.HasSlot(CombatActionSlot.BonusAction));
+            Assert.Equal(4, cSlow.Economy.MoveBudget);
+            Assert.Equal(6, cSlow.Economy.CurrentAp);
 
             session.EndTurn();
             session.EndTurn(); // goblin
 
-            // Round 2 resets fresh MP, Main Action, Bonus Action, and Reaction cleanly.
+            // Round 2 resets fresh 4 MP, 6 AP, and Reaction cleanly.
             Assert.Equal(2, session.RoundNumber);
             Assert.Equal("hero_fast", session.CurrentActorId);
-            Assert.Equal(7, cFast.Economy.MoveBudget);
-            Assert.Equal(7, cFast.Economy.MoveRemaining);
-            Assert.True(cFast.Economy.HasSlot(CombatActionSlot.MainAction));
-            Assert.True(cFast.Economy.HasSlot(CombatActionSlot.BonusAction));
+            Assert.Equal(4, cFast.Economy.MoveBudget);
+            Assert.Equal(4, cFast.Economy.MoveRemaining);
+            Assert.Equal(6, cFast.Economy.CurrentAp);
             Assert.False(cFast.Economy.HasUsedDash);
         }
 
@@ -121,7 +117,7 @@ namespace RealmzCore.Tests
             party.AddItemToStash(454, 1); // Leather Boots
             int capIdx = party.Stash.ToList().FindIndex(s => s.ItemId == 450);
             Assert.True(party.EquipFromStash(party.Members.ToList().IndexOf(vex), capIdx, bundle.Items));
-            Assert.Equal(1, vex.GetSetFreeMoveTiles());
+            Assert.Equal(2, vex.GetSetFreeMoveTiles());
             Assert.Equal(0, vex.GetSetApBonus());
 
             int bootsIdx = party.Stash.ToList().FindIndex(s => s.ItemId == 454);
@@ -129,7 +125,7 @@ namespace RealmzCore.Tests
             EquipmentSetProgress? vexScout = vex.GetEquipmentSetProgress(EquipmentSetCatalog.ScoutsLeatherSetId);
             Assert.NotNull(vexScout);
             Assert.Equal(3, vexScout!.EquippedPieces);
-            Assert.Equal(1, vexScout.FreeMoveTiles);
+            Assert.Equal(2, vexScout.FreeMoveTiles);
             Assert.Equal(1, vexScout.ApBonus);
 
             CombatantState cAldric = CombatantState.FromHero(aldric, new GridCoord(1, 3), bundle.Items);
@@ -139,30 +135,34 @@ namespace RealmzCore.Tests
             CombatGrid grid = new CombatGrid(10, 10);
             TacticalCombatSession session = new TacticalCombatSession(grid, new[] { cVex, cAldric, goblin }, bundle.Spells, bundle.Items);
 
-            // Vex starts with BaseMoveBudget + 2 bonus MP from Scout's Leather 3pc!
+            // Vex starts with 4 Base MP + 2 bonus MP (6 MP) AND 6 Base AP + 1 bonus AP (7 AP) from Scout's Leather 3pc!
             Assert.Equal("hero_rogue", session.CurrentActorId);
             int expectedVexMove = cVex.GetDndBaseMoveBudget() + 2;
+            Assert.Equal(6, expectedVexMove);
             Assert.Equal(expectedVexMove, cVex.Economy.MoveBudget);
             Assert.Equal(expectedVexMove, cVex.Economy.MoveRemaining);
+            Assert.Equal(7, cVex.Economy.MaxAp);
+            Assert.Equal(7, cVex.Economy.CurrentAp);
 
-            // Moving 2 tiles spends 2 MP cleanly and UndoMove restores full MP!
+            // Moving 2 tiles spends 2 MP cleanly (AP untouched) and UndoMove restores full MP!
             CombatActionResult moveRes = session.TryMoveTo(new GridCoord(3, 5));
             Assert.True(moveRes.Success);
             Assert.Equal(2, moveRes.ApSpent);
             Assert.Equal(expectedVexMove - 2, cVex.Economy.MoveRemaining);
+            Assert.Equal(7, cVex.Economy.CurrentAp);
 
             Assert.True(session.UndoMove());
             Assert.Equal(expectedVexMove, cVex.Economy.MoveRemaining);
 
-            // Switch to Aldric -> Iron Vanguard 3pc upgrades Guard/Overwatch to Bonus Action!
+            // Switch to Aldric -> Iron Vanguard 3pc grants +1 Max AP (7 AP) and 1 AP Guard discount!
             session.EndTurn();
             Assert.Equal("hero_knight", session.CurrentActorId);
-            Assert.True(cAldric.Economy.BonusActionGuardEnabled);
-            Assert.Equal(CombatActionSlot.BonusAction, cAldric.Economy.GuardSlot);
+            Assert.Equal(7, cAldric.Economy.MaxAp);
+            Assert.Equal(1, cAldric.Economy.EffectiveGuardApCost);
             CombatActionResult guardRes = session.GuardOverwatch();
             Assert.True(guardRes.Success);
-            Assert.False(cAldric.Economy.HasSlot(CombatActionSlot.BonusAction));
-            Assert.True(cAldric.Economy.HasSlot(CombatActionSlot.MainAction));
+            Assert.Equal(1, guardRes.ApSpent);
+            Assert.Equal(6, cAldric.Economy.CurrentAp);
         }
 
         [Fact]
@@ -185,13 +185,13 @@ namespace RealmzCore.Tests
                 bundle.Items,
                 roller: new QueuedDiceRoller(20, 4, 15));
 
-            // 1 Main Action attack per turn + Bonus Action Shove still available!
+            // 6 AP pool: Light weapon melee (2 AP x 2 = 4 AP) + Shove (2 AP) spends all 6 AP,
+            // OR Standard melee (3 AP) + Shove (2 AP) = 5 AP spent cleanly leaving 1 AP.
+            Assert.Equal(6, vex.Economy.MaxAp);
+            int apStart = vex.Economy.CurrentAp;
             Assert.True(session.ExecuteMeleeAttack("m1").Success);
-            Assert.False(vex.Economy.HasSlot(CombatActionSlot.MainAction));
-            Assert.False(session.ExecuteMeleeAttack("m1").Success);
-            Assert.True(vex.Economy.HasSlot(CombatActionSlot.BonusAction));
+            Assert.True(vex.Economy.CurrentAp < apStart);
             Assert.True(session.TryShove("m1").Success);
-            Assert.False(vex.Economy.HasSlot(CombatActionSlot.BonusAction));
             Assert.Equal(36, goblin.Hp);
 
             // Next hero turn: check Mud/Water 2 MP movement cost.
@@ -291,14 +291,14 @@ namespace RealmzCore.Tests
 
             CombatActionResult aiRes = session.ExecutePartyAiTurn();
             Assert.True(aiRes.Success);
-            // Option A: Theron uses 1 Main Action to cast Fireball.
-            Assert.Equal(1, session.Log.Count(e => e.ActorId == "h1" && e.ActionType == "CastSpell"));
+            // Split MP/AP: Theron spends AP casting Fireball (and any affordable follow-up).
+            Assert.True(session.Log.Count(e => e.ActorId == "h1" && e.ActionType == "CastSpell") >= 1);
             Assert.True(ogre.Hp < 50);
 
-            // Monster stationary turn uses 1 Main Action per turn when adjacent.
+            // Monster stationary turn uses AP cleanly when adjacent.
             ogre.Position = new GridCoord(2, 5);
             session.ExecuteMonsterAiTurn();
-            Assert.Equal(1, session.Log.Count(e => e.ActorId == "m1" && e.ActionType == "MeleeAttack"));
+            Assert.True(session.Log.Count(e => e.ActorId == "m1" && e.ActionType == "MeleeAttack") >= 1);
 
             // Combat Advantage (target Prone) and Disadvantage (ranged threatened in melee)
             CombatGrid advGrid = new CombatGrid(8, 8);

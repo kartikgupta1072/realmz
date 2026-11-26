@@ -130,8 +130,8 @@ namespace RealmzCore.Exploration
             {
                 new EquipmentSetBonusTier(
                     requiredPieces: 2,
-                    freeMoveTiles: 1,
-                    summary: "+1 Free Move Tile"),
+                    freeMoveTiles: 2,
+                    summary: "+2 MP"),
                 new EquipmentSetBonusTier(
                     requiredPieces: 3,
                     apBonus: 1,
@@ -167,7 +167,7 @@ namespace RealmzCore.Exploration
                     requiredPieces: 2,
                     acBonus: 1,
                     freeMoveTiles: 1,
-                    summary: "+1 AC & +1 Free Move Tile"),
+                    summary: "+1 AC & +1 MP"),
                 new EquipmentSetBonusTier(
                     requiredPieces: 3,
                     apBonus: 1,

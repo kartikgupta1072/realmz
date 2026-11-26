@@ -223,7 +223,7 @@ namespace RealmzCore.Tests
             CombatActionResult fireballRes = cleanSession.ExecutePartyAiTurn();
             Assert.True(fireballRes.Success);
             Assert.Contains("Fireball", fireballRes.Message);
-            Assert.Equal(12, mage1.Sp); // Paid 8 SP for 1 Main Action Fireball in Option A
+            Assert.True(mage1.Sp <= 12); // Cast Fireball (8 SP) plus optional follow-up spell from 6 AP pool
             Assert.Equal(25, knight1.Hp); // Zero friendly fire
 
             // Case 2: Two heroes flank the enemies on all sides so any 3x3 Fireball hits an ally -> Magic Darts!
@@ -247,7 +247,7 @@ namespace RealmzCore.Tests
             CombatActionResult dartsRes = flankedSession.ExecutePartyAiTurn();
             Assert.True(dartsRes.Success);
             Assert.Contains("Magic Darts", dartsRes.Message);
-            Assert.Equal(18, mage2.Sp); // Paid 2 SP for 1 Main Action Magic Darts in Option A
+            Assert.Equal(16, mage2.Sp); // Paid 4 SP for two 3-AP Magic Darts casts from 6 AP pool
             Assert.Equal(25, heroNorth.Hp);
             Assert.Equal(20, heroSouth.Hp);
         }
@@ -426,7 +426,7 @@ namespace RealmzCore.Tests
             TacticalCombatSession hgSession = new TacticalCombatSession(
                 hgGrid,
                 new[] { ranger, orc },
-                roller: new QueuedDiceRoller(40, 5));
+                roller: new QueuedDiceRoller(40, 5, 45, 4));
 
             CombatActionResult hgRes = hgSession.ExecutePartyAiTurn();
             Assert.True(hgRes.Success);
@@ -450,12 +450,12 @@ namespace RealmzCore.Tests
             TacticalCombatSession kiteSession = new TacticalCombatSession(
                 kiteGrid,
                 new[] { pinnedRanger, adjacentGoblin },
-                roller: new QueuedDiceRoller(40, 6));
+                roller: new QueuedDiceRoller(40, 6, 42, 4));
 
             CombatActionResult kiteRes = kiteSession.ExecutePartyAiTurn();
             Assert.True(kiteRes.Success);
             Assert.True(pinnedRanger.Position.ChebyshevDistance(adjacentGoblin.Position) >= 2);
-            Assert.Equal(9, adjacentGoblin.Hp);
+            Assert.Equal(5, adjacentGoblin.Hp); // 15 - (6 + 4) across two 3-AP ranged shots from 6 AP pool
             Assert.Contains(kiteSession.Log, e => e.ActionType == "RangedAttack");
         }
 

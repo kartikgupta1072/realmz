@@ -167,6 +167,8 @@ namespace Realmz.Game
         private float _combatPendingEndTurnWaitUntil;
         private Coroutine _delayedTurnRoutine;
         private string _selectedDeploymentHeroId;
+        private int _lastCombatRoundForTorch;
+        private int _lastSyncedTorchMinute = -1;
 
         public bool IsInCombat => _isInCombat;
         public int ActiveExploreViewCount => _exploreHeroViews.Count;
@@ -406,12 +408,38 @@ namespace Realmz.Game
 
             GridCoord worldCoord;
             bool rayHit;
-            if (_isInCombat && TryPickCombatUnitUnderScreenPoint(mousePos, out GridCoord pickedUnitWorld))
+            bool deploymentEmptyTilePriority = false;
+            if (_isInCombat &&
+                CombatSession != null &&
+                CombatSession.Phase == CombatPhase.Deployment &&
+                !string.IsNullOrEmpty(_selectedDeploymentHeroId) &&
+                cameraRig.ScreenPointToGridCoord(mousePos, out GridCoord deployRayWorld))
+            {
+                GridCoord deployLocal = WorldToLocal(deployRayWorld);
+                if (CombatSession.IsValidDeploymentTile(deployLocal) && GetLivingUnitAt(deployLocal) == null)
+                {
+                    rayHit = true;
+                    worldCoord = deployRayWorld;
+                    deploymentEmptyTilePriority = true;
+                }
+                else if (TryPickCombatUnitUnderScreenPoint(mousePos, out GridCoord pickedUnitWorld))
+                {
+                    rayHit = true;
+                    worldCoord = pickedUnitWorld;
+                    deploymentEmptyTilePriority = true;
+                }
+                else
+                {
+                    rayHit = false;
+                    worldCoord = default;
+                }
+            }
+            else if (_isInCombat && TryPickCombatUnitUnderScreenPoint(mousePos, out GridCoord pickedUnitWorld))
             {
                 rayHit = true;
                 worldCoord = pickedUnitWorld;
             }
-            else if (needRaycast)
+            else if (needRaycast && !deploymentEmptyTilePriority)
             {
                 rayHit = cameraRig.ScreenPointToGridCoord(mousePos, out worldCoord);
                 _hasCachedMouseRay = true;
@@ -3385,6 +3413,7 @@ namespace Realmz.Game
             {
                 audioDirector?.PlayUiClick();
                 _selectedDeploymentHeroId = null;
+                SyncDeploymentHeroPositions(immediate: false);
                 SyncAllCombatUnitViews();
                 RefreshUnitNameplates();
                 RefreshDeploymentOverlays();
@@ -3407,6 +3436,39 @@ namespace Realmz.Game
             }
         }
 
+        private void SyncDeploymentHeroPositions(bool immediate)
+        {
+            if (CombatSession == null)
+            {
+                return;
+            }
+
+            bool snapNow = immediate || Application.isBatchMode || !Application.isPlaying || GetCombatMoveTileDuration() <= 0.001f;
+            for (int i = 0; i < CombatSession.Combatants.Count; i++)
+            {
+                CombatantState c = CombatSession.Combatants[i];
+                if (c == null || c.Side != CombatSide.Hero || !c.IsAlive)
+                {
+                    continue;
+                }
+
+                if (!_combatUnitViews.TryGetValue(c.Id, out BywaterUnitView view) || view == null)
+                {
+                    continue;
+                }
+
+                Vector3 targetWorld = GridToWorldAtElevation(LocalToWorld(c.Position));
+                if (snapNow)
+                {
+                    view.SetWorldPosition(targetWorld);
+                }
+                else if ((view.transform.position - targetWorld).sqrMagnitude > 0.0004f)
+                {
+                    view.MoveAlongWorldPath(new[] { targetWorld }, 0.14f);
+                }
+            }
+        }
+
         private void HandleStartBattleFromDeployment()
         {
             if (!_isInCombat || CombatSession == null || CombatSession.Phase != CombatPhase.Deployment)
@@ -3416,6 +3478,7 @@ namespace Realmz.Game
 
             audioDirector?.PlayUiClick();
             _selectedDeploymentHeroId = null;
+            SyncDeploymentHeroPositions(immediate: true);
             gridOverlays?.ClearDeploymentZone();
             if (CombatSession.StartBattleFromDeployment())
             {
@@ -3690,6 +3753,20 @@ namespace Realmz.Game
             if (actor == null)
             {
                 return;
+            }
+
+            if (_lastCombatRoundForTorch <= 0)
+            {
+                _lastCombatRoundForTorch = CombatSession.RoundNumber;
+            }
+            else if (CombatSession.RoundNumber > _lastCombatRoundForTorch)
+            {
+                _lastCombatRoundForTorch = CombatSession.RoundNumber;
+                if (ExploreSession?.Party != null && ExploreSession.Party.BurnTorchMinutes(1.0))
+                {
+                    hudController?.ShowToast("Your torch flickered out!", 2.4f);
+                    ApplyAtmosphereAndTorchLighting(GetCombatPartyTorchWorldPos(), forceImmediate: false);
+                }
             }
 
             SyncAllCombatUnitViews();
@@ -4557,7 +4634,7 @@ namespace Realmz.Game
                                 $"[{actor.Name}] Approach & Melee: {hoveredUnit.Name}",
                                 approachMelee,
                                 isRanged: false,
-                                prefixLine: $"Move: {approachTile.PathCost} MP + Main Action Strike\n",
+                                prefixLine: $"Move: {approachTile.PathCost} MP + {approachMelee.ApCost} AP Strike\n",
                                 suffixLine: hoveredEnemyIntentLine);
                             UpdateFlankOverlayFrom(approachTile.Coord, actor, hoveredUnit, approachMelee.IsFlanking);
                         }
@@ -5698,10 +5775,11 @@ namespace Realmz.Game
                 elevationBadge = "[LOW GROUND -15%]";
             }
 
+            string costLabel = preview.ApCost > 0 ? $"{preview.ApCost} AP" : "Main Action";
             hudController?.SetCombatHoverPreview(
                 title,
                 (prefixLine ?? string.Empty) +
-                $"Cost: Main Action   |   Hit%: {preview.HitChancePct}% (Uncapped {preview.UncappedHitScore}%)\n" +
+                $"Cost: {costLabel}   |   Hit%: {preview.HitChancePct}% (Uncapped {preview.UncappedHitScore}%)\n" +
                 $"Dmg: {preview.MinDamage} - {preview.MaxDamage}   |   Defender AC: {preview.DefenderAc}\n" +
                 $"Crit%: {preview.CritChancePct}%   |   Graze%: {preview.GrazeChancePct}%\n" +
                 advLine + losLine + flankLine + aooLine +
@@ -8170,7 +8248,7 @@ namespace Realmz.Game
             }
 
             TileMapData map = ExploreSession.CurrentMap;
-            if (map == null || map.IsDungeon || Time.timeScale <= 0.001f)
+            if (map == null || Time.timeScale <= 0.001f)
             {
                 return;
             }
@@ -8183,15 +8261,45 @@ namespace Realmz.Game
             }
 
             double deltaMinutes = Mathf.Min(Time.unscaledDeltaTime, 0.25f) * minutesPerRealSecond;
+            if (map.IsDungeon)
+            {
+                bool dungeonTorchExpired = ExploreSession.Party.BurnTorchMinutes(deltaMinutes);
+                int torchMin = ExploreSession.Party.TorchTurnsRemaining;
+                if (dungeonTorchExpired)
+                {
+                    ExploreSession.RefreshFogOfWar();
+                    hudController?.ShowToast("Your torch flickered out!", 2.4f);
+                }
+
+                if (dungeonTorchExpired || torchMin != _lastSyncedTorchMinute)
+                {
+                    _lastSyncedTorchMinute = torchMin;
+                    ApplyAtmosphereAndTorchLighting(GridToWorldAtElevation(ExploreSession.Position), forceImmediate: false, allowContinuousNormalizedUpdate: true);
+                    SyncFogOfWarAndWeatherVisuals();
+                    if (_exploreWalkCoroutine == null)
+                    {
+                        hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false, _lastContextPoiLabel);
+                    }
+                }
+                return;
+            }
+
             bool phaseChanged = ExploreSession.AdvanceWorldClockMinutes(deltaMinutes);
+            bool torchExpired = ExploreSession.LastClockAdvanceExpiredTorch;
+            if (torchExpired)
+            {
+                hudController?.ShowToast("Your torch flickered out!", 2.4f);
+            }
 
             Vector3 focusPos = GridToWorldAtElevation(ExploreSession.Position);
             ApplyAtmosphereAndTorchLighting(focusPos, forceImmediate: false, allowContinuousNormalizedUpdate: true);
 
             int currentMinute = (int)Math.Floor(ExploreSession.CurrentWorldClock.TotalMinutes);
-            if (phaseChanged || currentMinute != _lastSyncedClockMinute)
+            int curTorchMin = ExploreSession.Party.TorchTurnsRemaining;
+            if (phaseChanged || torchExpired || currentMinute != _lastSyncedClockMinute || curTorchMin != _lastSyncedTorchMinute)
             {
                 _lastSyncedClockMinute = currentMinute;
+                _lastSyncedTorchMinute = curTorchMin;
                 SyncFogOfWarAndWeatherVisuals();
                 if (_exploreWalkCoroutine == null)
                 {

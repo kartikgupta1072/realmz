@@ -68,7 +68,12 @@ namespace Realmz.Game
         private TextMeshProUGUI _diceRollSubtitleText;
         private TextMeshProUGUI _diceRollAdvantageBadgeText;
         private GameObject _diceRollAdvantageBadgeRoot;
+        private RectTransform _diceRollDieCard;
+        private Image _diceRollDieImage;
         private TextMeshProUGUI _diceRollDieText;
+        private RectTransform _diceRollDie2Card;
+        private Image _diceRollDie2Image;
+        private TextMeshProUGUI _diceRollDie2Text;
         private TextMeshProUGUI _diceRollBreakdownText;
         private TextMeshProUGUI _diceRollOutcomeText;
         private Coroutine _diceRollCoroutine;
@@ -130,7 +135,7 @@ namespace Realmz.Game
 
             if (report.IsAmbushedInDark)
             {
-                _interceptScoutSummaryText.text = "Blindside ambush from the shadows - enemies seize the initiative!";
+                _interceptScoutSummaryText.text = "Something lunges out of the pitch dark!";
                 _interceptScoutSummaryText.color = BywaterUiHelpers.DangerRed;
                 _interceptScoutBannerBg.color = new Color(0.24f, 0.05f, 0.06f, 0.96f);
                 BywaterUiHelpers.SetBorderColor(_interceptScoutBannerBg.transform, BywaterUiHelpers.DangerRed);
@@ -139,7 +144,7 @@ namespace Realmz.Game
             else if (report.CanAmbush)
             {
                 string scoutName = string.IsNullOrWhiteSpace(report.LeadScoutName) ? "Kaelen & Vex" : report.LeadScoutName;
-                _interceptScoutSummaryText.text = $"{scoutName} spotted them first! Seize high ground for Round 1 Initiative.";
+                _interceptScoutSummaryText.text = $"{scoutName} spotted them ahead.";
                 _interceptScoutSummaryText.color = BywaterUiHelpers.SuccessGreen;
                 _interceptScoutBannerBg.color = new Color(0.05f, 0.16f, 0.09f, 0.95f);
                 BywaterUiHelpers.SetBorderColor(_interceptScoutBannerBg.transform, BywaterUiHelpers.SuccessGreen);
@@ -147,7 +152,7 @@ namespace Realmz.Game
             }
             else
             {
-                _interceptScoutSummaryText.text = "Enemy patrols crossed your path. Engage tactically or attempt a Stealth check.";
+                _interceptScoutSummaryText.text = "Hostile figures block the road ahead.";
                 _interceptScoutSummaryText.color = BywaterUiHelpers.ParchmentText;
                 _interceptScoutBannerBg.color = BywaterUiHelpers.CardBg;
                 BywaterUiHelpers.SetBorderColor(_interceptScoutBannerBg.transform, BywaterUiHelpers.BrassAccent);
@@ -159,8 +164,8 @@ namespace Realmz.Game
             if (_interceptEngageBtnLabel != null)
             {
                 _interceptEngageBtnLabel.text = report.IsAmbushedInDark
-                    ? "Defend Yourself"
-                    : (report.CanAmbush ? "Ambush! (+Init)" : "Engage");
+                    ? "Defend"
+                    : (report.CanAmbush ? "Ambush" : "Engage");
             }
             BywaterUiHelpers.SetButtonColors(_interceptEngageBtn, active: true);
 
@@ -183,7 +188,7 @@ namespace Realmz.Game
                         string advTag = effEvade.AdvantageState == RollAdvantageState.Advantage
                             ? " ADV"
                             : (effEvade.AdvantageState == RollAdvantageState.Disadvantage ? " DIS" : string.Empty);
-                        _interceptEvadeBtnLabel.text = $"Evade [{effEvade.StatLabel} DC {effEvade.Dc}{advTag}]";
+                        _interceptEvadeBtnLabel.text = $"Evade (DC {effEvade.Dc}{advTag})";
                     }
                 }
             }
@@ -196,7 +201,7 @@ namespace Realmz.Game
                 {
                     if (quickResolveSpec != null)
                     {
-                        _interceptQuickResolveBtnLabel.text = $"Quick Resolve [{quickResolveSpec.TierLabel} | DC {quickResolveSpec.Dc}]";
+                        _interceptQuickResolveBtnLabel.text = $"Quick Resolve (DC {quickResolveSpec.Dc})";
                     }
                     else
                     {
@@ -254,7 +259,35 @@ namespace Realmz.Game
             _diceRollBreakdownText.text = $"{modBreakdown}";
             _diceRollOutcomeText.text = "Rolling d20...";
             _diceRollOutcomeText.color = BywaterUiHelpers.MutedSlate;
-            _diceRollDieText.color = BywaterUiHelpers.BrassHighlight;
+            _diceRollDieText.color = Color.white;
+            if (_diceRollDieImage != null)
+            {
+                _diceRollDieImage.color = Color.white;
+            }
+            if (_diceRollDieCard != null)
+            {
+                _diceRollDieCard.localEulerAngles = Vector3.zero;
+                _diceRollDieCard.localScale = Vector3.one;
+                _diceRollDieCard.anchoredPosition = Vector2.zero;
+            }
+
+            bool showTwoDice = hasAdv || hasDis;
+            if (_diceRollDie2Card != null)
+            {
+                _diceRollDie2Card.gameObject.SetActive(showTwoDice);
+                _diceRollDie2Card.localEulerAngles = Vector3.zero;
+                _diceRollDie2Card.localScale = Vector3.one;
+            }
+            if (_diceRollDie2Image != null)
+            {
+                _diceRollDie2Image.color = Color.white;
+            }
+            if (_diceRollDie2Text != null)
+            {
+                _diceRollDie2Text.color = Color.white;
+                _diceRollDie2Text.text = "20";
+            }
+
             BywaterUiHelpers.SetBorderColor(_diceRollModalRoot.transform, BywaterUiHelpers.BrassHighlight);
 
             _diceRollModalRoot.SetActive(true);
@@ -280,46 +313,80 @@ namespace Realmz.Game
                 ? $"  [2d20: {result.D20Roll1}, {result.D20Roll2}]"
                 : string.Empty;
 
-            _diceRollDieText.text = result.SelectedD20.ToString();
-            _diceRollBreakdownText.text = $"d20 ({result.SelectedD20}) {modSign}  =  {result.Total} vs DC {result.Dc}{twinInfo}";
+            bool twoDice = result.AdvantageState != RollAdvantageState.Normal;
+            if (twoDice && _diceRollDie2Card != null && _diceRollDie2Text != null)
+            {
+                bool roll1Selected = result.SelectedD20 == result.D20Roll1;
+                int keptRoll = roll1Selected ? result.D20Roll1 : result.D20Roll2;
+                int droppedRoll = roll1Selected ? result.D20Roll2 : result.D20Roll1;
 
-            if (result.IsNatural20)
-            {
-                _diceRollDieText.color = new Color(1f, 0.85f, 0.25f, 1f);
-                _diceRollOutcomeText.text = $"NATURAL 20! {result.Summary}";
-                _diceRollOutcomeText.color = BywaterUiHelpers.SuccessGreen;
-                BywaterUiHelpers.SetBorderColor(_diceRollModalRoot.transform, new Color(1f, 0.85f, 0.25f, 1f));
-            }
-            else if (result.IsNatural1)
-            {
-                _diceRollDieText.color = BywaterUiHelpers.DangerRed;
-                _diceRollOutcomeText.text = $"CRITICAL MISS (Nat 1)! {result.Summary}";
-                _diceRollOutcomeText.color = BywaterUiHelpers.DangerRed;
-                BywaterUiHelpers.SetBorderColor(_diceRollModalRoot.transform, BywaterUiHelpers.DangerRed);
-            }
-            else if (result.Success)
-            {
-                _diceRollDieText.color = BywaterUiHelpers.SuccessGreen;
-                _diceRollOutcomeText.text = $"SUCCESS! {result.Summary}";
-                _diceRollOutcomeText.color = BywaterUiHelpers.SuccessGreen;
-                BywaterUiHelpers.SetBorderColor(_diceRollModalRoot.transform, BywaterUiHelpers.SuccessGreen);
+                _diceRollDieText.text = keptRoll.ToString();
+                _diceRollDie2Text.text = droppedRoll.ToString();
+                _diceRollDie2Card.localScale = new Vector3(0.78f, 0.78f, 1f);
+                if (_diceRollDie2Image != null)
+                {
+                    _diceRollDie2Image.color = new Color(0.55f, 0.58f, 0.65f, 0.42f);
+                }
+                _diceRollDie2Text.color = new Color(0.68f, 0.72f, 0.78f, 0.55f);
             }
             else
             {
-                _diceRollDieText.color = BywaterUiHelpers.DangerRed;
-                _diceRollOutcomeText.text = $"FAILED! {result.Summary}";
-                _diceRollOutcomeText.color = BywaterUiHelpers.DangerRed;
-                BywaterUiHelpers.SetBorderColor(_diceRollModalRoot.transform, BywaterUiHelpers.DangerRed);
+                _diceRollDieText.text = result.SelectedD20.ToString();
             }
+
+            if (_diceRollDieCard != null)
+            {
+                _diceRollDieCard.localEulerAngles = Vector3.zero;
+                _diceRollDieCard.localScale = twoDice ? new Vector3(1.10f, 1.10f, 1f) : Vector3.one;
+            }
+            if (_diceRollDie2Card != null)
+            {
+                _diceRollDie2Card.localEulerAngles = Vector3.zero;
+            }
+
+            _diceRollBreakdownText.text = $"d20 ({result.SelectedD20}) {modSign}  =  {result.Total} vs DC {result.Dc}{twinInfo}";
+
+            Color resultColor;
+            if (result.IsNatural20)
+            {
+                resultColor = new Color(1f, 0.85f, 0.25f, 1f);
+                _diceRollOutcomeText.text = $"NATURAL 20! {result.Summary}";
+            }
+            else if (result.IsNatural1)
+            {
+                resultColor = BywaterUiHelpers.DangerRed;
+                _diceRollOutcomeText.text = $"CRITICAL MISS (Nat 1)! {result.Summary}";
+            }
+            else if (result.Success)
+            {
+                resultColor = BywaterUiHelpers.SuccessGreen;
+                _diceRollOutcomeText.text = $"SUCCESS! {result.Summary}";
+            }
+            else
+            {
+                resultColor = BywaterUiHelpers.DangerRed;
+                _diceRollOutcomeText.text = $"FAILED! {result.Summary}";
+            }
+
+            _diceRollDieText.color = resultColor;
+            _diceRollOutcomeText.color = resultColor;
+            if (_diceRollDieImage != null)
+            {
+                _diceRollDieImage.color = Color.Lerp(Color.white, resultColor, 0.35f);
+            }
+            BywaterUiHelpers.SetBorderColor(_diceRollModalRoot.transform, resultColor);
         }
 
         private IEnumerator AnimateDiceRollRoutine(EncounterCheckRollResult result)
         {
-            float rollDuration = 0.48f;
+            const float tumbleDuration = 0.62f;
             float elapsed = 0f;
-            int ticker = 0;
+            float nextFaceSwap = 0f;
+            int ticker1 = 1;
+            int ticker2 = 11;
+            bool twoDice = result.AdvantageState != RollAdvantageState.Normal;
 
-            while (elapsed < rollDuration && !_diceRollSkipRequested)
+            while (elapsed < tumbleDuration && !_diceRollSkipRequested)
             {
                 Keyboard kb = Keyboard.current;
                 if (kb != null && kb.spaceKey.wasPressedThisFrame)
@@ -328,13 +395,77 @@ namespace Realmz.Game
                     break;
                 }
 
-                ticker = (ticker + 3) % 20 + 1;
-                _diceRollDieText.text = ticker.ToString();
+                float t = Mathf.Clamp01(elapsed / tumbleDuration);
+                float easeOut = 1f - (1f - t) * (1f - t);
+                float spinAngle = Mathf.Lerp(720f, 0f, easeOut);
+                float wobbleX = 1f + 0.14f * Mathf.Cos(t * Mathf.PI * 6f) * (1f - t);
+                float wobbleY = 1f - 0.10f * Mathf.Cos(t * Mathf.PI * 6f) * (1f - t);
+                float bounceY = Mathf.Abs(Mathf.Sin(t * Mathf.PI * 2.5f)) * 24f * (1f - t);
+
+                if (_diceRollDieCard != null)
+                {
+                    _diceRollDieCard.localEulerAngles = new Vector3(0f, 0f, spinAngle);
+                    _diceRollDieCard.localScale = new Vector3(wobbleX, wobbleY, 1f);
+                    _diceRollDieCard.anchoredPosition = new Vector2(_diceRollDieCard.anchoredPosition.x, bounceY);
+                }
+
+                if (twoDice && _diceRollDie2Card != null)
+                {
+                    _diceRollDie2Card.localEulerAngles = new Vector3(0f, 0f, -spinAngle * 0.9f);
+                    _diceRollDie2Card.localScale = new Vector3(wobbleY, wobbleX, 1f);
+                    _diceRollDie2Card.anchoredPosition = new Vector2(_diceRollDie2Card.anchoredPosition.x, bounceY * 0.85f);
+                }
+
+                if (elapsed >= nextFaceSwap)
+                {
+                    ticker1 = ((ticker1 + 6) % 20) + 1;
+                    _diceRollDieText.text = ticker1.ToString();
+                    if (twoDice && _diceRollDie2Text != null)
+                    {
+                        ticker2 = ((ticker2 + 4) % 20) + 1;
+                        _diceRollDie2Text.text = ticker2.ToString();
+                    }
+                    nextFaceSwap = elapsed + Mathf.Lerp(0.035f, 0.11f, t * t);
+                }
+
                 elapsed += Time.unscaledDeltaTime;
                 yield return null;
             }
 
             FinalizeDiceRollPresentation(result);
+
+            if (!_diceRollSkipRequested)
+            {
+                const float settleDuration = 0.22f;
+                float settleElapsed = 0f;
+                Vector3 baseScale = twoDice ? new Vector3(1.10f, 1.10f, 1f) : Vector3.one;
+                while (settleElapsed < settleDuration && !_diceRollSkipRequested)
+                {
+                    Keyboard kb = Keyboard.current;
+                    if (kb != null && kb.spaceKey.wasPressedThisFrame)
+                    {
+                        _diceRollSkipRequested = true;
+                        break;
+                    }
+
+                    float st = Mathf.Clamp01(settleElapsed / settleDuration);
+                    float pop = 1f + Mathf.Sin(st * Mathf.PI) * (result.IsNatural20 ? 0.26f : 0.16f);
+                    if (_diceRollDieCard != null)
+                    {
+                        _diceRollDieCard.localScale = baseScale * pop;
+                        float shakeX = result.IsNatural1 ? Mathf.Sin(st * Mathf.PI * 6f) * 6f * (1f - st) : 0f;
+                        _diceRollDieCard.anchoredPosition = new Vector2(shakeX, 0f);
+                    }
+                    settleElapsed += Time.unscaledDeltaTime;
+                    yield return null;
+                }
+
+                if (_diceRollDieCard != null)
+                {
+                    _diceRollDieCard.localScale = baseScale;
+                    _diceRollDieCard.anchoredPosition = Vector2.zero;
+                }
+            }
 
             float holdDuration = _diceRollSkipRequested ? 0.12f : 0.65f;
             float held = 0f;
@@ -642,7 +773,7 @@ namespace Realmz.Game
             modal.anchorMax = new Vector2(0.5f, 0.5f);
             modal.pivot = new Vector2(0.5f, 0.5f);
             modal.anchoredPosition = Vector2.zero;
-            modal.sizeDelta = new Vector2(660f, 450f);
+            modal.sizeDelta = new Vector2(760f, 460f);
             _encounterInterceptModalRoot = modal.gameObject;
 
             VerticalLayoutGroup vlg = modal.gameObject.AddComponent<VerticalLayoutGroup>();
@@ -858,7 +989,7 @@ namespace Realmz.Game
             // 4. Action button row
             GameObject btnRow = new GameObject("InterceptButtons", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             btnRow.transform.SetParent(modal, false);
-            btnRow.AddComponent<LayoutElement>().preferredHeight = 50f;
+            btnRow.AddComponent<LayoutElement>().preferredHeight = 54f;
             HorizontalLayoutGroup bHlg = btnRow.GetComponent<HorizontalLayoutGroup>();
             bHlg.spacing = 12f;
             bHlg.childControlWidth = true;
@@ -875,22 +1006,24 @@ namespace Realmz.Game
                     HideEncounterInterceptModal();
                     OnEncounterEngageRequested?.Invoke();
                 },
-                16f);
+                15.5f);
             _interceptEngageBtnLabel = _interceptEngageBtn.GetComponentInChildren<TextMeshProUGUI>(true);
+            ConfigureInterceptButtonLabel(_interceptEngageBtnLabel);
             BywaterUiHelpers.SetButtonColors(_interceptEngageBtn, active: true);
 
             _interceptEvadeBtn = BywaterUiHelpers.CreateButton(
                 btnRow.transform,
                 "InterceptEvadeBtn",
-                "Evade (50%)",
+                "Evade (DC 12)",
                 _font,
                 () =>
                 {
                     HideEncounterInterceptModal();
                     OnEncounterEvadeRequested?.Invoke();
                 },
-                16f);
+                15f);
             _interceptEvadeBtnLabel = _interceptEvadeBtn.GetComponentInChildren<TextMeshProUGUI>(true);
+            ConfigureInterceptButtonLabel(_interceptEvadeBtnLabel);
 
             _interceptQuickResolveBtn = BywaterUiHelpers.CreateButton(
                 btnRow.transform,
@@ -902,11 +1035,26 @@ namespace Realmz.Game
                     HideEncounterInterceptModal();
                     OnEncounterQuickResolveRequested?.Invoke();
                 },
-                15.5f);
+                15f);
             _interceptQuickResolveBtnLabel = _interceptQuickResolveBtn.GetComponentInChildren<TextMeshProUGUI>(true);
+            ConfigureInterceptButtonLabel(_interceptQuickResolveBtnLabel);
             _interceptQuickResolveBtn.gameObject.SetActive(false);
 
             BuildDiceRollOverlay(parent);
+        }
+
+        private static void ConfigureInterceptButtonLabel(TextMeshProUGUI label)
+        {
+            if (label == null)
+            {
+                return;
+            }
+
+            label.textWrappingMode = TextWrappingModes.Normal;
+            label.overflowMode = TextOverflowModes.Truncate;
+            RectTransform rt = label.rectTransform;
+            rt.offsetMin = new Vector2(8f, 2f);
+            rt.offsetMax = new Vector2(-8f, -2f);
         }
 
         private void BuildDiceRollOverlay(Transform parent)
@@ -921,7 +1069,7 @@ namespace Realmz.Game
             d20Root.anchorMax = new Vector2(0.5f, 0.5f);
             d20Root.pivot = new Vector2(0.5f, 0.5f);
             d20Root.anchoredPosition = Vector2.zero;
-            d20Root.sizeDelta = new Vector2(440f, 340f);
+            d20Root.sizeDelta = new Vector2(480f, 370f);
             _diceRollModalRoot = d20Root.gameObject;
 
             VerticalLayoutGroup dVlg = d20Root.gameObject.AddComponent<VerticalLayoutGroup>();
@@ -953,24 +1101,57 @@ namespace Realmz.Game
             _diceRollAdvantageBadgeText.rectTransform.offsetMax = Vector2.zero;
             _diceRollAdvantageBadgeRoot.SetActive(false);
 
-            RectTransform dieCard = BywaterUiHelpers.CreatePanel(
-                d20Root, "DiceRollD20Card", new Color(0.05f, 0.08f, 0.14f, 0.98f), withBrassOutline: true, outlinePx: 2f);
-            BywaterUiHelpers.SetBorderColor(dieCard, BywaterUiHelpers.BrassHighlight);
-            LayoutElement dieCardLe = dieCard.gameObject.AddComponent<LayoutElement>();
-            dieCardLe.preferredWidth = 104f;
-            dieCardLe.preferredHeight = 96f;
+            GameObject diceStage = new GameObject("DiceRollStage", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+            diceStage.transform.SetParent(d20Root, false);
+            diceStage.AddComponent<LayoutElement>().preferredHeight = 118f;
+            HorizontalLayoutGroup stageHlg = diceStage.GetComponent<HorizontalLayoutGroup>();
+            stageHlg.spacing = 18f;
+            stageHlg.childAlignment = TextAnchor.MiddleCenter;
+            stageHlg.childControlWidth = false;
+            stageHlg.childControlHeight = false;
+            stageHlg.childForceExpandWidth = false;
+            stageHlg.childForceExpandHeight = false;
 
-            Button skipBtn = dieCard.gameObject.AddComponent<Button>();
+            Sprite d20Sprite = BywaterUiHelpers.GetD20DieSprite();
+
+            GameObject die1Go = new GameObject("DiceRollD20Card", typeof(RectTransform), typeof(Image), typeof(Button));
+            die1Go.transform.SetParent(diceStage.transform, false);
+            _diceRollDieCard = die1Go.GetComponent<RectTransform>();
+            _diceRollDieCard.sizeDelta = new Vector2(112f, 112f);
+            _diceRollDieImage = die1Go.GetComponent<Image>();
+            _diceRollDieImage.sprite = d20Sprite;
+            _diceRollDieImage.preserveAspect = true;
+            Button skipBtn = die1Go.GetComponent<Button>();
             skipBtn.transition = Selectable.Transition.None;
             skipBtn.onClick.AddListener(() => _diceRollSkipRequested = true);
 
             _diceRollDieText = BywaterUiHelpers.CreateLabel(
-                dieCard, "DiceRollD20Number", "20", _font, 46f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
+                _diceRollDieCard, "DiceRollD20Number", "20", _font, 28f, Color.white, TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
             BywaterUiHelpers.AddTextDropShadow(_diceRollDieText);
             _diceRollDieText.rectTransform.anchorMin = Vector2.zero;
             _diceRollDieText.rectTransform.anchorMax = Vector2.one;
-            _diceRollDieText.rectTransform.offsetMin = Vector2.zero;
-            _diceRollDieText.rectTransform.offsetMax = Vector2.zero;
+            _diceRollDieText.rectTransform.offsetMin = new Vector2(0f, -6f);
+            _diceRollDieText.rectTransform.offsetMax = new Vector2(0f, -6f);
+
+            GameObject die2Go = new GameObject("DiceRollD20Card2", typeof(RectTransform), typeof(Image), typeof(Button));
+            die2Go.transform.SetParent(diceStage.transform, false);
+            _diceRollDie2Card = die2Go.GetComponent<RectTransform>();
+            _diceRollDie2Card.sizeDelta = new Vector2(112f, 112f);
+            _diceRollDie2Image = die2Go.GetComponent<Image>();
+            _diceRollDie2Image.sprite = d20Sprite;
+            _diceRollDie2Image.preserveAspect = true;
+            Button skipBtn2 = die2Go.GetComponent<Button>();
+            skipBtn2.transition = Selectable.Transition.None;
+            skipBtn2.onClick.AddListener(() => _diceRollSkipRequested = true);
+
+            _diceRollDie2Text = BywaterUiHelpers.CreateLabel(
+                _diceRollDie2Card, "DiceRollD20Number2", "20", _font, 28f, Color.white, TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
+            BywaterUiHelpers.AddTextDropShadow(_diceRollDie2Text);
+            _diceRollDie2Text.rectTransform.anchorMin = Vector2.zero;
+            _diceRollDie2Text.rectTransform.anchorMax = Vector2.one;
+            _diceRollDie2Text.rectTransform.offsetMin = new Vector2(0f, -6f);
+            _diceRollDie2Text.rectTransform.offsetMax = new Vector2(0f, -6f);
+            die2Go.SetActive(false);
 
             _diceRollBreakdownText = BywaterUiHelpers.CreateLabel(
                 d20Root, "DiceRollBreakdown", "DEX +3", _font, 15.5f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.Center, FontStyles.Normal, wrap: true);

@@ -796,7 +796,41 @@ namespace Realmz.PlayModeTests
                 Assert.That(heroA.Position, Is.EqualTo(origB));
                 Assert.That(heroB.Position, Is.EqualTo(origA));
 
-                // Re-select Hero A so highlighted cyan/gold tile shows clearly in Deployment proof
+                // M1.6 Regression check: selecting a hero and clicking an empty cyan deployment tile moves BOTH logical position AND sprite transform!
+                GridCoord emptyDeployTile = heroA.Position;
+                for (int i = 0; i < ctrl.CombatSession.DeploymentZoneTiles.Count; i++)
+                {
+                    GridCoord candidate = ctrl.CombatSession.DeploymentZoneTiles[i];
+                    bool occupied = false;
+                    for (int u = 0; u < ctrl.CombatSession.Combatants.Count; u++)
+                    {
+                        if (ctrl.CombatSession.Combatants[u].IsAlive && ctrl.CombatSession.Combatants[u].Position == candidate)
+                        {
+                            occupied = true;
+                            break;
+                        }
+                    }
+                    if (!occupied)
+                    {
+                        emptyDeployTile = candidate;
+                        break;
+                    }
+                }
+                Assert.That(emptyDeployTile, Is.Not.EqualTo(heroA.Position), "Expected at least 1 open cyan deployment tile.");
+                ctrl.ClickCombatCoordForTest(heroA.Position);
+                yield return null;
+                ctrl.ClickCombatCoordForTest(emptyDeployTile);
+                yield return null;
+                Assert.That(heroA.Position, Is.EqualTo(emptyDeployTile), "Clicking empty deployment tile must move hero logically.");
+                var combatViewsField = typeof(BywaterGameController).GetField("_combatUnitViews", BindingFlags.Instance | BindingFlags.NonPublic);
+                var combatViews = combatViewsField?.GetValue(ctrl) as Dictionary<string, BywaterUnitView>;
+                BywaterUnitView heroAView = null;
+                Assert.That(combatViews != null && combatViews.TryGetValue(heroA.Id, out heroAView) && heroAView != null, Is.True);
+                GridCoord expectedWorldGrid = new GridCoord(ctrl.ArenaOrigin.X + emptyDeployTile.X, ctrl.ArenaOrigin.Y + emptyDeployTile.Y);
+                Vector3 expectedWorldPos = CartographyWorldData.GridToWorld(expectedWorldGrid, ctrl.worldRenderer.GetTileElevation(expectedWorldGrid.X, expectedWorldGrid.Y));
+                Assert.That(Vector3.Distance(heroAView.transform.position, expectedWorldPos), Is.LessThan(0.05f), "Deployment move must update hero sprite world position.");
+
+                // Move back or re-select Hero A so highlighted tile shows clearly in Deployment proof
                 ctrl.ClickCombatCoordForTest(heroA.Position);
                 ctrl.hudController?.HideToast();
                 yield return null;
@@ -850,8 +884,10 @@ namespace Realmz.PlayModeTests
 
                 GameObject apRow = GameObject.Find("ApDiamondsRow");
                 Assert.That(apRow != null && apRow.activeInHierarchy, Is.True);
+                TMPro.TextMeshProUGUI mpLbl = GameObject.Find("MpValueLabel")?.GetComponent<TMPro.TextMeshProUGUI>();
                 TMPro.TextMeshProUGUI apLbl = GameObject.Find("ApValueLabel")?.GetComponent<TMPro.TextMeshProUGUI>();
-                Assert.That(apLbl != null && apLbl.text.Contains("MP"), Is.True);
+                Assert.That(mpLbl != null && mpLbl.text.Contains("MP"), Is.True);
+                Assert.That(apLbl != null && apLbl.text.Contains("AP"), Is.True);
                 Assert.That(GameObject.Find("DashBtn"), Is.Not.Null);
 
                 if (captureProofs)
@@ -860,13 +896,14 @@ namespace Realmz.PlayModeTests
                         ProofPath("M1_Bywater_ActionPoints_Combat_Proof.png"), 1600, 900);
                 }
 
-                // Execute Guard / Overwatch and verify exact Option A slot consumption
-                CombatActionSlot guardSlot = currentHero.Economy.GuardSlot;
-                Assert.That(currentHero.Economy.HasSlot(guardSlot), Is.True);
+                // Execute Guard / Overwatch and verify exact Split 4 MP + 6 AP deduction
+                int apBeforeGuard = currentHero.Economy.CurrentAp;
+                int expectedGuardCost = currentHero.Economy.EffectiveGuardApCost;
+                Assert.That(currentHero.Economy.HasApFor(expectedGuardCost), Is.True);
                 GameObject.Find("GuardBtn")?.GetComponent<UnityEngine.UI.Button>()?.onClick.Invoke();
                 yield return null;
                 Assert.That(currentHero.IsGuarding, Is.True);
-                Assert.That(currentHero.Economy.HasSlot(guardSlot), Is.False);
+                Assert.That(currentHero.Economy.CurrentAp, Is.EqualTo(apBeforeGuard - expectedGuardCost));
 
                 Assert.That(errors, Is.Empty, "PlayMode W-253 errors:\n" + string.Join("\n", errors));
             }

@@ -789,7 +789,12 @@ namespace RealmzCore.Combat
             _specialAbilities = specialAbilities != null ? new List<string>(specialAbilities) : new List<string>();
             Conditions = new ConditionTracker();
             Economy = new CombatActionEconomy();
-            Economy.ResetDndTurn(GetDndBaseMoveBudget(), GetDndBonusMoveTiles(), UsesBonusActionGuard);
+            Economy.ResetSplitMpApTurn(
+                GetDndBaseMoveBudget(),
+                GetDndBonusMoveTiles(),
+                CombatActionEconomy.DefaultBaseApPerTurn,
+                EquipApBonus,
+                GuardApDiscount);
         }
 
         public static CombatantState FromHero(
@@ -1023,8 +1028,21 @@ namespace RealmzCore.Combat
         public int GuardApDiscount { get; set; }
         public int MeleeApCost { get; set; } = CombatActionEconomy.StandardWeaponApCost;
         public int RangedApCost { get; set; } = CombatActionEconomy.StandardWeaponApCost;
-        public int GetDndBaseMoveBudget() => Math.Clamp(MovementMax > 0 ? MovementMax : 6, 4, 10);
-        public int GetDndBonusMoveTiles() => Math.Max(0, FreeMoveTiles) + Math.Max(0, EquipApBonus);
+        public int GetBaseMoveBudget()
+        {
+            if (Side == CombatSide.Hero)
+            {
+                // Base tactical movement starts at 4 MP (reduced only by heavy encumbrance); Set bonuses add extra MP.
+                return MovementMax > 0 && MovementMax <= 3
+                    ? Math.Max(2, MovementMax)
+                    : CombatActionEconomy.DefaultBaseMpPerTurn;
+            }
+
+            return Math.Clamp(MovementMax > 0 ? Math.Min(MovementMax, 5) : CombatActionEconomy.DefaultBaseMpPerTurn, 3, 5);
+        }
+
+        public int GetDndBaseMoveBudget() => GetBaseMoveBudget();
+        public int GetDndBonusMoveTiles() => Math.Max(0, FreeMoveTiles);
         public int GetDndTotalMoveBudget() => GetDndBaseMoveBudget() + GetDndBonusMoveTiles();
         public bool UsesBonusActionGuard => GuardApDiscount > 0;
         public int ExhaustionStacks { get; set; }

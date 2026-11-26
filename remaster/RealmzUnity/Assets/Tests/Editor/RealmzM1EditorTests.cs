@@ -2915,7 +2915,7 @@ namespace Realmz.EditorTests
                 Assert.That(rig.ApplyScrollZoomDelta(180f), Is.EqualTo(0f), "Bug #7: zoom must lock while Encounter Intercept is open.");
                 Assert.That(rig.ApplyKeyboardPanInput(Vector2.up, false, 0.2f), Is.EqualTo(Vector3.zero), "Bug #7: pan must lock while Intercept open.");
 
-                // Dark Ambush disables Evade and labels primary action Defend Yourself
+                // Dark Ambush disables Evade and labels primary action Defend
                 party.TorchTurnsRemaining = 0;
                 EncounterScoutingReport darkReport = session.CreateScoutingReport(zone, pack);
                 Assert.That(darkReport.IsAmbushedInDark, Is.True);
@@ -2923,7 +2923,7 @@ namespace Realmz.EditorTests
                 UnityEngine.UI.Button evadeBtn = FindDescendantByName(canvas.transform, "InterceptEvadeBtn").GetComponent<UnityEngine.UI.Button>();
                 UnityEngine.UI.Button engageBtn = FindDescendantByName(canvas.transform, "InterceptEngageBtn").GetComponent<UnityEngine.UI.Button>();
                 Assert.That(evadeBtn.interactable, Is.False);
-                Assert.That(engageBtn.GetComponentInChildren<TextMeshProUGUI>(true).text, Is.EqualTo("Defend Yourself"));
+                Assert.That(engageBtn.GetComponentInChildren<TextMeshProUGUI>(true).text, Is.EqualTo("Defend"));
                 Assert.That(FindDescendantByName(canvas.transform, "InterceptQuickResolveBtn").gameObject.activeSelf, Is.False);
 
                 bool engaged = false;
@@ -3184,10 +3184,11 @@ namespace Realmz.EditorTests
                 hud.RefreshCombatHud(session, bundle, CombatActionMode.Smart, -1, "1x");
                 Assert.That(deployBanner.gameObject.activeSelf, Is.False);
                 Assert.That(actionBar.gameObject.activeSelf, Is.True);
-                Assert.That(FindDescendantByName(actionBar, "ApValueLabel").GetComponent<TextMeshProUGUI>().text, Does.Contain("MP"));
+                Assert.That(FindDescendantByName(actionBar, "MpValueLabel").GetComponent<TextMeshProUGUI>().text, Does.Contain("MP"));
+                Assert.That(FindDescendantByName(actionBar, "ApValueLabel").GetComponent<TextMeshProUGUI>().text, Does.Contain("AP"));
                 Assert.That(FindDescendantByName(actionBar, "DashBtn"), Is.Not.Null);
-                Assert.That(FindDescendantByPathSuffix(actionBar, "GuardBtn/TopRow/ApBadge/ApBadgeLabel").GetComponent<TextMeshProUGUI>().text, Is.EqualTo("Bonus"));
-                Assert.That(FindDescendantByPathSuffix(actionBar, "HotbarSlot_0/TopRow/CostCol/ApCost").GetComponent<TextMeshProUGUI>().text, Is.EqualTo("Action"));
+                Assert.That(FindDescendantByPathSuffix(actionBar, "GuardBtn/TopRow/ApBadge/ApBadgeLabel").GetComponent<TextMeshProUGUI>().text, Does.EndWith("AP"));
+                Assert.That(FindDescendantByPathSuffix(actionBar, "HotbarSlot_0/TopRow/CostCol/ApCost").GetComponent<TextMeshProUGUI>().text, Does.EndWith("AP"));
 
                 // 3. Compact 4-across Victory Loot grid (216x72, constraintCount == 4, 12 items = 3 visible rows)
                 List<HeroVictorySummary> hv = new List<HeroVictorySummary>();

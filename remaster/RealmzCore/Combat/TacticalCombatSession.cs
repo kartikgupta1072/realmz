@@ -1072,8 +1072,10 @@ namespace RealmzCore.Combat
                 provokesAoO = WouldStepProvokeAoO(attackerId, attacker.Position, fromPos.Value);
             }
 
-            int apCost = attacker.Economy.IsUnifiedApMode ? Math.Max(1, attacker.MeleeApCost) : 1;
-            bool hasAction = ignoreActionBudget || attacker.Economy.HasSlot(CombatActionSlot.MainAction);
+            int apCost = attacker.Economy.UsesApForActions ? Math.Max(1, attacker.MeleeApCost) : 1;
+            bool hasAction = ignoreActionBudget || (attacker.Economy.UsesApForActions
+                ? attacker.Economy.HasApFor(apCost)
+                : attacker.Economy.HasSlot(CombatActionSlot.MainAction));
             bool canExecute = adjacent && attacker.Side != defender.Side && hasAction;
             string reason = !adjacent
                 ? "Target is out of melee reach."
@@ -1165,10 +1167,12 @@ namespace RealmzCore.Combat
             RollAdvantageState advantageState = ComputeRangedAdvantageState(attacker, defender, pos, out List<string> advTags);
             tags.AddRange(advTags);
 
-            int apCost = attacker.Economy.IsUnifiedApMode ? Math.Max(1, attacker.RangedApCost) : 1;
+            int apCost = attacker.Economy.UsesApForActions ? Math.Max(1, attacker.RangedApCost) : 1;
             bool inRange = hasRanged && dist > 0 && dist <= effectiveRange;
             bool losClear = los.Kind != LosKind.Blocked;
-            bool hasAction = ignoreActionBudget || attacker.Economy.HasSlot(CombatActionSlot.MainAction);
+            bool hasAction = ignoreActionBudget || (attacker.Economy.UsesApForActions
+                ? attacker.Economy.HasApFor(apCost)
+                : attacker.Economy.HasSlot(CombatActionSlot.MainAction));
             bool canExecute = inRange && losClear && attacker.Side != defender.Side && hasAction;
             string reason = !hasRanged
                 ? "No ranged weapon equipped."
@@ -1277,10 +1281,12 @@ namespace RealmzCore.Combat
                 tags.Add("IMMUNE");
             }
 
-            int apCost = caster.Economy.IsUnifiedApMode ? CombatWeaponCosts.GetSpellApCost(spell) : 1;
+            int apCost = caster.Economy.UsesApForActions ? CombatWeaponCosts.GetSpellApCost(spell) : 1;
             bool silenced = caster.Conditions.Has(CharConditionId.Silenced);
             bool enoughSp = caster.Sp >= spell.SpCost;
-            bool hasAction = ignoreActionBudget || caster.Economy.HasSlot(CombatActionSlot.MainAction);
+            bool hasAction = ignoreActionBudget || (caster.Economy.UsesApForActions
+                ? caster.Economy.HasApFor(apCost)
+                : caster.Economy.HasSlot(CombatActionSlot.MainAction));
             bool canExecute = caster.IsConscious && !silenced && enoughSp && hasAction && footprint.InRange && footprint.HasLineOfSight;
 
             string reason = silenced
@@ -1334,8 +1340,10 @@ namespace RealmzCore.Combat
             GridCoord dest = new GridCoord(target.Position.X + dx, target.Position.Y + dy);
 
             bool adjacent = pos.ChebyshevDistance(target.Position) == 1;
-            int apCost = actor.Economy.IsUnifiedApMode ? CombatActionEconomy.DefaultShoveApCost : 1;
-            bool hasAp = actor.Economy.HasSlot(CombatActionSlot.BonusAction);
+            int apCost = actor.Economy.UsesApForActions ? CombatActionEconomy.DefaultShoveApCost : 1;
+            bool hasAp = actor.Economy.UsesApForActions
+                ? actor.Economy.HasApFor(apCost)
+                : actor.Economy.HasSlot(CombatActionSlot.BonusAction);
             bool isAlly = actor.Side == target.Side;
 
             CombatDestructibleProp? destProp = Grid.InBounds(dest) ? GetDestructiblePropAt(dest) : null;
@@ -1415,7 +1423,14 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, preview.Reason);
             }
 
-            actor.Economy.CommitSlot(CombatActionSlot.BonusAction, lockMoveUndo: true);
+            if (actor.Economy.UsesApForActions)
+            {
+                actor.Economy.SpendAp(preview.ApCost, lockMoveUndo: true);
+            }
+            else
+            {
+                actor.Economy.CommitSlot(CombatActionSlot.BonusAction, lockMoveUndo: true);
+            }
             actor.HasTriggeredIrreversibleEvent = true;
 
             if (!preview.IsAllyShove)
@@ -1601,7 +1616,9 @@ namespace RealmzCore.Combat
             {
                 return new CombatActionResult(
                     false,
-                    actor.Economy.IsDnd5eMode ? "Destination is unreachable within remaining MP." : "Destination is unreachable within remaining AP.");
+                    (actor.Economy.IsDnd5eMode || actor.Economy.IsSplitMpApMode)
+                        ? "Destination is unreachable within remaining MP."
+                        : "Destination is unreachable within remaining AP.");
             }
 
             int moveBefore = moveBudget;
@@ -1631,7 +1648,7 @@ namespace RealmzCore.Combat
             }
 
             int moveSpent = Math.Max(0, moveBefore - (actor.Economy.IsUnifiedApMode ? actor.Economy.CurrentAp : actor.Economy.MoveRemaining));
-            string unitLabel = actor.Economy.IsDnd5eMode ? "MP" : "AP";
+            string unitLabel = (actor.Economy.IsDnd5eMode || actor.Economy.IsSplitMpApMode) ? "MP" : "AP";
             AppendLog(
                 actor.Id,
                 actor.Name,
@@ -1793,7 +1810,14 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, preview.Reason);
             }
 
-            actor.Economy.CommitSlot(CombatActionSlot.MainAction, lockMoveUndo: true);
+            if (actor.Economy.UsesApForActions)
+            {
+                actor.Economy.SpendAp(preview.ApCost, lockMoveUndo: true);
+            }
+            else
+            {
+                actor.Economy.CommitSlot(CombatActionSlot.MainAction, lockMoveUndo: true);
+            }
             actor.HasTriggeredIrreversibleEvent = true;
 
             List<AttackOutcome> outcomes = new List<AttackOutcome>();
@@ -1835,7 +1859,14 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, preview.Reason);
             }
 
-            actor.Economy.CommitSlot(CombatActionSlot.MainAction, lockMoveUndo: true);
+            if (actor.Economy.UsesApForActions)
+            {
+                actor.Economy.SpendAp(preview.ApCost, lockMoveUndo: true);
+            }
+            else
+            {
+                actor.Economy.CommitSlot(CombatActionSlot.MainAction, lockMoveUndo: true);
+            }
             actor.HasTriggeredIrreversibleEvent = true;
 
             int coverPenalty = preview.LosResult != null ? preview.LosResult.CoverPenaltyPct : 0;
@@ -2029,8 +2060,11 @@ namespace RealmzCore.Combat
 
             if (isAdjacent)
             {
-                apCost = actor.Economy.IsUnifiedApMode ? Math.Max(1, actor.MeleeApCost) : 1;
-                if (!actor.Economy.HasSlot(CombatActionSlot.MainAction))
+                apCost = actor.Economy.UsesApForActions ? Math.Max(1, actor.MeleeApCost) : 1;
+                bool hasAction = actor.Economy.UsesApForActions
+                    ? actor.Economy.HasApFor(apCost)
+                    : actor.Economy.HasSlot(CombatActionSlot.MainAction);
+                if (!hasAction)
                 {
                     return new CombatActionResult(false, actor.Economy.IsDnd5eMode ? "Main Action already used this turn." : $"Insufficient AP (needs {apCost} AP, has {actor.Economy.CurrentAp}).");
                 }
@@ -2057,8 +2091,11 @@ namespace RealmzCore.Combat
                     return new CombatActionResult(false, "Line of sight to prop is blocked.");
                 }
 
-                apCost = actor.Economy.IsUnifiedApMode ? Math.Max(1, actor.RangedApCost) : 1;
-                if (!actor.Economy.HasSlot(CombatActionSlot.MainAction))
+                apCost = actor.Economy.UsesApForActions ? Math.Max(1, actor.RangedApCost) : 1;
+                bool hasAction = actor.Economy.UsesApForActions
+                    ? actor.Economy.HasApFor(apCost)
+                    : actor.Economy.HasSlot(CombatActionSlot.MainAction);
+                if (!hasAction)
                 {
                     return new CombatActionResult(false, actor.Economy.IsDnd5eMode ? "Main Action already used this turn." : $"Insufficient AP (needs {apCost} AP, has {actor.Economy.CurrentAp}).");
                 }
@@ -2073,7 +2110,14 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, "Prop is out of melee reach.");
             }
 
-            actor.Economy.CommitSlot(CombatActionSlot.MainAction, lockMoveUndo: true);
+            if (actor.Economy.UsesApForActions)
+            {
+                actor.Economy.SpendAp(apCost, lockMoveUndo: true);
+            }
+            else
+            {
+                actor.Economy.CommitSlot(CombatActionSlot.MainAction, lockMoveUndo: true);
+            }
             actor.HasTriggeredIrreversibleEvent = true;
 
             CombatActionResult dmgRes = DamageDestructibleProp(prop.PropId, rolledDmg, "Physical", actor.Id);
@@ -2104,13 +2148,23 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, "Prop is not adjacent for Shove.");
             }
 
-            int apCost = actor.Economy.IsUnifiedApMode ? CombatActionEconomy.DefaultShoveApCost : 1;
-            if (!actor.Economy.HasSlot(CombatActionSlot.BonusAction))
+            int apCost = actor.Economy.UsesApForActions ? CombatActionEconomy.DefaultShoveApCost : 1;
+            bool hasAp = actor.Economy.UsesApForActions
+                ? actor.Economy.HasApFor(apCost)
+                : actor.Economy.HasSlot(CombatActionSlot.BonusAction);
+            if (!hasAp)
             {
                 return new CombatActionResult(false, actor.Economy.IsDnd5eMode ? "Bonus Action already used this turn." : $"Insufficient AP (Shove needs {apCost} AP, has {actor.Economy.CurrentAp}).");
             }
 
-            actor.Economy.CommitSlot(CombatActionSlot.BonusAction, lockMoveUndo: true);
+            if (actor.Economy.UsesApForActions)
+            {
+                actor.Economy.SpendAp(apCost, lockMoveUndo: true);
+            }
+            else
+            {
+                actor.Economy.CommitSlot(CombatActionSlot.BonusAction, lockMoveUndo: true);
+            }
             actor.HasTriggeredIrreversibleEvent = true;
 
             int dx = Math.Sign(prop.Coord.X - actor.Position.X);
@@ -2218,7 +2272,14 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, preview.Reason);
             }
 
-            actor.Economy.CommitSlot(CombatActionSlot.MainAction, lockMoveUndo: true);
+            if (actor.Economy.UsesApForActions)
+            {
+                actor.Economy.SpendAp(preview.ApCost, lockMoveUndo: true);
+            }
+            else
+            {
+                actor.Economy.CommitSlot(CombatActionSlot.MainAction, lockMoveUndo: true);
+            }
             actor.HasTriggeredIrreversibleEvent = true;
 
             List<AttackOutcome> outcomes = new List<AttackOutcome>();
@@ -2279,8 +2340,11 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, "Line of sight is blocked for TonguePull.");
             }
 
-            int apCost = actor.Economy.IsUnifiedApMode ? CombatActionEconomy.DefaultShoveApCost : 1;
-            if (!actor.Economy.HasSlot(CombatActionSlot.BonusAction))
+            int apCost = actor.Economy.UsesApForActions ? CombatActionEconomy.DefaultShoveApCost : 1;
+            bool hasAp = actor.Economy.UsesApForActions
+                ? actor.Economy.HasApFor(apCost)
+                : actor.Economy.HasSlot(CombatActionSlot.BonusAction);
+            if (!hasAp)
             {
                 return new CombatActionResult(false, actor.Economy.IsDnd5eMode ? "Bonus Action already used this turn." : $"Insufficient AP (TonguePull needs {apCost} AP, has {actor.Economy.CurrentAp}).");
             }
@@ -2291,7 +2355,14 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, "No open walkable tile to pull target into.");
             }
 
-            actor.Economy.CommitSlot(CombatActionSlot.BonusAction, lockMoveUndo: true);
+            if (actor.Economy.UsesApForActions)
+            {
+                actor.Economy.SpendAp(apCost, lockMoveUndo: true);
+            }
+            else
+            {
+                actor.Economy.CommitSlot(CombatActionSlot.BonusAction, lockMoveUndo: true);
+            }
             actor.HasTriggeredIrreversibleEvent = true;
 
             int pullDmg = Math.Max(1, DiceSpec.Parse("1d4").Roll(Roller));
@@ -2635,13 +2706,17 @@ namespace RealmzCore.Combat
             int bonusMove = actor.GetDndBaseMoveBudget();
             if (!actor.Economy.PerformDash(bonusMove))
             {
-                return new CombatActionResult(false, "Main Action already used this turn.");
+                string failMsg = actor.Economy.IsSplitMpApMode
+                    ? $"Insufficient AP (Dash needs {CombatActionEconomy.DefaultDashApCost} AP, has {actor.Economy.CurrentAp})."
+                    : "Main Action already used this turn.";
+                return new CombatActionResult(false, failMsg);
             }
 
+            int dashAp = actor.Economy.IsSplitMpApMode ? CombatActionEconomy.DefaultDashApCost : 1;
             actor.HasTriggeredIrreversibleEvent = true;
-            string msg = $"{actor.Name} takes DASH (+{bonusMove} MP, {actor.Economy.MoveRemaining} MP remaining).";
+            string msg = $"{actor.Name} takes DASH (+{bonusMove} MP, {dashAp} AP, {actor.Economy.MoveRemaining} MP remaining).";
             AppendLog(actor.Id, actor.Name, "Dash", msg);
-            return new CombatActionResult(true, msg, apSpent: 1);
+            return new CombatActionResult(true, msg, apSpent: dashAp);
         }
 
         public CombatActionResult GuardOverwatch()
@@ -2658,8 +2733,8 @@ namespace RealmzCore.Combat
             }
 
             CombatActionSlot guardSlot = actor.Economy.GuardSlot;
-            int guardCost = actor.Economy.IsUnifiedApMode ? actor.Economy.EffectiveGuardApCost : 1;
-            if (actor.Economy.IsUnifiedApMode)
+            int guardCost = actor.Economy.UsesApForActions ? actor.Economy.EffectiveGuardApCost : 1;
+            if (actor.Economy.UsesApForActions)
             {
                 if (!actor.Economy.SpendAp(guardCost, lockMoveUndo: true))
                 {
@@ -2705,8 +2780,11 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, "Requires an active conscious hero turn to light a torch.");
             }
 
-            int torchCost = actor.Economy.IsUnifiedApMode ? CombatActionEconomy.DefaultTorchApCost : 1;
-            if (!actor.Economy.HasSlot(CombatActionSlot.BonusAction))
+            int torchCost = actor.Economy.UsesApForActions ? CombatActionEconomy.DefaultTorchApCost : 1;
+            bool hasTorchAp = actor.Economy.UsesApForActions
+                ? actor.Economy.HasApFor(torchCost)
+                : actor.Economy.HasSlot(CombatActionSlot.BonusAction);
+            if (!hasTorchAp)
             {
                 return new CombatActionResult(false, actor.Economy.IsDnd5eMode ? "Bonus Action already used this turn." : $"Insufficient AP (Light Torch needs {torchCost} AP).");
             }
@@ -2716,7 +2794,14 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, feedback);
             }
 
-            actor.Economy.CommitSlot(CombatActionSlot.BonusAction, lockMoveUndo: true);
+            if (actor.Economy.UsesApForActions)
+            {
+                actor.Economy.SpendAp(torchCost, lockMoveUndo: true);
+            }
+            else
+            {
+                actor.Economy.CommitSlot(CombatActionSlot.BonusAction, lockMoveUndo: true);
+            }
             actor.HasTriggeredIrreversibleEvent = true;
 
             string costLabel = actor.Economy.IsDnd5eMode ? "Bonus Action" : $"{torchCost} AP";
@@ -2739,8 +2824,11 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, "No conscious actor.");
             }
 
-            int potionCost = actor.Economy.IsUnifiedApMode ? CombatActionEconomy.DefaultPotionApCost : 1;
-            if (!actor.Economy.HasSlot(CombatActionSlot.BonusAction))
+            int potionCost = actor.Economy.UsesApForActions ? CombatActionEconomy.DefaultPotionApCost : 1;
+            bool hasPotionAp = actor.Economy.UsesApForActions
+                ? actor.Economy.HasApFor(potionCost)
+                : actor.Economy.HasSlot(CombatActionSlot.BonusAction);
+            if (!hasPotionAp)
             {
                 return new CombatActionResult(false, actor.Economy.IsDnd5eMode ? "Bonus Action already used this turn." : $"Insufficient AP (Potion needs {potionCost} AP).");
             }
@@ -2758,7 +2846,14 @@ namespace RealmzCore.Combat
                 }
             }
 
-            actor.Economy.CommitSlot(CombatActionSlot.BonusAction, lockMoveUndo: true);
+            if (actor.Economy.UsesApForActions)
+            {
+                actor.Economy.SpendAp(potionCost, lockMoveUndo: true);
+            }
+            else
+            {
+                actor.Economy.CommitSlot(CombatActionSlot.BonusAction, lockMoveUndo: true);
+            }
             actor.HasTriggeredIrreversibleEvent = true;
 
             CombatantState target = !string.IsNullOrWhiteSpace(targetId)
@@ -4530,10 +4625,12 @@ namespace RealmzCore.Combat
                 return;
             }
 
-            actor.Economy.ResetDndTurn(
+            actor.Economy.ResetSplitMpApTurn(
                 actor.GetDndBaseMoveBudget(),
                 actor.GetDndBonusMoveTiles(),
-                actor.UsesBonusActionGuard);
+                CombatActionEconomy.DefaultBaseApPerTurn,
+                actor.EquipApBonus,
+                actor.GuardApDiscount);
             actor.TurnStartPosition = actor.Position;
             actor.HasTriggeredIrreversibleEvent = false;
             actor.IsGuarding = false;

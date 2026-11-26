@@ -466,23 +466,21 @@ namespace RealmzCore.Tests
             TacticalCombatSession session = new TacticalCombatSession(new CombatGrid(10, 10), new[] { cSlow, cFast, dummy });
 
             Assert.Equal("h_fast", session.CurrentActorId);
-            Assert.True(cFast.Economy.IsDnd5eMode);
-            Assert.Equal(7, cFast.Economy.MoveBudget);
-            Assert.True(cFast.Economy.HasSlot(CombatActionSlot.MainAction));
-            Assert.True(cFast.Economy.HasSlot(CombatActionSlot.BonusAction));
+            Assert.True(cFast.Economy.IsSplitMpApMode);
+            Assert.Equal(4, cFast.Economy.MoveBudget);
+            Assert.Equal(6, cFast.Economy.MaxAp);
+            Assert.Equal(6, cFast.Economy.CurrentAp);
             session.EndTurn();
 
             Assert.Equal("h_slow", session.CurrentActorId);
-            Assert.Equal(5, cSlow.Economy.MoveBudget);
-            Assert.True(cSlow.Economy.HasSlot(CombatActionSlot.MainAction));
-            Assert.True(cSlow.Economy.HasSlot(CombatActionSlot.BonusAction));
+            Assert.Equal(4, cSlow.Economy.MoveBudget);
+            Assert.Equal(6, cSlow.Economy.CurrentAp);
             session.EndTurn();
             session.EndTurn(); // dummy
 
             Assert.Equal(2, session.RoundNumber);
-            Assert.Equal(7, cFast.Economy.MoveRemaining);
-            Assert.True(cFast.Economy.HasSlot(CombatActionSlot.MainAction));
-            Assert.True(cFast.Economy.HasSlot(CombatActionSlot.BonusAction));
+            Assert.Equal(4, cFast.Economy.MoveRemaining);
+            Assert.Equal(6, cFast.Economy.CurrentAp);
         }
 
         [Fact]

@@ -113,9 +113,17 @@ Shader "Realmz/CartographyWater"
                 half3 overlayWater = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, uvB).rgb;
                 half3 col = lerp(baseWater, overlayWater, 0.35h) * _BaseColor.rgb;
 
-                // Subtle normal-mapped pixel surface relief
-                half3 nTex = UnpackNormal(SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, uvA));
-                half3 nWS = normalize(half3(nTex.x * 0.55h, 1.0h, nTex.y * 0.55h));
+                // Sleek animated liquid ripple normals quantized on the 64 px/m pixel grid (eliminates chunky clay bumps)
+                half3 nTexA = UnpackNormal(SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, uvA));
+                float tRipple = waterTime * 1.65;
+                float r1 = sin(snappedWS.x * 11.0 + snappedWS.y * 5.0 - tRipple * 2.1);
+                float r2 = sin(snappedWS.x * 6.5 - snappedWS.y * 13.0 + tRipple * 1.55);
+                float waveDx = cos(snappedWS.x * 11.0 + snappedWS.y * 5.0 - tRipple * 2.1) * 0.14
+                             + cos(snappedWS.x * 6.5 - snappedWS.y * 13.0 + tRipple * 1.55) * 0.08;
+                float waveDz = cos(snappedWS.x * 11.0 + snappedWS.y * 5.0 - tRipple * 2.1) * 0.06
+                             - cos(snappedWS.x * 6.5 - snappedWS.y * 13.0 + tRipple * 1.55) * 0.14;
+                half3 nWS = normalize(half3((half)waveDx + nTexA.x * 0.08h, 1.0h, (half)waveDz + nTexA.y * 0.08h));
+                half rippleCrest = saturate(0.5h + 0.5h * (half)(r1 * 0.6 + r2 * 0.4));
 
                 // Global top-down lightmap (bridge shadows, cloud dapples, lantern pools) + baked SDF shoreline proximity
                 half4 tdLm = half4(1.0h, 1.0h, 1.0h, 0.0h);
@@ -128,7 +136,9 @@ Shader "Realmz/CartographyWater"
                     shoreProx = SAMPLE_TEXTURE2D(_WorldStaticMap, sampler_WorldStaticMap, lmUV).g;
                 }
 
-                // Shallow bank absorption blend toward dark mossy riverbed mud
+                // Shallow bank absorption blend toward dark mossy riverbed mud + subtle scrolling caustic shimmer
+                half caustic = smoothstep(0.58h, 0.95h, rippleCrest) * 0.06h * (1.0h - shoreProx);
+                col += col * caustic;
                 half bankMud = smoothstep(0.55h, 0.96h, shoreProx) * 0.42h;
                 col = lerp(col, half3(0.11h, 0.18h, 0.14h), bankMud);
 
@@ -144,6 +154,10 @@ Shader "Realmz/CartographyWater"
                 half ndl = saturate(dot(nWS, mainLight.direction));
                 half shadowAtten = lerp(1.0h, mainLight.shadowAttenuation, 0.94h);
 
+                half3 mainHalf = SafeNormalize(mainLight.direction + viewDirWS);
+                half mainSpecGlint = pow(saturate(dot(nWS, mainHalf)), 144.0h) * 0.85h * shadowAtten;
+                half mainSpecRibbon = pow(saturate(dot(nWS, mainHalf)), 36.0h) * 0.16h * rippleCrest * shadowAtten;
+
                 half3 addLighting = half3(0.0h, 0.0h, 0.0h);
                 #if defined(_ADDITIONAL_LIGHTS)
                 uint pixelLightCount = GetAdditionalLightsCount();
@@ -155,8 +169,10 @@ Shader "Realmz/CartographyWater"
                     half addAtten = addLight.distanceAttenuation * addLight.shadowAttenuation;
                     half addNdotL = saturate(dot(nWS, addLight.direction));
                     half3 addHalf = SafeNormalize(addLight.direction + viewDirWS);
-                    half addSpec = pow(saturate(dot(nWS, addHalf)), 28.0h) * 1.15h;
-                    addLighting += (col * (addNdotL * 1.35h) + addSpec) * addLight.color * addAtten;
+                    half ndh = saturate(dot(nWS, addHalf));
+                    half addGlint = pow(ndh, 144.0h) * 1.45h;
+                    half addRibbon = pow(ndh, 36.0h) * 0.24h * rippleCrest;
+                    addLighting += (col * (addNdotL * 0.42h) + (addGlint + addRibbon)) * addLight.color * addAtten;
                 }
                 #endif
 
@@ -165,8 +181,10 @@ Shader "Realmz/CartographyWater"
                     half addAtten = addLight.distanceAttenuation * addLight.shadowAttenuation;
                     half addNdotL = saturate(dot(nWS, addLight.direction));
                     half3 addHalf = SafeNormalize(addLight.direction + viewDirWS);
-                    half addSpec = pow(saturate(dot(nWS, addHalf)), 28.0h) * 1.15h;
-                    addLighting += (col * (addNdotL * 1.35h) + addSpec) * addLight.color * addAtten;
+                    half ndh = saturate(dot(nWS, addHalf));
+                    half addGlint = pow(ndh, 144.0h) * 1.45h;
+                    half addRibbon = pow(ndh, 36.0h) * 0.24h * rippleCrest;
+                    addLighting += (col * (addNdotL * 0.42h) + (addGlint + addRibbon)) * addLight.color * addAtten;
                 LIGHT_LOOP_END
                 #endif
 
@@ -182,7 +200,7 @@ Shader "Realmz/CartographyWater"
                 float distToBank = (1.0 - (float)shoreProx) * 0.55 + wavePerturb;
                 float waveEdge = 0.16 + 0.04 * sin(snappedWS.x * 5.0 + snappedWS.y * 3.0 + floor(waterTime * 4.0) * 0.45);
                 float edgeNoise = Hash21(floor(snappedWS * 64.0));
-                half foam = smoothstep(waveEdge + 0.045, waveEdge - 0.035, distToBank + edgeNoise * 0.05) * 0.46h;
+                half foam = smoothstep(waveEdge + 0.045, waveEdge - 0.035, distToBank + edgeNoise * 0.05) * 0.34h;
 
                 half3 ambientSH = SampleSH(nWS);
                 half3 ambientCloudMod = lerp(half3(1.0h, 1.0h, 1.0h), tdLm.rgb, 0.40h);
@@ -190,10 +208,10 @@ Shader "Realmz/CartographyWater"
                 half3 sceneAmbient = ambientSH * ambientCloudMod;
                 half3 waterFloor = half3(0.012h, 0.024h, 0.044h) * ambientCloudMod;
                 half ndotv = saturate(dot(nWS, viewDirWS));
-                half fresnel = saturate(0.14h + 0.26h * pow(1.0h - ndotv, 2.0h));
-                half3 skyRefl = max(ambientSH * 1.15h + mainLight.color * (0.12h * shadowAtten), half3(0.028h, 0.046h, 0.088h)) * ambientCloudMod;
-                half3 lanternPool = col * half3(1.0h, 0.62h, 0.24h) * (tdLm.a * 1.15h);
-                half3 lit = col * (sceneDirect + sceneAmbient + waterFloor) + skyRefl * fresnel + addLighting + lanternPool;
+                half fresnel = saturate(0.14h + 0.28h * pow(1.0h - ndotv, 2.2h));
+                half3 skyRefl = max(ambientSH * 1.15h + mainLight.color * (0.14h * shadowAtten), half3(0.028h, 0.046h, 0.088h)) * ambientCloudMod;
+                half3 lanternPool = _ShimmerColor.rgb * half3(1.0h, 0.68h, 0.28h) * (tdLm.a * (0.35h + 0.55h * rippleCrest));
+                half3 lit = col * (sceneDirect + sceneAmbient + waterFloor) + skyRefl * fresnel + mainLight.color * (mainSpecGlint + mainSpecRibbon) + addLighting + lanternPool;
 
                 half3 foamLight = (mainLight.color * (0.45h + 0.55h * ndl) * shadowAtten * 0.65h + ambientSH * 1.15h) * ambientCloudMod;
                 half3 foamColor = _ShimmerColor.rgb * max(foamLight, half3(0.05h, 0.07h, 0.12h)) + lanternPool * 0.55h;

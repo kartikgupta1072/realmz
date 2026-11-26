@@ -901,6 +901,7 @@ namespace RealmzCore.Exploration
         public const int TorchItemId = 805;
         public const int RationItemId = 807;
         public const int DefaultFoodRations = 6;
+        public const int DefaultTorchDurationMinutes = 120;
 
         private readonly List<PartyMemberState> _members;
         private readonly List<InventoryItem> _stash;
@@ -966,7 +967,36 @@ namespace RealmzCore.Exploration
         public IReadOnlyList<InventoryItem> Stash => _stash;
         public int Gold { get; set; }
         public bool HasBoat { get; set; }
-        public int TorchTurnsRemaining { get; set; }
+        public double TorchMinutesRemaining { get; set; }
+        public int TorchTurnsRemaining
+        {
+            get => (int)Math.Ceiling(Math.Max(0.0, TorchMinutesRemaining));
+            set => TorchMinutesRemaining = Math.Max(0, value);
+        }
+
+        public bool BurnTorchMinutes(double minutes)
+        {
+            if (minutes <= 0.0 || TorchMinutesRemaining <= 0.0)
+            {
+                return false;
+            }
+
+            TorchMinutesRemaining = Math.Max(0.0, TorchMinutesRemaining - minutes);
+            return TorchMinutesRemaining <= 0.0;
+        }
+
+        public static string FormatTorchDuration(double minutes)
+        {
+            int totalMins = Math.Max(0, (int)Math.Ceiling(minutes));
+            if (totalMins <= 0)
+            {
+                return "Out";
+            }
+
+            int hours = totalMins / 60;
+            int mins = totalMins % 60;
+            return hours > 0 ? $"{hours}h {mins:00}m" : $"{mins}m";
+        }
         public int QuickBandageCharges { get; set; }
         public bool DeferLevelUp { get; set; }
         public int FoodRations { get; set; }
@@ -1066,8 +1096,8 @@ namespace RealmzCore.Exploration
                 return false;
             }
 
-            TorchTurnsRemaining += 30;
-            feedbackMessage = $"Lit a Torch (+30 turns; {TorchTurnsRemaining} active).";
+            TorchMinutesRemaining += DefaultTorchDurationMinutes;
+            feedbackMessage = $"Lit a Torch (+{FormatTorchDuration(DefaultTorchDurationMinutes)}; {FormatTorchDuration(TorchMinutesRemaining)} active).";
             return true;
         }
 
@@ -2006,8 +2036,8 @@ namespace RealmzCore.Exploration
                 {
                     return false;
                 }
-                TorchTurnsRemaining += 30;
-                feedbackMessage = $"Lit a Torch (+30 dungeon turns; {TorchTurnsRemaining} active).";
+                TorchMinutesRemaining += DefaultTorchDurationMinutes;
+                feedbackMessage = $"Lit a Torch (+{FormatTorchDuration(DefaultTorchDurationMinutes)}; {FormatTorchDuration(TorchMinutesRemaining)} active).";
                 return true;
             }
 
@@ -2254,9 +2284,9 @@ namespace RealmzCore.Exploration
                     torchChargesConsumed = 1;
                     burnedNewStashTorch = true;
                 }
-                else if (TorchTurnsRemaining >= 15)
+                else if (TorchMinutesRemaining >= 30.0)
                 {
-                    TorchTurnsRemaining -= 15;
+                    TorchMinutesRemaining = Math.Max(0.0, TorchMinutesRemaining - 30.0);
                 }
                 else
                 {
@@ -2270,7 +2300,7 @@ namespace RealmzCore.Exploration
                         turnsElapsed: 0,
                         torchChargesConsumed: 0,
                         quickBandagesRemaining: QuickBandageCharges,
-                        reason: "Full Rest outside Bywater town requires 1 Torch charge (or >= 15 active turns).",
+                        reason: "Full Rest outside Bywater town requires 1 Torch charge (or >= 30m active torch).",
                         consumedRation: false,
                         foodRationsRemaining: FoodRations);
                 }
@@ -2278,7 +2308,7 @@ namespace RealmzCore.Exploration
 
             if (burnedNewStashTorch)
             {
-                TorchTurnsRemaining = Math.Max(TorchTurnsRemaining, 20);
+                TorchMinutesRemaining = Math.Max(TorchMinutesRemaining, 60.0);
             }
 
             if (inHostileZone && roller != null && roller.NextInt(1, 101) <= 15)

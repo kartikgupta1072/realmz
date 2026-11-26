@@ -115,16 +115,16 @@ namespace RealmzCore.Tests
 
             TacticalCombatSession session = new TacticalCombatSession(grid, new[] { hero, enemy }, items: items);
 
-            // Free move + undo before Standard/Swift/AoO.
+            // Free move + undo before Standard/Swift/AoO (4 base MP -> 2 MP remaining after 2-tile step).
             Assert.False(session.CanUndoMove);
             Assert.True(session.TryMoveTo(new GridCoord(4, 2)).Success);
             Assert.Equal(new GridCoord(4, 2), hero.Position);
-            Assert.Equal(4, hero.Economy.MoveRemaining);
+            Assert.Equal(2, hero.Economy.MoveRemaining);
             Assert.True(session.CanUndoMove);
 
             Assert.True(session.UndoMove());
             Assert.Equal(new GridCoord(2, 2), hero.Position);
-            Assert.Equal(6, hero.Economy.MoveRemaining);
+            Assert.Equal(4, hero.Economy.MoveRemaining);
             Assert.False(session.CanUndoMove);
 
             // Swift action locks session-level UndoMove.

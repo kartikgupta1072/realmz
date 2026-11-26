@@ -116,8 +116,8 @@ namespace RealmzCore.Combat
                 if (session.Outcome != CombatOutcome.InProgress ||
                     !string.Equals(session.CurrentActorId, actor.Id, StringComparison.Ordinal) ||
                     !actor.IsConscious ||
-                    (actor.Economy.IsUnifiedApMode
-                        ? actor.Economy.CurrentAp <= 0
+                    (actor.Economy.UsesApForActions
+                        ? (actor.Economy.CurrentAp < CombatActionEconomy.LightWeaponApCost && actor.Economy.MoveRemaining <= 0)
                         : (!actor.Economy.HasSlot(CombatActionSlot.MainAction) &&
                            !actor.Economy.HasSlot(CombatActionSlot.BonusAction) &&
                            actor.Economy.MoveRemaining <= 0)) ||
@@ -296,8 +296,8 @@ namespace RealmzCore.Combat
                     continue;
                 }
 
-                // In D&D 5e Option A, if a melee monster could not reach an enemy after its normal Move, Dash once to close the gap.
-                if (actor.Economy.IsDnd5eMode &&
+                // In D&D 5e / Split MP-AP, if a melee monster could not reach an enemy after its normal Move, Dash once to close the gap.
+                if ((actor.Economy.IsDnd5eMode || actor.Economy.IsSplitMpApMode) &&
                     !tookAttackOrCast &&
                     !actor.PrefersRanged &&
                     actor.Economy.CanPerformDash &&
@@ -750,7 +750,7 @@ namespace RealmzCore.Combat
                             TacticalSpellPreview spCheck = session.PreviewSpellInternal(actor.Id, spellKey, spellCenter, tile.Coord, ignoreActionBudget: true);
                             if (actor.Economy.IsUnifiedApMode
                                 ? (tile.PathCost + spCheck.ApCost > actor.Economy.CurrentAp)
-                                : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasSlot(CombatActionSlot.MainAction)))
+                                : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasApFor(spCheck.ApCost)))
                             {
                                 continue;
                             }
@@ -782,7 +782,7 @@ namespace RealmzCore.Combat
                     if (rangedTarget != null &&
                         (ignoreBudget || (actor.Economy.IsUnifiedApMode
                             ? tile.PathCost + actor.RangedApCost <= actor.Economy.CurrentAp
-                            : (tile.PathCost <= actor.Economy.MoveRemaining && actor.Economy.HasSlot(CombatActionSlot.MainAction)))))
+                            : (tile.PathCost <= actor.Economy.MoveRemaining && actor.Economy.HasApFor(actor.RangedApCost)))))
                     {
                         int totalScore = rangedScore + elevBonus + aooPenalty - surfacePenalty - tile.PathCost;
                         if (totalScore > bestScore)
@@ -872,7 +872,7 @@ namespace RealmzCore.Combat
 
                 if (requireApForShot && (actor.Economy.IsUnifiedApMode
                     ? tile.PathCost + actor.RangedApCost > actor.Economy.CurrentAp
-                    : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasSlot(CombatActionSlot.MainAction))))
+                    : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasApFor(actor.RangedApCost))))
                 {
                     continue;
                 }
@@ -989,7 +989,7 @@ namespace RealmzCore.Combat
                 ReachableTileInfo tile = reachable[r];
                 if (!ignoreBudget && (actor.Economy.IsUnifiedApMode
                     ? tile.PathCost + actor.MeleeApCost > actor.Economy.CurrentAp
-                    : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasSlot(CombatActionSlot.MainAction))))
+                    : (tile.PathCost > actor.Economy.MoveRemaining || !actor.Economy.HasApFor(actor.MeleeApCost))))
                 {
                     continue;
                 }

@@ -289,6 +289,8 @@ namespace Realmz.Game
         private TextMeshProUGUI _combatApValueText;
         private GameObject _combatFreeMovePill;
         private TextMeshProUGUI _combatFreeMoveText;
+        private GameObject _mpValuePillRoot;
+        private TextMeshProUGUI _combatMpValueText;
         private readonly List<HotbarSlotRefs> _hotbarSlots = new List<HotbarSlotRefs>(MaxHotbarSlots);
         private readonly List<string> _visibleHotbarActionIds = new List<string>(16);
         private readonly List<string> _badgeKeysScratch = new List<string>(4);
@@ -303,6 +305,7 @@ namespace Realmz.Game
         private TextMeshProUGUI _combatPotionApBadgeText;
         private Button _combatTorchBtn;
         private Image _combatTorchBtnIcon;
+        private TextMeshProUGUI _combatTorchApBadgeText;
         private Button _combatShoveBtn;
         private Image _combatShoveBtnIcon;
         private Image _combatShoveSwiftBadgeBg;
@@ -1170,7 +1173,7 @@ namespace Realmz.Game
             if (_lastExploreTorch != session.Party.TorchTurnsRemaining)
             {
                 _lastExploreTorch = session.Party.TorchTurnsRemaining;
-                _topTorchText.text = $"Torch: {session.Party.TorchTurnsRemaining}t";
+                _topTorchText.text = $"Torch: {PartyState.FormatTorchDuration(session.Party.TorchMinutesRemaining)}";
             }
 
             if (_lastExploreTurn != session.TurnCount)
@@ -1352,7 +1355,7 @@ namespace Realmz.Game
             }
 
             _selectedHeroIndex = Mathf.Clamp(selectedHeroIndex, 0, party.Members.Count - 1);
-            _drawerGoldTorchLabel.text = $"Gold: {party.Gold}g  |  Torch: {party.TorchTurnsRemaining}t";
+            _drawerGoldTorchLabel.text = $"Gold: {party.Gold}g  |  Torch: {PartyState.FormatTorchDuration(party.TorchMinutesRemaining)}";
 
             for (int i = 0; i < _partyHeroSelectorBtns.Count; i++)
             {
@@ -2494,7 +2497,7 @@ namespace Realmz.Game
                 return;
             }
 
-            if (actor.Economy.IsDnd5eMode || !actor.Economy.IsUnifiedApMode)
+            if (actor.Economy.IsDnd5eMode)
             {
                 int moveBudget = Mathf.Max(1, actor.Economy.MoveBudget);
                 int moveRem = Mathf.Clamp(actor.Economy.MoveRemaining, 0, moveBudget);
@@ -2515,6 +2518,7 @@ namespace Realmz.Game
                     }
                 }
 
+                if (_mpValuePillRoot != null) _mpValuePillRoot.SetActive(false);
                 if (_combatApValueText != null)
                 {
                     _combatApValueText.text = $"{moveRem}/{moveBudget} MP";
@@ -2530,11 +2534,73 @@ namespace Realmz.Game
                     }
                 }
 
+                if (_actionSlotPillBg != null) _actionSlotPillBg.gameObject.SetActive(true);
+                if (_bonusSlotPillBg != null) _bonusSlotPillBg.gameObject.SetActive(true);
                 UpdateSlotPill(_actionSlotPillBg, _actionSlotPillText, actor.Economy.HasSlot(CombatActionSlot.MainAction), new Color(0.98f, 0.80f, 0.14f, 1f));
                 UpdateSlotPill(_bonusSlotPillBg, _bonusSlotPillText, actor.Economy.HasSlot(CombatActionSlot.BonusAction), new Color(0.98f, 0.56f, 0.18f, 1f));
                 UpdateSlotPill(_reactSlotPillBg, _reactSlotPillText, actor.Economy.HasSlot(CombatActionSlot.Reaction), new Color(0.68f, 0.54f, 0.98f, 1f));
                 return;
             }
+
+            if (actor.Economy.IsSplitMpApMode)
+            {
+                int moveBudget = Mathf.Max(1, actor.Economy.MoveBudget);
+                int moveRem = Mathf.Clamp(actor.Economy.MoveRemaining, 0, moveBudget);
+                Color moveCyan = new Color(0.24f, 0.88f, 0.96f, 1f);
+                if (_mpValuePillRoot != null)
+                {
+                    _mpValuePillRoot.SetActive(true);
+                    BywaterUiHelpers.SetBorderColor(_mpValuePillRoot.transform, moveRem > 0 ? moveCyan : BywaterUiHelpers.MutedSlate);
+                }
+                if (_combatMpValueText != null)
+                {
+                    _combatMpValueText.text = $"{moveRem}/{moveBudget} MP";
+                    _combatMpValueText.color = moveRem > 0 ? moveCyan : BywaterUiHelpers.MutedSlate;
+                }
+
+                int baseAp = Mathf.Max(CombatActionEconomy.DefaultBaseApPerTurn, actor.Economy.NominalMaxAp);
+                int maxAp = Mathf.Max(baseAp, actor.Economy.MaxAp);
+                int curAp = Mathf.Clamp(actor.Economy.CurrentAp, 0, maxAp);
+                int totalDiamonds = Mathf.Min(_apDiamondIcons.Count, maxAp);
+                Color gold = new Color(0.98f, 0.80f, 0.14f, 1f);
+                Color dim = new Color(0.22f, 0.25f, 0.32f, 0.90f);
+
+                for (int i = 0; i < _apDiamondIcons.Count; i++)
+                {
+                    Image d = _apDiamondIcons[i];
+                    if (d == null) continue;
+                    bool vis = i < totalDiamonds;
+                    d.gameObject.SetActive(vis);
+                    if (vis)
+                    {
+                        d.color = i < curAp ? gold : dim;
+                    }
+                }
+
+                if (_combatApValueText != null)
+                {
+                    _combatApValueText.text = $"{curAp}/{maxAp} AP";
+                    _combatApValueText.color = curAp > 0 ? gold : BywaterUiHelpers.MutedSlate;
+                }
+
+                if (_actionSlotPillBg != null) _actionSlotPillBg.gameObject.SetActive(false);
+                if (_bonusSlotPillBg != null) _bonusSlotPillBg.gameObject.SetActive(false);
+                UpdateSlotPill(_reactSlotPillBg, _reactSlotPillText, actor.Economy.HasReaction, new Color(0.68f, 0.54f, 0.98f, 1f));
+
+                if (_combatFreeMovePill != null)
+                {
+                    _combatFreeMovePill.SetActive(actor.Economy.HasUsedDash);
+                    if (actor.Economy.HasUsedDash && _combatFreeMoveText != null)
+                    {
+                        _combatFreeMoveText.text = "DASH";
+                    }
+                }
+                return;
+            }
+
+            if (_mpValuePillRoot != null) _mpValuePillRoot.SetActive(false);
+            if (_actionSlotPillBg != null) _actionSlotPillBg.gameObject.SetActive(false);
+            if (_bonusSlotPillBg != null) _bonusSlotPillBg.gameObject.SetActive(false);
 
             int basePlusSet = Mathf.Max(CombatActionEconomy.DefaultBaseApPerTurn, actor.Economy.NominalMaxAp);
             int maxThisTurn = Mathf.Max(basePlusSet, actor.Economy.MaxAp);
@@ -2617,12 +2683,24 @@ namespace Realmz.Game
             _visibleHotbarActionIds.Clear();
 
             int slotCursor = 0;
-            bool dndMode = actor == null || actor.Economy.IsDnd5eMode || !actor.Economy.IsUnifiedApMode;
-            bool hasMain = isHeroTurn && actor != null && actor.Economy.HasSlot(CombatActionSlot.MainAction);
-            bool hasBonus = isHeroTurn && actor != null && actor.Economy.HasSlot(CombatActionSlot.BonusAction);
+            bool legacyDnd = actor != null && actor.Economy.IsDnd5eMode;
+            bool usesAp = actor == null || actor.Economy.UsesApForActions;
+            int meleeAp = actor != null && usesAp ? Mathf.Max(1, actor.MeleeApCost) : 1;
+            int rangedAp = actor != null && usesAp ? Mathf.Max(1, actor.RangedApCost) : 1;
+            int guardAp = actor != null && usesAp ? Mathf.Max(1, actor.Economy.EffectiveGuardApCost) : 1;
+            int dashAp = usesAp ? CombatActionEconomy.DefaultDashApCost : 1;
+            int potionAp = usesAp ? CombatActionEconomy.DefaultPotionApCost : 1;
+            int shoveAp = usesAp ? CombatActionEconomy.DefaultShoveApCost : 1;
+            int torchAp = usesAp ? CombatActionEconomy.DefaultTorchApCost : 1;
+
+            bool hasMelee = isHeroTurn && actor != null && (usesAp ? actor.Economy.HasApFor(meleeAp) : actor.Economy.HasSlot(CombatActionSlot.MainAction));
+            bool hasRanged = isHeroTurn && actor != null && (usesAp ? actor.Economy.HasApFor(rangedAp) : actor.Economy.HasSlot(CombatActionSlot.MainAction));
             bool canDash = isHeroTurn && actor != null && actor.Economy.CanPerformDash;
-            bool bonusGuard = actor != null && actor.Economy.BonusActionGuardEnabled;
-            bool hasGuard = isHeroTurn && actor != null && actor.Economy.HasSlot(actor.Economy.GuardSlot);
+            bool hasPotionAp = isHeroTurn && actor != null && (usesAp ? actor.Economy.HasApFor(potionAp) : actor.Economy.HasSlot(CombatActionSlot.BonusAction));
+            bool hasShoveAp = isHeroTurn && actor != null && (usesAp ? actor.Economy.HasApFor(shoveAp) : actor.Economy.HasSlot(CombatActionSlot.BonusAction));
+            bool hasTorchAp = isHeroTurn && actor != null && (usesAp ? actor.Economy.HasApFor(torchAp) : actor.Economy.HasSlot(CombatActionSlot.BonusAction));
+            bool bonusGuard = actor != null && (legacyDnd ? actor.Economy.BonusActionGuardEnabled : actor.Economy.GuardApDiscount > 0);
+            bool hasGuard = isHeroTurn && actor != null && (usesAp ? actor.Economy.HasApFor(guardAp) : actor.Economy.HasSlot(actor.Economy.GuardSlot));
 
             if (actor != null && actor.IsAlive)
             {
@@ -2639,14 +2717,14 @@ namespace Realmz.Game
                     hotkeyIndex: slotCursor,
                     iconKey: meleeIconKey,
                     label: meleeLabel,
-                    apCost: 1,
+                    apCost: meleeAp,
                     spCost: 0,
-                    interactable: hasMain,
+                    interactable: hasMelee,
                     selected: isHeroTurn && activeMode == CombatActionMode.Melee,
-                    tipTitle: $"{meleeLabel} [Action]",
-                    tipBody: $"Weapon: {actor.WeaponDice} (+{actor.EffectiveToHit} Hit). Cost: 1 Main Action.",
+                    tipTitle: $"{meleeLabel} [{meleeAp} AP]",
+                    tipBody: $"Weapon: {actor.WeaponDice} (+{actor.EffectiveToHit} Hit). Cost: {meleeAp} AP.",
                     directIconSprite: meleeSprite,
-                    costLabelOverride: dndMode ? "Action" : null);
+                    costLabelOverride: legacyDnd ? "Action" : null);
 
                 // Slot 2: Ranged (ONLY if actor has ranged weapon/range)
                 if (actor.RangedRange > 0 && !string.IsNullOrWhiteSpace(actor.RangedDice))
@@ -2663,14 +2741,14 @@ namespace Realmz.Game
                         hotkeyIndex: slotCursor,
                         iconKey: "bow",
                         label: rangedLabel,
-                        apCost: 1,
+                        apCost: rangedAp,
                         spCost: 0,
-                        interactable: hasMain,
+                        interactable: hasRanged,
                         selected: isHeroTurn && activeMode == CombatActionMode.Ranged,
-                        tipTitle: $"{rangedLabel} [Action]",
-                        tipBody: $"Damage: {actor.RangedDice}, Range {actor.RangedRange}. Cost: 1 Main Action.",
+                        tipTitle: $"{rangedLabel} [{rangedAp} AP]",
+                        tipBody: $"Damage: {actor.RangedDice}, Range {actor.RangedRange}. Cost: {rangedAp} AP.",
                         directIconSprite: rangedSprite,
-                        costLabelOverride: dndMode ? "Action" : null);
+                        costLabelOverride: legacyDnd ? "Action" : null);
                 }
 
                 // Direct Spell Slots (NO Spell submenu button, 0 slots for non-casters)
@@ -2684,8 +2762,9 @@ namespace Realmz.Game
                             continue;
                         }
 
+                        int spellAp = usesAp ? CombatWeaponCosts.GetSpellApCost(spell) : 1;
                         bool enoughSp = actor.Sp >= spell.SpCost;
-                        bool enoughAp = hasMain;
+                        bool enoughAp = isHeroTurn && (usesAp ? actor.Economy.HasApFor(spellAp) : actor.Economy.HasSlot(CombatActionSlot.MainAction));
                         bool isSelectedSpell = isHeroTurn && activeMode == CombatActionMode.Spell && spell.Id == selectedSpellId;
                         string spellIcon = ResolveSpellIconKey(spell);
                         Sprite spellSprite = _catalog != null
@@ -2706,14 +2785,14 @@ namespace Realmz.Game
                             hotkeyIndex: slotCursor,
                             iconKey: spellIcon,
                             label: ShortenSpellName(spell.Name),
-                            apCost: 1,
+                            apCost: spellAp,
                             spCost: spell.SpCost,
                             interactable: enoughAp && enoughSp,
                             selected: isSelectedSpell,
-                            tipTitle: $"{spell.Name} [Action | {spell.SpCost} SP]",
-                            tipBody: $"{scope} | Range {spell.Range} | {(string.IsNullOrWhiteSpace(spell.EffectDice) ? spell.EffectKind : spell.EffectDice)}. Cost: 1 Main Action, {spell.SpCost} SP. {(string.IsNullOrWhiteSpace(spell.Description) ? string.Empty : spell.Description)}",
+                            tipTitle: $"{spell.Name} [{spellAp} AP | {spell.SpCost} SP]",
+                            tipBody: $"{scope} | Range {spell.Range} | {(string.IsNullOrWhiteSpace(spell.EffectDice) ? spell.EffectKind : spell.EffectDice)}. Cost: {spellAp} AP, {spell.SpCost} SP. {(string.IsNullOrWhiteSpace(spell.Description) ? string.Empty : spell.Description)}",
                             directIconSprite: spellSprite,
-                            costLabelOverride: dndMode ? "Action" : null);
+                            costLabelOverride: legacyDnd ? "Action" : null);
                     }
                 }
             }
@@ -2742,7 +2821,7 @@ namespace Realmz.Game
                 if (_combatDashBtnIcon != null) _combatDashBtnIcon.color = canDash ? enabledIconTint : disabledIconTint;
                 if (_combatDashApBadgeText != null)
                 {
-                    _combatDashApBadgeText.text = "Action";
+                    _combatDashApBadgeText.text = legacyDnd ? "Action" : $"{dashAp} AP";
                     _combatDashApBadgeText.color = canDash ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.MutedSlate;
                 }
                 if (_combatDashApBadgeBg != null)
@@ -2756,12 +2835,12 @@ namespace Realmz.Game
             if (_combatPotionBtn != null)
             {
                 _combatPotionBtn.gameObject.SetActive(hasPotion);
-                _combatPotionBtn.interactable = hasPotion && hasBonus;
-                if (_combatPotionBtnIcon != null) _combatPotionBtnIcon.color = (hasPotion && hasBonus) ? enabledIconTint : disabledIconTint;
+                _combatPotionBtn.interactable = hasPotion && hasPotionAp;
+                if (_combatPotionBtnIcon != null) _combatPotionBtnIcon.color = (hasPotion && hasPotionAp) ? enabledIconTint : disabledIconTint;
                 if (_combatPotionApBadgeText != null)
                 {
-                    _combatPotionApBadgeText.text = "Bonus";
-                    _combatPotionApBadgeText.color = (hasPotion && hasBonus) ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.MutedSlate;
+                    _combatPotionApBadgeText.text = legacyDnd ? "Bonus" : $"{potionAp} AP";
+                    _combatPotionApBadgeText.color = (hasPotion && hasPotionAp) ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.MutedSlate;
                 }
                 BywaterUiHelpers.SetButtonColors(_combatPotionBtn, isHeroTurn && activeMode == CombatActionMode.Potion);
                 if (hasPotion) _visibleHotbarActionIds.Add("potion");
@@ -2772,29 +2851,34 @@ namespace Realmz.Game
             if (_combatTorchBtn != null)
             {
                 _combatTorchBtn.gameObject.SetActive(showCombatTorch);
-                _combatTorchBtn.interactable = showCombatTorch && hasBonus;
-                if (_combatTorchBtnIcon != null) _combatTorchBtnIcon.color = (showCombatTorch && hasBonus) ? enabledIconTint : disabledIconTint;
+                _combatTorchBtn.interactable = showCombatTorch && hasTorchAp;
+                if (_combatTorchBtnIcon != null) _combatTorchBtnIcon.color = (showCombatTorch && hasTorchAp) ? enabledIconTint : disabledIconTint;
+                if (_combatTorchApBadgeText != null)
+                {
+                    _combatTorchApBadgeText.text = legacyDnd ? "Bonus" : $"{torchAp} AP";
+                    _combatTorchApBadgeText.color = (showCombatTorch && hasTorchAp) ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.MutedSlate;
+                }
                 if (showCombatTorch) _visibleHotbarActionIds.Add("torch");
             }
 
             if (_combatShoveBtn != null)
             {
-                _combatShoveBtn.interactable = hasBonus;
-                if (_combatShoveBtnIcon != null) _combatShoveBtnIcon.color = hasBonus ? enabledIconTint : disabledIconTint;
+                _combatShoveBtn.interactable = hasShoveAp;
+                if (_combatShoveBtnIcon != null) _combatShoveBtnIcon.color = hasShoveAp ? enabledIconTint : disabledIconTint;
                 BywaterUiHelpers.SetButtonColors(_combatShoveBtn, isHeroTurn && activeMode == CombatActionMode.Shove);
                 _visibleHotbarActionIds.Add("shove");
             }
             if (_combatShoveSwiftBadgeText != null)
             {
-                _combatShoveSwiftBadgeText.text = "Bonus";
-                _combatShoveSwiftBadgeText.color = hasBonus ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.MutedSlate;
+                _combatShoveSwiftBadgeText.text = legacyDnd ? "Bonus" : $"{shoveAp} AP";
+                _combatShoveSwiftBadgeText.color = hasShoveAp ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.MutedSlate;
             }
             if (_combatShoveSwiftBadgeBg != null)
             {
-                _combatShoveSwiftBadgeBg.color = hasBonus
+                _combatShoveSwiftBadgeBg.color = hasShoveAp
                     ? new Color(0.32f, 0.22f, 0.04f, 0.96f)
                     : new Color(0.10f, 0.12f, 0.18f, 0.90f);
-                BywaterUiHelpers.SetBorderColor(_combatShoveSwiftBadgeBg.transform, hasBonus ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.MutedSlate);
+                BywaterUiHelpers.SetBorderColor(_combatShoveSwiftBadgeBg.transform, hasShoveAp ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.MutedSlate);
             }
 
             if (_combatGuardBtn != null)
@@ -2803,7 +2887,7 @@ namespace Realmz.Game
                 if (_combatGuardBtnIcon != null) _combatGuardBtnIcon.color = hasGuard ? enabledIconTint : disabledIconTint;
                 if (_combatGuardApBadgeText != null)
                 {
-                    _combatGuardApBadgeText.text = bonusGuard ? "Bonus" : "Action";
+                    _combatGuardApBadgeText.text = legacyDnd ? (bonusGuard ? "Bonus" : "Action") : $"{guardAp} AP";
                     _combatGuardApBadgeText.color = hasGuard
                         ? (bonusGuard ? BywaterUiHelpers.InfoCyan : BywaterUiHelpers.BrassHighlight)
                         : BywaterUiHelpers.MutedSlate;
@@ -2820,9 +2904,8 @@ namespace Realmz.Game
                 _combatEndTurnBtn.interactable = isHeroTurn;
                 if (_combatEndTurnBtnIcon != null) _combatEndTurnBtnIcon.color = isHeroTurn ? enabledIconTint : disabledIconTint;
                 _pulseEndTurn = isHeroTurn && actor != null &&
-                    !actor.Economy.HasSlot(CombatActionSlot.MainAction) &&
                     actor.Economy.MoveRemaining == 0 &&
-                    (!actor.Economy.HasSlot(CombatActionSlot.BonusAction) || (!hasPotion && !showCombatTorch));
+                    (usesAp ? actor.Economy.CurrentAp < CombatActionEconomy.LightWeaponApCost : !actor.Economy.HasSlot(CombatActionSlot.MainAction));
                 if (!_pulseEndTurn)
                 {
                     BywaterUiHelpers.SetButtonColors(_combatEndTurnBtn, false);
@@ -5222,7 +5305,7 @@ namespace Realmz.Game
 
             GameObject actorInfo = new GameObject("ActorInfo", typeof(RectTransform), typeof(VerticalLayoutGroup));
             actorInfo.transform.SetParent(actionBar, false);
-            actorInfo.AddComponent<LayoutElement>().preferredWidth = 342f;
+            actorInfo.AddComponent<LayoutElement>().preferredWidth = 368f;
             VerticalLayoutGroup aiVlg = actorInfo.GetComponent<VerticalLayoutGroup>();
             aiVlg.spacing = 2f;
             aiVlg.childControlWidth = true;
@@ -5234,23 +5317,39 @@ namespace Realmz.Game
             _combatActorVitals = BywaterUiHelpers.CreateLabel(actorInfo.transform, "ActorVitals", "HP 17/17 | SP 0/0 | AC 29", _font, 15.5f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, wrap: false);
             _combatActorVitals.overflowMode = TextOverflowModes.Truncate;
 
-            // Option A D&D 5e Row: MP Movement Pips + ACTION / BONUS / REACT Badges
+            // Split 4 MP + 6 AP Row: Cyan MP Pill + Gold AP Diamonds/Label + RCT Pill
             GameObject apRow = new GameObject("ApDiamondsRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             _apDiamondsRow = apRow;
             apRow.transform.SetParent(actorInfo.transform, false);
             apRow.AddComponent<LayoutElement>().preferredHeight = 24f;
             HorizontalLayoutGroup apHlg = apRow.GetComponent<HorizontalLayoutGroup>();
-            apHlg.spacing = 2f;
+            apHlg.spacing = 3f;
             apHlg.childControlWidth = true;
             apHlg.childControlHeight = true;
             apHlg.childForceExpandWidth = false;
             apHlg.childAlignment = TextAnchor.MiddleLeft;
 
+            Color mpCyan = new Color(0.24f, 0.88f, 0.96f, 1f);
+            RectTransform mpPillRt = BywaterUiHelpers.CreatePanel(
+                apRow.transform,
+                "MpValuePill",
+                new Color(0.06f, 0.16f, 0.24f, 0.96f),
+                withBrassOutline: true,
+                outlinePx: 1f);
+            BywaterUiHelpers.SetBorderColor(mpPillRt, mpCyan);
+            mpPillRt.gameObject.AddComponent<LayoutElement>().preferredWidth = 68f;
+            _mpValuePillRoot = mpPillRt.gameObject;
+            _combatMpValueText = BywaterUiHelpers.CreateLabel(mpPillRt, "MpValueLabel", "4/4 MP", _font, 15f, mpCyan, TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
+            _combatMpValueText.rectTransform.anchorMin = Vector2.zero;
+            _combatMpValueText.rectTransform.anchorMax = Vector2.one;
+            _combatMpValueText.rectTransform.offsetMin = Vector2.zero;
+            _combatMpValueText.rectTransform.offsetMax = Vector2.zero;
+
             _apDiamondIcons.Clear();
             Sprite diamondSprite = BywaterUiHelpers.GetProceduralIconSprite("diamond");
             for (int i = 0; i < 10; i++)
             {
-                Image pip = BywaterUiHelpers.CreateImage(apRow.transform, $"ApDiamond_{i}", diamondSprite, new Color(0.24f, 0.88f, 0.96f, 1f), preserveAspect: true);
+                Image pip = BywaterUiHelpers.CreateImage(apRow.transform, $"ApDiamond_{i}", diamondSprite, new Color(0.98f, 0.80f, 0.14f, 1f), preserveAspect: true);
                 pip.raycastTarget = false;
                 LayoutElement pipLe = pip.gameObject.AddComponent<LayoutElement>();
                 pipLe.preferredWidth = 10f;
@@ -5259,12 +5358,14 @@ namespace Realmz.Game
                 _apDiamondIcons.Add(pip);
             }
 
-            _combatApValueText = BywaterUiHelpers.CreateLabel(apRow.transform, "ApValueLabel", "6/6 MP", _font, 15f, new Color(0.24f, 0.88f, 0.96f, 1f), TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            _combatApValueText = BywaterUiHelpers.CreateLabel(apRow.transform, "ApValueLabel", "6/6 AP", _font, 15f, new Color(0.98f, 0.80f, 0.14f, 1f), TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
             _combatApValueText.gameObject.AddComponent<LayoutElement>().preferredWidth = 64f;
 
             CreateCombatSlotPill(apRow.transform, "ActionSlotPill", "ACT", new Color(0.98f, 0.80f, 0.14f, 1f), out _actionSlotPillBg, out _actionSlotPillText);
             CreateCombatSlotPill(apRow.transform, "BonusSlotPill", "BON", new Color(0.98f, 0.56f, 0.18f, 1f), out _bonusSlotPillBg, out _bonusSlotPillText);
             CreateCombatSlotPill(apRow.transform, "ReactSlotPill", "RCT", new Color(0.68f, 0.54f, 0.98f, 1f), out _reactSlotPillBg, out _reactSlotPillText);
+            if (_actionSlotPillBg != null) _actionSlotPillBg.gameObject.SetActive(false);
+            if (_bonusSlotPillBg != null) _bonusSlotPillBg.gameObject.SetActive(false);
 
             RectTransform freePillRt = BywaterUiHelpers.CreatePanel(apRow.transform, "FreeMovePill", new Color(0.08f, 0.30f, 0.24f, 0.96f), withBrassOutline: true, outlinePx: 1f);
             _combatFreeMovePill = freePillRt.gameObject;
@@ -5288,21 +5389,21 @@ namespace Realmz.Game
             _combatUndoBtn = AddCombatSkillButton(actionBar, "UndoMoveBtn", "undo", "Undo", 74f, () => OnUndoMoveRequested?.Invoke(), out _combatUndoBtnIcon, out _, out _, null);
             AttachHoverTooltip(_combatUndoBtn.gameObject, "undo_move", "Undo Move [Free]", "Rewind your last movement step this turn.");
 
-            _combatDashBtn = AddCombatSkillButton(actionBar, "DashBtn", "leather_boots", "Dash", 84f, () => OnDashRequested?.Invoke(), out _combatDashBtnIcon, out _combatDashApBadgeText, out _combatDashApBadgeBg, "Action");
-            AttachHoverTooltip(_combatDashBtn.gameObject, "dash", "Dash [D] [Main Action]", "Spend your Main Action to gain +Base MP extra movement this turn.");
+            _combatDashBtn = AddCombatSkillButton(actionBar, "DashBtn", "leather_boots", "Dash", 84f, () => OnDashRequested?.Invoke(), out _combatDashBtnIcon, out _combatDashApBadgeText, out _combatDashApBadgeBg, "2 AP");
+            AttachHoverTooltip(_combatDashBtn.gameObject, "dash", "Dash [D] [2 AP]", "Spend 2 AP to gain +Base MP extra movement this turn.");
 
-            _combatPotionBtn = AddCombatSkillButton(actionBar, "PotionBtn", "potion", "Potion", 90f, () => OnCombatModeSelected?.Invoke(CombatActionMode.Potion), out _combatPotionBtnIcon, out _combatPotionApBadgeText, out _, "Bonus");
-            AttachHoverTooltip(_combatPotionBtn.gameObject, "potion", "Healing Potion [Bonus Action]", "Drink or throw a healing potion. Cost: 1 Bonus Action.");
+            _combatPotionBtn = AddCombatSkillButton(actionBar, "PotionBtn", "potion", "Potion", 90f, () => OnCombatModeSelected?.Invoke(CombatActionMode.Potion), out _combatPotionBtnIcon, out _combatPotionApBadgeText, out _, "2 AP");
+            AttachHoverTooltip(_combatPotionBtn.gameObject, "potion", "Healing Potion [2 AP]", "Drink or throw a healing potion. Cost: 2 AP.");
 
-            _combatTorchBtn = AddCombatSkillButton(actionBar, "CombatTorchBtn", "torch", "Torch", 86f, () => OnLightTorchFromHudRequested?.Invoke(), out _combatTorchBtnIcon, out _, out _, "Bonus");
-            AttachHoverTooltip(_combatTorchBtn.gameObject, "torch", "Light Torch [Bonus Action]", "Ignite a Torch from party stash (+30 turns) to illuminate darkness and lift Ranged Disadvantage. Cost: 1 Bonus Action.");
+            _combatTorchBtn = AddCombatSkillButton(actionBar, "CombatTorchBtn", "torch", "Torch", 86f, () => OnLightTorchFromHudRequested?.Invoke(), out _combatTorchBtnIcon, out _combatTorchApBadgeText, out _, "2 AP");
+            AttachHoverTooltip(_combatTorchBtn.gameObject, "torch", "Light Torch [2 AP]", "Ignite a Torch from party stash (+2h 00m) to illuminate darkness. Cost: 2 AP.");
             _combatTorchBtn.gameObject.SetActive(false);
 
             _combatShoveBtn = AddShoveCombatButton(actionBar, "ShoveBtn", 98f, () => OnCombatModeSelected?.Invoke(CombatActionMode.Shove), out _combatShoveBtnIcon);
-            AttachHoverTooltip(_combatShoveBtn.gameObject, "shove", "Shove [V] [Bonus Action]", "Push an adjacent enemy 1 tile (off ledges or into walls). Cost: 1 Bonus Action.");
+            AttachHoverTooltip(_combatShoveBtn.gameObject, "shove", "Shove [V] [2 AP]", "Push an adjacent enemy 1 tile (off ledges or into walls). Cost: 2 AP.");
 
-            _combatGuardBtn = AddCombatSkillButton(actionBar, "GuardBtn", "guard", "Guard", 90f, () => OnGuardRequested?.Invoke(), out _combatGuardBtnIcon, out _combatGuardApBadgeText, out _combatGuardApBadgeBg, "Action");
-            AttachHoverTooltip(_combatGuardBtn.gameObject, "guard", "Guard / Overwatch [G]", "+4 AC and Overwatch reaction strike when an enemy enters melee reach (Bonus Action with Iron Vanguard 3pc).");
+            _combatGuardBtn = AddCombatSkillButton(actionBar, "GuardBtn", "guard", "Guard", 90f, () => OnGuardRequested?.Invoke(), out _combatGuardBtnIcon, out _combatGuardApBadgeText, out _combatGuardApBadgeBg, "2 AP");
+            AttachHoverTooltip(_combatGuardBtn.gameObject, "guard", "Guard / Overwatch [G]", "+4 AC and Overwatch reaction strike when an enemy enters melee reach (1 AP with Iron Vanguard 3pc).");
 
             _combatEndTurnBtn = AddCombatSkillButton(actionBar, "EndTurnBtn", "end_turn", "End Turn", 94f, () => OnEndTurnRequested?.Invoke(), out _combatEndTurnBtnIcon, out _, out _, null);
             AttachHoverTooltip(_combatEndTurnBtn.gameObject, "end_turn", "End Turn [Space]", "Finish the current hero's turn.");

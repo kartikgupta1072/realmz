@@ -1146,7 +1146,7 @@ namespace Realmz.World
                             pip.Label.font = font;
                         }
 
-                        pip.Label.text = stepCost == 1 ? "1 AP" : (stepCost == 2 ? "2 AP" : stepCost + " AP");
+                        pip.Label.text = stepCost == 1 ? "1 MP" : (stepCost == 2 ? "2 MP" : stepCost + " MP");
                         Color accent = highCostOrAoo
                             ? new Color(0.980f, 0.800f, 0.082f, 0.96f)
                             : new Color(0.220f, 0.741f, 0.973f, 0.96f);

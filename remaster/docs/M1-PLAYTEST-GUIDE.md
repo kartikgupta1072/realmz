@@ -24,16 +24,16 @@ If you want to capture your own session notes or log issues, note the **tile `(x
 
 ### Beat 2: Overworld Exploration, Day/Night & 3-State Fog-of-War
 - Leave the Bywater safe zone onto the wild road / Haunted Quarters / meadow.
-- Confirm Bywater town tiles never trigger ambushes, while wild roads/woods advance the `1,440`-minute clock (`+2` min/step) and update 3-state Fog-of-War (`Unseen` -> `Explored` -> `CurrentlyVisible`), keeping distant chimney smoke hidden inside pitch-black `Unseen` tiles.
-- **Check:** Dusk river water reads naturally (tinted glints, soft bank foam) with zero 1px skybox hairlines along cobble/grass borders.
+- Confirm Bywater town tiles never trigger ambushes, while wild roads/woods advance the `1,440`-minute clock (`+2` min/step) and burn lit Torches (`120` in-game minutes = `2h 00m`), updating 3-state Fog-of-War (`Unseen` -> `Explored` -> `CurrentlyVisible`) and keeping distant chimney smoke hidden inside pitch-black `Unseen` tiles.
+- **Check:** Dusk river water shows crisp pixel-grid liquid ripples and glinting lantern/moon reflections, with zero 1px skybox hairlines along cobble/grass borders.
 
-### Beat 3: Spoiler-Free Intercept & BG3 `d20` Rolls
-- Continue until an encounter triggers (or Dusk/Night ambush): verify the intercept modal shows terrain flavor without revealing clock/torch spoilers, displays `Evade [DEX DC X]` / `Quick Resolve [Tier | DC X]`, and animates a BG3-style `d20` check modal!
+### Beat 3: Spoiler-Free Intercept & Faceted `d20` Rolls
+- Continue until an encounter triggers (or Dusk/Night ambush): verify the intercept modal stays clean with zero button overflow, displays `Ambush` / `Engage` / `Evade (DC X)` / `Quick Resolve (DC X)` without gameplay hint spoilers, and animates a spinning faceted **d20** die (twin dice on Advantage/Disadvantage)!
 
-### Beat 4: Pre-Battle Deployment & Option A D&D 5e Tactical Combat
-- In Pre-Battle Deployment, verify only the selected hero shows the active ring (not unselected heroes), click hero sprites (head/body) or tiles in the curated 8-slot zone to swap/reposition, and press `Start Battle [Space]`.
-- In **Haunted Quarters** combat, verify ruins stone features (`RuinsOutskirts`) instead of road supply wagons.
-- Verify **Option A** resources (`MP` movement + `ACT` Main Action + `BON` Bonus Action + `RCT` Reaction + **`Dash [D]`** + Iron Vanguard Bonus Action `Guard`), zero distracting red enemy intent arcs, and **Green / Yellow / Red + `X` dotted LOS sightlines** when aiming Ranged attacks or Spells!
+### Beat 4: Pre-Battle Deployment & Split 4 MP + 6 AP Tactical Combat
+- In Pre-Battle Deployment, verify only the selected hero shows the active ring (not unselected heroes), click hero sprites or open cyan tiles in the curated 8-slot zone to reposition/swap (sprite moves cleanly to clicked tile), and press `Start Battle [Space]`.
+- In **Haunted Quarters** combat, verify ruins stone features (`RuinsOutskirts`) and authentic shambling **Zombies** instead of road supply wagons.
+- Verify **Split `4 MP + 6 AP`** resources (`4/4 MP` base movement + `6/6 AP` base actions + `RCT` Reaction + **`Dash [D]` (`2 AP` -> `+4 MP`)** + Set bonuses scaling MP/AP), zero distracting red enemy intent arcs, `"X MP"` path step pips, and **Green / Yellow / Red + `X` dotted LOS sightlines** when aiming Ranged attacks or Spells!
 
 ### Beat 5: Option 2 Victory Screen & `[P]` Paper-Doll
 - Finish the encounter and verify the Victory modal:

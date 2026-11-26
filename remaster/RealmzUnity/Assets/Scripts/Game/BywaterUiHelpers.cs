@@ -1052,6 +1052,187 @@ namespace Realmz.Game
             }
         }
 
+        private static Sprite _cachedD20DieSprite;
+
+        public static Sprite GetD20DieSprite()
+        {
+            if (_cachedD20DieSprite != null)
+            {
+                return _cachedD20DieSprite;
+            }
+
+            const int s = 128;
+            Texture2D tex = new Texture2D(s, s, TextureFormat.RGBA32, false);
+            tex.filterMode = FilterMode.Point;
+            tex.wrapMode = TextureWrapMode.Clamp;
+
+            Color[] px = new Color[s * s];
+            Vector2 c = new Vector2(63.5f, 63.5f);
+            float rOuter = 58f;
+            float rInner = 29f;
+
+            Vector2[] outerVerts = new Vector2[6];
+            for (int i = 0; i < 6; i++)
+            {
+                float a = Mathf.Deg2Rad * (90f - i * 60f);
+                outerVerts[i] = c + new Vector2(Mathf.Cos(a) * rOuter, Mathf.Sin(a) * rOuter);
+            }
+
+            // Inner upright triangle matching regular icosahedron front face (vertices at top, bottom-right, bottom-left)
+            Vector2[] triVerts = new Vector2[3];
+            for (int i = 0; i < 3; i++)
+            {
+                float a = Mathf.Deg2Rad * (90f - i * 120f);
+                triVerts[i] = c + new Vector2(Mathf.Cos(a) * rInner, Mathf.Sin(a) * rInner);
+            }
+
+            // 9 facet triangles surrounding center face + 1 center equilateral face
+            Vector2[][] facets =
+            {
+                new[] { triVerts[0], outerVerts[1], triVerts[1] }, // upper-right lit
+                new[] { outerVerts[0], outerVerts[1], triVerts[0] }, // top-right bevel
+                new[] { triVerts[1], outerVerts[1], outerVerts[2] }, // mid-right
+                new[] { triVerts[1], outerVerts[2], outerVerts[3] }, // lower-right shadow
+                new[] { triVerts[1], outerVerts[3], triVerts[2] }, // bottom bevel
+                new[] { triVerts[2], outerVerts[3], outerVerts[4] }, // lower-left
+                new[] { triVerts[2], outerVerts[4], outerVerts[5] }, // mid-left
+                new[] { triVerts[0], triVerts[2], outerVerts[5] }, // upper-left lit
+                new[] { outerVerts[0], triVerts[0], outerVerts[5] }  // top-left highlight
+            };
+            Color[] facetColors =
+            {
+                new Color(0.14f, 0.21f, 0.34f, 1f),
+                new Color(0.20f, 0.29f, 0.44f, 1f),
+                new Color(0.11f, 0.16f, 0.28f, 1f),
+                new Color(0.07f, 0.10f, 0.19f, 1f),
+                new Color(0.08f, 0.12f, 0.22f, 1f),
+                new Color(0.09f, 0.14f, 0.24f, 1f),
+                new Color(0.13f, 0.19f, 0.32f, 1f),
+                new Color(0.18f, 0.26f, 0.41f, 1f),
+                new Color(0.24f, 0.34f, 0.52f, 1f)
+            };
+
+            Color centerFace = new Color(0.16f, 0.24f, 0.39f, 1f);
+            Color brassEdge = new Color(0.92f, 0.75f, 0.34f, 1f);
+            Color darkInk = new Color(0.03f, 0.04f, 0.08f, 1f);
+
+            for (int y = 0; y < s; y++)
+            {
+                for (int x = 0; x < s; x++)
+                {
+                    Vector2 p = new Vector2(x, y);
+                    if (!PointInConvexPoly(p, outerVerts))
+                    {
+                        px[y * s + x] = Color.clear;
+                        continue;
+                    }
+
+                    Color col = centerFace;
+                    if (!PointInTriangle(p, triVerts[0], triVerts[1], triVerts[2]))
+                    {
+                        col = facetColors[0];
+                        for (int f = 0; f < facets.Length; f++)
+                        {
+                            if (PointInTriangle(p, facets[f][0], facets[f][1], facets[f][2]))
+                            {
+                                col = facetColors[f];
+                                break;
+                            }
+                        }
+                    }
+
+                    float outerEdgeDist = MinEdgeDistancePoly(p, outerVerts);
+                    float innerEdgeDist = MinEdgeDistancePoly(p, triVerts);
+                    float spokeDist = MinFacetSpokeDist(p, outerVerts, triVerts);
+
+                    if (outerEdgeDist < 1.8f)
+                    {
+                        col = darkInk;
+                    }
+                    else if (outerEdgeDist < 4.2f)
+                    {
+                        col = brassEdge;
+                    }
+                    else if (innerEdgeDist < 2.1f)
+                    {
+                        col = brassEdge;
+                    }
+                    else if (spokeDist < 1.5f)
+                    {
+                        col = Color.Lerp(col, brassEdge, 0.65f);
+                    }
+
+                    px[y * s + x] = col;
+                }
+            }
+
+            tex.SetPixels(px);
+            tex.Apply(false, true);
+            _cachedD20DieSprite = Sprite.Create(tex, new Rect(0f, 0f, s, s), new Vector2(0.5f, 0.5f), 100f);
+            _cachedD20DieSprite.name = "ProceduralD20Die";
+            return _cachedD20DieSprite;
+        }
+
+        private static bool PointInTriangle(Vector2 p, Vector2 a, Vector2 b, Vector2 c)
+        {
+            float d1 = (p.x - b.x) * (a.y - b.y) - (a.x - b.x) * (p.y - b.y);
+            float d2 = (p.x - c.x) * (b.y - c.y) - (b.x - c.x) * (p.y - c.y);
+            float d3 = (p.x - a.x) * (c.y - a.y) - (c.x - a.x) * (p.y - a.y);
+            bool hasNeg = (d1 < 0f) || (d2 < 0f) || (d3 < 0f);
+            bool hasPos = (d1 > 0f) || (d2 > 0f) || (d3 > 0f);
+            return !(hasNeg && hasPos);
+        }
+
+        private static bool PointInConvexPoly(Vector2 p, Vector2[] verts)
+        {
+            bool hasNeg = false;
+            bool hasPos = false;
+            for (int i = 0; i < verts.Length; i++)
+            {
+                Vector2 a = verts[i];
+                Vector2 b = verts[(i + 1) % verts.Length];
+                float cross = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+                if (cross < -0.001f) hasNeg = true;
+                else if (cross > 0.001f) hasPos = true;
+                if (hasNeg && hasPos) return false;
+            }
+            return true;
+        }
+
+        private static float DistancePointToSegment(Vector2 p, Vector2 a, Vector2 b)
+        {
+            Vector2 ab = b - a;
+            float lenSq = Vector2.Dot(ab, ab);
+            if (lenSq < 0.0001f) return Vector2.Distance(p, a);
+            float t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / lenSq);
+            return Vector2.Distance(p, a + t * ab);
+        }
+
+        private static float MinEdgeDistancePoly(Vector2 p, Vector2[] verts)
+        {
+            float best = float.MaxValue;
+            for (int i = 0; i < verts.Length; i++)
+            {
+                float d = DistancePointToSegment(p, verts[i], verts[(i + 1) % verts.Length]);
+                if (d < best) best = d;
+            }
+            return best;
+        }
+
+        private static float MinFacetSpokeDist(Vector2 p, Vector2[] o, Vector2[] t)
+        {
+            float d = DistancePointToSegment(p, o[0], t[0]);
+            d = Mathf.Min(d, DistancePointToSegment(p, o[1], t[0]));
+            d = Mathf.Min(d, DistancePointToSegment(p, o[1], t[1]));
+            d = Mathf.Min(d, DistancePointToSegment(p, o[2], t[1]));
+            d = Mathf.Min(d, DistancePointToSegment(p, o[3], t[1]));
+            d = Mathf.Min(d, DistancePointToSegment(p, o[3], t[2]));
+            d = Mathf.Min(d, DistancePointToSegment(p, o[4], t[2]));
+            d = Mathf.Min(d, DistancePointToSegment(p, o[5], t[2]));
+            d = Mathf.Min(d, DistancePointToSegment(p, o[5], t[0]));
+            return d;
+        }
+
         private static void DrawTorch(Color[] px, int s)
         {
             Color wood = new Color(0.56f, 0.34f, 0.16f, 1f);

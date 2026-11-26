@@ -184,7 +184,7 @@ namespace RealmzCore.Tests
             Assert.True(torchRes.Success);
             Assert.Equal(1, fireCalls);
             Assert.False(session1.IsInTheDark);
-            Assert.Equal(30, party.TorchTurnsRemaining);
+            Assert.Equal(PartyState.DefaultTorchDurationMinutes, party.TorchTurnsRemaining);
 
             TacticalAttackPreview litPreview = session1.PreviewRangedAttack(cRanger.Id, "m1");
             Assert.Equal(darkPreview.HitChancePct + TacticalCombatSession.DarknessRangedHitPenaltyPct, litPreview.HitChancePct);
