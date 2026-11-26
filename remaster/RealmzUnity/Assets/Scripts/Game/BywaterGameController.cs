@@ -4071,6 +4071,19 @@ namespace Realmz.Game
                 return;
             }
 
+            bool isCrit = false;
+            for (int i = 0; i < res.AttackOutcomes.Count; i++)
+            {
+                if (res.AttackOutcomes[i].Kind == AttackOutcomeKind.CriticalHit)
+                {
+                    isCrit = true;
+                    break;
+                }
+            }
+
+            bool isSpell = res.Message.IndexOf("casts ", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isRangedMessage = res.Message.IndexOf("fires at", StringComparison.OrdinalIgnoreCase) >= 0;
+
             CombatantState hitHero = null;
             CombatantState healedAlly = null;
             for (int i = 0; i < CombatSession.Combatants.Count; i++)
@@ -4089,12 +4102,23 @@ namespace Realmz.Game
                     }
                     if (_combatUnitViews.TryGetValue(c.Id, out BywaterUnitView hView) && hView != null)
                     {
-                        hView.PlayHitFlash(0.055f);
+                        hView.PlayHitFlash(0.055f, isCrit);
+                    }
+                    bool isRangedHit = isRangedMessage ||
+                        (monster.PrefersRanged && monster.Position.ChebyshevDistance(c.Position) > 1);
+                    if (!isSpell && !isRangedHit)
+                    {
+                        GetOrEnsureVfxDirector()?.PlayMeleeHitSpark(GridToWorldAtElevation(LocalToWorld(c.Position)), isCrit);
                     }
                 }
                 else if (c.Side == CombatSide.Monster && c.Hp > before)
                 {
                     healedAlly = c;
+                    if (_combatUnitViews.TryGetValue(c.Id, out BywaterUnitView mHealView) && mHealView != null)
+                    {
+                        mHealView.PlayHealPulse();
+                    }
+                    GetOrEnsureVfxDirector()?.PlayHealBurst(GridToWorldAtElevation(LocalToWorld(c.Position)));
                 }
             }
 
@@ -4104,7 +4128,6 @@ namespace Realmz.Game
                 ? GridToWorldAtElevation(LocalToWorld(targetUnit.Position))
                 : startWorld;
 
-            bool isSpell = res.Message.IndexOf("casts ", StringComparison.OrdinalIgnoreCase) >= 0;
             if (isSpell && gridOverlays != null)
             {
                 string spellVfx = ResolveSpellVfxKeyFromMessage(res.Message, res.HealingDone > 0, out bool isProjectile);
@@ -4122,17 +4145,7 @@ namespace Realmz.Game
                     mView.PlayAttackLunge(GridToWorldAtElevation(LocalToWorld(hitHero.Position)), 0.28f, GetCombatAttackDuration());
                 }
 
-                bool isCrit = false;
-                for (int i = 0; i < res.AttackOutcomes.Count; i++)
-                {
-                    if (res.AttackOutcomes[i].Kind == AttackOutcomeKind.CriticalHit)
-                    {
-                        isCrit = true;
-                        break;
-                    }
-                }
-
-                bool isRanged = res.Message.IndexOf("fires at", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                bool isRanged = isRangedMessage ||
                                 (monster.PrefersRanged && monster.Position.ChebyshevDistance(hitHero.Position) > 1);
                 if (!isSpell && gridOverlays != null)
                 {
@@ -5120,13 +5133,26 @@ namespace Realmz.Game
                         for (int i = 0; i < CombatSession.Combatants.Count; i++)
                         {
                             CombatantState c = CombatSession.Combatants[i];
-                            if (oldHps.TryGetValue(c.Id, out int before) && c.Hp < before)
+                            if (!oldHps.TryGetValue(c.Id, out int before))
+                            {
+                                continue;
+                            }
+
+                            if (c.Hp < before)
                             {
                                 damagedCount++;
                                 if (_combatUnitViews.TryGetValue(c.Id, out BywaterUnitView v) && v != null)
                                 {
                                     v.PlayHitFlash(0.055f);
                                 }
+                            }
+                            else if (c.Hp > before)
+                            {
+                                if (_combatUnitViews.TryGetValue(c.Id, out BywaterUnitView healView) && healView != null)
+                                {
+                                    healView.PlayHealPulse();
+                                }
+                                GetOrEnsureVfxDirector()?.PlayHealBurst(GridToWorldAtElevation(LocalToWorld(c.Position)));
                             }
                         }
 
@@ -5170,11 +5196,16 @@ namespace Realmz.Game
                     if (res.Success)
                     {
                         audioDirector?.PlaySpell("heal");
+                        CombatantState targetUnit = CombatSession.GetCombatant(targetId) ?? actor;
+                        Vector3 startWorld = GridToWorldAtElevation(LocalToWorld(actor.Position));
+                        Vector3 targetWorld = GridToWorldAtElevation(LocalToWorld(targetUnit.Position));
+                        if (_combatUnitViews.TryGetValue(targetUnit.Id, out BywaterUnitView healView) && healView != null)
+                        {
+                            healView.PlayHealPulse();
+                        }
+                        GetOrEnsureVfxDirector()?.PlayHealBurst(targetWorld);
                         if (gridOverlays != null)
                         {
-                            CombatantState targetUnit = CombatSession.GetCombatant(targetId) ?? actor;
-                            Vector3 startWorld = GridToWorldAtElevation(LocalToWorld(actor.Position));
-                            Vector3 targetWorld = GridToWorldAtElevation(LocalToWorld(targetUnit.Position));
                             gridOverlays.PlayCombatVfx("heal_sparkle", startWorld, targetWorld, isProjectile: false);
                         }
                     }
@@ -5296,7 +5327,11 @@ namespace Realmz.Game
             {
                 if (res.DamageDealt > 0)
                 {
-                    defView.PlayHitFlash(0.055f);
+                    defView.PlayHitFlash(0.055f, isCrit);
+                    if (!isRanged)
+                    {
+                        GetOrEnsureVfxDirector()?.PlayMeleeHitSpark(targetWorld, isCrit);
+                    }
                     if (isCrit)
                     {
                         critTargetId = defender.Id;
@@ -7270,6 +7305,10 @@ namespace Realmz.Game
             {
                 bool wasOverwatch = CombatSession.Log.Count > 0 && string.Equals(CombatSession.Log[CombatSession.Log.Count - 1].ActionType, "Overwatch", StringComparison.Ordinal);
                 hitView.PlayHitFlash(0.055f);
+                if (!wasOverwatch)
+                {
+                    GetOrEnsureVfxDirector()?.PlayMeleeHitSpark(destWorld, isCrit: false);
+                }
                 hitView.ShowArcingFloatingText(wasOverwatch ? $"OVERWATCH -{moveRes.DamageDealt}!" : $"AoO -{moveRes.DamageDealt}!", BywaterUiHelpers.DangerRed, isCrit: false);
                 cameraRig?.PlayImpactImpulse(0.12f, 0.14f, Vector3.down);
             }
@@ -7333,10 +7372,15 @@ namespace Realmz.Game
                 if (res.Success)
                 {
                     audioDirector?.PlaySpell("heal");
+                    Vector3 startWorld = GridToWorldAtElevation(LocalToWorld(actor.Position));
+                    Vector3 targetWorld = GridToWorldAtElevation(LocalToWorld(ally.Position));
+                    if (_combatUnitViews.TryGetValue(ally.Id, out BywaterUnitView healView) && healView != null)
+                    {
+                        healView.PlayHealPulse();
+                    }
+                    GetOrEnsureVfxDirector()?.PlayHealBurst(targetWorld);
                     if (gridOverlays != null)
                     {
-                        Vector3 startWorld = GridToWorldAtElevation(LocalToWorld(actor.Position));
-                        Vector3 targetWorld = GridToWorldAtElevation(LocalToWorld(ally.Position));
                         gridOverlays.PlayCombatVfx("heal_sparkle", startWorld, targetWorld, isProjectile: false);
                     }
                 }
@@ -7376,6 +7420,19 @@ namespace Realmz.Game
                 return;
             }
 
+            bool isCrit = false;
+            for (int i = 0; i < res.AttackOutcomes.Count; i++)
+            {
+                if (res.AttackOutcomes[i].Kind == AttackOutcomeKind.CriticalHit)
+                {
+                    isCrit = true;
+                    break;
+                }
+            }
+
+            bool isSpell = res.Message.IndexOf("casts ", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isRangedMessage = res.Message.IndexOf("fires at", StringComparison.OrdinalIgnoreCase) >= 0;
+
             CombatantState hitEnemy = null;
             CombatantState healedHero = null;
             bool anyHealed = false;
@@ -7395,7 +7452,13 @@ namespace Realmz.Game
                     }
                     if (_combatUnitViews.TryGetValue(c.Id, out BywaterUnitView eView) && eView != null)
                     {
-                        eView.PlayHitFlash(0.055f);
+                        eView.PlayHitFlash(0.055f, isCrit);
+                    }
+                    bool isRangedHit = isRangedMessage ||
+                        (hero.PrefersRanged && hero.Position.ChebyshevDistance(c.Position) > 1);
+                    if (!isSpell && !isRangedHit)
+                    {
+                        GetOrEnsureVfxDirector()?.PlayMeleeHitSpark(GridToWorldAtElevation(LocalToWorld(c.Position)), isCrit);
                     }
                 }
                 else if (c.Side == CombatSide.Hero && c.Hp > before)
@@ -7405,6 +7468,11 @@ namespace Realmz.Game
                     {
                         healedHero = c;
                     }
+                    if (_combatUnitViews.TryGetValue(c.Id, out BywaterUnitView healView) && healView != null)
+                    {
+                        healView.PlayHealPulse();
+                    }
+                    GetOrEnsureVfxDirector()?.PlayHealBurst(GridToWorldAtElevation(LocalToWorld(c.Position)));
                 }
             }
 
@@ -7414,7 +7482,6 @@ namespace Realmz.Game
                 ? GridToWorldAtElevation(LocalToWorld(targetUnit.Position))
                 : startWorld;
 
-            bool isSpell = res.Message.IndexOf("casts ", StringComparison.OrdinalIgnoreCase) >= 0;
             if (isSpell && gridOverlays != null)
             {
                 string spellVfx = ResolveSpellVfxKeyFromMessage(res.Message, anyHealed || res.HealingDone > 0, out bool isProjectile);
@@ -7432,17 +7499,7 @@ namespace Realmz.Game
                     hView.PlayAttackLunge(GridToWorldAtElevation(LocalToWorld(hitEnemy.Position)), 0.28f, GetCombatAttackDuration());
                 }
 
-                bool isCrit = false;
-                for (int i = 0; i < res.AttackOutcomes.Count; i++)
-                {
-                    if (res.AttackOutcomes[i].Kind == AttackOutcomeKind.CriticalHit)
-                    {
-                        isCrit = true;
-                        break;
-                    }
-                }
-
-                bool isRanged = res.Message.IndexOf("fires at", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                bool isRanged = isRangedMessage ||
                                 (hero.PrefersRanged && hero.Position.ChebyshevDistance(hitEnemy.Position) > 1);
                 if (!isSpell && gridOverlays != null)
                 {

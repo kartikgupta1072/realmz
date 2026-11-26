@@ -105,7 +105,7 @@ namespace Realmz.EditorTests
                 ScriptableRendererFeature feat = rendererData.rendererFeatures[i];
                 if (feat != null && feat.GetType().Name.Contains("ScreenSpaceAmbientOcclusion"))
                 {
-                    Assert.That(feat.isActive, Is.False, "Wasted SSAO feature should be inactive.");
+                    Assert.That(feat.isActive, Is.True, "HD-2D SSAO contact occlusion feature must be active on PC_Renderer.");
                 }
             }
 
@@ -1462,6 +1462,58 @@ namespace Realmz.EditorTests
             finally
             {
                 Object.DestroyImmediate(worldGo);
+            }
+        }
+
+        [Test]
+        public void M19_UrpSsao_TiltShiftDof_AtmosphereVfx_And_CombatJuice_ContractsHold()
+        {
+            string pcRendererYaml = File.ReadAllText(Path.Combine(Application.dataPath, "Settings", "PC_Renderer.asset"));
+            Assert.That(pcRendererYaml, Does.Contain("m_Name: ScreenSpaceAmbientOcclusion"));
+            Assert.That(pcRendererYaml, Does.Contain("m_Active: 1"));
+            Assert.That(pcRendererYaml, Does.Contain("AfterOpaque: 1"));
+
+            GameObject root = new GameObject("TempM19VerifyRoot");
+            VolumeProfile tempProfile = ScriptableObject.CreateInstance<VolumeProfile>();
+            try
+            {
+                Volume vol = root.AddComponent<Volume>();
+                vol.sharedProfile = tempProfile;
+                BywaterBiomeAtmosphere atmos = root.AddComponent<BywaterBiomeAtmosphere>();
+                atmos.globalVolume = vol;
+                atmos.ApplyBiome(isDungeon: false, immediate: true);
+                Assert.That(atmos.IsDepthOfFieldActive, Is.True, "Tilt-shift Bokeh DepthOfField must be active.");
+
+                BywaterAtmosphereVfx vfx = root.AddComponent<BywaterAtmosphereVfx>();
+                CartographyWorldData cw = CartographyWorldData.BuildBywaterProofLayout();
+                vfx.ConfigureFromWorldData(cw, isDungeon: false);
+                ParticleSystem[] children = vfx.GetComponentsInChildren<ParticleSystem>(true);
+                HashSet<uint> smokeSeeds = new HashSet<uint>();
+                for (int i = 0; i < children.Length; i++)
+                {
+                    if (children[i].gameObject.name.StartsWith("ChimneySmoke_"))
+                    {
+                        Assert.That(children[i].useAutoRandomSeed, Is.False);
+                        smokeSeeds.Add(children[i].randomSeed);
+                    }
+                }
+                Assert.That(smokeSeeds.Count, Is.EqualTo(4), "Each chimney smoke emitter must use a unique seed.");
+
+                vfx.SetWeather(isRaining: true, windScale: 1.5f);
+                Assert.That(vfx.IsRainSplashActive, Is.True, "Rain splash emitter must activate during rain.");
+                vfx.SetWeather(isRaining: false, windScale: 1.0f);
+                Assert.That(vfx.IsRainSplashActive, Is.False, "Rain splash emitter must stop when clear.");
+
+                BywaterCombatVfxDirector combatVfx = root.AddComponent<BywaterCombatVfxDirector>();
+                combatVfx.PlayMeleeHitSpark(new Vector3(4f, 0f, -4f), isCrit: true);
+                combatVfx.PlayHealBurst(new Vector3(2f, 0f, -2f));
+                Assert.That(combatVfx.IsAnyVfxActive, Is.True);
+                combatVfx.ClearAll();
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+                Object.DestroyImmediate(tempProfile);
             }
         }
     }

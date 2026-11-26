@@ -202,6 +202,8 @@ namespace Realmz.Game
         private CombatVictorySummary _cachedVictorySummary;
         private bool _outcomeInRichVictoryMode;
         private Coroutine _victoryAnimCoroutine;
+        private Coroutine _modalPopCoroutine;
+        private GameObject _modalPopTarget;
 
         private struct VictoryHeroAnimEntry
         {
@@ -917,11 +919,13 @@ namespace Realmz.Game
             }
 
             _potionPickerBar.SetActive(true);
+            PlayModalPopIn(_potionPickerBar, 0.94f, 0.12f);
         }
 
         private void ClosePotionPicker()
         {
             _pendingPotionStashIdx = -1;
+            ResetModalPopIn(_potionPickerBar);
             if (_potionPickerBar != null)
             {
                 _potionPickerBar.SetActive(false);
@@ -1585,10 +1589,12 @@ namespace Realmz.Game
             _levelUpModalRoot.SetActive(true);
             _levelUpModalRoot.transform.SetAsLastSibling();
             RefreshLevelUpModal();
+            PlayModalPopIn(_levelUpModalRoot, 0.90f, 0.16f);
         }
 
         public void CloseLevelUpModal()
         {
+            ResetModalPopIn(_levelUpModalRoot);
             if (_levelUpModalRoot != null)
             {
                 _levelUpModalRoot.SetActive(false);
@@ -2068,6 +2074,7 @@ namespace Realmz.Game
 
             _outcomeModalRoot.SetActive(true);
             _outcomeModalRoot.transform.SetAsLastSibling();
+            PlayModalPopIn(_outcomeModalRoot, 0.90f, 0.18f);
 
             if (immediate)
             {
@@ -2163,6 +2170,7 @@ namespace Realmz.Game
 
         private void StopVictoryAnimation()
         {
+            ResetModalPopIn(_outcomeModalRoot);
             if (_victoryAnimCoroutine != null)
             {
                 StopCoroutine(_victoryAnimCoroutine);
@@ -2176,6 +2184,91 @@ namespace Realmz.Game
                     _victoryHeroCards[i].LvlUpIconGo.transform.localScale = Vector3.one;
                 }
             }
+        }
+
+        private void PlayModalPopIn(GameObject modalRoot, float startScale = 0.90f, float duration = 0.16f)
+        {
+            if (modalRoot == null)
+            {
+                return;
+            }
+
+            if (_modalPopCoroutine != null)
+            {
+                StopCoroutine(_modalPopCoroutine);
+                _modalPopCoroutine = null;
+            }
+            if (_modalPopTarget != null && _modalPopTarget != modalRoot)
+            {
+                _modalPopTarget.transform.localScale = Vector3.one;
+            }
+            _modalPopTarget = modalRoot;
+
+            bool immediate = Application.isBatchMode || !Application.isPlaying || !gameObject.activeInHierarchy || SkipAnimations;
+            if (immediate)
+            {
+                modalRoot.transform.localScale = Vector3.one;
+                _modalPopTarget = null;
+                return;
+            }
+
+            modalRoot.transform.localScale = new Vector3(startScale, startScale, 1f);
+            _modalPopCoroutine = StartCoroutine(ModalPopInRoutine(modalRoot, startScale, duration));
+        }
+
+        private void ResetModalPopIn(GameObject modalRoot)
+        {
+            if (_modalPopTarget == modalRoot && _modalPopCoroutine != null)
+            {
+                StopCoroutine(_modalPopCoroutine);
+                _modalPopCoroutine = null;
+                _modalPopTarget = null;
+            }
+            if (modalRoot != null)
+            {
+                modalRoot.transform.localScale = Vector3.one;
+            }
+        }
+
+        private IEnumerator ModalPopInRoutine(GameObject modalRoot, float startScale, float duration)
+        {
+            float safeDuration = Mathf.Max(0.01f, duration);
+            float elapsed = 0f;
+            while (elapsed < safeDuration)
+            {
+                if (modalRoot == null || !modalRoot.activeSelf || SkipAnimations)
+                {
+                    if (modalRoot != null)
+                    {
+                        modalRoot.transform.localScale = Vector3.one;
+                    }
+                    _modalPopCoroutine = null;
+                    _modalPopTarget = null;
+                    yield break;
+                }
+
+                elapsed += Time.unscaledDeltaTime;
+                float t = Mathf.Clamp01(elapsed / safeDuration);
+                float eased = EaseOutBack(t);
+                float s = Mathf.LerpUnclamped(startScale, 1.0f, eased);
+                modalRoot.transform.localScale = new Vector3(s, s, 1f);
+                yield return null;
+            }
+
+            if (modalRoot != null)
+            {
+                modalRoot.transform.localScale = Vector3.one;
+            }
+            _modalPopCoroutine = null;
+            _modalPopTarget = null;
+        }
+
+        private static float EaseOutBack(float t)
+        {
+            const float c1 = 1.70158f;
+            const float c3 = c1 + 1f;
+            float x = t - 1f;
+            return 1f + c3 * x * x * x + c1 * x * x;
         }
 
         public bool ToggleVictoryLootSelection(int stackIndex)

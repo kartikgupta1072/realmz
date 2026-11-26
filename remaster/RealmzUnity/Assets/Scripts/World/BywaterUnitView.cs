@@ -38,10 +38,15 @@ namespace Realmz.World
         private const float FloatingTextOvershootEndScale = 1.0f;
         private static readonly Color CurrentTurnGold = new Color(0.980f, 0.800f, 0.082f, 0.95f); // #FACC15
         private static readonly Color HitFlashGoldWhite = new Color(1.0f, 0.953f, 0.690f, 1.0f); // #FFF3B0
+        private static readonly Color HealFlashEmerald = new Color(0.45f, 1.0f, 0.66f, 1.0f);
+        private static readonly Color HitFlashEmissionGold = new Color(1.0f, 0.92f, 0.55f, 1.0f);
+        private static readonly Color HealFlashEmissionEmerald = new Color(0.28f, 0.96f, 0.56f, 1.0f);
+        private static readonly Color HpDamageTrailColor = new Color(1.0f, 0.92f, 0.56f, 0.95f);
         private static readonly Color DeadSpriteTint = new Color(0.56f, 0.52f, 0.50f, 0.86f);
         private static readonly Color AllyHpBlue = new Color(0.220f, 0.741f, 0.973f, 1f);      // #38BDF8
         private static readonly Color EnemyHpRed = new Color(0.937f, 0.267f, 0.267f, 1f);      // #EF4444
         private static readonly Color ContactShadowColor = new Color(0.05f, 0.06f, 0.10f, 0.55f);
+        private const float HpDamageTrailDuration = 0.45f;
         private static readonly Dictionary<Material, Material> s_corpseMaterials = new Dictionary<Material, Material>(16);
         private static Material s_fallbackCorpseMaterial;
 
@@ -70,6 +75,7 @@ namespace Realmz.World
         private TextMeshProUGUI _nameLabel;
         private TextMeshProUGUI _detailLabel;
         private Image _hpFill;
+        private Image _hpDamageTrailFill;
         private Image _spBarRoot;
         private Image _spFill;
         private TextMeshProUGUI _statusBadgeLabel;
@@ -109,6 +115,16 @@ namespace Realmz.World
         private bool _isDyingTopple;
         private float _idlePhase;
         private float _windPhaseNorm;
+        private bool _hpTrailInitialized;
+        private float _hpCurrentRatio = 1f;
+        private float _hpTrailRatio = 1f;
+        private float _hpTrailStartRatio = 1f;
+        private float _hpTrailTimer;
+        private float _scalePunchTimer;
+        private float _scalePunchDuration;
+        private float _scalePunchPeak = 1f;
+        private Color _activeFlashTint = HitFlashGoldWhite;
+        private Color _activeFlashEmission = HitFlashEmissionGold;
         private Coroutine _moveCoroutine;
         private Coroutine _lungeCoroutine;
         private Coroutine _hitFlashCoroutine;
@@ -210,11 +226,11 @@ namespace Realmz.World
         public void SetFacingRight(bool facingRight)
         {
             _facingRight = facingRight;
-            if (_spriteBillboardTransform != null)
+            if (_spriteBillboardTransform != null && _scalePunchTimer <= 0f)
             {
                 _spriteBillboardTransform.localScale = Vector3.one;
             }
-            ApplySpritePropertyBlock(_isHitFlashing ? HitFlashGoldWhite : GetNormalSpriteTint());
+            ApplySpritePropertyBlock(_isHitFlashing ? _activeFlashTint : GetNormalSpriteTint());
         }
 
         public void ShowHoverRim(bool active, Color color)
@@ -222,7 +238,7 @@ namespace Realmz.World
             EnsureHierarchy();
             _hoverRimActive = active;
             _hoverRimColor = active ? color : Color.clear;
-            ApplySpritePropertyBlock(_isHitFlashing ? HitFlashGoldWhite : GetNormalSpriteTint());
+            ApplySpritePropertyBlock(_isHitFlashing ? _activeFlashTint : GetNormalSpriteTint());
         }
 
         private void ResolveStateMaterials(Material fallback)
@@ -311,12 +327,27 @@ namespace Realmz.World
             _hoverRimColor = Color.clear;
             _idlePhase = ComputeDeterministicPhase(UnitId);
             _windPhaseNorm = _idlePhase / (Mathf.PI * 2f);
+            _hpTrailInitialized = false;
+            _hpCurrentRatio = 1f;
+            _hpTrailRatio = 1f;
+            _hpTrailStartRatio = 1f;
+            _hpTrailTimer = 0f;
+            _scalePunchTimer = 0f;
+            _scalePunchDuration = 0f;
+            _scalePunchPeak = 1f;
+            _activeFlashTint = HitFlashGoldWhite;
+            _activeFlashEmission = HitFlashEmissionGold;
 
             StopMoveCoroutine();
             StopLungeCoroutine();
             StopHitFlashCoroutine();
             StopDeathCoroutine();
             EnsureHierarchy();
+
+            if (_hpDamageTrailFill != null)
+            {
+                _hpDamageTrailFill.rectTransform.anchorMax = Vector2.one;
+            }
 
             if (_spriteBillboard != null)
             {
@@ -514,9 +545,47 @@ namespace Realmz.World
             UpdateDustPuffs(Time.deltaTime);
             UpdateFloatingTexts(Time.unscaledDeltaTime);
 
+            if (_hpTrailTimer > 0f && _hpDamageTrailFill != null)
+            {
+                _hpTrailTimer = Mathf.Max(0f, _hpTrailTimer - Time.deltaTime);
+                float u = 1f - (_hpTrailTimer / HpDamageTrailDuration);
+                float inv = 1f - u;
+                float eased = 1f - (inv * inv * inv);
+                _hpTrailRatio = Mathf.Lerp(_hpTrailStartRatio, _hpCurrentRatio, eased);
+                _hpDamageTrailFill.rectTransform.anchorMax = new Vector2(_hpTrailRatio, 1f);
+            }
+
             if (!_isAlive)
             {
+                if (_spriteBillboardTransform != null && _scalePunchTimer > 0f)
+                {
+                    _scalePunchTimer = 0f;
+                    _scalePunchDuration = 0f;
+                    _scalePunchPeak = 1f;
+                    _spriteBillboardTransform.localScale = Vector3.one;
+                }
                 return;
+            }
+
+            float punchScale = 1f;
+            if (_scalePunchTimer > 0f && _scalePunchDuration > 0.0001f)
+            {
+                _scalePunchTimer = Mathf.Max(0f, _scalePunchTimer - Time.deltaTime);
+                float progress = 1f - (_scalePunchTimer / _scalePunchDuration);
+                float envelope = progress < 0.28f
+                    ? Mathf.SmoothStep(0f, 1f, progress / 0.28f)
+                    : Mathf.SmoothStep(1f, 0f, (progress - 0.28f) / 0.72f);
+                punchScale = Mathf.Lerp(1f, _scalePunchPeak, envelope);
+                if (_scalePunchTimer <= 0f)
+                {
+                    _scalePunchDuration = 0f;
+                    _scalePunchPeak = 1f;
+                    punchScale = 1f;
+                }
+            }
+            if (_spriteBillboardTransform != null)
+            {
+                _spriteBillboardTransform.localScale = new Vector3(punchScale, punchScale, 1f);
             }
 
             if (_animState == UnitAnimState.Attack &&
@@ -677,6 +746,46 @@ namespace Realmz.World
             float safeMaxHp = Mathf.Max(1, maxHp);
             float hpRatio = Mathf.Clamp01(hp / safeMaxHp);
             _hpFill.rectTransform.anchorMax = new Vector2(hpRatio, 1f);
+
+            if (!_hpTrailInitialized)
+            {
+                _hpTrailInitialized = true;
+                _hpCurrentRatio = hpRatio;
+                _hpTrailRatio = hpRatio;
+                _hpTrailStartRatio = hpRatio;
+                _hpTrailTimer = 0f;
+                if (_hpDamageTrailFill != null)
+                {
+                    _hpDamageTrailFill.rectTransform.anchorMax = new Vector2(hpRatio, 1f);
+                }
+            }
+            else if (hpRatio < _hpCurrentRatio - 0.0001f)
+            {
+                _hpTrailStartRatio = Mathf.Max(_hpTrailRatio, _hpCurrentRatio);
+                _hpTrailRatio = _hpTrailStartRatio;
+                _hpTrailTimer = HpDamageTrailDuration;
+                _hpCurrentRatio = hpRatio;
+                if (_hpDamageTrailFill != null)
+                {
+                    _hpDamageTrailFill.rectTransform.anchorMax = new Vector2(_hpTrailRatio, 1f);
+                }
+            }
+            else if (hpRatio > _hpCurrentRatio + 0.0001f)
+            {
+                _hpCurrentRatio = hpRatio;
+                _hpTrailRatio = hpRatio;
+                _hpTrailStartRatio = hpRatio;
+                _hpTrailTimer = 0f;
+                if (_hpDamageTrailFill != null)
+                {
+                    _hpDamageTrailFill.rectTransform.anchorMax = new Vector2(hpRatio, 1f);
+                }
+            }
+            else
+            {
+                _hpCurrentRatio = hpRatio;
+            }
+
             ApplyTeamHpColor();
         }
 
@@ -930,6 +1039,22 @@ namespace Realmz.World
             StopLungeCoroutine();
             StopHitFlashCoroutine();
 
+            _hpTrailTimer = 0f;
+            _hpTrailRatio = _hpCurrentRatio;
+            _hpTrailStartRatio = _hpCurrentRatio;
+            if (_hpDamageTrailFill != null)
+            {
+                _hpDamageTrailFill.rectTransform.anchorMax = new Vector2(_hpCurrentRatio, 1f);
+            }
+
+            _scalePunchTimer = 0f;
+            _scalePunchDuration = 0f;
+            _scalePunchPeak = 1f;
+            if (_spriteBillboardTransform != null)
+            {
+                _spriteBillboardTransform.localScale = Vector3.one;
+            }
+
             if (!_isAlive)
             {
                 if (_isDyingTopple || _deathCoroutine != null)
@@ -950,7 +1075,7 @@ namespace Realmz.World
             SetAnimState(UnitAnimState.Idle);
         }
 
-        public void PlayHitFlash(float duration = 0.055f)
+        public void PlayHitFlash(float duration = 0.055f, bool isCrit = false)
         {
             EnsureHierarchy();
             StopHitFlashCoroutine();
@@ -964,15 +1089,61 @@ namespace Realmz.World
             if (!Application.isPlaying || !gameObject.activeInHierarchy || duration <= 0.001f)
             {
                 _isHitFlashing = false;
+                _scalePunchTimer = 0f;
+                _scalePunchDuration = 0f;
+                _scalePunchPeak = 1f;
+                if (_spriteBillboardTransform != null)
+                {
+                    _spriteBillboardTransform.localScale = Vector3.one;
+                }
                 ApplySpriteTint(GetNormalSpriteTint());
                 SetAnimState(_moveCoroutine != null ? UnitAnimState.Walk : UnitAnimState.Idle);
                 return;
             }
 
             SetAnimState(UnitAnimState.Hit);
+            _activeFlashTint = HitFlashGoldWhite;
+            _activeFlashEmission = HitFlashEmissionGold;
+            _scalePunchDuration = isCrit ? 0.24f : 0.18f;
+            _scalePunchTimer = _scalePunchDuration;
+            _scalePunchPeak = isCrit ? 1.16f : 1.08f;
             _isHitFlashing = true;
             ApplyHitFlashTint();
             _hitFlashCoroutine = StartCoroutine(HitFlashRoutine(hitDuration));
+        }
+
+        public void PlayHealPulse()
+        {
+            EnsureHierarchy();
+            StopHitFlashCoroutine();
+
+            if (!_isAlive)
+            {
+                return;
+            }
+
+            if (!Application.isPlaying || !gameObject.activeInHierarchy)
+            {
+                _isHitFlashing = false;
+                _scalePunchTimer = 0f;
+                _scalePunchDuration = 0f;
+                _scalePunchPeak = 1f;
+                if (_spriteBillboardTransform != null)
+                {
+                    _spriteBillboardTransform.localScale = Vector3.one;
+                }
+                ApplySpriteTint(GetNormalSpriteTint());
+                return;
+            }
+
+            _activeFlashTint = HealFlashEmerald;
+            _activeFlashEmission = HealFlashEmissionEmerald;
+            _scalePunchDuration = 0.28f;
+            _scalePunchTimer = _scalePunchDuration;
+            _scalePunchPeak = 1.10f;
+            _isHitFlashing = true;
+            ApplySpritePropertyBlock(_activeFlashTint);
+            _hitFlashCoroutine = StartCoroutine(HitFlashRoutine(0.26f));
         }
 
         public void ShowFloatingText(string message, Color color)
@@ -1484,7 +1655,7 @@ namespace Realmz.World
 
             ApplyAnimStateMaterial();
             ResetSpriteIdlePose();
-            ApplySpritePropertyBlock(_isHitFlashing ? HitFlashGoldWhite : GetNormalSpriteTint());
+            ApplySpritePropertyBlock(_isHitFlashing ? _activeFlashTint : GetNormalSpriteTint());
         }
 
         private static Material GetOrCreateCorpseMaterial(Material sourceMat)
@@ -1630,7 +1801,7 @@ namespace Realmz.World
 
         private void ApplyHitFlashTint()
         {
-            ApplySpritePropertyBlock(HitFlashGoldWhite);
+            ApplySpritePropertyBlock(_activeFlashTint);
         }
 
         private void ApplySpritePropertyBlock(Color tint)
@@ -1655,7 +1826,7 @@ namespace Realmz.World
                 Material mat = _spriteRenderer.sharedMaterial;
                 if (mat != null && mat.HasProperty(EmissionColorId))
                 {
-                    _spritePropBlock.SetColor(EmissionColorId, new Color(1.0f, 0.92f, 0.55f, 1.0f) * 0.65f);
+                    _spritePropBlock.SetColor(EmissionColorId, _activeFlashEmission * 0.65f);
                 }
             }
 
@@ -1742,6 +1913,18 @@ namespace Realmz.World
             microHudGo.AddComponent<PixelBillboard>();
 
             _hpFill = CreateSlimBar(microHudGo.transform, "HpBar", Vector2.zero, new Vector2(92f, 5f), AllyHpBlue);
+
+            GameObject trailGo = new GameObject("DamageTrail");
+            trailGo.transform.SetParent(_hpFill.transform.parent, false);
+            trailGo.transform.SetSiblingIndex(_hpFill.transform.GetSiblingIndex());
+            RectTransform trailRt = trailGo.AddComponent<RectTransform>();
+            trailRt.anchorMin = Vector2.zero;
+            trailRt.anchorMax = Vector2.one;
+            trailRt.offsetMin = new Vector2(0.5f, 0.5f);
+            trailRt.offsetMax = new Vector2(-0.5f, -0.5f);
+            _hpDamageTrailFill = trailGo.AddComponent<Image>();
+            _hpDamageTrailFill.color = HpDamageTrailColor;
+            _hpDamageTrailFill.raycastTarget = false;
 
             // 6. WorldHud (hover/Alt expanded nameplate, hidden by default)
             EnsureWorldHud(headHeight);

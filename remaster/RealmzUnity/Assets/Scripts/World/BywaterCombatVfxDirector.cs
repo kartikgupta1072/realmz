@@ -34,6 +34,11 @@ namespace Realmz.World
         private static readonly Color FrostMistTint = new Color(0.84f, 0.97f, 1.00f, 0.56f);
         private static readonly Color KegGoldTint = new Color(1.00f, 0.82f, 0.26f, 0.98f);
         private static readonly Color WarmFlashColor = new Color(1.00f, 0.58f, 0.20f, 1.0f);
+        private static readonly Color MeleeSparkGoldTint = new Color(1.00f, 0.84f, 0.30f, 1.0f);
+        private static readonly Color MeleeSparkWhiteTint = new Color(1.00f, 0.98f, 0.88f, 1.0f);
+        private static readonly Color HealEmeraldTint = new Color(0.28f, 0.96f, 0.56f, 0.95f);
+        private static readonly Color HealGoldTint = new Color(1.00f, 0.88f, 0.38f, 0.95f);
+        private static readonly Color HealRingTint = new Color(0.36f, 0.98f, 0.62f, 0.85f);
 
         private enum VfxKind
         {
@@ -44,7 +49,9 @@ namespace Realmz.World
             FireballBlast = 4,
             ChainLightning = 5,
             FrostShatter = 6,
-            KegExplosion = 7
+            KegExplosion = 7,
+            MeleeHitSpark = 8,
+            HealBurst = 9
         }
 
         private sealed class PooledLineSlot
@@ -90,6 +97,8 @@ namespace Realmz.World
             public readonly float[] QuadBaseScales = new float[MaxQuadsPerEffect];
             public readonly float[] QuadSpinAngles = new float[MaxQuadsPerEffect];
             public readonly bool[] QuadIsSmoke = new bool[MaxQuadsPerEffect];
+            public readonly bool[] QuadIsAlt = new bool[MaxQuadsPerEffect];
+            public bool IsCrit;
             public int Seed;
         }
 
@@ -330,6 +339,94 @@ namespace Realmz.World
                 FireFlameTint);
         }
 
+        public void PlayMeleeHitSpark(Vector3 targetWorldPos, bool isCrit = false)
+        {
+            EnsureInitialized();
+
+            Vector3 center = targetWorldPos + new Vector3(0f, 0.55f, 0f);
+            ActiveVfxEffect fx = AcquireEffectSlot();
+            fx.Active = true;
+            fx.Kind = VfxKind.MeleeHitSpark;
+            fx.Elapsed = 0f;
+            fx.Duration = isCrit ? 0.24f : 0.20f;
+            fx.LightDuration = 0.18f;
+            fx.StartPos = center;
+            fx.TargetPos = center;
+            fx.IsCrit = isCrit;
+            fx.Seed = ++_nextSeed;
+            fx.LightIndex = isCrit ? AcquireLight(center + new Vector3(0f, 0.35f, 0f), 4.5f) : -1;
+
+            int sparkCount = isCrit ? 8 : 5;
+            fx.QuadCount = sparkCount;
+
+            for (int i = 0; i < sparkCount; i++)
+            {
+                float angle = (i / (float)sparkCount) * Mathf.PI * 2f + ((fx.Seed % 7) * 0.19f);
+                float elev = ((i % 2 == 0) ? 0.45f : 0.15f) + ((i % 3) * 0.18f);
+                float speed = (isCrit ? 3.2f : 2.4f) + ((i * 19) % 5) * 0.25f;
+                Vector3 dir = new Vector3(Mathf.Cos(angle), elev, Mathf.Sin(angle)).normalized;
+                bool useGlow = (i % 3) == 1;
+                bool isGold = (i % 2) == 0;
+                Material mat = useGlow ? _additiveGlowMat : _additiveStreakMat;
+                Color col = isGold ? MeleeSparkGoldTint : MeleeSparkWhiteTint;
+
+                fx.QuadIndices[i] = AcquireQuad(mat, col, new Vector3(0.32f, 0.14f, 1f));
+                fx.QuadStartPos[i] = center + dir * 0.06f;
+                fx.QuadVelocities[i] = dir * speed;
+                fx.QuadBaseScales[i] = (isCrit ? 0.36f : 0.28f) + ((i % 2) * 0.06f);
+                fx.QuadIsAlt[i] = useGlow;
+                fx.QuadIsSmoke[i] = isGold;
+            }
+
+            UpdateMeleeHitSparkVisual(fx);
+        }
+
+        public void PlayHealBurst(Vector3 targetWorldPos)
+        {
+            EnsureInitialized();
+
+            ActiveVfxEffect fx = AcquireEffectSlot();
+            fx.Active = true;
+            fx.Kind = VfxKind.HealBurst;
+            fx.Elapsed = 0f;
+            fx.Duration = 0.42f;
+            fx.StartPos = targetWorldPos;
+            fx.TargetPos = targetWorldPos;
+            fx.Seed = ++_nextSeed;
+
+            const int moteCount = 6;
+            fx.QuadCount = 1 + moteCount;
+
+            fx.QuadIndices[0] = AcquireQuad(_additiveRingMat, HealRingTint, new Vector3(0.40f, 0.40f, 1f));
+            fx.QuadStartPos[0] = new Vector3(targetWorldPos.x, targetWorldPos.y + 0.08f, targetWorldPos.z);
+            fx.QuadBaseScales[0] = 1.45f;
+            fx.QuadIsAlt[0] = true;
+            fx.QuadIsSmoke[0] = true;
+
+            for (int i = 1; i <= moteCount; i++)
+            {
+                float angle = ((i - 1) / (float)moteCount) * Mathf.PI * 2f + ((fx.Seed % 5) * 0.22f);
+                float radial = 0.24f + ((i % 2) * 0.14f);
+                bool isEmerald = (i % 2) == 1;
+                Color c = isEmerald ? HealEmeraldTint : HealGoldTint;
+
+                fx.QuadIndices[i] = AcquireQuad(_additiveGlowMat, c, new Vector3(0.24f, 0.24f, 1f));
+                fx.QuadStartPos[i] = targetWorldPos + new Vector3(
+                    Mathf.Cos(angle) * radial,
+                    0.12f + (i % 3) * 0.08f,
+                    Mathf.Sin(angle) * radial);
+                fx.QuadVelocities[i] = new Vector3(
+                    Mathf.Cos(angle) * 0.22f,
+                    1.45f + (i % 3) * 0.25f,
+                    Mathf.Sin(angle) * 0.22f);
+                fx.QuadBaseScales[i] = 0.22f + (i % 2) * 0.07f;
+                fx.QuadIsAlt[i] = false;
+                fx.QuadIsSmoke[i] = isEmerald;
+            }
+
+            UpdateHealBurstVisual(fx);
+        }
+
         public void ClearAll()
         {
             for (int i = 0; i < _activeEffects.Length; i++)
@@ -509,10 +606,12 @@ namespace Realmz.World
             fx.LineIndex = -1;
             fx.LightIndex = -1;
             fx.QuadCount = 0;
+            fx.IsCrit = false;
             for (int i = 0; i < MaxQuadsPerEffect; i++)
             {
                 fx.QuadIndices[i] = -1;
                 fx.QuadIsSmoke[i] = false;
+                fx.QuadIsAlt[i] = false;
             }
         }
 
@@ -708,6 +807,30 @@ namespace Realmz.World
                         else
                         {
                             UpdateFrostShatterVisual(fx);
+                        }
+                        break;
+
+                    case VfxKind.MeleeHitSpark:
+                        if (fx.Elapsed >= fx.Duration)
+                        {
+                            ReleaseEffectResources(fx);
+                            fx.Active = false;
+                        }
+                        else
+                        {
+                            UpdateMeleeHitSparkVisual(fx);
+                        }
+                        break;
+
+                    case VfxKind.HealBurst:
+                        if (fx.Elapsed >= fx.Duration)
+                        {
+                            ReleaseEffectResources(fx);
+                            fx.Active = false;
+                        }
+                        else
+                        {
+                            UpdateHealBurstVisual(fx);
                         }
                         break;
                 }
@@ -1078,6 +1201,96 @@ namespace Realmz.World
                     SetQuadTint(slot.Renderer, c);
                 }
                 slot.Root.transform.position = pos;
+            }
+        }
+
+        private void UpdateMeleeHitSparkVisual(ActiveVfxEffect fx)
+        {
+            float t = Mathf.Clamp01(fx.Elapsed / Mathf.Max(0.01f, fx.Duration));
+            Quaternion camRot = GetBillboardRotation();
+
+            if (fx.LightIndex >= 0)
+            {
+                PooledLightSlot lSlot = _lightPool[fx.LightIndex];
+                if (fx.Elapsed >= fx.LightDuration)
+                {
+                    lSlot.PointLight.intensity = 0f;
+                    lSlot.PointLight.gameObject.SetActive(false);
+                }
+                else
+                {
+                    float lt = Mathf.Clamp01(fx.Elapsed / Mathf.Max(0.01f, fx.LightDuration));
+                    lSlot.PointLight.intensity = Mathf.Lerp(7.5f, 0f, lt);
+                }
+            }
+
+            for (int i = 0; i < fx.QuadCount; i++)
+            {
+                int qIdx = fx.QuadIndices[i];
+                if (qIdx < 0) continue;
+                PooledQuadSlot slot = _quadPool[qIdx];
+                Vector3 pos = fx.QuadStartPos[i] + fx.QuadVelocities[i] * fx.Elapsed;
+                pos.y -= 2.4f * fx.Elapsed * fx.Elapsed;
+
+                if (fx.QuadIsAlt[i])
+                {
+                    slot.Root.transform.position = pos;
+                    slot.Root.transform.rotation = camRot;
+                    float sc = fx.QuadBaseScales[i] * Mathf.Lerp(1.1f, 0.35f, t);
+                    slot.Root.transform.localScale = new Vector3(sc, sc, 1f);
+                }
+                else
+                {
+                    Vector3 vel = fx.QuadVelocities[i];
+                    vel.y -= 4.8f * fx.Elapsed;
+                    Vector3 tangent = vel.sqrMagnitude > 0.0001f ? vel.normalized : Vector3.right;
+                    OrientStreakQuad(slot.Root.transform, pos, tangent);
+                    float len = fx.QuadBaseScales[i] * Mathf.Lerp(1.25f, 0.5f, t);
+                    slot.Root.transform.localScale = new Vector3(len, len * 0.42f, 1f);
+                }
+
+                Color col = fx.QuadIsSmoke[i] ? MeleeSparkGoldTint : MeleeSparkWhiteTint;
+                col.a *= (1f - t);
+                SetQuadTint(slot.Renderer, col);
+            }
+        }
+
+        private void UpdateHealBurstVisual(ActiveVfxEffect fx)
+        {
+            float t = Mathf.Clamp01(fx.Elapsed / Mathf.Max(0.01f, fx.Duration));
+            float easeOut = 1f - (1f - t) * (1f - t);
+            Quaternion camRot = GetBillboardRotation();
+
+            if (fx.QuadCount > 0 && fx.QuadIndices[0] >= 0)
+            {
+                PooledQuadSlot ring = _quadPool[fx.QuadIndices[0]];
+                ring.Root.transform.position = fx.QuadStartPos[0];
+                ring.Root.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+                float rScale = Mathf.Lerp(0.32f, fx.QuadBaseScales[0], easeOut);
+                ring.Root.transform.localScale = new Vector3(rScale, rScale, 1f);
+                Color rCol = HealRingTint;
+                rCol.a *= (1f - t);
+                SetQuadTint(ring.Renderer, rCol);
+            }
+
+            float moteFade = t < 0.25f
+                ? Mathf.Lerp(0.4f, 1f, t / 0.25f)
+                : Mathf.Clamp01(1f - (t - 0.25f) / 0.75f);
+
+            for (int i = 1; i < fx.QuadCount; i++)
+            {
+                int qIdx = fx.QuadIndices[i];
+                if (qIdx < 0) continue;
+                PooledQuadSlot slot = _quadPool[qIdx];
+                Vector3 pos = fx.QuadStartPos[i] + fx.QuadVelocities[i] * fx.Elapsed;
+                slot.Root.transform.position = pos;
+                slot.Root.transform.rotation = camRot;
+                float pulse = 1f + 0.22f * Mathf.Sin(fx.Elapsed * 24f + i);
+                float sc = fx.QuadBaseScales[i] * pulse * (1f - t * 0.35f);
+                slot.Root.transform.localScale = new Vector3(sc, sc, 1f);
+                Color col = fx.QuadIsSmoke[i] ? HealEmeraldTint : HealGoldTint;
+                col.a *= moteFade;
+                SetQuadTint(slot.Renderer, col);
             }
         }
 

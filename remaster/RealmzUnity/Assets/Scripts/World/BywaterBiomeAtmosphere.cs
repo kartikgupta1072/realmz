@@ -74,6 +74,10 @@ namespace Realmz.World
         private Gradient _sunMotesGradient;
         private Gradient _firefliesGradient;
         private Gradient _caveSporesGradient;
+        private Vector3 _focusWorldPos;
+        private bool _hasFocusWorldPos;
+        private float _currentDofFocusDistance = 16f;
+        private bool _hasInitializedDofFocus;
 
         public bool IsDungeonActive { get; private set; }
         public WorldTimePhase CurrentTimePhase { get; private set; } = WorldTimePhase.Day;
@@ -82,6 +86,11 @@ namespace Realmz.World
         public bool HasLitTorch { get; private set; }
         public bool IsCombatActive { get; private set; }
         public float CurrentNightRimStrength => _currentState.nightRimStrength;
+        public bool IsDepthOfFieldActive =>
+            ResolveActiveVolumeProfile() is VolumeProfile vp &&
+            vp.TryGet(out DepthOfField dof) &&
+            dof.active &&
+            dof.mode.value == DepthOfFieldMode.Bokeh;
         public bool HasFirefliesActive =>
             sunMoteParticles != null &&
             sunMoteParticles.emission.enabled &&
@@ -94,23 +103,31 @@ namespace Realmz.World
 
         private void Update()
         {
-            if (!_isTransitioning || !Application.isPlaying)
+            if (!Application.isPlaying)
             {
                 return;
             }
 
-            _transitionElapsed += Time.unscaledDeltaTime;
-            float rawT = Mathf.Clamp01(_transitionElapsed / TransitionDurationSeconds);
-            float t = rawT * rawT * (3f - 2f * rawT);
-
-            AtmosphereState blended = LerpState(_startState, _targetState, t);
-            _currentState = blended;
-            ApplyAtmosphereStateImmediate(blended);
-
-            if (rawT >= 1f)
+            if (_isTransitioning)
             {
-                _currentState = _targetState;
-                _isTransitioning = false;
+                _transitionElapsed += Time.unscaledDeltaTime;
+                float rawT = Mathf.Clamp01(_transitionElapsed / TransitionDurationSeconds);
+                float t = rawT * rawT * (3f - 2f * rawT);
+
+                AtmosphereState blended = LerpState(_startState, _targetState, t);
+                _currentState = blended;
+                ApplyAtmosphereStateImmediate(blended);
+
+                if (rawT >= 1f)
+                {
+                    _currentState = _targetState;
+                    _isTransitioning = false;
+                }
+            }
+
+            if (targetCamera != null)
+            {
+                UpdateDepthOfFieldFocus();
             }
         }
 
@@ -300,6 +317,9 @@ namespace Realmz.World
 
         public void UpdateFocusPosition(Vector3 worldPos)
         {
+            _focusWorldPos = worldPos;
+            _hasFocusWorldPos = true;
+
             if (sunMoteParticles != null)
             {
                 float yPos = _currentState.moteMode == MoteVisualMode.Fireflies ? 1.55f : 2.6f;
@@ -697,6 +717,79 @@ namespace Realmz.World
             }
         }
 
+        private VolumeProfile ResolveActiveVolumeProfile()
+        {
+            if (globalVolume == null)
+            {
+                return null;
+            }
+
+            return Application.isPlaying ? globalVolume.profile : globalVolume.sharedProfile;
+        }
+
+        private float ComputeTargetFocusDistance()
+        {
+            if (targetCamera == null)
+            {
+                return 16f;
+            }
+
+            Transform camTransform = targetCamera.transform;
+            float planeY = _hasFocusWorldPos ? _focusWorldPos.y : 0f;
+            Plane groundPlane = new Plane(Vector3.up, new Vector3(0f, planeY, 0f));
+            Ray viewRay = new Ray(camTransform.position, camTransform.forward);
+            if (groundPlane.Raycast(viewRay, out float enterDistance) && enterDistance > 0.01f)
+            {
+                return Mathf.Clamp(enterDistance, 10f, 32f);
+            }
+
+            if (_hasFocusWorldPos)
+            {
+                return Mathf.Clamp(Vector3.Distance(camTransform.position, _focusWorldPos), 10f, 32f);
+            }
+
+            return 16f;
+        }
+
+        private void ApplyDepthOfFieldSettings(VolumeProfile activeProfile, float focusDistance)
+        {
+            DepthOfField dof = GetOrAddOverride<DepthOfField>(activeProfile);
+            dof.active = true;
+            dof.mode.overrideState = true;
+            dof.mode.value = DepthOfFieldMode.Bokeh;
+            dof.focusDistance.overrideState = true;
+            dof.focusDistance.value = focusDistance;
+            dof.focalLength.overrideState = true;
+            dof.focalLength.value = IsCombatActive ? 34f : 44f;
+            dof.aperture.overrideState = true;
+            dof.aperture.value = IsCombatActive ? 20f : 15f;
+            dof.bladeCount.overrideState = true;
+            dof.bladeCount.value = 6;
+        }
+
+        private void UpdateDepthOfFieldFocus()
+        {
+            VolumeProfile activeProfile = ResolveActiveVolumeProfile();
+            if (activeProfile == null)
+            {
+                return;
+            }
+
+            float targetFocus = ComputeTargetFocusDistance();
+            if (!_hasInitializedDofFocus)
+            {
+                _currentDofFocusDistance = targetFocus;
+                _hasInitializedDofFocus = true;
+            }
+            else
+            {
+                float lerpFactor = 1f - Mathf.Exp(-8f * Time.unscaledDeltaTime);
+                _currentDofFocusDistance = Mathf.Lerp(_currentDofFocusDistance, targetFocus, lerpFactor);
+            }
+
+            ApplyDepthOfFieldSettings(activeProfile, _currentDofFocusDistance);
+        }
+
         private void ApplyVolumeOverrides(
             TonemappingMode tonemappingMode,
             float postExposure,
@@ -711,12 +804,7 @@ namespace Realmz.World
             float vignetteIntensity,
             float vignetteSmoothness)
         {
-            if (globalVolume == null)
-            {
-                return;
-            }
-
-            VolumeProfile activeProfile = Application.isPlaying ? globalVolume.profile : globalVolume.sharedProfile;
+            VolumeProfile activeProfile = ResolveActiveVolumeProfile();
             if (activeProfile == null)
             {
                 return;
@@ -762,6 +850,15 @@ namespace Realmz.World
             vignette.intensity.value = vignetteIntensity;
             vignette.smoothness.overrideState = true;
             vignette.smoothness.value = vignetteSmoothness;
+
+            float targetFocus = ComputeTargetFocusDistance();
+            if (!_hasInitializedDofFocus || !Application.isPlaying)
+            {
+                _currentDofFocusDistance = targetFocus;
+                _hasInitializedDofFocus = true;
+            }
+
+            ApplyDepthOfFieldSettings(activeProfile, _currentDofFocusDistance);
         }
 
         private static T GetOrAddOverride<T>(VolumeProfile profile) where T : VolumeComponent
