@@ -61,6 +61,9 @@ namespace Realmz.World
             public Vector2 BaseScale = Vector2.one;
             public float FlipX;
             public MeshRenderer ContactShadowRenderer;
+            public Vector3 BaseShadowLocalPos;
+            public Vector3 BaseShadowLocalScale = Vector3.one;
+            public Vector2 BaseWorldSizeMeters;
             public bool IsHovered;
             public float CurrentAlpha = 1f;
             public float LastAppliedAlpha = 1f;
@@ -212,6 +215,9 @@ namespace Realmz.World
         private int _combatClearMinY;
         private int _combatClearMaxY;
         private int _hiddenCombatForegroundPropCount;
+        private bool _hasBuildingSunShadowState;
+        private Quaternion _lastBuildingSunRotation = Quaternion.identity;
+        private bool _lastBuildingSunIsDungeon;
 
         public CartographyWorldData CartographyData => _cartographyData;
         public BywaterAtmosphereVfx AtmosphereVfx => _atmosphereVfx;
@@ -1389,9 +1395,22 @@ namespace Realmz.World
                             if (showShadow)
                             {
                                 Transform shadowTf = entry.ContactShadowRenderer.transform;
-                                shadowTf.localPosition = new Vector3(0f, 0.010f / Mathf.Max(0.25f, sizeY), 0f);
-                                float shadowDepth = Mathf.Clamp(sizeX * 0.44f, 0.42f, 2.20f);
-                                shadowTf.localScale = new Vector3(0.85f, 1f, shadowDepth);
+                                bool isBuilding = IsBuildingPropKind(prop.Kind);
+                                float widthMul = isBuilding ? 1.06f : 0.85f;
+                                float shadowDepth = isBuilding
+                                    ? Mathf.Clamp(sizeX * 0.58f, 0.95f, 3.10f)
+                                    : Mathf.Clamp(sizeX * 0.44f, 0.42f, 2.20f);
+                                float shadowLocalY = (isBuilding ? 0.014f : 0.010f) / Mathf.Max(0.25f, sizeY);
+
+                                Vector3 baseLocalPos = new Vector3(0f, shadowLocalY, 0f);
+                                Vector3 baseLocalScale = new Vector3(widthMul, 1f, shadowDepth);
+                                shadowTf.localPosition = baseLocalPos;
+                                shadowTf.localRotation = Quaternion.identity;
+                                shadowTf.localScale = baseLocalScale;
+
+                                entry.BaseShadowLocalPos = baseLocalPos;
+                                entry.BaseShadowLocalScale = baseLocalScale;
+                                entry.BaseWorldSizeMeters = new Vector2(sizeX, sizeY);
                                 entry.ContactShadowRenderer.sharedMaterial = GetOrCreatePropContactShadowMaterial();
                             }
                             entry.ContactShadowRenderer.gameObject.SetActive(showShadow);
@@ -1923,6 +1942,67 @@ namespace Realmz.World
             }
         }
 
+        public void UpdateBuildingSunShadows(Quaternion sunRotation, bool isDungeon)
+        {
+            _hasBuildingSunShadowState = true;
+            _lastBuildingSunRotation = sunRotation;
+            _lastBuildingSunIsDungeon = isDungeon;
+
+            if (_activePropCount <= 0)
+            {
+                return;
+            }
+
+            Vector3 lightRay = sunRotation * Vector3.forward;
+            float sunElevationSin = Mathf.Clamp01(-lightRay.y);
+            float lowSunFactor = Mathf.InverseLerp(0.92f, 0.20f, sunElevationSin);
+            Vector3 lightFwdXZ = new Vector3(lightRay.x, 0f, lightRay.z);
+            bool hasHorizontalSun = !isDungeon && lightFwdXZ.sqrMagnitude > 0.0001f;
+
+            Vector3 worldOffset = Vector3.zero;
+            float depthElongation = 1f;
+            if (hasHorizontalSun)
+            {
+                lightFwdXZ.Normalize();
+                float worldOffsetDist = Mathf.Lerp(0f, 0.38f, lowSunFactor);
+                worldOffset = lightFwdXZ * worldOffsetDist;
+                depthElongation = Mathf.Lerp(1f, 1.30f, lowSunFactor);
+            }
+
+            int limit = Mathf.Min(_activePropCount, _propPool.Count);
+            for (int i = 0; i < limit; i++)
+            {
+                PropBillboardEntry entry = _propPool[i];
+                if (entry == null ||
+                    entry.IsFloorDecal ||
+                    entry.Root == null ||
+                    !entry.Root.activeSelf ||
+                    !IsBuildingPropKind(entry.Kind) ||
+                    entry.ContactShadowRenderer == null ||
+                    !entry.ContactShadowRenderer.gameObject.activeSelf)
+                {
+                    continue;
+                }
+
+                Transform shadowTf = entry.ContactShadowRenderer.transform;
+                if (!hasHorizontalSun)
+                {
+                    shadowTf.localPosition = entry.BaseShadowLocalPos;
+                    shadowTf.localScale = entry.BaseShadowLocalScale;
+                    continue;
+                }
+
+                Vector3 localOffset = entry.Root.transform.InverseTransformVector(worldOffset);
+                Vector3 targetLocalPos = entry.BaseShadowLocalPos + localOffset;
+                targetLocalPos.y = entry.BaseShadowLocalPos.y;
+                shadowTf.localPosition = targetLocalPos;
+                shadowTf.localScale = new Vector3(
+                    entry.BaseShadowLocalScale.x,
+                    entry.BaseShadowLocalScale.y,
+                    entry.BaseShadowLocalScale.z * depthElongation);
+            }
+        }
+
         private static float PhaseToDefaultNormalizedTime(WorldTimePhase phase)
         {
             switch (phase)
@@ -2192,6 +2272,11 @@ namespace Realmz.World
                 {
                     entry.Root.transform.rotation = yawRot;
                 }
+            }
+
+            if (_hasBuildingSunShadowState)
+            {
+                UpdateBuildingSunShadows(_lastBuildingSunRotation, _lastBuildingSunIsDungeon);
             }
         }
 
@@ -2869,8 +2954,31 @@ namespace Realmz.World
             return !IsFloorDecalPropKind(kind);
         }
 
+        private static bool IsBuildingPropKind(CartographyPropKind kind)
+        {
+            switch (kind)
+            {
+                case CartographyPropKind.BywaterInn:
+                case CartographyPropKind.Blacksmith:
+                case CartographyPropKind.Apothecary:
+                case CartographyPropKind.Temple:
+                case CartographyPropKind.Guildhall:
+                case CartographyPropKind.CottageB:
+                case CartographyPropKind.CottageC:
+                case CartographyPropKind.Watchtower:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         private static bool ShouldPropShowContactShadow(CartographyPropKind kind)
         {
+            if (IsBuildingPropKind(kind))
+            {
+                return true;
+            }
+
             if (IsFloorDecalPropKind(kind))
             {
                 return false;

@@ -35,7 +35,8 @@ Material:
     m_Floats:
     - _AnimFps: 0
     - _BillboardMode: 0
-    - _BumpScale: 0.65
+    - _BuildingDepthSculpt: 0.9
+    - _BumpScale: 0.85
     - _CameraPitchTiltDeg: 12
     - _Cols: 1
     - _Cutoff: 0.5
@@ -49,7 +50,7 @@ Material:
     - _IsTwoBankAtlas: 0
     - _LanternPoolIntensity: 1.25
     - _NightRimStrength: 1
-    - _NormalUpBias: 0.65
+    - _NormalUpBias: 0.42
     - _ReceiveRootShadowOnly: 1
     - _Rows: 1
     - _SrcBlend: 1
@@ -58,9 +59,9 @@ Material:
     - _TrampleStrength: 0
     - _Translucency: 0.28
     - _UnitDepthSculpt: 0
-    - _UnitFootAO: 0
-    - _UnitSpecStrength: 0
-    - _UnitSunRimStrength: 0
+    - _UnitFootAO: 0.28
+    - _UnitSpecStrength: 0.34
+    - _UnitSunRimStrength: 0.56
     - _VariantIndex: 0
     - _WindFreq: 0.45
     - _WindGustInfluence: 0.16

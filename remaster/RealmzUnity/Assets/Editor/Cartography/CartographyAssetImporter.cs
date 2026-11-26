@@ -1124,6 +1124,20 @@ namespace Realmz.EditorTools.Cartography
             if (mat.HasProperty("_Cutoff")) mat.SetFloat("_Cutoff", 0.5f);
             if (mat.HasProperty("_ReceiveRootShadowOnly")) mat.SetFloat("_ReceiveRootShadowOnly", 1f);
 
+            if (isBuilding)
+            {
+                if (mat.HasProperty("_BuildingDepthSculpt")) mat.SetFloat("_BuildingDepthSculpt", 0.90f);
+                if (mat.HasProperty("_UnitSunRimStrength")) mat.SetFloat("_UnitSunRimStrength", 0.56f);
+                if (mat.HasProperty("_UnitSpecStrength")) mat.SetFloat("_UnitSpecStrength", 0.34f);
+                if (mat.HasProperty("_UnitFootAO")) mat.SetFloat("_UnitFootAO", 0.28f);
+                if (mat.HasProperty("_BumpScale")) mat.SetFloat("_BumpScale", 0.85f);
+                if (mat.HasProperty("_NormalUpBias")) mat.SetFloat("_NormalUpBias", 0.42f);
+            }
+            else
+            {
+                if (mat.HasProperty("_BuildingDepthSculpt")) mat.SetFloat("_BuildingDepthSculpt", 0f);
+            }
+
             Color emissionColor = Color.black;
             float emissionWarmMask = 1f;
             float emissionMinV = 0f;

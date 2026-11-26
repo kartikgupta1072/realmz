@@ -1551,5 +1551,68 @@ namespace Realmz.EditorTests
                 Object.DestroyImmediate(unitGo);
             }
         }
+
+        [Test]
+        public void M111_BuildingArchitecturalDepth_WindowGlow_AndGroundShadows_ContractsHold()
+        {
+            Shader billboardShader = Shader.Find("Realmz/CartographyBillboard");
+            Assert.That(billboardShader, Is.Not.Null, "Realmz/CartographyBillboard shader not found.");
+            Assert.That(ShaderUtil.ShaderHasError(billboardShader), Is.False, "Realmz/CartographyBillboard has shader compile errors.");
+            Assert.That(billboardShader.FindPropertyIndex("_BuildingDepthSculpt"), Is.GreaterThanOrEqualTo(0),
+                "Shader 'Realmz/CartographyBillboard' missing '_BuildingDepthSculpt' property.");
+
+            Material innMat = AssetDatabase.LoadAssetAtPath<Material>("Assets/Art/Cartography/Materials/Cartography_Prop_bywaterinn.mat");
+            Material smithMat = AssetDatabase.LoadAssetAtPath<Material>("Assets/Art/Cartography/Materials/Cartography_Prop_blacksmith.mat");
+            Material barrelsMat = AssetDatabase.LoadAssetAtPath<Material>("Assets/Art/Cartography/Materials/Cartography_Prop_barrelscrates.mat");
+
+            Assert.That(innMat, Is.Not.Null, "Cartography_Prop_bywaterinn.mat not found.");
+            Assert.That(innMat.HasProperty("_BuildingDepthSculpt"), Is.True, "Cartography_Prop_bywaterinn.mat missing _BuildingDepthSculpt.");
+            Assert.That(innMat.GetFloat("_BuildingDepthSculpt"), Is.GreaterThan(0.5f));
+            Assert.That(innMat.HasProperty("_UnitFootAO"), Is.True, "Cartography_Prop_bywaterinn.mat missing _UnitFootAO.");
+            Assert.That(innMat.GetFloat("_UnitFootAO"), Is.GreaterThan(0.2f));
+
+            Assert.That(smithMat, Is.Not.Null, "Cartography_Prop_blacksmith.mat not found.");
+            Assert.That(smithMat.HasProperty("_BuildingDepthSculpt"), Is.True, "Cartography_Prop_blacksmith.mat missing _BuildingDepthSculpt.");
+            Assert.That(smithMat.GetFloat("_BuildingDepthSculpt"), Is.GreaterThan(0.5f));
+            Assert.That(smithMat.HasProperty("_UnitFootAO"), Is.True, "Cartography_Prop_blacksmith.mat missing _UnitFootAO.");
+            Assert.That(smithMat.GetFloat("_UnitFootAO"), Is.GreaterThan(0.2f));
+
+            Assert.That(barrelsMat, Is.Not.Null, "Cartography_Prop_barrelscrates.mat not found.");
+            Assert.That(barrelsMat.HasProperty("_BuildingDepthSculpt"), Is.True, "Cartography_Prop_barrelscrates.mat missing _BuildingDepthSculpt.");
+            Assert.That(barrelsMat.GetFloat("_BuildingDepthSculpt"), Is.EqualTo(0f));
+
+            string bundleDir = Path.Combine(Application.streamingAssetsPath, "bywater_m1");
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(bundleDir);
+            BywaterAssetCatalog catalog = Resources.Load<BywaterAssetCatalog>("BywaterAssetCatalog");
+            Assert.That(catalog, Is.Not.Null, "BywaterAssetCatalog missing.");
+
+            GameObject root = new GameObject("TempM111VerifyRoot");
+            VolumeProfile tempProfile = ScriptableObject.CreateInstance<VolumeProfile>();
+            try
+            {
+                Volume vol = root.AddComponent<Volume>();
+                vol.sharedProfile = tempProfile;
+                BywaterBiomeAtmosphere atmos = root.AddComponent<BywaterBiomeAtmosphere>();
+                atmos.globalVolume = vol;
+
+                atmos.ApplyBiome(isDungeon: false, WorldTimePhase.Night, 0.5f, hasLitTorch: false, immediate: true);
+                Assert.That(atmos.CurrentWindowGlowScale, Is.GreaterThan(1.8f),
+                    "CurrentWindowGlowScale must exceed 1.8f at WorldTimePhase.Night.");
+
+                atmos.ApplyBiome(isDungeon: false, WorldTimePhase.Day, 0.5f, hasLitTorch: false, immediate: true);
+                Assert.That(atmos.CurrentWindowGlowScale, Is.LessThan(0.5f),
+                    "CurrentWindowGlowScale must be below 0.5f at WorldTimePhase.Day.");
+
+                BywaterWorldRenderer renderer = root.AddComponent<BywaterWorldRenderer>();
+                renderer.Initialize(catalog);
+                renderer.RenderMap(bundle.Land0, new GridCoord(56, 63), forceRebuild: true);
+                Assert.DoesNotThrow(() => renderer.UpdateBuildingSunShadows(Quaternion.Euler(26f, -45f, 0f), false));
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+                Object.DestroyImmediate(tempProfile);
+            }
+        }
     }
 }

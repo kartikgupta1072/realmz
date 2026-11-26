@@ -575,6 +575,10 @@ namespace Realmz.Game
                 partyPos);
             _hasAppliedLightingState = false;
             worldRenderer?.RenderMap(ExploreSession.CurrentMap, ExploreSession.Position, forceRebuild: true);
+            if (biomeAtmosphere != null && ExploreSession.CurrentMap != null)
+            {
+                worldRenderer?.UpdateBuildingSunShadows(biomeAtmosphere.CurrentSunRotation, ExploreSession.CurrentMap.IsDungeon);
+            }
 
             _forcedCombatArenaArchetype = archetype;
             try
@@ -1545,6 +1549,10 @@ namespace Realmz.Game
                 worldRenderer.SetCombatArenaFrame(0, 0, 0, 0, false);
                 worldRenderer.SetTerrainGridHint(0.0f);
                 worldRenderer.RenderMap(ExploreSession.CurrentMap, ExploreSession.Position, forceRebuild: true);
+                if (biomeAtmosphere != null && ExploreSession.CurrentMap != null)
+                {
+                    worldRenderer.UpdateBuildingSunShadows(biomeAtmosphere.CurrentSunRotation, ExploreSession.CurrentMap.IsDungeon);
+                }
                 if (worldRenderer.CartographyData != null)
                 {
                     ExploreSession.SetBlockedPropFootprints(worldRenderer.CartographyData.ExportBlockedPropGridCoords());
@@ -3278,6 +3286,10 @@ namespace Realmz.Game
             if (worldRenderer != null)
             {
                 worldRenderer.ApplyCombatArenaVisuals(map, _arenaOriginX, _arenaOriginY, grid);
+                if (biomeAtmosphere != null)
+                {
+                    worldRenderer.UpdateBuildingSunShadows(biomeAtmosphere.CurrentSunRotation, map.IsDungeon);
+                }
                 worldRenderer.SetCombatArenaFrame(_arenaOriginX, _arenaOriginY, _arenaWidth, _arenaHeight, true);
                 worldRenderer.SetTerrainGridHint(0.08f);
             }
@@ -8049,6 +8061,7 @@ namespace Realmz.Game
             }
 
             Quaternion sunRotation = biomeAtmosphere.CurrentSunRotation;
+            worldRenderer?.UpdateBuildingSunShadows(sunRotation, isDungeon);
             for (int i = 0; i < _exploreHeroViews.Count; i++)
             {
                 BywaterUnitView view = _exploreHeroViews[i];

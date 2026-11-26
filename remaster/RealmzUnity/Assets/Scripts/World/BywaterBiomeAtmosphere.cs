@@ -47,11 +47,13 @@ namespace Realmz.World
             public float vignetteIntensity;
             public float vignetteSmoothness;
             public float nightRimStrength;
+            public float windowGlowScale;
             public bool playSunMotes;
             public MoteVisualMode moteMode;
         }
 
         private static readonly int GlobalNightRimStrengthId = Shader.PropertyToID("_GlobalNightRimStrength");
+        private static readonly int GlobalWindowGlowScaleId = Shader.PropertyToID("_GlobalWindowGlowScale");
 
         [Header("Scene References")]
         public Light directionalSun;
@@ -86,6 +88,7 @@ namespace Realmz.World
         public bool HasLitTorch { get; private set; }
         public bool IsCombatActive { get; private set; }
         public float CurrentNightRimStrength => _currentState.nightRimStrength;
+        public float CurrentWindowGlowScale => _currentState.windowGlowScale;
         public bool IsDepthOfFieldActive =>
             ResolveActiveVolumeProfile() is VolumeProfile vp &&
             vp.TryGet(out DepthOfField dof) &&
@@ -357,6 +360,7 @@ namespace Realmz.World
                 vignetteIntensity = 0.16f,
                 vignetteSmoothness = 0.52f,
                 nightRimStrength = 0.0f,
+                windowGlowScale = 0.85f,
                 playSunMotes = true,
                 moteMode = MoteVisualMode.SunMotes
             };
@@ -392,6 +396,7 @@ namespace Realmz.World
                 vignetteIntensity = 0.18f,
                 vignetteSmoothness = 0.51f,
                 nightRimStrength = 0.06f,
+                windowGlowScale = 0.95f,
                 playSunMotes = true,
                 moteMode = MoteVisualMode.SunMotes
             };
@@ -428,6 +433,7 @@ namespace Realmz.World
                 vignetteIntensity = 0.18f,
                 vignetteSmoothness = 0.52f,
                 nightRimStrength = 0.0f,
+                windowGlowScale = 1.25f,
                 playSunMotes = true,
                 moteMode = MoteVisualMode.SunMotes
             };
@@ -464,6 +470,7 @@ namespace Realmz.World
                 vignetteIntensity = 0.15f,
                 vignetteSmoothness = 0.52f,
                 nightRimStrength = 0.0f,
+                windowGlowScale = 0.28f,
                 playSunMotes = true,
                 moteMode = MoteVisualMode.SunMotes
             };
@@ -500,6 +507,7 @@ namespace Realmz.World
                 vignetteIntensity = 0.22f,
                 vignetteSmoothness = 0.50f,
                 nightRimStrength = 0.28f,
+                windowGlowScale = 1.65f,
                 playSunMotes = true,
                 moteMode = MoteVisualMode.Fireflies
             };
@@ -535,6 +543,7 @@ namespace Realmz.World
                 vignetteIntensity = hasLitTorch ? 0.22f : 0.34f,
                 vignetteSmoothness = 0.50f,
                 nightRimStrength = 0.55f,
+                windowGlowScale = 2.15f,
                 playSunMotes = true,
                 moteMode = MoteVisualMode.Fireflies
             };
@@ -571,6 +580,7 @@ namespace Realmz.World
                 vignetteIntensity = hasLitTorch ? 0.12f : 0.16f,
                 vignetteSmoothness = 0.52f,
                 nightRimStrength = 0.55f,
+                windowGlowScale = 2.15f,
                 playSunMotes = true,
                 moteMode = MoteVisualMode.Fireflies
             };
@@ -606,6 +616,7 @@ namespace Realmz.World
                 vignetteIntensity = hasLitTorch ? 0.26f : 0.36f,
                 vignetteSmoothness = 0.48f,
                 nightRimStrength = 0.35f,
+                windowGlowScale = 1.50f,
                 playSunMotes = true,
                 moteMode = MoteVisualMode.CaveSpores
             };
@@ -641,6 +652,7 @@ namespace Realmz.World
                 vignetteIntensity = Mathf.Lerp(a.vignetteIntensity, b.vignetteIntensity, t),
                 vignetteSmoothness = Mathf.Lerp(a.vignetteSmoothness, b.vignetteSmoothness, t),
                 nightRimStrength = Mathf.Lerp(a.nightRimStrength, b.nightRimStrength, t),
+                windowGlowScale = Mathf.Lerp(a.windowGlowScale, b.windowGlowScale, t),
                 playSunMotes = b.playSunMotes,
                 moteMode = t >= 0.5f ? b.moteMode : a.moteMode
             };
@@ -649,6 +661,7 @@ namespace Realmz.World
         private void ApplyAtmosphereStateImmediate(in AtmosphereState state)
         {
             Shader.SetGlobalFloat(GlobalNightRimStrengthId, state.nightRimStrength);
+            Shader.SetGlobalFloat(GlobalWindowGlowScaleId, state.windowGlowScale);
 
             if (directionalSun != null)
             {

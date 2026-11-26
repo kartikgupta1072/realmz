@@ -53,6 +53,7 @@ Shader "Realmz/CartographyBillboard"
         _UnitFootAO ("Unit Ground Contact Foot AO", Range(0, 0.6)) = 0.0
         _StanceAuraColor ("Unit Guard/Buff Aura Color", Color) = (0.38, 0.78, 1.0, 1)
         _StanceAuraStrength ("Unit Guard/Buff Aura Strength", Range(0, 1)) = 0.0
+        _BuildingDepthSculpt ("Building Roof/Wall 3D Sculpt (0..1)", Range(0, 1)) = 0.0
 
         [HideInInspector] _SrcBlend ("SrcBlend", Float) = 1.0
         [HideInInspector] _DstBlend ("DstBlend", Float) = 0.0
@@ -89,6 +90,7 @@ Shader "Realmz/CartographyBillboard"
         SAMPLER(sampler_FogOfWarTex);
         float _FogOfWarEnabled;
         float _GlobalNightRimStrength;
+        float _GlobalWindowGlowScale;
 
         CBUFFER_START(UnityPerMaterial)
             float4 _BaseMap_ST;
@@ -127,6 +129,7 @@ Shader "Realmz/CartographyBillboard"
             half _UnitFootAO;
             half4 _StanceAuraColor;
             half _StanceAuraStrength;
+            half _BuildingDepthSculpt;
         #if !defined(UNITY_INSTANCING_ENABLED)
             float _VariantIndex;
             float _WindPhase;
@@ -432,6 +435,14 @@ Shader "Realmz/CartographyBillboard"
                     albedo *= lerp(1.0h - _UnitFootAO, 1.0h, footMask);
                 }
 
+                if (_BuildingDepthSculpt > 0.001h)
+                {
+                    half byNorm = (half)input.localUV.y;
+                    half eaveDist = abs(byNorm - 0.45h) / 0.075h;
+                    half eaveShadow = (eaveDist < 1.0h) ? (1.0h - (1.0h - eaveDist * eaveDist) * 0.22h * _BuildingDepthSculpt) : 1.0h;
+                    albedo *= eaveShadow;
+                }
+
                 half3 normalTS = UnpackNormalScale(SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, input.uv), _BumpScale);
                 float flipXVal = CARTO_INST_PROP(_FlipX);
                 if (flipXVal > 0.5)
@@ -446,6 +457,18 @@ Shader "Realmz/CartographyBillboard"
                     half cylY = clamp((yNorm - 0.52h) * 0.36h, -0.24h, 0.34h);
                     half3 macroN = normalize(half3(cylX, cylY, sqrt(max(0.18h, 1.0h - cylX * cylX - cylY * cylY))));
                     normalTS = SafeNormalize(lerp(normalTS, SafeNormalize(normalTS + macroN * 0.85h), _UnitDepthSculpt));
+                }
+                if (_BuildingDepthSculpt > 0.001h)
+                {
+                    half bxNorm = (half)(input.localUV.x * 2.0 - 1.0);
+                    half byNorm = (half)input.localUV.y;
+                    half roofMask = smoothstep(0.42h, 0.54h, byNorm);
+                    half wallX = clamp(bxNorm * 0.42h, -0.48h, 0.48h);
+                    half3 wallN = normalize(half3(wallX, -0.08h, 0.88h));
+                    half roofX = clamp(bxNorm * 0.55h, -0.60h, 0.60h);
+                    half3 roofN = normalize(half3(roofX, 0.62h, 0.62h));
+                    half3 archNormalTS = normalize(lerp(wallN, roofN, roofMask));
+                    normalTS = SafeNormalize(lerp(normalTS, SafeNormalize(normalTS + archNormalTS * 0.90h), _BuildingDepthSculpt));
                 }
                 float3 baseN = SafeNormalize(input.normalWS);
                 float3 tang = SafeNormalize(input.tangentWS);
@@ -541,6 +564,12 @@ Shader "Realmz/CartographyBillboard"
                 half vMask = smoothstep((half)_EmissionMinV - 0.04h, (half)_EmissionMinV + 0.04h, tipFactor);
                 half emissionMask = lerp(1.0h, warmBright * vMask, saturate((half)_EmissionWarmMask));
                 half3 emission = _EmissionColor.rgb * albedoAlpha.rgb * emissionMask;
+                if (_BuildingDepthSculpt > 0.001h && _EmissionWarmMask > 0.5h)
+                {
+                    half windowGlow = (_GlobalWindowGlowScale > 0.001) ? (half)_GlobalWindowGlowScale : 1.0h;
+                    half hearthFlicker = (half)(1.0 + 0.07 * sin(_Time.y * 5.2 + input.rootWS.x * 3.1 + input.rootWS.z * 2.3));
+                    emission *= windowGlow * hearthFlicker;
+                }
 
                 half3 rawLit = ambientColor + directLight + addLighting + lanternPool;
                 // Soft-shoulder highlight compression prevents torch and lantern blowouts on bright sprites.

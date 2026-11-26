@@ -35,6 +35,7 @@ Material:
     m_Floats:
     - _AnimFps: 0
     - _BillboardMode: 0
+    - _BuildingDepthSculpt: 0
     - _BumpScale: 0.65
     - _CameraPitchTiltDeg: 4
     - _Cols: 1
