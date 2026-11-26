@@ -111,8 +111,66 @@ class TestRealmzLocalAi(unittest.TestCase):
         self.assertEqual(parser.parse_args(["evict"]).command, "evict")
         self.assertEqual(parser.parse_args(["vision-qa", "img.png", "--mode", "sprite"]).mode, "sprite")
         self.assertEqual(parser.parse_args(["log-triage", "a.log", "--tier", "heavy"]).tier, "heavy")
-        self.assertEqual(parser.parse_args(["summarize", "doc.md", "--focus", "combat"]).focus, "combat")
-        self.assertEqual(parser.parse_args(["draft-content", "--kind", "item", "--spec", "torch"]).kind, "item")
+        self.assertEqual(parser.parse_args(["summarize", "doc.md", "--focus", "combat"]).tier, "heavy")
+        self.assertEqual(parser.parse_args(["draft-content", "--kind", "item", "--spec", "torch"]).tier, "heavy")
+
+    def test_resolve_gguf_model_finds_standalone_and_ollama_manifest_blobs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gguf_dir = root / "gguf"
+            gguf_dir.mkdir(parents=True)
+            standalone = gguf_dir / "qwen2.5-14b-q4_k_m.gguf"
+            standalone.write_bytes(b"GGUF")
+            resolved_model, resolved_proj = lai.resolve_gguf_model(
+                "qwen2.5:14b-instruct", gguf_dir=gguf_dir, ollama_models_dir=root / "ollama"
+            )
+            self.assertEqual(resolved_model, standalone)
+            self.assertIsNone(resolved_proj)
+
+            ollama_dir = root / "ollama"
+            blob_dir = ollama_dir / "blobs"
+            manifest_dir = ollama_dir / "manifests" / "registry.ollama.ai" / "library" / "qwen2.5"
+            blob_dir.mkdir(parents=True)
+            manifest_dir.mkdir(parents=True)
+            blob = blob_dir / "sha256-deadbeef"
+            blob.write_bytes(b"GGUF")
+            (manifest_dir / "7b-instruct").write_text(
+                json.dumps(
+                    {
+                        "layers": [
+                            {"mediaType": "application/vnd.ollama.image.model", "digest": "sha256:deadbeef"}
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            resolved_blob, _ = lai.resolve_gguf_model(
+                "qwen2.5:7b-instruct", gguf_dir=root / "empty_gguf", ollama_models_dir=ollama_dir
+            )
+            self.assertEqual(resolved_blob, blob)
+
+    def test_run_local_chat_prefers_llamacpp_without_ollama(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_bin = Path(tmp) / "llama-completion.exe"
+            fake_gguf = Path(tmp) / "model.gguf"
+            fake_bin.write_bytes(b"MZ")
+            fake_gguf.write_bytes(b"GGUF")
+
+            with (
+                mock.patch.object(lai, "find_llama_binary", return_value=fake_bin),
+                mock.patch.object(lai, "resolve_gguf_model", return_value=(fake_gguf, None)),
+                mock.patch.object(lai, "llamacpp_chat", return_value="OK" + "\u2014" + "clean") as llama_mock,
+                mock.patch.object(lai, "ollama_chat", side_effect=AssertionError("Ollama must not be called")),
+            ):
+                text, backend = lai.run_local_chat(
+                    model="qwen2.5:14b-instruct",
+                    messages=[{"role": "user", "content": "Say OK"}],
+                    backend="auto",
+                )
+
+            llama_mock.assert_called_once()
+            self.assertEqual(backend, "llamacpp")
+            self.assertEqual(text, lai.sanitize_dashes("OK" + "\u2014" + "clean"))
 
 
 if __name__ == "__main__":

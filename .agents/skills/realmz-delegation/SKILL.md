@@ -15,11 +15,11 @@ Keep the lead conversation focused on architecture, gameplay invariants, diff re
 ## Mandatory Pre-Execution Routing Gate
 
 Check these thresholds BEFORE starting sequential work on the lead model:
-- **`2+` disjoint lanes (`RealmzCore`, `RealmzUnity`, `Exporter/Art`, `Research`):** MUST launch parallel `invoke_subagent` workers (`Model="flash"` for bounded edits/tests, `Model="flash_lite"` for inventories/lookups) instead of editing everything sequentially in one turn.
+- **`2+` disjoint lanes (`RealmzCore`, `RealmzUnity`, `Exporter/Art`, `Research`):** MUST launch parallel `invoke_subagent` workers (`Model="flash"` for bounded edits/tests; avoid `flash_lite` where local 14B can handle read/triage) instead of editing everything sequentially in one turn.
 - **`4+` independent units/files:** MUST fan out via `run_workflow`.
-- **`>= 3` screenshots or sprites to screen:** When Ollama is online, MUST run `dev.ps1 local-ai vision-qa <path> --mode proof|sprite|sheet --json` first before direct `read_file` sign-off on flagged/final PNGs.
-- **Failing Unity or build log `> 50` lines:** MUST run `dev.ps1 local-ai log-triage <log_path> --json` first to condense errors before manual inspection.
-- **GPU handoff:** Always run `dev.ps1 local-ai evict` before ComfyUI, Blender, Hunyuan3D, or Unity PlayMode proof captures.
+- **Large log `> 50` lines / long file summary / flavor text draft:** MUST run `dev.ps1 local-ai` (`summarize` and `draft-content` default to `--tier heavy` `qwen2.5:14b-instruct`; `log-triage` defaults to `--tier fast` `qwen2.5:7b-instruct`) via standalone zero-daemon `llama.cpp` before burning cloud tokens.
+- **`>= 3` screenshots or sprites to screen:** When vision backend (`llama-mtmd-cli` + `mmproj` or Ollama fallback) is ready, run `dev.ps1 local-ai vision-qa <path> --mode proof|sprite|sheet --json` first before direct `read_file` sign-off on flagged/final PNGs.
+- **GPU handoff:** `llama.cpp` releases 100% of VRAM on exit; run `dev.ps1 local-ai evict` if Ollama was used before ComfyUI, Blender, Hunyuan3D, or Unity PlayMode proof captures.
 
 ## 1. Sub-Worker Delegation Rules
 
@@ -32,9 +32,9 @@ Check these thresholds BEFORE starting sequential work on the lead model:
 - **Fan-out (`run_workflow`):** 4+ parallel independent units (e.g., auditing all 13 classic scenarios or batch-generating/QA-ing M2 asset packs).
 
 ### Model Tier Selection
-- **`flash_lite`:** File inventories, symbol greps, or trivial single-step lookups.
 - **`flash`:** Bounded unit tests, single-module edits, exporter updates, and test/lint runners.
 - **`inherit` / `pro` (Lead):** Cross-layer architecture (`RealmzCore` <-> `RealmzUnity` <-> `StreamingAssets`), HLSL shader/normal-map math, game-feel/UX tuning, resolving failed retries, and final Art Director sign-off.
+- **Local `llama.cpp` (`dev.ps1 local-ai`):** C90/doc summaries and M2 content drafts (`qwen2.5:14b-instruct` `--tier heavy`), Unity log triage (`qwen2.5:7b-instruct`).
 
 ### Hard Concurrency Locks
 - **Unity Single-Lock Rule:** Only **one** worker may run `Unity.exe` batchmode tests/builds or control the open Editor at a time (`UnityLockfile`). Other workers may edit pure C# (`RealmzCore`), Python (`realmz-exporter`, `art-pipeline`), or docs concurrently, and **one** Unity-owner worker runs `dev.ps1 sync-core` -> `unity-tests` -> `build` -> `smoke` last.
@@ -42,16 +42,16 @@ Check these thresholds BEFORE starting sequential work on the lead model:
 
 ## 2. Local GPU & Offline Model Offload (`remaster/dev.ps1 local-ai`)
 
-Use local Ollama models on the RTX 5060 Ti (`127.0.0.1:11434`) via `remaster/dev.ps1 local-ai` before burning cloud tokens on bulk triage, and use global `local-ai web-research "<query>"` for Unity/URP/Cinemachine documentation lookups.
+Primary backend is standalone Vulkan `llama.cpp` (`C:\Users\karti\.local\tools\llama.cpp`, zero background daemon, instant VRAM release on exit, optional Ollama fallback at `127.0.0.1:11434`). Use global `local-ai web-research "<query>"` for Unity/URP/Cinemachine documentation lookups.
 
 | Task | Local Command | Model | When to Escalate to Lead Cloud Model |
 | :--- | :--- | :--- | :--- |
-| **GPU / Service Check** | `dev.ps1 local-ai status` | - | Service offline |
-| **Batch Screenshot / Sprite QA** | `dev.ps1 local-ai vision-qa <path> --mode proof\|sprite\|sheet --json` | `qwen2.5vl:3b` | Always inspect final proof PNGs directly with `read_file` for Grade-A sign-off |
+| **GPU / Backend Check** | `dev.ps1 local-ai status` | - | Check `llama.cpp` + GGUFs + free VRAM |
+| **Batch Screenshot / Sprite QA** | `dev.ps1 local-ai vision-qa <path> --mode proof\|sprite\|sheet --json` | `qwen2.5vl:3b` (`mmproj` or Ollama) | Always inspect final proof PNGs directly with `read_file` for Grade-A sign-off |
 | **Large Unity / Build Log Triage** | `dev.ps1 local-ai log-triage <log_path> --json` | `qwen2.5:7b-instruct` (or `--tier heavy` `14b`) | Any non-trivial C#/shader/Unity failure needing root-cause repair |
-| **Classic C90 / Doc Summary** | `dev.ps1 local-ai summarize <file> --focus "..."` | `qwen2.5:7b-instruct` / `14b` | Exact line-level code edits or binary struct parsing |
-| **Flavor Text / Notes Draft** | `dev.ps1 local-ai draft-content --kind item\|monster\|npc\|encounter\|changelog --spec "..."` | `qwen2.5:7b-instruct` | Final narrative pass |
-| **VRAM Cleanup** | `dev.ps1 local-ai evict` | - | Mandatory before ComfyUI, Blender, or Unity captures |
+| **Classic C90 / Doc Summary** | `dev.ps1 local-ai summarize <file> --focus "..."` | `qwen2.5:14b-instruct` (`--tier heavy` default) | Exact line-level code edits or binary struct parsing |
+| **Flavor Text / Notes Draft** | `dev.ps1 local-ai draft-content --kind item\|monster\|npc\|encounter\|changelog --spec "..."` | `qwen2.5:14b-instruct` (`--tier heavy` default) | Final narrative pass |
+| **VRAM Cleanup** | `dev.ps1 local-ai evict` | - | Releases any residual Ollama VRAM before ComfyUI/Blender/Unity |
 
 ### 8 GB RTX 5060 Ti VRAM Handoff Rule
 - Single `log-triage`, `summarize`, `draft-content`, and single-image `vision-qa` calls send `keep_alive: 0` automatically.
