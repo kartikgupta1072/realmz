@@ -204,6 +204,7 @@ namespace Realmz.Game
         private Coroutine _victoryAnimCoroutine;
         private Coroutine _modalPopCoroutine;
         private GameObject _modalPopTarget;
+        private const float LootTileChromePpuMultiplier = BywaterUiHelpers.ChromePpuMultiplier * 1.45f;
 
         private struct VictoryHeroAnimEntry
         {
@@ -1763,7 +1764,7 @@ namespace Realmz.Game
             _outcomeRichVictoryRoot = richRoot;
 
             VerticalLayoutGroup rv = richRoot.GetComponent<VerticalLayoutGroup>();
-            rv.spacing = 6f;
+            rv.spacing = 4f;
             rv.childControlWidth = true;
             rv.childControlHeight = true;
             rv.childForceExpandHeight = false;
@@ -1772,7 +1773,7 @@ namespace Realmz.Game
             GameObject infoBar = new GameObject("VictoryBannerRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             infoBar.transform.SetParent(richRoot.transform, false);
             LayoutElement ibLe = infoBar.AddComponent<LayoutElement>();
-            ibLe.preferredHeight = 28f;
+            ibLe.preferredHeight = 24f;
             ibLe.flexibleHeight = 0f;
             HorizontalLayoutGroup ibHlg = infoBar.GetComponent<HorizontalLayoutGroup>();
             ibHlg.spacing = 6f;
@@ -1800,11 +1801,11 @@ namespace Realmz.Game
             GameObject heroGrid = new GameObject("VictoryHeroGrid", typeof(RectTransform), typeof(GridLayoutGroup));
             heroGrid.transform.SetParent(richRoot.transform, false);
             LayoutElement hgLe = heroGrid.AddComponent<LayoutElement>();
-            hgLe.preferredHeight = 256f;
+            hgLe.preferredHeight = 232f;
             hgLe.flexibleHeight = 0f;
             GridLayoutGroup hg = heroGrid.GetComponent<GridLayoutGroup>();
-            hg.cellSize = new Vector2(462f, 80f);
-            hg.spacing = new Vector2(12f, 6f);
+            hg.cellSize = new Vector2(464f, 74f);
+            hg.spacing = new Vector2(12f, 5f);
             hg.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
             hg.constraintCount = 2;
 
@@ -1814,11 +1815,12 @@ namespace Realmz.Game
                 HorizontalLayoutGroup ch = card.gameObject.AddComponent<HorizontalLayoutGroup>();
                 ch.padding = new RectOffset(8, 8, 4, 4);
                 ch.spacing = 8f;
+                ch.childAlignment = TextAnchor.MiddleLeft;
                 ch.childControlWidth = true;
                 ch.childControlHeight = true;
                 ch.childForceExpandWidth = false;
 
-                BywaterUiHelpers.CreatePortraitFrame(card, "Portrait", 60f, out Image pImg);
+                BywaterUiHelpers.CreatePortraitFrame(card, "Portrait", 56f, out Image pImg);
 
                 GameObject right = new GameObject("Right", typeof(RectTransform), typeof(VerticalLayoutGroup));
                 right.transform.SetParent(card, false);
@@ -1831,7 +1833,7 @@ namespace Realmz.Game
 
                 GameObject topRow = new GameObject("Top", typeof(RectTransform), typeof(HorizontalLayoutGroup));
                 topRow.transform.SetParent(right.transform, false);
-                topRow.AddComponent<LayoutElement>().preferredHeight = 22f;
+                topRow.AddComponent<LayoutElement>().preferredHeight = 20f;
                 HorizontalLayoutGroup th = topRow.GetComponent<HorizontalLayoutGroup>();
                 th.spacing = 6f;
                 th.childControlWidth = true;
@@ -1875,7 +1877,7 @@ namespace Realmz.Game
 
                 // Dual-segment XP progress bar
                 RectTransform xpTrack = BywaterUiHelpers.CreatePanel(right.transform, "XpTrack", BywaterUiHelpers.BarTrackColor, withBrassOutline: true, outlinePx: 1f);
-                xpTrack.gameObject.AddComponent<LayoutElement>().preferredHeight = 20f;
+                xpTrack.gameObject.AddComponent<LayoutElement>().preferredHeight = 18f;
 
                 Image baseFill = BywaterUiHelpers.CreateImage(xpTrack, "XpBaseFill", BywaterUiHelpers.BarFillSprite, new Color(0.24f, 0.42f, 0.72f, 1f), preserveAspect: false);
                 if (BywaterUiHelpers.BarFillSprite != null)
@@ -1907,7 +1909,7 @@ namespace Realmz.Game
                 xpTxt.rectTransform.offsetMax = Vector2.zero;
 
                 TextMeshProUGUI perfLbl = BywaterUiHelpers.CreateLabel(right.transform, "Perf", string.Empty, _font, 15f, BywaterUiHelpers.MutedSlate, TextAlignmentOptions.MidlineLeft, wrap: false);
-                perfLbl.gameObject.AddComponent<LayoutElement>().preferredHeight = 20f;
+                perfLbl.gameObject.AddComponent<LayoutElement>().preferredHeight = 18f;
 
                 _victoryHeroCards.Add(new VictoryHeroCardRefs
                 {
@@ -1932,30 +1934,44 @@ namespace Realmz.Game
             // Loot Header + Scrollable Self-Contained Selectable Cards
             TextMeshProUGUI lootHdr = BywaterUiHelpers.CreateLabel(richRoot.transform, "VictoryLootHeader", "Loot", _font, 16f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
             LayoutElement lhLe = lootHdr.gameObject.AddComponent<LayoutElement>();
-            lhLe.preferredHeight = 24f;
+            lhLe.preferredHeight = 22f;
             lhLe.flexibleHeight = 0f;
 
-            RectTransform lootBox = BywaterUiHelpers.CreatePanel(richRoot.transform, "VictoryLootTray", BywaterUiHelpers.PanelBg, withBrassOutline: true, outlinePx: 1f);
+            RectTransform lootBox = BywaterUiHelpers.CreatePanel(richRoot.transform, "VictoryLootTray", BywaterUiHelpers.PanelBg, withBrassOutline: false);
+            Image lootBoxImg = lootBox.GetComponent<Image>();
+            if (lootBoxImg != null)
+            {
+                // Let child VictoryLootScroll provide the single carved stone well frame without double borders.
+                lootBoxImg.sprite = null;
+                lootBoxImg.color = Color.clear;
+                lootBoxImg.raycastTarget = false;
+            }
             LayoutElement lootBoxLe = lootBox.gameObject.AddComponent<LayoutElement>();
-            lootBoxLe.minHeight = 238f;
-            lootBoxLe.preferredHeight = 244f;
+            lootBoxLe.minHeight = 264f;
+            lootBoxLe.preferredHeight = 282f;
             lootBoxLe.flexibleHeight = 1f;
 
             _victoryLootScroll = BywaterUiHelpers.CreateScrollView(lootBox, "VictoryLootScroll", _font, spacing: 6f);
             RectTransform lootScrollRt = _victoryLootScroll.GetComponent<RectTransform>();
             lootScrollRt.anchorMin = Vector2.zero;
             lootScrollRt.anchorMax = Vector2.one;
-            lootScrollRt.offsetMin = new Vector2(6f, 2f);
-            lootScrollRt.offsetMax = new Vector2(-6f, -2f);
+            lootScrollRt.offsetMin = Vector2.zero;
+            lootScrollRt.offsetMax = Vector2.zero;
+            if (_victoryLootScroll.viewport != null)
+            {
+                _victoryLootScroll.viewport.offsetMin = new Vector2(12f, 10f);
+                _victoryLootScroll.viewport.offsetMax = new Vector2(-12f, -10f);
+            }
 
             VerticalLayoutGroup oldVlg = _victoryLootScroll.content.GetComponent<VerticalLayoutGroup>();
             if (oldVlg != null) DestroyImmediate(oldVlg);
             GridLayoutGroup lootGrid = _victoryLootScroll.content.gameObject.AddComponent<GridLayoutGroup>();
-            lootGrid.cellSize = new Vector2(216f, 76f);
-            lootGrid.spacing = new Vector2(8f, 3f);
+            lootGrid.cellSize = new Vector2(218f, 76f);
+            lootGrid.spacing = new Vector2(8f, 6f);
             lootGrid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
             lootGrid.constraintCount = 4;
-            lootGrid.padding = new RectOffset(6, 6, 2, 2);
+            lootGrid.childAlignment = TextAnchor.UpperCenter;
+            lootGrid.padding = new RectOffset(4, 4, 2, 2);
 
             _victoryLootEmptyLabel = BywaterUiHelpers.CreateLabel(lootBox, "EmptyLootLabel", "No physical item drops from this skirmish.", _font, 15.5f, BywaterUiHelpers.MutedSlate, TextAlignmentOptions.Center, wrap: false).gameObject;
             RectTransform elRt = _victoryLootEmptyLabel.GetComponent<RectTransform>();
@@ -2431,6 +2447,10 @@ namespace Realmz.Game
             if (tile.FrameBg != null)
             {
                 BywaterUiHelpers.ApplySurfaceState(tile.FrameBg, isSelected);
+                if (BywaterUiHelpers.HasChromeSprites && tile.FrameBg.type == Image.Type.Sliced)
+                {
+                    tile.FrameBg.pixelsPerUnitMultiplier = LootTileChromePpuMultiplier;
+                }
             }
             Color border = !isSelected
                 ? new Color(0.28f, 0.32f, 0.40f, 0.85f)
@@ -2523,26 +2543,32 @@ namespace Realmz.Game
             }
 
             RectTransform tile = BywaterUiHelpers.CreatePanel(_victoryLootScroll.content, $"LootTile_{idx}", BywaterUiHelpers.CardBg, withBrassOutline: true, outlinePx: 1.5f);
+            Image tileImg = tile.GetComponent<Image>();
+            if (tileImg != null && BywaterUiHelpers.HasChromeSprites && tileImg.type == Image.Type.Sliced)
+            {
+                tileImg.pixelsPerUnitMultiplier = LootTileChromePpuMultiplier;
+            }
             Button btn = tile.gameObject.AddComponent<Button>();
-            btn.targetGraphic = tile.GetComponent<Image>();
+            btn.targetGraphic = tileImg;
 
             HorizontalLayoutGroup hlg = tile.gameObject.AddComponent<HorizontalLayoutGroup>();
-            hlg.padding = new RectOffset(6, 6, 2, 2);
-            hlg.spacing = 6f;
+            hlg.padding = new RectOffset(9, 9, 6, 6);
+            hlg.spacing = 7f;
+            hlg.childAlignment = TextAnchor.MiddleLeft;
             hlg.childControlWidth = true;
             hlg.childControlHeight = true;
             hlg.childForceExpandWidth = false;
 
-            // Left Column: Compact Icon + Optional xQty (locked exact 34px width, flexibleWidth = 0)
+            // Left Column: Compact Icon + Optional xQty (locked exact 32px width, flexibleWidth = 0)
             GameObject leftCol = new GameObject("LeftCol", typeof(RectTransform), typeof(VerticalLayoutGroup));
             leftCol.transform.SetParent(tile, false);
             LayoutElement leftLe = leftCol.AddComponent<LayoutElement>();
-            leftLe.minWidth = 34f;
-            leftLe.preferredWidth = 34f;
+            leftLe.minWidth = 32f;
+            leftLe.preferredWidth = 32f;
             leftLe.flexibleWidth = 0f;
             VerticalLayoutGroup lVlg = leftCol.GetComponent<VerticalLayoutGroup>();
             lVlg.spacing = 1f;
-            lVlg.childAlignment = TextAnchor.UpperCenter;
+            lVlg.childAlignment = TextAnchor.MiddleCenter;
             lVlg.childControlWidth = true;
             lVlg.childControlHeight = true;
             lVlg.childForceExpandHeight = false;
@@ -2550,27 +2576,27 @@ namespace Realmz.Game
             Image iconImg = BywaterUiHelpers.CreateImage(leftCol.transform, "Icon", null, Color.white, preserveAspect: true);
             iconImg.raycastTarget = false;
             LayoutElement iLe = iconImg.gameObject.AddComponent<LayoutElement>();
-            iLe.preferredWidth = 34f;
-            iLe.preferredHeight = 34f;
+            iLe.preferredWidth = 32f;
+            iLe.preferredHeight = 32f;
             iLe.flexibleWidth = 0f;
 
             TextMeshProUGUI qtyLbl = BywaterUiHelpers.CreateLabel(leftCol.transform, "Qty", "x1", _font, 15f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
             LayoutElement qLe = qtyLbl.gameObject.AddComponent<LayoutElement>();
-            qLe.preferredWidth = 34f;
-            qLe.minHeight = 19f;
-            qLe.preferredHeight = 19f;
+            qLe.preferredWidth = 32f;
+            qLe.minHeight = 18f;
+            qLe.preferredHeight = 18f;
             qLe.flexibleWidth = 0f;
 
-            // Right Body: Wrapped Full Name + 18x18 Checkbox | Inline Stats | Upgrade Tag (Green Arrow + Hero)
+            // Right Body: Crisp Auto-Sized Name + 18x18 Gem Select | Inline Stats | Upgrade Tag (Green Arrow + Hero)
             GameObject bodyCol = new GameObject("BodyCol", typeof(RectTransform), typeof(VerticalLayoutGroup));
             bodyCol.transform.SetParent(tile, false);
             LayoutElement bodyLe = bodyCol.AddComponent<LayoutElement>();
             bodyLe.minWidth = 148f;
-            bodyLe.preferredWidth = 164f;
+            bodyLe.preferredWidth = 160f;
             bodyLe.flexibleWidth = 1f;
             VerticalLayoutGroup bVlg = bodyCol.GetComponent<VerticalLayoutGroup>();
-            bVlg.spacing = 1f;
-            bVlg.childAlignment = TextAnchor.UpperLeft;
+            bVlg.spacing = 2f;
+            bVlg.childAlignment = TextAnchor.MiddleLeft;
             bVlg.childControlWidth = true;
             bVlg.childControlHeight = true;
             bVlg.childForceExpandWidth = true;
@@ -2580,19 +2606,22 @@ namespace Realmz.Game
             titleRow.transform.SetParent(bodyCol.transform, false);
             LayoutElement trLe = titleRow.AddComponent<LayoutElement>();
             trLe.minHeight = 20f;
+            trLe.preferredHeight = 20f;
             trLe.flexibleWidth = 1f;
             HorizontalLayoutGroup trHlg = titleRow.GetComponent<HorizontalLayoutGroup>();
             trHlg.spacing = 4f;
-            trHlg.childAlignment = TextAnchor.UpperLeft;
+            trHlg.childAlignment = TextAnchor.MiddleLeft;
             trHlg.childControlWidth = true;
             trHlg.childControlHeight = true;
             trHlg.childForceExpandWidth = false;
 
-            TextMeshProUGUI nameLbl = BywaterUiHelpers.CreateLabel(titleRow.transform, "Name", string.Empty, _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.TopLeft, FontStyles.Bold, wrap: true);
-            nameLbl.lineSpacing = -8f;
-            nameLbl.overflowMode = TextOverflowModes.Overflow;
+            TextMeshProUGUI nameLbl = BywaterUiHelpers.CreateLabel(titleRow.transform, "Name", string.Empty, _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            nameLbl.enableAutoSizing = true;
+            nameLbl.fontSizeMin = 11f;
+            nameLbl.fontSizeMax = 15f;
+            nameLbl.overflowMode = TextOverflowModes.Truncate;
             LayoutElement nameLe = nameLbl.gameObject.AddComponent<LayoutElement>();
-            nameLe.minWidth = 120f;
+            nameLe.minWidth = 116f;
             nameLe.flexibleWidth = 1f;
 
             RectTransform checkFrame = BywaterUiHelpers.CreatePanel(titleRow.transform, "SelectBox", new Color(0.14f, 0.38f, 0.20f, 0.98f), withBrassOutline: true, outlinePx: 1.2f);
@@ -2611,12 +2640,12 @@ namespace Realmz.Game
 
             TextMeshProUGUI statsLbl = BywaterUiHelpers.CreateLabel(bodyCol.transform, "Stats", string.Empty, _font, 15f, new Color(0.84f, 0.88f, 0.95f, 1f), TextAlignmentOptions.MidlineLeft, wrap: false);
             statsLbl.enableAutoSizing = true;
-            statsLbl.fontSizeMin = 9.5f;
+            statsLbl.fontSizeMin = 10f;
             statsLbl.fontSizeMax = 15f;
-            statsLbl.overflowMode = TextOverflowModes.Ellipsis;
+            statsLbl.overflowMode = TextOverflowModes.Truncate;
             LayoutElement statsLe = statsLbl.gameObject.AddComponent<LayoutElement>();
-            statsLe.minHeight = 20f;
-            statsLe.preferredHeight = 20f;
+            statsLe.minHeight = 18f;
+            statsLe.preferredHeight = 18f;
             statsLe.flexibleHeight = 0f;
 
             GameObject upgRow = new GameObject("UpgRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
@@ -2627,6 +2656,7 @@ namespace Realmz.Game
             upgLe.flexibleHeight = 0f;
             HorizontalLayoutGroup uHlg = upgRow.GetComponent<HorizontalLayoutGroup>();
             uHlg.spacing = 3f;
+            uHlg.childAlignment = TextAnchor.MiddleLeft;
             uHlg.childControlWidth = true;
             uHlg.childControlHeight = true;
             uHlg.childForceExpandWidth = false;
@@ -2638,6 +2668,10 @@ namespace Realmz.Game
             uaLe.preferredHeight = 14f;
 
             TextMeshProUGUI upgLbl = BywaterUiHelpers.CreateLabel(upgRow.transform, "UpgHero", string.Empty, _font, 15f, BywaterUiHelpers.SuccessGreen, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            upgLbl.enableAutoSizing = true;
+            upgLbl.fontSizeMin = 10.5f;
+            upgLbl.fontSizeMax = 15f;
+            upgLbl.overflowMode = TextOverflowModes.Truncate;
             upgLbl.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
 
             VictoryLootTileRefs tRef = new VictoryLootTileRefs

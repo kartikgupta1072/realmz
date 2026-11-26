@@ -6469,15 +6469,15 @@ namespace Realmz.Game
             _outcomeModalRoot = modal.gameObject;
 
             VerticalLayoutGroup vlg = modal.gameObject.AddComponent<VerticalLayoutGroup>();
-            vlg.padding = new RectOffset(18, 18, 14, 14);
-            vlg.spacing = 6f;
+            vlg.padding = new RectOffset(18, 18, 10, 10);
+            vlg.spacing = 4f;
             vlg.childControlWidth = true;
             vlg.childControlHeight = true;
             vlg.childForceExpandHeight = false;
 
             _outcomeTitle = BywaterUiHelpers.CreateDisplayLabel(modal, "OutcomeTitle", "VICTORY!", _font, 26f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.Center, FontStyles.Bold);
             LayoutElement titleLe = _outcomeTitle.gameObject.AddComponent<LayoutElement>();
-            titleLe.preferredHeight = 40f;
+            titleLe.preferredHeight = 34f;
             titleLe.flexibleHeight = 0f;
 
             BywaterUiHelpers.CreateHeaderDivider(modal, "OutcomeHeaderRule");
