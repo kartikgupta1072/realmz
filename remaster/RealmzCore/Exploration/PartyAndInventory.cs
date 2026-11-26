@@ -1855,6 +1855,48 @@ namespace RealmzCore.Exploration
                 {
                     score += item.MovementMod * 0.8;
                 }
+
+                // Class-smart Equipment Set affinity (keeps Arcanist Signet with Mages, Silver Sun Amulet with Clerics, etc.)
+                IReadOnlyList<EquipmentSetDefinition> itemSets = EquipmentSetCatalog.GetSetsForItem(item.Id);
+                for (int s = 0; s < itemSets.Count; s++)
+                {
+                    EquipmentSetDefinition setDef = itemSets[s];
+                    string setId = setDef.SetId;
+                    if (string.Equals(setId, EquipmentSetCatalog.BywaterArcanistSetId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        score += profile == HeroClassProfile.Mage ? 28.0 : (profile == HeroClassProfile.Cleric ? 4.0 : 0.0);
+                    }
+                    else if (string.Equals(setId, EquipmentSetCatalog.SanctuaryAcolyteSetId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        score += profile == HeroClassProfile.Cleric ? 28.0 : (profile == HeroClassProfile.Paladin ? 10.0 : 0.0);
+                    }
+                    else if (string.Equals(setId, EquipmentSetCatalog.ThornwoodStalkerSetId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        score += profile == HeroClassProfile.Ranger ? 28.0 : (profile == HeroClassProfile.Rogue ? 12.0 : 0.0);
+                    }
+                    else if (string.Equals(setId, EquipmentSetCatalog.ScoutsLeatherSetId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        score += (profile == HeroClassProfile.Rogue || profile == HeroClassProfile.Ranger) ? 24.0 : 4.0;
+                    }
+                    else if (string.Equals(setId, EquipmentSetCatalog.IronVanguardSetId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        score += (profile == HeroClassProfile.Knight || profile == HeroClassProfile.Paladin) ? 26.0 : 0.0;
+                    }
+                    else if (string.Equals(setId, EquipmentSetCatalog.CryptbreakerSetId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        score += profile == HeroClassProfile.Paladin ? 28.0 : (profile == HeroClassProfile.Knight || profile == HeroClassProfile.Cleric ? 14.0 : 0.0);
+                    }
+
+                    // Slight bonus for completing a set this hero already has pieces equipped in
+                    foreach (InventoryItem eq in hero.Equipped.Values)
+                    {
+                        if (setDef.ContainsItem(eq.ItemId))
+                        {
+                            score += 10.0;
+                            break;
+                        }
+                    }
+                }
             }
 
             return score + item.BasePrice * 0.001;

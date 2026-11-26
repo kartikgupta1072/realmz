@@ -342,13 +342,18 @@ Shader "Realmz/CartographyTerrain"
                     half macroA = CartoMacroFbm(input.positionWS.xz * 0.055);
                     half macroB = CartoMacroFbm(input.positionWS.xz * 0.11 + float2(19.3, 7.1));
 
-                    // Slot 0: meadow_grass -> alpine_frost_grass (13), marsh_bog_turf (10), or dark_forest_moss (7)
+                    // Slot 0: meadow_grass -> alpine_frost_grass (13 only on high peaks), dark_forest_moss (7 on plateaus), or marsh_bog_turf (10)
                     float ext0 = -1.0;
                     half blend0 = 0.0h;
-                    if (elevHint >= 0.45h && arrayDepth > 13u)
+                    if (elevHint >= 0.92h && arrayDepth > 13u)
                     {
                         ext0 = 13.0;
                         blend0 = smoothstep(-0.35h, 0.35h, macroA + 0.25h);
+                    }
+                    else if (elevHint >= 0.45h && arrayDepth > 7u)
+                    {
+                        ext0 = 7.0;
+                        blend0 = smoothstep(-0.35h, 0.35h, macroA + 0.15h) * 0.65h;
                     }
                     else if (biomeHint >= 0.40h && biomeHint < 0.65h && arrayDepth > 10u)
                     {
@@ -592,9 +597,12 @@ Shader "Realmz/CartographyTerrain"
                 #endif
 
                 // Warm top-down lantern/torch pool contribution
-                half3 lanternPool = albedo * _LanternPoolColor.rgb * (topDownLM.a * _LanternPoolIntensity);
+                half3 lanternPool = albedo * _LanternPoolColor.rgb * (topDownLM.a * (_LanternPoolIntensity * 0.72h));
 
-                half3 color = ambientColor + directDiffuse + directSpecular + addLighting + lanternPool;
+                half3 rawLit = ambientColor + directDiffuse + directSpecular + addLighting + lanternPool;
+                half maxLum = max(rawLit.r, max(rawLit.g, rawLit.b));
+                half compressedLum = maxLum <= 0.94h ? maxLum : 0.94h + (maxLum - 0.94h) / (1.0h + (maxLum - 0.94h) * 1.40h);
+                half3 color = maxLum > 0.0001h ? rawLit * (compressedLum / maxLum) : rawLit;
                 if (_TopDownLightmapBounds.w > 0.00001)
                 {
                     half northFrac = saturate((half)((input.positionWS.z - _TopDownLightmapBounds.y) * _TopDownLightmapBounds.w));

@@ -2347,6 +2347,8 @@ MonoBehaviour:
   itemAndSpellIcons:
   - key: amulet_ruby
     sprite: {fileID: 21300000, guid: f3c84cd5e83f86c4bb755277705241d1, type: 3}
+  - key: arcanist_signet
+    sprite: {fileID: 21300000, guid: 83a37311944c6c443a7751c7b060803d, type: 3}
   - key: audio
     sprite: {fileID: 21300000, guid: 1432cef3ffd9c164dac5d0e6efcdda37, type: 3}
   - key: auto_combat
@@ -2379,6 +2381,8 @@ MonoBehaviour:
     sprite: {fileID: 21300000, guid: 5be4d21b33efde847b75c0af8ea32adc, type: 3}
   - key: crossbow
     sprite: {fileID: 21300000, guid: 2ac093e09d1a72d418093e60a9b6db45, type: 3}
+  - key: crypt_ward_ring
+    sprite: {fileID: 21300000, guid: 70cfd1d18b55cdc4e989296148d37e06, type: 3}
   - key: dagger
     sprite: {fileID: 21300000, guid: daa6e6bbb4df6234ca7c86cf7062329d, type: 3}
   - key: dagger_shielding
@@ -2495,6 +2499,8 @@ MonoBehaviour:
     sprite: {fileID: 21300000, guid: 78cf23970ac0fea4585ca8ae1892bc83, type: 3}
   - key: shove
     sprite: {fileID: 21300000, guid: 4cd9d7d4f0d309d44889fee463386adc, type: 3}
+  - key: silver_sun_amulet
+    sprite: {fileID: 21300000, guid: 3faa1eaaed2b0024c8e911dee5b9f0ef, type: 3}
   - key: spear
     sprite: {fileID: 21300000, guid: 2378f2ca1b27abf4a833a474a2932a56, type: 3}
   - key: speed
@@ -2936,8 +2942,8 @@ MonoBehaviour:
     key: arcanist_signet
     name: Arcanist Signet
     category: Accessory
-    iconKey: luck_stone
-    sprite: {fileID: 21300000, guid: d29184328bbfbfb4a97159c1acb6f12a, type: 3}
+    iconKey: arcanist_signet
+    sprite: {fileID: 21300000, guid: 83a37311944c6c443a7751c7b060803d, type: 3}
   - id: 909
     key: blessed_mace
     name: Blessed Mace
@@ -2954,8 +2960,8 @@ MonoBehaviour:
     key: silver_sun_amulet
     name: Silver Sun Amulet
     category: Accessory
-    iconKey: luck_stone
-    sprite: {fileID: 21300000, guid: d29184328bbfbfb4a97159c1acb6f12a, type: 3}
+    iconKey: silver_sun_amulet
+    sprite: {fileID: 21300000, guid: 3faa1eaaed2b0024c8e911dee5b9f0ef, type: 3}
   - id: 912
     key: silvered_longsword
     name: Silvered Longsword
@@ -2972,8 +2978,8 @@ MonoBehaviour:
     key: crypt_ward_ring
     name: Crypt Ward Ring
     category: Accessory
-    iconKey: luck_stone
-    sprite: {fileID: 21300000, guid: d29184328bbfbfb4a97159c1acb6f12a, type: 3}
+    iconKey: crypt_ward_ring
+    sprite: {fileID: 21300000, guid: 70cfd1d18b55cdc4e989296148d37e06, type: 3}
   spellIdIconMappings:
   - id: 1108
     key: magic_missile

@@ -168,6 +168,18 @@ namespace RealmzCore.Tests
             Assert.Equal(1, seraphina.GetSetFreeMoveTiles());
             Assert.Equal(1, seraphina.GetSetApBonus());
 
+            // Verify class-smart set loot recipient routing (never sends Arcanist Signet / Sun Amulet to Warrior)
+            PartyState lootParty = PartyState.FromBundle(bundle);
+            HeroUpgradeRecommendation? arcanistRec = PartyState.FindBestUpgradeRecipient(lootParty, bundle.Items[908], bundle.Items);
+            Assert.NotNull(arcanistRec);
+            Assert.Equal("Theron", arcanistRec!.Hero.Name);
+            HeroUpgradeRecommendation? acolyteRec = PartyState.FindBestUpgradeRecipient(lootParty, bundle.Items[911], bundle.Items);
+            Assert.NotNull(acolyteRec);
+            Assert.Equal("Liora", acolyteRec!.Hero.Name);
+            HeroUpgradeRecommendation? cryptRec = PartyState.FindBestUpgradeRecipient(lootParty, bundle.Items[914], bundle.Items);
+            Assert.NotNull(cryptRec);
+            Assert.Equal("Seraphina", cryptRec!.Hero.Name);
+
             // Test live combat effects: Ignore Half-Cover, -1 SP & +2 Spell Dmg, -1 Support AP, and +25% vs Undead
             CombatGrid grid = new CombatGrid(12, 10);
             grid.SetCover(4, 5, moveCost: 2, blocksLos: false); // Partial cover between Kaelen (1,5) and Skeleton (7,5)

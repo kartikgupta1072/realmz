@@ -34,7 +34,7 @@ Shader "Realmz/CartographyBillboard"
         _RootTint ("Root Ground AO Tint", Color) = (0.50, 0.56, 0.46, 1)
         _Translucency ("Sun Tip Translucency", Range(0, 1)) = 0.28
         _LanternPoolColor ("Lantern Pool Color", Color) = (1.0, 0.62, 0.24, 1)
-        _LanternPoolIntensity ("Lantern Pool Intensity", Range(0, 3)) = 1.25
+        _LanternPoolIntensity ("Lantern Pool Intensity", Range(0, 3)) = 0.78
         _EmissionColor ("Optional Emission", Color) = (0, 0, 0, 1)
         _EmissionWarmMask ("Mask Emission To Warm Bright Pixels (0/1)", Float) = 1.0
         _EmissionMinV ("Min UV.y For Emission", Range(0, 1)) = 0.0
@@ -487,8 +487,14 @@ Shader "Realmz/CartographyBillboard"
                 half emissionMask = lerp(1.0h, warmBright * vMask, saturate((half)_EmissionWarmMask));
                 half3 emission = _EmissionColor.rgb * albedoAlpha.rgb * emissionMask;
 
-                half3 color = ambientColor + directLight + addLighting + lanternPool + emission;
+                half3 rawLit = ambientColor + directLight + addLighting + lanternPool;
+                // Soft-shoulder highlight compression prevents torch and lantern blowouts on bright sprites.
+                half maxLum = max(rawLit.r, max(rawLit.g, rawLit.b));
+                half compressedLum = maxLum <= 0.92h ? maxLum : 0.92h + (maxLum - 0.92h) / (1.0h + (maxLum - 0.92h) * 1.45h);
+                half3 litColor = maxLum > 0.0001h ? rawLit * (compressedLum / maxLum) : rawLit;
+                half3 color = litColor + emission;
                 half rim = pow(1.0h - saturate(dot(normalWS, (half3)viewDirWS)), 2.2h) * (half)(max(0.0, _GlobalNightRimStrength) * max(0.0, (float)_NightRimStrength));
+                rim = min(rim, 0.55h);
                 color += albedo * _NightRimColor.rgb * rim;
 
                 if (_HoverOutlineStrength > 0.001h)

@@ -1947,7 +1947,7 @@ namespace Realmz.World
         {
             switch (surface)
             {
-                case SurfaceType.Water: return 0.80f;
+                case SurfaceType.Water: return 0.46f;
                 case SurfaceType.SteamCloud: return 0.78f;
                 case SurfaceType.Fire: return 0.92f;
                 case SurfaceType.ElectrifiedWater: return 0.90f;
@@ -2141,7 +2141,7 @@ namespace Realmz.World
             switch (surface)
             {
                 case SurfaceType.Water:
-                    return new Color(0.22f, 0.72f, 0.96f, 0.62f);
+                    return new Color(0.14f, 0.36f, 0.48f, 0.46f);
                 case SurfaceType.Oil:
                     return new Color(0.18f, 0.14f, 0.12f, 0.78f);
                 case SurfaceType.Fire:
@@ -2187,10 +2187,10 @@ namespace Realmz.World
                         case SurfaceType.Water:
                         {
                             float wave = Mathf.Sin((x / (float)size) * Mathf.PI * 4f + (y / (float)size) * Mathf.PI * 2f);
-                            bool foam = wave > 0.68f || (n > 0.91f && ((bx + by) % 3 == 0));
-                            c = foam
-                                ? new Color(0.86f, 0.97f, 1.0f, 0.92f)
-                                : Color.Lerp(new Color(0.26f, 0.66f, 0.92f, 0.74f), new Color(0.42f, 0.80f, 0.98f, 0.80f), n);
+                            bool glint = wave > 0.78f && ((bx + by) % 4 == 0);
+                            c = glint
+                                ? new Color(0.46f, 0.68f, 0.76f, 0.56f)
+                                : Color.Lerp(new Color(0.10f, 0.25f, 0.36f, 0.38f), new Color(0.18f, 0.40f, 0.52f, 0.46f), n);
                             break;
                         }
 

@@ -425,7 +425,24 @@ namespace Realmz.Game
             CreatePaperDollSlotCard(armCol, EquipmentSlot.Weapon, "Main Hand");
             CreatePaperDollSlotCard(armCol, EquipmentSlot.Shield, "Off-Hand");
             CreatePaperDollSlotCard(armCol, EquipmentSlot.MissileWeapon, "Ranged");
-            CreateFillerSpacer(armCol);
+            RectTransform controlsHintCard = BywaterUiHelpers.CreatePanel(armCol, "PaperDollControlsHint", BywaterUiHelpers.CardBg, withBrassOutline: false);
+            controlsHintCard.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
+            TextMeshProUGUI controlsHintTxt = BywaterUiHelpers.CreateLabel(
+                controlsHintCard,
+                "ControlsHintText",
+                "Click slot: Filter stash\nRight-click: Unequip",
+                _font,
+                15f,
+                BywaterUiHelpers.MutedSlate,
+                TextAlignmentOptions.Center,
+                wrap: true);
+            controlsHintTxt.enableAutoSizing = true;
+            controlsHintTxt.fontSizeMin = 11f;
+            controlsHintTxt.fontSizeMax = 15f;
+            controlsHintTxt.rectTransform.anchorMin = Vector2.zero;
+            controlsHintTxt.rectTransform.anchorMax = Vector2.one;
+            controlsHintTxt.rectTransform.offsetMin = new Vector2(6f, 4f);
+            controlsHintTxt.rectTransform.offsetMax = new Vector2(-6f, -4f);
 
             Transform torsoCol = CreateAnatomyColumn(colsRow.transform, "TorsoCol");
             CreatePaperDollSlotCard(torsoCol, EquipmentSlot.Helm, "Head");
@@ -438,10 +455,11 @@ namespace Realmz.Game
             CreatePaperDollSlotCard(accCol, EquipmentSlot.Accessory2, "Accessory 2");
             RectTransform hintCard = BywaterUiHelpers.CreatePanel(accCol, "PaperDollTip", BywaterUiHelpers.CardBg, withBrassOutline: false);
             hintCard.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
+            hintCard.gameObject.AddComponent<UnityEngine.UI.RectMask2D>();
             _paperDollSummaryText = BywaterUiHelpers.CreateLabel(
                 hintCard,
                 "HintText",
-                "Click slot: Filter stash\nRight-click / 2x click: Unequip",
+                "No active set bonuses",
                 _font,
                 15f,
                 BywaterUiHelpers.MutedSlate,
@@ -450,6 +468,7 @@ namespace Realmz.Game
             _paperDollSummaryText.enableAutoSizing = true;
             _paperDollSummaryText.fontSizeMin = 11f;
             _paperDollSummaryText.fontSizeMax = 15f;
+            _paperDollSummaryText.overflowMode = TextOverflowModes.Ellipsis;
             _paperDollSummaryText.rectTransform.anchorMin = Vector2.zero;
             _paperDollSummaryText.rectTransform.anchorMax = Vector2.one;
             _paperDollSummaryText.rectTransform.offsetMin = new Vector2(6f, 4f);
@@ -922,7 +941,7 @@ namespace Realmz.Game
             }
             if (_campRestBadge != null)
             {
-                _campRestBadge.text = isSafeZone ? "Free" : $"{party.GetTotalTorchCharges()}t";
+                _campRestBadge.text = isSafeZone ? "Free" : $"{party.GetTotalTorchCharges()}x";
                 _campRestBadge.color = isSafeZone || party.GetTotalTorchCharges() > 0 || party.TorchTurnsRemaining >= 15
                     ? BywaterUiHelpers.BrassHighlight
                     : BywaterUiHelpers.DangerRed;
@@ -1018,13 +1037,13 @@ namespace Realmz.Game
                 IReadOnlyList<EquipmentSetProgress> activeSets = hero.GetActiveEquipmentSets();
                 if (activeSets != null && activeSets.Count > 0)
                 {
-                    _paperDollSummaryText.text = $"{FormatEquipmentSetsCompact(hero)}\nClick slot: Filter | Right-click: Unequip";
+                    _paperDollSummaryText.text = FormatEquipmentSetsCompact(hero);
                     _paperDollSummaryText.color = BywaterUiHelpers.BrassHighlight;
                     _paperDollSummaryText.alignment = TextAlignmentOptions.TopLeft;
                 }
                 else
                 {
-                    _paperDollSummaryText.text = "Click slot: Filter stash\nRight-click / 2x click: Unequip";
+                    _paperDollSummaryText.text = "No active set bonuses";
                     _paperDollSummaryText.color = BywaterUiHelpers.MutedSlate;
                     _paperDollSummaryText.alignment = TextAlignmentOptions.Center;
                 }
@@ -1289,19 +1308,19 @@ namespace Realmz.Game
                 string header = $"{prog.Definition.Name} [{prog.EquippedPieces}/{prog.TargetPieces}]";
                 if (unlocked.Count > 0 && pending.Count > 0)
                 {
-                    entries.Add($"{header}: {string.Join(", ", unlocked)} (Next {string.Join(" | ", pending)})");
+                    entries.Add($"{header}: {string.Join(", ", unlocked)} (Next {pending[0]})");
                 }
                 else if (unlocked.Count > 0)
                 {
                     entries.Add($"{header}: {string.Join(", ", unlocked)}");
                 }
-                else
+                else if (pending.Count > 0)
                 {
-                    entries.Add($"{header}: {string.Join(" | ", pending)}");
+                    entries.Add($"{header}: Next {pending[0]}");
                 }
             }
 
-            return "Sets: " + string.Join(" | ", entries);
+            return string.Join("\n", entries);
         }
 
         private static string FormatItemSetProgressTag(PartyMemberState hero, ItemDefinition item)

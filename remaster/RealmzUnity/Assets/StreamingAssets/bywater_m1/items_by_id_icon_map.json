@@ -457,7 +457,7 @@
       "name": "Arcanist Signet",
       "category": "Accessory",
       "slot": "Accessory1",
-      "icon_path": "icons/icon_luck_stone.png"
+      "icon_path": "icons/icon_arcanist_signet.png"
     },
     "909": {
       "id": 909,
@@ -478,7 +478,7 @@
       "name": "Silver Sun Amulet",
       "category": "Accessory",
       "slot": "Accessory1",
-      "icon_path": "icons/icon_luck_stone.png"
+      "icon_path": "icons/icon_silver_sun_amulet.png"
     },
     "912": {
       "id": 912,
@@ -499,7 +499,7 @@
       "name": "Crypt Ward Ring",
       "category": "Accessory",
       "slot": "Accessory1",
-      "icon_path": "icons/icon_luck_stone.png"
+      "icon_path": "icons/icon_crypt_ward_ring.png"
     }
   },
   "items": [
@@ -956,7 +956,7 @@
       "name": "Arcanist Signet",
       "category": "Accessory",
       "slot": "Accessory1",
-      "icon_path": "icons/icon_luck_stone.png"
+      "icon_path": "icons/icon_arcanist_signet.png"
     },
     {
       "id": 909,
@@ -977,7 +977,7 @@
       "name": "Silver Sun Amulet",
       "category": "Accessory",
       "slot": "Accessory1",
-      "icon_path": "icons/icon_luck_stone.png"
+      "icon_path": "icons/icon_silver_sun_amulet.png"
     },
     {
       "id": 912,
@@ -998,7 +998,7 @@
       "name": "Crypt Ward Ring",
       "category": "Accessory",
       "slot": "Accessory1",
-      "icon_path": "icons/icon_luck_stone.png"
+      "icon_path": "icons/icon_crypt_ward_ring.png"
     }
   ],
   "by_spell_id": {

@@ -23,12 +23,14 @@ namespace Realmz.Cartography
         public MeshRenderer terrainMeshRenderer;
         public MeshCollider terrainMeshCollider;
         public GameObject waterPlaneObject;
+        public GameObject outerApronObject;
 
         public int LastCliffTriangleCount { get; private set; }
         public Mesh LastBuiltMesh { get; private set; }
 
         private Mesh _ownedTerrainMesh;
         private Mesh _ownedWaterMesh;
+        private Mesh _ownedApronMesh;
         private CartographyWorldData _lastWorldData;
 
         private void OnDestroy()
@@ -59,6 +61,20 @@ namespace Realmz.Cartography
                 }
                 DestroySafe(_ownedWaterMesh);
                 _ownedWaterMesh = null;
+            }
+
+            if (_ownedApronMesh != null)
+            {
+                if (outerApronObject != null)
+                {
+                    MeshFilter af = outerApronObject.GetComponent<MeshFilter>();
+                    if (af != null && af.sharedMesh == _ownedApronMesh)
+                    {
+                        af.sharedMesh = null;
+                    }
+                }
+                DestroySafe(_ownedApronMesh);
+                _ownedApronMesh = null;
             }
         }
 
@@ -111,6 +127,7 @@ namespace Realmz.Cartography
             }
 
             EnsureWaterPlane(data);
+            EnsureOuterDioramaApron(data);
         }
 
         public void EnsureWaterPlane()
@@ -434,6 +451,135 @@ namespace Realmz.Cartography
             tris.Add(baseIdx + 0);
             tris.Add(baseIdx + 2);
             tris.Add(baseIdx + 3);
+        }
+
+        private void EnsureOuterDioramaApron(CartographyWorldData data)
+        {
+            if (data == null)
+            {
+                return;
+            }
+
+            Transform existing = transform.Find("OuterDioramaApron");
+            if (existing != null)
+            {
+                outerApronObject = existing.gameObject;
+            }
+            else if (outerApronObject == null)
+            {
+                outerApronObject = new GameObject("OuterDioramaApron");
+                outerApronObject.transform.SetParent(transform, false);
+            }
+
+            outerApronObject.transform.localPosition = Vector3.zero;
+            outerApronObject.transform.localRotation = Quaternion.identity;
+            outerApronObject.transform.localScale = Vector3.one;
+
+            MeshFilter mf = outerApronObject.GetComponent<MeshFilter>();
+            if (mf == null)
+            {
+                mf = outerApronObject.AddComponent<MeshFilter>();
+            }
+            MeshRenderer mr = outerApronObject.GetComponent<MeshRenderer>();
+            if (mr == null)
+            {
+                mr = outerApronObject.AddComponent<MeshRenderer>();
+            }
+            if (terrainMaterial != null)
+            {
+                mr.sharedMaterial = terrainMaterial;
+            }
+            mr.shadowCastingMode = ShadowCastingMode.Off;
+            mr.receiveShadows = true;
+
+            if (_ownedApronMesh != null)
+            {
+                if (mf.sharedMesh == _ownedApronMesh)
+                {
+                    mf.sharedMesh = null;
+                }
+                DestroySafe(_ownedApronMesh);
+                _ownedApronMesh = null;
+            }
+
+            List<Vector3> verts = new List<Vector3>(16);
+            List<Vector3> norms = new List<Vector3>(16);
+            List<Vector4> tangs = new List<Vector4>(16);
+            List<Color> colors = new List<Color>(16);
+            List<Vector2> uv0 = new List<Vector2>(16);
+            List<Vector2> uv1 = new List<Vector2>(16);
+            List<Vector2> uv2 = new List<Vector2>(16);
+            List<int> tris = new List<int>(24);
+
+            EmitOuterDioramaApron(data.Width, data.Height, -0.75f, 16f, verts, norms, tangs, colors, uv0, uv1, uv2, tris);
+
+            Mesh apronMesh = new Mesh
+            {
+                name = $"Cartography_OuterApron_{data.Width}x{data.Height}"
+            };
+            apronMesh.SetVertices(verts);
+            apronMesh.SetNormals(norms);
+            apronMesh.SetTangents(tangs);
+            apronMesh.SetColors(colors);
+            apronMesh.SetUVs(0, uv0);
+            apronMesh.SetUVs(1, uv1);
+            apronMesh.SetUVs(2, uv2);
+            apronMesh.SetTriangles(tris, 0);
+            apronMesh.RecalculateBounds();
+
+            _ownedApronMesh = apronMesh;
+            mf.sharedMesh = apronMesh;
+        }
+
+        private static void EmitOuterDioramaApron(
+            int w,
+            int h,
+            float apronY,
+            float margin,
+            List<Vector3> verts,
+            List<Vector3> norms,
+            List<Vector4> tangs,
+            List<Color> colors,
+            List<Vector2> uv0,
+            List<Vector2> uv1,
+            List<Vector2> uv2,
+            List<int> tris)
+        {
+            void AddApronQuad(float x0, float x1, float zSouth, float zNorth)
+            {
+                int baseIdx = verts.Count;
+                verts.Add(new Vector3(x0, apronY, zSouth));
+                verts.Add(new Vector3(x1, apronY, zSouth));
+                verts.Add(new Vector3(x1, apronY, zNorth));
+                verts.Add(new Vector3(x0, apronY, zNorth));
+
+                for (int k = 0; k < 4; k++)
+                {
+                    norms.Add(Vector3.up);
+                    tangs.Add(new Vector4(1f, 0f, 0f, 1f));
+                    colors.Add(new Color(0f, 0f, 0f, 0f));
+                    uv1.Add(new Vector2(1f, 0.24f));
+                    uv2.Add(new Vector2(0f, apronY));
+                }
+
+                uv0.Add(new Vector2(x0 / Mathf.Max(1, w), 0f));
+                uv0.Add(new Vector2(x1 / Mathf.Max(1, w), 0f));
+                uv0.Add(new Vector2(x1 / Mathf.Max(1, w), 1f));
+                uv0.Add(new Vector2(x0 / Mathf.Max(1, w), 1f));
+
+                tris.Add(baseIdx + 0);
+                tris.Add(baseIdx + 2);
+                tris.Add(baseIdx + 1);
+                tris.Add(baseIdx + 0);
+                tris.Add(baseIdx + 3);
+                tris.Add(baseIdx + 2);
+            }
+
+            // North, South, West, and East rings enclosing (0..w, -h..0)
+            AddApronQuad(-margin, w + margin, 0f, margin);
+            AddApronQuad(-margin, w + margin, -(h + margin), -h);
+            AddApronQuad(-margin, 0f, -h, 0f);
+            AddApronQuad(w, w + margin, -h, 0f);
         }
 
         private static float EncodeBiomeHint(CartographyBiomeZone zone)

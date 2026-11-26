@@ -5282,17 +5282,16 @@ namespace Realmz.Game
             // 5. Bottom Tactical Action Bar (Unified 6-AP Diamonds + Contextual Hotbar 1-6 + Skills)
             RectTransform actionBar = BywaterUiHelpers.CreatePanel(_combatRoot.transform, "TacticalActionBar", BywaterUiHelpers.PanelDarkBg, withBrassOutline: true, outlinePx: 1.8f);
             _actionBarRoot = actionBar.gameObject;
-            actionBar.anchorMin = new Vector2(0.5f, 0f);
-            actionBar.anchorMax = new Vector2(0.5f, 0f);
-            actionBar.pivot = new Vector2(0.5f, 0f);
-            // Width is content-fitted; a full caster hotbar (6 spells + Potion/Shove/Guard/End Turn) is ~1554px.
-            // Center at x=791 (960-169) spans ~14..1568, clearing the 330px Combat Log ticker that starts at 1578.
-            actionBar.anchoredPosition = new Vector2(-169f, 10f);
+            actionBar.anchorMin = new Vector2(0f, 0f);
+            actionBar.anchorMax = new Vector2(0f, 0f);
+            actionBar.pivot = new Vector2(0f, 0f);
+            // Left-anchored and content-fitted so even full caster hotbars stay left of the Combat Log ticker at x=1578.
+            actionBar.anchoredPosition = new Vector2(14f, 10f);
             actionBar.sizeDelta = new Vector2(1240f, 90f);
 
             HorizontalLayoutGroup abHlg = actionBar.gameObject.AddComponent<HorizontalLayoutGroup>();
-            abHlg.padding = new RectOffset(10, 10, 6, 6);
-            abHlg.spacing = 6f;
+            abHlg.padding = new RectOffset(8, 8, 6, 6);
+            abHlg.spacing = 4f;
             abHlg.childControlWidth = true;
             abHlg.childControlHeight = true;
             abHlg.childForceExpandWidth = false;
@@ -5302,11 +5301,11 @@ namespace Realmz.Game
             abCsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
             abCsf.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
 
-            BywaterUiHelpers.CreatePortraitFrame(actionBar, "ActorPortraitFrame", 74f, out _combatActorPortrait);
+            BywaterUiHelpers.CreatePortraitFrame(actionBar, "ActorPortraitFrame", 72f, out _combatActorPortrait);
 
             GameObject actorInfo = new GameObject("ActorInfo", typeof(RectTransform), typeof(VerticalLayoutGroup));
             actorInfo.transform.SetParent(actionBar, false);
-            actorInfo.AddComponent<LayoutElement>().preferredWidth = 368f;
+            actorInfo.AddComponent<LayoutElement>().preferredWidth = 320f;
             VerticalLayoutGroup aiVlg = actorInfo.GetComponent<VerticalLayoutGroup>();
             aiVlg.spacing = 2f;
             aiVlg.childControlWidth = true;
@@ -5387,26 +5386,26 @@ namespace Realmz.Game
             }
 
             // Fixed Tactical Skills
-            _combatUndoBtn = AddCombatSkillButton(actionBar, "UndoMoveBtn", "undo", "Undo", 74f, () => OnUndoMoveRequested?.Invoke(), out _combatUndoBtnIcon, out _, out _, null);
+            _combatUndoBtn = AddCombatSkillButton(actionBar, "UndoMoveBtn", "undo", "Undo", 68f, () => OnUndoMoveRequested?.Invoke(), out _combatUndoBtnIcon, out _, out _, null);
             AttachHoverTooltip(_combatUndoBtn.gameObject, "undo_move", "Undo Move [Free]", "Rewind your last movement step this turn.");
 
-            _combatDashBtn = AddCombatSkillButton(actionBar, "DashBtn", "leather_boots", "Dash", 84f, () => OnDashRequested?.Invoke(), out _combatDashBtnIcon, out _combatDashApBadgeText, out _combatDashApBadgeBg, "2 AP");
+            _combatDashBtn = AddCombatSkillButton(actionBar, "DashBtn", "leather_boots", "Dash", 76f, () => OnDashRequested?.Invoke(), out _combatDashBtnIcon, out _combatDashApBadgeText, out _combatDashApBadgeBg, "2 AP");
             AttachHoverTooltip(_combatDashBtn.gameObject, "dash", "Dash [D] [2 AP]", "Spend 2 AP to gain +Base MP extra movement this turn.");
 
-            _combatPotionBtn = AddCombatSkillButton(actionBar, "PotionBtn", "potion", "Potion", 90f, () => OnCombatModeSelected?.Invoke(CombatActionMode.Potion), out _combatPotionBtnIcon, out _combatPotionApBadgeText, out _, "2 AP");
+            _combatPotionBtn = AddCombatSkillButton(actionBar, "PotionBtn", "potion", "Potion", 78f, () => OnCombatModeSelected?.Invoke(CombatActionMode.Potion), out _combatPotionBtnIcon, out _combatPotionApBadgeText, out _, "2 AP");
             AttachHoverTooltip(_combatPotionBtn.gameObject, "potion", "Healing Potion [2 AP]", "Drink or throw a healing potion. Cost: 2 AP.");
 
-            _combatTorchBtn = AddCombatSkillButton(actionBar, "CombatTorchBtn", "torch", "Torch", 86f, () => OnLightTorchFromHudRequested?.Invoke(), out _combatTorchBtnIcon, out _combatTorchApBadgeText, out _, "2 AP");
+            _combatTorchBtn = AddCombatSkillButton(actionBar, "CombatTorchBtn", "torch", "Torch", 76f, () => OnLightTorchFromHudRequested?.Invoke(), out _combatTorchBtnIcon, out _combatTorchApBadgeText, out _, "2 AP");
             AttachHoverTooltip(_combatTorchBtn.gameObject, "torch", "Light Torch [2 AP]", "Ignite a Torch from party stash (+2h 00m) to illuminate darkness. Cost: 2 AP.");
             _combatTorchBtn.gameObject.SetActive(false);
 
-            _combatShoveBtn = AddShoveCombatButton(actionBar, "ShoveBtn", 98f, () => OnCombatModeSelected?.Invoke(CombatActionMode.Shove), out _combatShoveBtnIcon);
+            _combatShoveBtn = AddShoveCombatButton(actionBar, "ShoveBtn", 82f, () => OnCombatModeSelected?.Invoke(CombatActionMode.Shove), out _combatShoveBtnIcon);
             AttachHoverTooltip(_combatShoveBtn.gameObject, "shove", "Shove [V] [2 AP]", "Push an adjacent enemy 1 tile (off ledges or into walls). Cost: 2 AP.");
 
-            _combatGuardBtn = AddCombatSkillButton(actionBar, "GuardBtn", "guard", "Guard", 90f, () => OnGuardRequested?.Invoke(), out _combatGuardBtnIcon, out _combatGuardApBadgeText, out _combatGuardApBadgeBg, "2 AP");
+            _combatGuardBtn = AddCombatSkillButton(actionBar, "GuardBtn", "guard", "Guard", 78f, () => OnGuardRequested?.Invoke(), out _combatGuardBtnIcon, out _combatGuardApBadgeText, out _combatGuardApBadgeBg, "2 AP");
             AttachHoverTooltip(_combatGuardBtn.gameObject, "guard", "Guard / Overwatch [G]", "+4 AC and Overwatch reaction strike when an enemy enters melee reach (1 AP with Iron Vanguard 3pc).");
 
-            _combatEndTurnBtn = AddCombatSkillButton(actionBar, "EndTurnBtn", "end_turn", "End Turn", 94f, () => OnEndTurnRequested?.Invoke(), out _combatEndTurnBtnIcon, out _, out _, null);
+            _combatEndTurnBtn = AddCombatSkillButton(actionBar, "EndTurnBtn", "end_turn", "End Turn", 84f, () => OnEndTurnRequested?.Invoke(), out _combatEndTurnBtnIcon, out _, out _, null);
             AttachHoverTooltip(_combatEndTurnBtn.gameObject, "end_turn", "End Turn [Space]", "Finish the current hero's turn.");
 
             // Pre-Battle Deployment Phase Banner + [Start Battle] CTA Button
@@ -5536,7 +5535,7 @@ namespace Realmz.Game
             btn.colors = colors;
 
             LayoutElement le = go.AddComponent<LayoutElement>();
-            le.preferredWidth = 104f;
+            le.preferredWidth = 88f;
             le.preferredHeight = 72f;
 
             VerticalLayoutGroup vlg = go.AddComponent<VerticalLayoutGroup>();
