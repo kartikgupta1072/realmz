@@ -236,7 +236,6 @@ namespace Realmz.Game
         private readonly List<Button> _partyHeroSelectorBtns = new List<Button>(6);
         private Image _drawerHeroPortrait;
         private TextMeshProUGUI _drawerHeroTitle;
-        private readonly List<Button> _formationRankBtns = new List<Button>(3);
         private TextMeshProUGUI _drawerHeroStats;
         private TextMeshProUGUI _drawerHeroConditions;
         private TextMeshProUGUI _drawerHeroSpells;
@@ -445,7 +444,6 @@ namespace Realmz.Game
 
         public event Action<int> OnHeroCardClicked;
         public event Action<int> OnPartyHeroSelected;
-        public event Action<int, FormationRank> OnHeroFormationChanged;
         public event Action OnStartBattleRequested;
         public event Action<int, EquipmentSlot> OnUnequipRequested;
         public event Action<int, int> OnEquipFromStashRequested;
@@ -1488,18 +1486,12 @@ namespace Realmz.Game
                 TextMeshProUGUI lbl = btn.GetComponentInChildren<TextMeshProUGUI>();
                 if (lbl != null)
                 {
-                    FormationRank rank = party.GetFormationRank(i);
-                    string rankCode = rank == FormationRank.Front ? "F" : (rank == FormationRank.Mid ? "M" : "B");
-                    lbl.text = $"{party.Members[i].Name} [{rankCode}]";
+                    lbl.text = party.Members[i].Name;
                 }
                 BywaterUiHelpers.SetButtonColors(btn, i == _selectedHeroIndex);
             }
 
             PartyMemberState hero = party.Members[_selectedHeroIndex];
-            for (int r = 0; r < _formationRankBtns.Count; r++)
-            {
-                BywaterUiHelpers.SetButtonColors(_formationRankBtns[r], (int)hero.FormationRank == r);
-            }
             _drawerHeroPortrait.sprite = ResolveHeroPortrait(hero.Id, hero.PortraitId, hero.Archetype);
             _drawerHeroPortrait.preserveAspect = true;
             _drawerHeroPortrait.color = _drawerHeroPortrait.sprite != null ? Color.white : new Color(0.2f, 0.25f, 0.35f, 1f);
@@ -4457,19 +4449,19 @@ namespace Realmz.Game
 
             // Left Column: Hero Sheet & Equipment
             RectTransform leftCol = BywaterUiHelpers.CreatePanel(body.transform, "HeroSheetCol", BywaterUiHelpers.PanelBg, withBrassOutline: true, outlinePx: 1f);
-            leftCol.gameObject.AddComponent<LayoutElement>().preferredWidth = 590f;
+            leftCol.gameObject.AddComponent<LayoutElement>().preferredWidth = 676f;
             VerticalLayoutGroup leftVlg = leftCol.gameObject.AddComponent<VerticalLayoutGroup>();
-            leftVlg.padding = new RectOffset(12, 12, 12, 12);
-            leftVlg.spacing = 8f;
+            leftVlg.padding = new RectOffset(12, 12, 10, 10);
+            leftVlg.spacing = 6f;
             leftVlg.childControlWidth = true;
             leftVlg.childControlHeight = true;
             leftVlg.childForceExpandHeight = false;
 
             GameObject heroTop = new GameObject("HeroTop", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             heroTop.transform.SetParent(leftCol, false);
-            heroTop.AddComponent<LayoutElement>().preferredHeight = 132f;
+            heroTop.AddComponent<LayoutElement>().preferredHeight = 128f;
             HorizontalLayoutGroup htHlg = heroTop.GetComponent<HorizontalLayoutGroup>();
-            htHlg.spacing = 14f;
+            htHlg.spacing = 12f;
             htHlg.childControlWidth = true;
             htHlg.childControlHeight = true;
             htHlg.childForceExpandWidth = false;
@@ -4477,54 +4469,43 @@ namespace Realmz.Game
 
             BywaterUiHelpers.CreatePortraitFrame(heroTop.transform, "DrawerPortraitFrame", 128f, out _drawerHeroPortrait);
 
-            GameObject heroTitleCol = new GameObject("HeroTitleFormationCol", typeof(RectTransform), typeof(VerticalLayoutGroup));
-            heroTitleCol.transform.SetParent(heroTop.transform, false);
-            heroTitleCol.AddComponent<LayoutElement>().flexibleWidth = 1f;
-            VerticalLayoutGroup htcVlg = heroTitleCol.GetComponent<VerticalLayoutGroup>();
-            htcVlg.spacing = 8f;
+            GameObject heroSummaryCol = new GameObject("HeroSummaryCol", typeof(RectTransform), typeof(VerticalLayoutGroup));
+            heroSummaryCol.transform.SetParent(heroTop.transform, false);
+            heroSummaryCol.AddComponent<LayoutElement>().flexibleWidth = 1f;
+            VerticalLayoutGroup htcVlg = heroSummaryCol.GetComponent<VerticalLayoutGroup>();
+            htcVlg.spacing = 3f;
             htcVlg.childControlWidth = true;
             htcVlg.childControlHeight = true;
             htcVlg.childForceExpandHeight = false;
 
-            _drawerHeroTitle = BywaterUiHelpers.CreateLabel(heroTitleCol.transform, "HeroTitle", "Aldric", _font, 18.5f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold);
+            _drawerHeroTitle = BywaterUiHelpers.CreateDisplayLabel(heroSummaryCol.transform, "HeroTitle", "Aldric", _font, 19f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
             BywaterUiHelpers.AddTextDropShadow(_drawerHeroTitle);
-            _drawerHeroTitle.gameObject.AddComponent<LayoutElement>().preferredHeight = 46f;
+            _drawerHeroTitle.enableAutoSizing = true;
+            _drawerHeroTitle.fontSizeMin = 14f;
+            _drawerHeroTitle.fontSizeMax = 19f;
+            _drawerHeroTitle.overflowMode = TextOverflowModes.Truncate;
+            _drawerHeroTitle.gameObject.AddComponent<LayoutElement>().preferredHeight = 28f;
 
-            GameObject formationRow = new GameObject("FormationRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
-            formationRow.transform.SetParent(heroTitleCol.transform, false);
-            formationRow.AddComponent<LayoutElement>().preferredHeight = 32f;
-            HorizontalLayoutGroup frmHlg = formationRow.GetComponent<HorizontalLayoutGroup>();
-            frmHlg.spacing = 6f;
-            frmHlg.childControlWidth = true;
-            frmHlg.childControlHeight = true;
-            frmHlg.childForceExpandWidth = false;
-            frmHlg.childAlignment = TextAnchor.MiddleLeft;
+            _drawerHeroStats = BywaterUiHelpers.CreateLabel(heroSummaryCol.transform, "HeroStats", string.Empty, _font, 15f, BywaterUiHelpers.ParchmentText);
+            _drawerHeroStats.enableAutoSizing = true;
+            _drawerHeroStats.fontSizeMin = 12f;
+            _drawerHeroStats.fontSizeMax = 15f;
+            _drawerHeroStats.overflowMode = TextOverflowModes.Truncate;
+            _drawerHeroStats.gameObject.AddComponent<LayoutElement>().preferredHeight = 46f;
 
-            TextMeshProUGUI frmLbl = BywaterUiHelpers.CreateLabel(formationRow.transform, "FormationLabel", "Rank:", _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
-            frmLbl.gameObject.AddComponent<LayoutElement>().preferredWidth = 52f;
+            _drawerHeroConditions = BywaterUiHelpers.CreateLabel(heroSummaryCol.transform, "HeroConditions", "Conditions: Healthy", _font, 15f, BywaterUiHelpers.InfoCyan, wrap: false);
+            _drawerHeroConditions.enableAutoSizing = true;
+            _drawerHeroConditions.fontSizeMin = 11.5f;
+            _drawerHeroConditions.fontSizeMax = 15f;
+            _drawerHeroConditions.overflowMode = TextOverflowModes.Truncate;
+            _drawerHeroConditions.gameObject.AddComponent<LayoutElement>().preferredHeight = 22f;
 
-            _formationRankBtns.Clear();
-            FormationRank[] ranks = { FormationRank.Front, FormationRank.Mid, FormationRank.Back };
-            string[] rankNames = { "Front", "Mid", "Back" };
-            for (int r = 0; r < ranks.Length; r++)
-            {
-                FormationRank targetRank = ranks[r];
-                Button rankBtn = BywaterUiHelpers.CreateButton(formationRow.transform, $"FormationRankBtn_{rankNames[r]}", rankNames[r], _font, () =>
-                {
-                    OnHeroFormationChanged?.Invoke(_selectedHeroIndex, targetRank);
-                }, 15f);
-                rankBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 72f;
-                _formationRankBtns.Add(rankBtn);
-            }
-
-            _drawerHeroStats = BywaterUiHelpers.CreateLabel(leftCol, "HeroStats", string.Empty, _font, 15.5f, BywaterUiHelpers.ParchmentText);
-            _drawerHeroStats.gameObject.AddComponent<LayoutElement>().preferredHeight = 72f;
-
-            _drawerHeroConditions = BywaterUiHelpers.CreateLabel(leftCol, "HeroConditions", "Conditions: Healthy", _font, 15f, BywaterUiHelpers.InfoCyan);
-            _drawerHeroConditions.gameObject.AddComponent<LayoutElement>().preferredHeight = 28f;
-
-            _drawerHeroSpells = BywaterUiHelpers.CreateLabel(leftCol, "HeroSpells", "Known Spells: None", _font, 15f, BywaterUiHelpers.MutedSlate);
-            _drawerHeroSpells.gameObject.AddComponent<LayoutElement>().preferredHeight = 44f;
+            _drawerHeroSpells = BywaterUiHelpers.CreateLabel(heroSummaryCol.transform, "HeroSpells", "Known Spells: None", _font, 15f, BywaterUiHelpers.MutedSlate, wrap: false);
+            _drawerHeroSpells.enableAutoSizing = true;
+            _drawerHeroSpells.fontSizeMin = 11.5f;
+            _drawerHeroSpells.fontSizeMax = 15f;
+            _drawerHeroSpells.overflowMode = TextOverflowModes.Truncate;
+            _drawerHeroSpells.gameObject.AddComponent<LayoutElement>().preferredHeight = 22f;
 
             BuildPaperDollAndCharSheet(leftCol);
 

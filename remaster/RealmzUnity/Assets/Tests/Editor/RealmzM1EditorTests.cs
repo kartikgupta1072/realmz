@@ -3144,24 +3144,22 @@ namespace Realmz.EditorTests
                 hud.BuildUi(catalog);
                 Canvas canvas = hud.GetComponentInChildren<Canvas>(true);
 
-                // 1. Party [P] Formation rank buttons + Iron Vanguard set progress in CharSheet
+                // 1. Party [P] Paper Doll full-body visual hero + zero FormationRank UI + Iron Vanguard set progress in CharSheet
                 hud.TogglePartyPanel(true);
                 hud.RefreshPartyDrawer(party, bundle, 0);
                 Transform charExtra = FindDescendantByName(canvas.transform, "ExtraBody");
                 Assert.That(charExtra, Is.Not.Null);
                 Assert.That(charExtra.GetComponent<TextMeshProUGUI>().text, Does.Contain("Iron Vanguard [1/3]"));
 
-                FormationRank changedRank = FormationRank.Front;
-                int changedIdx = -1;
-                hud.OnHeroFormationChanged += (idx, rank) =>
-                {
-                    changedIdx = idx;
-                    changedRank = rank;
-                    party.SetFormationRank(idx, rank);
-                };
-                FindDescendantByName(canvas.transform, "FormationRankBtn_Back").GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
-                Assert.That(changedIdx, Is.EqualTo(0));
-                Assert.That(changedRank, Is.EqualTo(FormationRank.Back));
+                Assert.That(FindDescendantByName(canvas.transform, "FormationRow"), Is.Null, "FormationRow should be removed from Party/Camp menu.");
+                Assert.That(FindDescendantByName(canvas.transform, "FormationRankBtn_Front"), Is.Null);
+                Assert.That(FindDescendantByName(canvas.transform, "FormationRankBtn_Mid"), Is.Null);
+                Assert.That(FindDescendantByName(canvas.transform, "FormationRankBtn_Back"), Is.Null);
+                Transform paperDollFig = FindDescendantByName(canvas.transform, "PaperDollHeroFigure");
+                Assert.That(paperDollFig, Is.Not.Null, "PaperDollHeroFigure must exist inside PaperDollPanel.");
+                UnityEngine.UI.Image figImg = paperDollFig.GetComponent<UnityEngine.UI.Image>();
+                Assert.That(figImg, Is.Not.Null);
+                Assert.That(figImg.sprite, Is.Not.Null, "PaperDollHeroFigure must bind a hero sprite on RefreshPartyDrawer.");
                 hud.TogglePartyPanel(false);
 
                 // 2. Pre-Battle Deployment banner + Start Battle CTA toggle cleanly vs TacticalActionBar + AP Diamonds

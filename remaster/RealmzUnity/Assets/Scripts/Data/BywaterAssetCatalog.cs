@@ -138,6 +138,8 @@ namespace Realmz.Data
 
         [NonSerialized]
         private Dictionary<string, Material> _runtimeUnitSheetMaterials;
+        [NonSerialized]
+        private Dictionary<string, Sprite> _runtimeHeroPaperDollSprites;
 
         [Serializable]
         public sealed class HotbarIconEntry
@@ -1408,6 +1410,65 @@ namespace Realmz.Data
             }
 
             return (extraHeroes != null && extraHeroes.Count > 0) ? extraHeroes[0] : null;
+        }
+
+        /// <summary>
+        /// Resolves a crisp single-frame full-body sprite from the hero's idle Cartography unit sheet
+        /// for the Party &amp; Equipment Paper Doll stage, falling back cleanly to heroArt.sprite or portrait.
+        /// </summary>
+        public Sprite GetHeroPaperDollSprite(string heroId, int portraitId, string archetype)
+        {
+            HeroArtEntry heroArt = GetHeroArt(heroId, portraitId, archetype);
+            Material idleMat = null;
+            if (!string.IsNullOrWhiteSpace(heroId))
+            {
+                idleMat = ResolveCartographyUnitMaterial(heroId, UnitAnimState.Idle, null, out _);
+            }
+            if (idleMat == null && !string.IsNullOrWhiteSpace(archetype))
+            {
+                idleMat = ResolveCartographyUnitMaterial(archetype, UnitAnimState.Idle, null, out _);
+            }
+            if (idleMat == null && heroArt != null)
+            {
+                idleMat = heroArt.unitSheetMaterial;
+            }
+
+            Texture2D tex = idleMat != null
+                ? (idleMat.mainTexture as Texture2D
+                    ?? (idleMat.HasProperty("_BaseMap") ? idleMat.GetTexture("_BaseMap") as Texture2D : null))
+                : null;
+            if (tex != null && tex.width > 0 && tex.height > 0)
+            {
+                int cols = idleMat.HasProperty("_SheetCols")
+                    ? Mathf.Max(1, Mathf.RoundToInt(idleMat.GetFloat("_SheetCols")))
+                    : (tex.width >= tex.height * 2 ? 4 : 1);
+                int rows = idleMat.HasProperty("_SheetRows")
+                    ? Mathf.Max(1, Mathf.RoundToInt(idleMat.GetFloat("_SheetRows")))
+                    : 1;
+
+                _runtimeHeroPaperDollSprites ??= new Dictionary<string, Sprite>(StringComparer.Ordinal);
+                string cacheKey = $"{tex.GetInstanceID()}_{cols}x{rows}";
+                if (_runtimeHeroPaperDollSprites.TryGetValue(cacheKey, out Sprite cached) && cached != null)
+                {
+                    return cached;
+                }
+
+                float fw = tex.width / (float)cols;
+                float fh = tex.height / (float)rows;
+                Rect frame0 = new Rect(0f, tex.height - fh, fw, fh);
+                Sprite created = Sprite.Create(tex, frame0, new Vector2(0.5f, 0.0f), 64f, 0, SpriteMeshType.FullRect);
+                created.name = $"{tex.name}_PaperDollFrame0";
+                created.hideFlags = HideFlags.HideAndDontSave;
+                _runtimeHeroPaperDollSprites[cacheKey] = created;
+                return created;
+            }
+
+            if (heroArt != null)
+            {
+                return heroArt.sprite != null ? heroArt.sprite : heroArt.portrait;
+            }
+
+            return null;
         }
 
         private static HeroArtEntry FindHeroInList(List<HeroArtEntry> list, string heroId, int portraitId, string archetype)

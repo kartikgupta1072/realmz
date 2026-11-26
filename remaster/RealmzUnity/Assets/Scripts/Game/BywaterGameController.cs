@@ -1058,7 +1058,6 @@ namespace Realmz.Game
             hudController.OnCycleSpeedRequested += HandleCycleSpeed;
             hudController.OnSpellSelected += HandleSpellSelected;
             hudController.OnCombatPartyAllyClicked += HandleCombatPartyAllyClicked;
-            hudController.OnHeroFormationChanged += HandleHeroFormationChanged;
             hudController.OnStartBattleRequested += HandleStartBattleFromDeployment;
             hudController.OnHotbarSlotHovered += (actionId, title, body) =>
             {
@@ -2743,21 +2742,6 @@ namespace Realmz.Game
             {
                 hudController?.RefreshPartyDrawer(ExploreSession.Party, Bundle, heroIdx);
                 hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false);
-            }
-        }
-
-        private void HandleHeroFormationChanged(int heroIdx, FormationRank rank)
-        {
-            if (ExploreSession?.Party == null || Bundle == null)
-            {
-                return;
-            }
-
-            audioDirector?.PlayUiClick();
-            if (ExploreSession.Party.SetFormationRank(heroIdx, rank))
-            {
-                hudController?.RefreshPartyDrawer(ExploreSession.Party, Bundle, heroIdx);
-                hudController?.ShowToast($"{ExploreSession.Party.Members[heroIdx].Name} assigned to {rank} rank.", 1.5f);
             }
         }
 

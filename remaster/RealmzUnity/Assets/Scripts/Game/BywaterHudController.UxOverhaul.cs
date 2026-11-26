@@ -144,6 +144,8 @@ namespace Realmz.Game
         private GameObject _charSheetPanel;
         private bool _showCharSheetTab;
         private readonly List<PaperDollSlotRefs> _paperDollSlots = new List<PaperDollSlotRefs>(9);
+        private Image _paperDollHeroFigure;
+        private TextMeshProUGUI _paperDollHeroCaption;
         private TextMeshProUGUI _paperDollSummaryText;
         private TextMeshProUGUI _drawerCarryWeightText;
         private Button _drawerLvlUpBtn;
@@ -402,15 +404,15 @@ namespace Realmz.Game
             _tabEquipBtn = BywaterUiHelpers.CreateButton(tabRow.transform, "TabEquipmentBtn", "Equipment (9 Slots)", _font, () => SwitchHeroSheetTab(false), 15.5f);
             _tabCharSheetBtn = BywaterUiHelpers.CreateButton(tabRow.transform, "TabCharSheetBtn", "Character Sheet", _font, () => SwitchHeroSheetTab(true), 15.5f);
 
-            // Paper-Doll 9-slot container (3 anatomical columns, 386px height, ZERO unequip buttons)
+            // Paper-Doll 9-slot container (3 columns: Left 4 slots | Center Hero Stage | Right 5 slots)
             RectTransform dollRt = BywaterUiHelpers.CreatePanel(leftCol, "PaperDollPanel", BywaterUiHelpers.PanelDarkBg, withBrassOutline: true, outlinePx: 1f);
             LayoutElement dollLe = dollRt.gameObject.AddComponent<LayoutElement>();
-            dollLe.preferredHeight = 404f;
+            dollLe.preferredHeight = 464f;
             dollLe.flexibleHeight = 1f;
             _paperDollPanel = dollRt.gameObject;
 
             VerticalLayoutGroup dollVlg = dollRt.gameObject.AddComponent<VerticalLayoutGroup>();
-            dollVlg.padding = new RectOffset(8, 8, 8, 8);
+            dollVlg.padding = new RectOffset(8, 8, 8, 6);
             dollVlg.spacing = 6f;
             dollVlg.childControlWidth = true;
             dollVlg.childControlHeight = true;
@@ -423,43 +425,114 @@ namespace Realmz.Game
             colsHlg.spacing = 8f;
             colsHlg.childControlWidth = true;
             colsHlg.childControlHeight = true;
-            colsHlg.childForceExpandWidth = true;
+            colsHlg.childForceExpandWidth = false;
 
-            Transform armCol = CreateAnatomyColumn(colsRow.transform, "ArmsCol");
-            CreatePaperDollSlotCard(armCol, EquipmentSlot.Weapon, "Main Hand");
-            CreatePaperDollSlotCard(armCol, EquipmentSlot.Shield, "Off-Hand");
-            CreatePaperDollSlotCard(armCol, EquipmentSlot.MissileWeapon, "Ranged");
-            RectTransform controlsHintCard = BywaterUiHelpers.CreatePanel(armCol, "PaperDollControlsHint", BywaterUiHelpers.CardBg, withBrassOutline: false);
-            controlsHintCard.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
-            TextMeshProUGUI controlsHintTxt = BywaterUiHelpers.CreateLabel(
-                controlsHintCard,
-                "ControlsHintText",
-                "Click slot: Filter stash\nRight-click: Unequip",
+            // Left Column (4 slots: Head, Main Hand, Off-Hand, Ranged)
+            Transform leftSlotCol = CreateAnatomyColumn(colsRow.transform, "ArmsCol", preferredWidth: 204f, spacing: 6f);
+            CreatePaperDollSlotCard(leftSlotCol, EquipmentSlot.Helm, "Head", cardHeight: 0f);
+            CreatePaperDollSlotCard(leftSlotCol, EquipmentSlot.Weapon, "Main Hand", cardHeight: 0f);
+            CreatePaperDollSlotCard(leftSlotCol, EquipmentSlot.Shield, "Off-Hand", cardHeight: 0f);
+            CreatePaperDollSlotCard(leftSlotCol, EquipmentSlot.MissileWeapon, "Ranged", cardHeight: 0f);
+
+            // Center Column (Visual Full-Body Paper Doll Stage + Set Bonuses)
+            GameObject centerColGo = new GameObject("PaperDollCenterCol", typeof(RectTransform), typeof(VerticalLayoutGroup));
+            centerColGo.transform.SetParent(colsRow.transform, false);
+            centerColGo.AddComponent<LayoutElement>().flexibleWidth = 1f;
+            VerticalLayoutGroup centerVlg = centerColGo.GetComponent<VerticalLayoutGroup>();
+            centerVlg.spacing = 6f;
+            centerVlg.childControlWidth = true;
+            centerVlg.childControlHeight = true;
+            centerVlg.childForceExpandHeight = false;
+
+            RectTransform stageRt = BywaterUiHelpers.CreatePanel(centerColGo.transform, "PaperDollStage", BywaterUiHelpers.PanelDarkBg, withBrassOutline: true, outlinePx: 1.2f);
+            LayoutElement stageLe = stageRt.gameObject.AddComponent<LayoutElement>();
+            stageLe.minHeight = 250f;
+            stageLe.flexibleHeight = 1f;
+            Image stageBg = stageRt.GetComponent<Image>();
+            if (BywaterUiHelpers.HasChromeSprites && stageBg != null)
+            {
+                stageBg.sprite = BywaterUiHelpers.StoneWellSprite ?? BywaterUiHelpers.StoneBarSprite;
+                stageBg.type = Image.Type.Sliced;
+                stageBg.pixelsPerUnitMultiplier = BywaterUiHelpers.ChromePpuMultiplier;
+                stageBg.color = Color.white;
+            }
+            BywaterUiHelpers.SetBorderColor(stageRt, BywaterUiHelpers.BrassAccent);
+
+            Image alcoveTint = BywaterUiHelpers.CreateImage(stageRt, "PaperDollAlcoveBackdrop", null, new Color(0.05f, 0.06f, 0.09f, 0.55f), preserveAspect: false);
+            alcoveTint.raycastTarget = false;
+            alcoveTint.rectTransform.anchorMin = Vector2.zero;
+            alcoveTint.rectTransform.anchorMax = Vector2.one;
+            alcoveTint.rectTransform.offsetMin = new Vector2(6f, 6f);
+            alcoveTint.rectTransform.offsetMax = new Vector2(-6f, -6f);
+
+            _paperDollHeroCaption = BywaterUiHelpers.CreateLabel(
+                stageRt,
+                "PaperDollHeroCaption",
+                "Aldric - Lv1 Knight",
                 _font,
                 15f,
-                BywaterUiHelpers.MutedSlate,
+                BywaterUiHelpers.BrassHighlight,
                 TextAlignmentOptions.Center,
-                wrap: true);
-            controlsHintTxt.enableAutoSizing = true;
-            controlsHintTxt.fontSizeMin = 11f;
-            controlsHintTxt.fontSizeMax = 15f;
-            controlsHintTxt.rectTransform.anchorMin = Vector2.zero;
-            controlsHintTxt.rectTransform.anchorMax = Vector2.one;
-            controlsHintTxt.rectTransform.offsetMin = new Vector2(6f, 4f);
-            controlsHintTxt.rectTransform.offsetMax = new Vector2(-6f, -4f);
+                FontStyles.Bold,
+                wrap: false);
+            BywaterUiHelpers.AddTextDropShadow(_paperDollHeroCaption);
+            _paperDollHeroCaption.enableAutoSizing = true;
+            _paperDollHeroCaption.fontSizeMin = 11.5f;
+            _paperDollHeroCaption.fontSizeMax = 15f;
+            _paperDollHeroCaption.overflowMode = TextOverflowModes.Truncate;
+            _paperDollHeroCaption.rectTransform.anchorMin = new Vector2(0f, 1f);
+            _paperDollHeroCaption.rectTransform.anchorMax = new Vector2(1f, 1f);
+            _paperDollHeroCaption.rectTransform.pivot = new Vector2(0.5f, 1f);
+            _paperDollHeroCaption.rectTransform.offsetMin = new Vector2(8f, -32f);
+            _paperDollHeroCaption.rectTransform.offsetMax = new Vector2(-8f, -6f);
 
-            Transform torsoCol = CreateAnatomyColumn(colsRow.transform, "TorsoCol");
-            CreatePaperDollSlotCard(torsoCol, EquipmentSlot.Helm, "Head");
-            CreatePaperDollSlotCard(torsoCol, EquipmentSlot.Armor, "Body");
-            CreatePaperDollSlotCard(torsoCol, EquipmentSlot.Hands, "Hands");
-            CreatePaperDollSlotCard(torsoCol, EquipmentSlot.Feet, "Feet");
+            Image pedestalImg = BywaterUiHelpers.CreateImage(stageRt, "PaperDollPedestal", BywaterUiHelpers.StoneBarSprite, BywaterUiHelpers.HasChromeSprites ? new Color(0.82f, 0.80f, 0.78f, 1f) : new Color(0.18f, 0.20f, 0.25f, 0.95f), preserveAspect: false);
+            pedestalImg.raycastTarget = false;
+            if (BywaterUiHelpers.HasChromeSprites && BywaterUiHelpers.StoneBarSprite != null)
+            {
+                pedestalImg.type = Image.Type.Sliced;
+                pedestalImg.pixelsPerUnitMultiplier = BywaterUiHelpers.ChromePpuMultiplier * 1.4f;
+            }
+            pedestalImg.rectTransform.anchorMin = new Vector2(0.08f, 0f);
+            pedestalImg.rectTransform.anchorMax = new Vector2(0.92f, 0f);
+            pedestalImg.rectTransform.pivot = new Vector2(0.5f, 0f);
+            pedestalImg.rectTransform.anchoredPosition = new Vector2(0f, 10f);
+            pedestalImg.rectTransform.sizeDelta = new Vector2(0f, 22f);
 
-            Transform accCol = CreateAnatomyColumn(colsRow.transform, "AccessoryCol");
-            CreatePaperDollSlotCard(accCol, EquipmentSlot.Accessory1, "Accessory 1");
-            CreatePaperDollSlotCard(accCol, EquipmentSlot.Accessory2, "Accessory 2");
-            RectTransform hintCard = BywaterUiHelpers.CreatePanel(accCol, "PaperDollTip", BywaterUiHelpers.CardBg, withBrassOutline: false);
-            hintCard.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
+            Image pedestalRim = BywaterUiHelpers.CreateImage(pedestalImg.rectTransform, "PaperDollPedestalRim", null, BywaterUiHelpers.BrassAccent, preserveAspect: false);
+            pedestalRim.raycastTarget = false;
+            pedestalRim.rectTransform.anchorMin = new Vector2(0.02f, 1f);
+            pedestalRim.rectTransform.anchorMax = new Vector2(0.98f, 1f);
+            pedestalRim.rectTransform.pivot = new Vector2(0.5f, 1f);
+            pedestalRim.rectTransform.anchoredPosition = Vector2.zero;
+            pedestalRim.rectTransform.sizeDelta = new Vector2(0f, 1.5f);
+
+            Image footShadow = BywaterUiHelpers.CreateImage(stageRt, "PaperDollShadow", null, new Color(0.02f, 0.02f, 0.03f, 0.65f), preserveAspect: false);
+            footShadow.raycastTarget = false;
+            footShadow.rectTransform.anchorMin = new Vector2(0.24f, 0f);
+            footShadow.rectTransform.anchorMax = new Vector2(0.76f, 0f);
+            footShadow.rectTransform.pivot = new Vector2(0.5f, 0f);
+            footShadow.rectTransform.anchoredPosition = new Vector2(0f, 30f);
+            footShadow.rectTransform.sizeDelta = new Vector2(0f, 8f);
+
+            _paperDollHeroFigure = BywaterUiHelpers.CreateImage(stageRt, "PaperDollHeroFigure", null, Color.white, preserveAspect: true);
+            _paperDollHeroFigure.raycastTarget = false;
+            _paperDollHeroFigure.rectTransform.anchorMin = new Vector2(0.05f, 0.11f);
+            _paperDollHeroFigure.rectTransform.anchorMax = new Vector2(0.95f, 0.89f);
+            _paperDollHeroFigure.rectTransform.offsetMin = Vector2.zero;
+            _paperDollHeroFigure.rectTransform.offsetMax = Vector2.zero;
+
+            RectTransform hintCard = BywaterUiHelpers.CreatePanel(centerColGo.transform, "PaperDollTip", BywaterUiHelpers.CardBg, withBrassOutline: false);
+            hintCard.gameObject.AddComponent<LayoutElement>().preferredHeight = 76f;
             hintCard.gameObject.AddComponent<UnityEngine.UI.RectMask2D>();
+            Image hintCardImg = hintCard.GetComponent<Image>();
+            if (BywaterUiHelpers.HasChromeSprites && hintCardImg != null)
+            {
+                hintCardImg.sprite = BywaterUiHelpers.StoneWellSprite ?? BywaterUiHelpers.StoneBarSprite;
+                hintCardImg.type = Image.Type.Sliced;
+                hintCardImg.pixelsPerUnitMultiplier = BywaterUiHelpers.ChromePpuMultiplier * 1.45f;
+                hintCardImg.color = Color.white;
+            }
             _paperDollSummaryText = BywaterUiHelpers.CreateLabel(
                 hintCard,
                 "HintText",
@@ -472,16 +545,50 @@ namespace Realmz.Game
             _paperDollSummaryText.enableAutoSizing = true;
             _paperDollSummaryText.fontSizeMin = 10.5f;
             _paperDollSummaryText.fontSizeMax = 15f;
-            _paperDollSummaryText.overflowMode = TextOverflowModes.Ellipsis;
+            _paperDollSummaryText.overflowMode = TextOverflowModes.Truncate;
             _paperDollSummaryText.rectTransform.anchorMin = Vector2.zero;
             _paperDollSummaryText.rectTransform.anchorMax = Vector2.one;
-            _paperDollSummaryText.rectTransform.offsetMin = new Vector2(6f, 2f);
-            _paperDollSummaryText.rectTransform.offsetMax = new Vector2(-6f, -2f);
+            _paperDollSummaryText.rectTransform.offsetMin = new Vector2(8f, 4f);
+            _paperDollSummaryText.rectTransform.offsetMax = new Vector2(-8f, -4f);
+
+            // Right Column (5 slots: Body, Hands, Feet, Accessory 1, Accessory 2)
+            Transform rightSlotCol = CreateAnatomyColumn(colsRow.transform, "ArmorAccCol", preferredWidth: 204f, spacing: 5f);
+            CreatePaperDollSlotCard(rightSlotCol, EquipmentSlot.Armor, "Body", cardHeight: 0f);
+            CreatePaperDollSlotCard(rightSlotCol, EquipmentSlot.Hands, "Hands", cardHeight: 0f);
+            CreatePaperDollSlotCard(rightSlotCol, EquipmentSlot.Feet, "Feet", cardHeight: 0f);
+            CreatePaperDollSlotCard(rightSlotCol, EquipmentSlot.Accessory1, "Accessory 1", cardHeight: 0f);
+            CreatePaperDollSlotCard(rightSlotCol, EquipmentSlot.Accessory2, "Accessory 2", cardHeight: 0f);
+
+            // Bottom Controls Hint Strip
+            RectTransform controlsHintCard = BywaterUiHelpers.CreatePanel(dollRt, "PaperDollControlsHint", BywaterUiHelpers.CardBg, withBrassOutline: false);
+            controlsHintCard.gameObject.AddComponent<LayoutElement>().preferredHeight = 24f;
+            Image controlsHintBg = controlsHintCard.GetComponent<Image>();
+            if (BywaterUiHelpers.HasChromeSprites && controlsHintBg != null)
+            {
+                controlsHintBg.pixelsPerUnitMultiplier = BywaterUiHelpers.ChromePpuMultiplier * 1.5f;
+            }
+            TextMeshProUGUI controlsHintTxt = BywaterUiHelpers.CreateLabel(
+                controlsHintCard,
+                "ControlsHintText",
+                "Click slot: Filter stash   |   Right-click / Double-click slot: Unequip",
+                _font,
+                15f,
+                BywaterUiHelpers.MutedSlate,
+                TextAlignmentOptions.Center,
+                wrap: false);
+            controlsHintTxt.enableAutoSizing = true;
+            controlsHintTxt.fontSizeMin = 11.5f;
+            controlsHintTxt.fontSizeMax = 15f;
+            controlsHintTxt.overflowMode = TextOverflowModes.Truncate;
+            controlsHintTxt.rectTransform.anchorMin = Vector2.zero;
+            controlsHintTxt.rectTransform.anchorMax = Vector2.one;
+            controlsHintTxt.rectTransform.offsetMin = new Vector2(8f, 2f);
+            controlsHintTxt.rectTransform.offsetMax = new Vector2(-8f, -2f);
 
             // Character Sheet View (initially hidden)
             RectTransform csRt = BywaterUiHelpers.CreatePanel(leftCol, "CharacterSheetPanel", BywaterUiHelpers.PanelDarkBg, withBrassOutline: true, outlinePx: 1f);
             LayoutElement csLe = csRt.gameObject.AddComponent<LayoutElement>();
-            csLe.preferredHeight = 404f;
+            csLe.preferredHeight = 464f;
             csLe.flexibleHeight = 1f;
             _charSheetPanel = csRt.gameObject;
 
@@ -557,13 +664,23 @@ namespace Realmz.Game
             SwitchHeroSheetTab(false);
         }
 
-        private Transform CreateAnatomyColumn(Transform parent, string name)
+        private Transform CreateAnatomyColumn(Transform parent, string name, float preferredWidth = 0f, float spacing = 6f)
         {
             GameObject col = new GameObject(name, typeof(RectTransform), typeof(VerticalLayoutGroup));
             col.transform.SetParent(parent, false);
-            col.AddComponent<LayoutElement>().flexibleWidth = 1f;
+            LayoutElement colLe = col.AddComponent<LayoutElement>();
+            if (preferredWidth > 0f)
+            {
+                colLe.preferredWidth = preferredWidth;
+                colLe.flexibleWidth = 0f;
+            }
+            else
+            {
+                colLe.flexibleWidth = 1f;
+            }
+
             VerticalLayoutGroup vlg = col.GetComponent<VerticalLayoutGroup>();
-            vlg.spacing = 6f;
+            vlg.spacing = spacing;
             vlg.childControlWidth = true;
             vlg.childControlHeight = true;
             vlg.childForceExpandHeight = false;
@@ -577,24 +694,51 @@ namespace Realmz.Game
             spacer.AddComponent<LayoutElement>().flexibleHeight = 1f;
         }
 
-        private void CreatePaperDollSlotCard(Transform parent, EquipmentSlot slot, string label)
+        private void CreatePaperDollSlotCard(Transform parent, EquipmentSlot slot, string label, float cardHeight = 86f)
         {
             RectTransform card = BywaterUiHelpers.CreatePanel(parent, $"PaperDollSlot_{slot}", BywaterUiHelpers.CardBg, withBrassOutline: true, outlinePx: 1.2f);
+            Image cardImg = card.GetComponent<Image>();
+            if (BywaterUiHelpers.HasChromeSprites && cardImg != null)
+            {
+                cardImg.pixelsPerUnitMultiplier = BywaterUiHelpers.ChromePpuMultiplier * 1.45f;
+            }
+
             LayoutElement le = card.gameObject.AddComponent<LayoutElement>();
-            le.preferredHeight = 86f;
+            le.minHeight = 64f;
+            if (cardHeight > 0f)
+            {
+                le.preferredHeight = cardHeight;
+            }
+            else
+            {
+                le.flexibleHeight = 1f;
+            }
 
             HorizontalLayoutGroup hlg = card.gameObject.AddComponent<HorizontalLayoutGroup>();
-            hlg.padding = new RectOffset(6, 6, 4, 4);
+            hlg.padding = new RectOffset(8, 8, 5, 5);
             hlg.spacing = 6f;
             hlg.childControlWidth = true;
             hlg.childControlHeight = true;
             hlg.childForceExpandWidth = false;
 
-            RectTransform iconFrame = BywaterUiHelpers.CreatePanel(card, "IconBox", BywaterUiHelpers.PanelDarkBg, withBrassOutline: true, outlinePx: 1f);
-            LayoutElement iconBoxLe = iconFrame.gameObject.AddComponent<LayoutElement>();
-            iconBoxLe.preferredWidth = 44f;
-            iconBoxLe.minWidth = 44f;
-            iconBoxLe.preferredHeight = 44f;
+            GameObject iconWrap = new GameObject("IconWrap", typeof(RectTransform), typeof(VerticalLayoutGroup));
+            iconWrap.transform.SetParent(card, false);
+            LayoutElement iconWrapLe = iconWrap.AddComponent<LayoutElement>();
+            iconWrapLe.preferredWidth = 40f;
+            iconWrapLe.minWidth = 40f;
+            iconWrapLe.flexibleWidth = 0f;
+            VerticalLayoutGroup iwVlg = iconWrap.GetComponent<VerticalLayoutGroup>();
+            iwVlg.childAlignment = TextAnchor.MiddleCenter;
+            iwVlg.childControlWidth = false;
+            iwVlg.childControlHeight = false;
+
+            RectTransform iconFrame = BywaterUiHelpers.CreatePanel(iconWrap.transform, "IconBox", BywaterUiHelpers.PanelDarkBg, withBrassOutline: true, outlinePx: 1f);
+            iconFrame.sizeDelta = new Vector2(40f, 40f);
+            Image iconFrameImg = iconFrame.GetComponent<Image>();
+            if (BywaterUiHelpers.HasChromeSprites && iconFrameImg != null)
+            {
+                iconFrameImg.pixelsPerUnitMultiplier = BywaterUiHelpers.ChromePpuMultiplier * 1.45f;
+            }
 
             Image icon = BywaterUiHelpers.CreateImage(iconFrame, "Icon", null, Color.white, preserveAspect: true);
             icon.raycastTarget = false;
@@ -623,7 +767,7 @@ namespace Realmz.Game
             itemLbl.enableAutoSizing = true;
             itemLbl.fontSizeMin = 11f;
             itemLbl.fontSizeMax = 15f;
-            itemLbl.overflowMode = TextOverflowModes.Ellipsis;
+            itemLbl.overflowMode = TextOverflowModes.Truncate;
             itemLbl.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
 
             PaperDollSlotRefs slotRef = new PaperDollSlotRefs
@@ -1000,6 +1144,25 @@ namespace Realmz.Game
                 _drawerCarryWeightText.color = encumbered ? BywaterUiHelpers.DangerRed : BywaterUiHelpers.MutedSlate;
             }
 
+            // Paper-Doll Center Full-Body Hero Figure & Caption
+            if (_paperDollHeroFigure != null)
+            {
+                Sprite dollSprite = _catalog != null
+                    ? _catalog.GetHeroPaperDollSprite(hero.Id, hero.PortraitId, hero.Archetype)
+                    : null;
+                if (dollSprite == null)
+                {
+                    dollSprite = ResolveHeroPortrait(hero.Id, hero.PortraitId, hero.Archetype);
+                }
+                _paperDollHeroFigure.sprite = dollSprite;
+                _paperDollHeroFigure.preserveAspect = true;
+                _paperDollHeroFigure.color = dollSprite != null ? Color.white : new Color(0.25f, 0.28f, 0.35f, 0.4f);
+            }
+            if (_paperDollHeroCaption != null)
+            {
+                _paperDollHeroCaption.text = $"{hero.Name} - Lv{hero.Level} {hero.Archetype}";
+            }
+
             // 9-Slot Paper-Doll Refresh
             for (int i = 0; i < _paperDollSlots.Count; i++)
             {
@@ -1042,9 +1205,9 @@ namespace Realmz.Game
                     {
                         sr.Background.sprite = BywaterUiHelpers.StoneWellSprite ?? BywaterUiHelpers.StoneBarSprite;
                         sr.Background.type = Image.Type.Sliced;
-                        sr.Background.pixelsPerUnitMultiplier = BywaterUiHelpers.ChromePpuMultiplier;
                         sr.Background.color = Color.white;
                     }
+                    sr.Background.pixelsPerUnitMultiplier = BywaterUiHelpers.ChromePpuMultiplier * 1.45f;
                 }
                 else
                 {
