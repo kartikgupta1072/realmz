@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import sys
+import urllib.request
 
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
@@ -74,6 +75,18 @@ def is_unity_running() -> bool:
         return False
 
 
+def check_ollama_status() -> str:
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:11434/api/tags", timeout=0.8) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+                models = data.get("models") or []
+                return f"READY({len(models)} models)" if models else "READY"
+    except Exception:
+        pass
+    return "OFFLINE"
+
+
 def main() -> int:
     try:
         raw = sys.stdin.read()
@@ -87,11 +100,12 @@ def main() -> int:
         dirty_count = len([ln for ln in dirty_raw.splitlines() if ln.strip()]) if dirty_raw else 0
         dll_status = check_core_dll_status(repo_root)
         unity_state = "RUNNING" if is_unity_running() else "IDLE"
+        ollama_state = check_ollama_status()
 
         msg = (
             f"[Realmz Workspace] branch={branch} | head={head} | dirty={dirty_count} | "
-            f"RealmzCore.dll={dll_status} | UnityEditor={unity_state} | "
-            "CLI=remaster/dev.ps1"
+            f"RealmzCore.dll={dll_status} | UnityEditor={unity_state} | Ollama={ollama_state} | "
+            "Routing=2+lanes->flash_subagents;>=3PNG/logs->dev.ps1_local-ai | CLI=remaster/dev.ps1"
         )
         print(json.dumps({"injectSteps": [{"systemMessage": {"systemMessage": msg}}]}))
     except Exception:

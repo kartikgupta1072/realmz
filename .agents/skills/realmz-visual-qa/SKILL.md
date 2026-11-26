@@ -32,7 +32,7 @@ For isolated shader/foliage/water iteration via `CartographyCaptureTools.BatchCa
 
 ## Inspection Protocol
 
-1. **(Optional Batch Pre-Screen) Local Vision QA:** For large screenshot batches, run a fast local pre-screen via `qwen2.5vl:3b` (auto-evicts VRAM when done):
+1. **(Mandatory for `>= 3` PNGs) Local Vision QA Pre-Screen:** When Ollama is online and inspecting 3+ screenshots, run the fast local pre-screen via `qwen2.5vl:3b` (auto-evicts VRAM when done; run `dev.ps1 local-ai evict` before any subsequent Unity capture):
    ```powershell
    powershell -ExecutionPolicy Bypass -File C:\Users\karti\realmz\remaster\dev.ps1 local-ai vision-qa C:\Users\karti\realmz\.scratch\proofs --mode proof --json
    ```

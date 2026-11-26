@@ -12,6 +12,15 @@ description: >-
 
 Keep the lead conversation focused on architecture, gameplay invariants, diff review, and final visual/playability sign-off while delegating bounded execution and offloading bulk triage to local GPU models. See [lane-ownership.md](./references/lane-ownership.md) for exact path boundaries and prompt templates.
 
+## Mandatory Pre-Execution Routing Gate
+
+Check these thresholds BEFORE starting sequential work on the lead model:
+- **`2+` disjoint lanes (`RealmzCore`, `RealmzUnity`, `Exporter/Art`, `Research`):** MUST launch parallel `invoke_subagent` workers (`Model="flash"` for bounded edits/tests, `Model="flash_lite"` for inventories/lookups) instead of editing everything sequentially in one turn.
+- **`4+` independent units/files:** MUST fan out via `run_workflow`.
+- **`>= 3` screenshots or sprites to screen:** When Ollama is online, MUST run `dev.ps1 local-ai vision-qa <path> --mode proof|sprite|sheet --json` first before direct `read_file` sign-off on flagged/final PNGs.
+- **Failing Unity or build log `> 50` lines:** MUST run `dev.ps1 local-ai log-triage <log_path> --json` first to condense errors before manual inspection.
+- **GPU handoff:** Always run `dev.ps1 local-ai evict` before ComfyUI, Blender, Hunyuan3D, or Unity PlayMode proof captures.
+
 ## 1. Sub-Worker Delegation Rules
 
 ### When to Delegate vs. Execute Directly
