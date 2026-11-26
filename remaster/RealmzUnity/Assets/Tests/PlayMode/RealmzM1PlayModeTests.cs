@@ -13,6 +13,7 @@ using RealmzCore.Data;
 using RealmzCore.Exploration;
 using RealmzCore.Rules;
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using Object = UnityEngine.Object;
@@ -924,42 +925,127 @@ namespace Realmz.PlayModeTests
             float prevPlaneDist = hudCanvas != null ? hudCanvas.planeDistance : 100f;
             int prevOrder = hudCanvas != null ? hudCanvas.sortingOrder : 0;
 
+            List<(Transform tr, int layer)> savedLayers = null;
+            GameObject uiCamGo = null;
+            Camera uiCam = null;
             if (hudCanvas != null)
             {
-                hudCanvas.renderMode = RenderMode.ScreenSpaceCamera;
-                hudCanvas.worldCamera = cam;
-                hudCanvas.planeDistance = 0.35f;
-                hudCanvas.sortingOrder = 200;
+                int uiLayer = LayerMask.NameToLayer("UI");
+                if (uiLayer < 0) uiLayer = 5;
+                Transform[] allTransforms = hudCanvas.GetComponentsInChildren<Transform>(true);
+                savedLayers = new List<(Transform, int)>(allTransforms.Length);
+                for (int i = 0; i < allTransforms.Length; i++)
+                {
+                    savedLayers.Add((allTransforms[i], allTransforms[i].gameObject.layer));
+                    allTransforms[i].gameObject.layer = uiLayer;
+                }
+
+                uiCamGo = new GameObject("TempProofUiCamera");
+                uiCam = uiCamGo.AddComponent<Camera>();
+                uiCam.orthographic = true;
+                uiCam.orthographicSize = 5f;
+                uiCam.nearClipPlane = 0.1f;
+                uiCam.farClipPlane = 10f;
+                uiCam.clearFlags = CameraClearFlags.SolidColor;
+                uiCam.cullingMask = 1 << uiLayer;
+                uiCam.allowHDR = false;
+                uiCam.allowMSAA = false;
+
+                UniversalAdditionalCameraData urpData = uiCam.GetUniversalAdditionalCameraData();
+                if (urpData != null)
+                {
+                    urpData.renderType = CameraRenderType.Base;
+                    urpData.renderPostProcessing = false;
+                    urpData.renderShadows = false;
+                    urpData.stopNaN = false;
+                    urpData.antialiasing = AntialiasingMode.None;
+                }
             }
 
             RenderTexture rt = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
-            Texture2D tex = new Texture2D(width, height, TextureFormat.RGB24, false);
+            Texture2D worldTex = new Texture2D(width, height, TextureFormat.RGB24, false);
+            Texture2D blackTex = hudCanvas != null ? new Texture2D(width, height, TextureFormat.RGB24, false) : null;
+            Texture2D whiteTex = hudCanvas != null ? new Texture2D(width, height, TextureFormat.RGB24, false) : null;
             RenderTexture prevAct = RenderTexture.active;
             RenderTexture prevTgt = cam.targetTexture;
             try
             {
-                Canvas.ForceUpdateCanvases();
-                hud?.ClampTooltipToActiveCanvas();
+                // Pass 1: 3D world with full URP lighting and post-processing (ScreenSpaceOverlay HUD is excluded).
                 cam.targetTexture = rt;
                 cam.Render();
+                cam.targetTexture = null;
                 RenderTexture.active = rt;
-                tex.ReadPixels(new Rect(0, 0, width, height), 0, 0);
-                tex.Apply(false, false);
-                File.WriteAllBytes(outPngPath, tex.EncodeToPNG());
+                worldTex.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+                worldTex.Apply(false, false);
+
+                if (hudCanvas != null && uiCam != null)
+                {
+                    hudCanvas.renderMode = RenderMode.ScreenSpaceCamera;
+                    hudCanvas.worldCamera = uiCam;
+                    hudCanvas.planeDistance = 1f;
+                    hudCanvas.sortingOrder = 200;
+                    Canvas.ForceUpdateCanvases();
+                    hud?.ClampTooltipToActiveCanvas();
+
+                    // Pass 2 & 3: render ungraded UI over black & white backgrounds to recover exact per-channel alpha.
+                    uiCam.backgroundColor = Color.black;
+                    uiCam.targetTexture = rt;
+                    uiCam.Render();
+                    RenderTexture.active = rt;
+                    blackTex.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+
+                    uiCam.backgroundColor = Color.white;
+                    uiCam.Render();
+                    RenderTexture.active = rt;
+                    whiteTex.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+                    uiCam.targetTexture = null;
+
+                    Color32[] wPx = worldTex.GetPixels32();
+                    Color32[] bPx = blackTex.GetPixels32();
+                    Color32[] uPx = whiteTex.GetPixels32();
+                    for (int i = 0; i < wPx.Length; i++)
+                    {
+                        int r = bPx[i].r + ((wPx[i].r * Mathf.Clamp(uPx[i].r - bPx[i].r, 0, 255) + 127) / 255);
+                        int g = bPx[i].g + ((wPx[i].g * Mathf.Clamp(uPx[i].g - bPx[i].g, 0, 255) + 127) / 255);
+                        int b = bPx[i].b + ((wPx[i].b * Mathf.Clamp(uPx[i].b - bPx[i].b, 0, 255) + 127) / 255);
+                        wPx[i] = new Color32((byte)Mathf.Min(255, r), (byte)Mathf.Min(255, g), (byte)Mathf.Min(255, b), 255);
+                    }
+                    worldTex.SetPixels32(wPx);
+                    worldTex.Apply(false, false);
+                }
+
+                File.WriteAllBytes(outPngPath, worldTex.EncodeToPNG());
             }
             finally
             {
                 cam.targetTexture = prevTgt;
+                if (uiCam != null) uiCam.targetTexture = null;
                 RenderTexture.active = prevAct;
                 rt.Release();
                 Object.DestroyImmediate(rt);
-                Object.DestroyImmediate(tex);
+                Object.DestroyImmediate(worldTex);
+                if (blackTex != null) Object.DestroyImmediate(blackTex);
+                if (whiteTex != null) Object.DestroyImmediate(whiteTex);
                 if (hudCanvas != null)
                 {
                     hudCanvas.renderMode = prevMode;
                     hudCanvas.worldCamera = prevWorldCam;
                     hudCanvas.planeDistance = prevPlaneDist;
                     hudCanvas.sortingOrder = prevOrder;
+                }
+                if (savedLayers != null)
+                {
+                    for (int i = 0; i < savedLayers.Count; i++)
+                    {
+                        if (savedLayers[i].tr != null)
+                        {
+                            savedLayers[i].tr.gameObject.layer = savedLayers[i].layer;
+                        }
+                    }
+                }
+                if (uiCamGo != null)
+                {
+                    Object.DestroyImmediate(uiCamGo);
                 }
             }
         }

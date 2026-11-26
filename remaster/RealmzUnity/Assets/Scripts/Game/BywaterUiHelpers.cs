@@ -559,7 +559,7 @@ namespace Realmz.Game
             colors.highlightedColor = new Color(1.16f, 1.08f, 0.92f, 1f);
             colors.pressedColor = new Color(0.84f, 0.78f, 0.68f, 1f);
             colors.disabledColor = new Color(0.55f, 0.55f, 0.58f, 0.65f);
-            colors.colorMultiplier = ChromePpuMultiplier;
+            colors.colorMultiplier = 1f;
             btn.colors = colors;
 
             if (onClick != null)

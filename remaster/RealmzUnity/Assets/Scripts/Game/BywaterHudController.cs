@@ -236,6 +236,13 @@ namespace Realmz.Game
         private readonly List<Button> _partyHeroSelectorBtns = new List<Button>(6);
         private Image _drawerHeroPortrait;
         private TextMeshProUGUI _drawerHeroTitle;
+        private TextMeshProUGUI _drawerHeroSubtitle;
+        private TextMeshProUGUI _drawerStatHp;
+        private TextMeshProUGUI _drawerStatSp;
+        private TextMeshProUGUI _drawerStatAc;
+        private TextMeshProUGUI _drawerStatToHit;
+        private TextMeshProUGUI _drawerStatMove;
+        private TextMeshProUGUI _drawerStatDmg;
         private TextMeshProUGUI _drawerHeroStats;
         private TextMeshProUGUI _drawerHeroConditions;
         private TextMeshProUGUI _drawerHeroSpells;
@@ -1495,7 +1502,11 @@ namespace Realmz.Game
             _drawerHeroPortrait.sprite = ResolveHeroPortrait(hero.Id, hero.PortraitId, hero.Archetype);
             _drawerHeroPortrait.preserveAspect = true;
             _drawerHeroPortrait.color = _drawerHeroPortrait.sprite != null ? Color.white : new Color(0.2f, 0.25f, 0.35f, 1f);
-            _drawerHeroTitle.text = $"{hero.Name} - Lv{hero.Level} {hero.RaceName} {hero.Archetype} ({hero.CasteName})";
+            _drawerHeroTitle.text = hero.Name;
+            if (_drawerHeroSubtitle != null)
+            {
+                _drawerHeroSubtitle.text = $"Lv{hero.Level} {hero.RaceName} {hero.Archetype} ({hero.CasteName})";
+            }
 
             IReadOnlyDictionary<int, ItemDefinition> items = bundle != null ? bundle.Items : null;
             int effAc = hero.GetEffectiveAc(items);
@@ -1503,9 +1514,16 @@ namespace Realmz.Game
             int effMove = hero.GetEffectiveMovementMax(items);
             string effDice = hero.GetEffectiveDamageDice(items);
 
+            if (_drawerStatHp != null) _drawerStatHp.text = $"<color=#C49546>HP</color>  {hero.Hp}/{hero.MaxHp}";
+            if (_drawerStatSp != null) _drawerStatSp.text = $"<color=#C49546>SP</color>  {hero.Sp}/{hero.MaxSp}";
+            if (_drawerStatAc != null) _drawerStatAc.text = $"<color=#C49546>AC</color>  {effAc}";
+            if (_drawerStatToHit != null) _drawerStatToHit.text = $"<color=#C49546>HIT</color>  +{effToHit}";
+            if (_drawerStatMove != null) _drawerStatMove.text = $"<color=#C49546>MV</color>  {effMove}";
+            if (_drawerStatDmg != null) _drawerStatDmg.text = $"<color=#C49546>DMG</color>  {effDice}";
+
             _drawerHeroStats.text =
-                $"HP: {hero.Hp}/{hero.MaxHp}   SP: {hero.Sp}/{hero.MaxSp}   AC: {effAc}   ToHit: +{effToHit}   Move: {effMove}   Weapon: {effDice}\n" +
-                $"Brawn {hero.Brawn}  |  Knowledge {hero.Knowledge}  |  Judgment {hero.Judgment}  |  Agility {hero.Agility}  |  Vitality {hero.Vitality}  |  Luck {hero.Luck}";
+                $"BRN {hero.Brawn}   KNW {hero.Knowledge}   JDG {hero.Judgment}\n" +
+                $"AGI {hero.Agility}   VIT {hero.Vitality}   LCK {hero.Luck}";
 
             IReadOnlyList<ConditionDisplayEffect> conds = hero.Conditions.GetDisplayEffects();
             if (conds.Count == 0 && hero.ExhaustionStacks == 0 && hero.CurseStacks == 0)
@@ -4447,67 +4465,123 @@ namespace Realmz.Game
             bodyHlg.childControlHeight = true;
             bodyHlg.childForceExpandWidth = false;
 
-            // Left Column: Hero Sheet & Equipment
+            // Left Column: Hero Profile (274px) + Icon-First Paper Doll & Character Sheet (436px)
             RectTransform leftCol = BywaterUiHelpers.CreatePanel(body.transform, "HeroSheetCol", BywaterUiHelpers.PanelBg, withBrassOutline: true, outlinePx: 1f);
-            leftCol.gameObject.AddComponent<LayoutElement>().preferredWidth = 676f;
-            VerticalLayoutGroup leftVlg = leftCol.gameObject.AddComponent<VerticalLayoutGroup>();
-            leftVlg.padding = new RectOffset(12, 12, 10, 10);
-            leftVlg.spacing = 6f;
-            leftVlg.childControlWidth = true;
-            leftVlg.childControlHeight = true;
-            leftVlg.childForceExpandHeight = false;
+            leftCol.gameObject.AddComponent<LayoutElement>().preferredWidth = 720f;
+            HorizontalLayoutGroup leftHlg = leftCol.gameObject.AddComponent<HorizontalLayoutGroup>();
+            leftHlg.padding = new RectOffset(10, 10, 10, 10);
+            leftHlg.spacing = 10f;
+            leftHlg.childControlWidth = true;
+            leftHlg.childControlHeight = true;
+            leftHlg.childForceExpandWidth = false;
 
-            GameObject heroTop = new GameObject("HeroTop", typeof(RectTransform), typeof(HorizontalLayoutGroup));
-            heroTop.transform.SetParent(leftCol, false);
-            heroTop.AddComponent<LayoutElement>().preferredHeight = 128f;
-            HorizontalLayoutGroup htHlg = heroTop.GetComponent<HorizontalLayoutGroup>();
-            htHlg.spacing = 12f;
-            htHlg.childControlWidth = true;
-            htHlg.childControlHeight = true;
-            htHlg.childForceExpandWidth = false;
-            htHlg.childAlignment = TextAnchor.MiddleLeft;
+            RectTransform profileCol = BywaterUiHelpers.CreatePanel(leftCol, "HeroProfileCol", BywaterUiHelpers.PanelDarkBg, withBrassOutline: true, outlinePx: 1f);
+            profileCol.gameObject.AddComponent<LayoutElement>().preferredWidth = 274f;
+            Image profileBg = profileCol.GetComponent<Image>();
+            if (BywaterUiHelpers.HasChromeSprites && profileBg != null)
+            {
+                profileBg.sprite = BywaterUiHelpers.StoneWellSprite ?? BywaterUiHelpers.StonePanelSprite;
+                profileBg.type = Image.Type.Sliced;
+                profileBg.pixelsPerUnitMultiplier = BywaterUiHelpers.ChromePpuMultiplier * 1.35f;
+                profileBg.color = Color.white;
+            }
+            VerticalLayoutGroup profileVlg = profileCol.gameObject.AddComponent<VerticalLayoutGroup>();
+            profileVlg.padding = new RectOffset(10, 10, 10, 10);
+            profileVlg.spacing = 7f;
+            profileVlg.childControlWidth = true;
+            profileVlg.childControlHeight = true;
+            profileVlg.childForceExpandHeight = false;
 
-            BywaterUiHelpers.CreatePortraitFrame(heroTop.transform, "DrawerPortraitFrame", 128f, out _drawerHeroPortrait);
+            GameObject portraitWrap = new GameObject("HeroPortraitWrap", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+            portraitWrap.transform.SetParent(profileCol, false);
+            portraitWrap.AddComponent<LayoutElement>().preferredHeight = 128f;
+            HorizontalLayoutGroup pwHlg = portraitWrap.GetComponent<HorizontalLayoutGroup>();
+            pwHlg.childAlignment = TextAnchor.MiddleCenter;
+            pwHlg.childControlWidth = false;
+            pwHlg.childControlHeight = false;
+            BywaterUiHelpers.CreatePortraitFrame(portraitWrap.transform, "DrawerPortraitFrame", 128f, out _drawerHeroPortrait);
 
-            GameObject heroSummaryCol = new GameObject("HeroSummaryCol", typeof(RectTransform), typeof(VerticalLayoutGroup));
-            heroSummaryCol.transform.SetParent(heroTop.transform, false);
-            heroSummaryCol.AddComponent<LayoutElement>().flexibleWidth = 1f;
-            VerticalLayoutGroup htcVlg = heroSummaryCol.GetComponent<VerticalLayoutGroup>();
-            htcVlg.spacing = 3f;
-            htcVlg.childControlWidth = true;
-            htcVlg.childControlHeight = true;
-            htcVlg.childForceExpandHeight = false;
-
-            _drawerHeroTitle = BywaterUiHelpers.CreateDisplayLabel(heroSummaryCol.transform, "HeroTitle", "Aldric", _font, 19f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            _drawerHeroTitle = BywaterUiHelpers.CreateDisplayLabel(profileCol, "HeroTitle", "Aldric", _font, 22f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.Center, FontStyles.Bold, wrap: false);
             BywaterUiHelpers.AddTextDropShadow(_drawerHeroTitle);
             _drawerHeroTitle.enableAutoSizing = true;
-            _drawerHeroTitle.fontSizeMin = 14f;
-            _drawerHeroTitle.fontSizeMax = 19f;
+            _drawerHeroTitle.fontSizeMin = 15f;
+            _drawerHeroTitle.fontSizeMax = 22f;
             _drawerHeroTitle.overflowMode = TextOverflowModes.Truncate;
             _drawerHeroTitle.gameObject.AddComponent<LayoutElement>().preferredHeight = 28f;
 
-            _drawerHeroStats = BywaterUiHelpers.CreateLabel(heroSummaryCol.transform, "HeroStats", string.Empty, _font, 15f, BywaterUiHelpers.ParchmentText);
+            _drawerHeroSubtitle = BywaterUiHelpers.CreateLabel(profileCol, "HeroSubtitle", "Lv1 Human Knight", _font, 15f, BywaterUiHelpers.MutedSlate, TextAlignmentOptions.Center, wrap: false);
+            _drawerHeroSubtitle.enableAutoSizing = true;
+            _drawerHeroSubtitle.fontSizeMin = 11.5f;
+            _drawerHeroSubtitle.fontSizeMax = 15f;
+            _drawerHeroSubtitle.overflowMode = TextOverflowModes.Truncate;
+            _drawerHeroSubtitle.gameObject.AddComponent<LayoutElement>().preferredHeight = 22f;
+
+            BuildDrawerXpRow(profileCol);
+
+            GameObject vitalsGridGo = new GameObject("HeroVitalsGrid", typeof(RectTransform), typeof(GridLayoutGroup));
+            vitalsGridGo.transform.SetParent(profileCol, false);
+            vitalsGridGo.AddComponent<LayoutElement>().preferredHeight = 138f;
+            GridLayoutGroup vitalsGrid = vitalsGridGo.GetComponent<GridLayoutGroup>();
+            vitalsGrid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            vitalsGrid.constraintCount = 2;
+            vitalsGrid.cellSize = new Vector2(124f, 42f);
+            vitalsGrid.spacing = new Vector2(6f, 6f);
+
+            _drawerStatHp = CreateVitalBadge(vitalsGridGo.transform, "VitalTile_HP", "HP  0/0");
+            _drawerStatSp = CreateVitalBadge(vitalsGridGo.transform, "VitalTile_SP", "SP  0/0");
+            _drawerStatAc = CreateVitalBadge(vitalsGridGo.transform, "VitalTile_AC", "AC  0");
+            _drawerStatToHit = CreateVitalBadge(vitalsGridGo.transform, "VitalTile_HIT", "HIT  +0");
+            _drawerStatMove = CreateVitalBadge(vitalsGridGo.transform, "VitalTile_MV", "MV  0");
+            _drawerStatDmg = CreateVitalBadge(vitalsGridGo.transform, "VitalTile_DMG", "DMG  1d4");
+
+            RectTransform attrWell = BywaterUiHelpers.CreatePanel(profileCol, "HeroAttrWell", BywaterUiHelpers.PanelDarkBg, withBrassOutline: false);
+            attrWell.gameObject.AddComponent<LayoutElement>().preferredHeight = 52f;
+            Image attrWellBg = attrWell.GetComponent<Image>();
+            if (BywaterUiHelpers.HasChromeSprites && attrWellBg != null)
+            {
+                attrWellBg.sprite = BywaterUiHelpers.StoneWellSprite ?? BywaterUiHelpers.StoneBarSprite;
+                attrWellBg.type = Image.Type.Sliced;
+                attrWellBg.pixelsPerUnitMultiplier = BywaterUiHelpers.ChromePpuMultiplier * 1.45f;
+                attrWellBg.color = Color.white;
+            }
+            _drawerHeroStats = BywaterUiHelpers.CreateLabel(attrWell, "HeroStats", string.Empty, _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.Center, wrap: true);
             _drawerHeroStats.enableAutoSizing = true;
-            _drawerHeroStats.fontSizeMin = 12f;
+            _drawerHeroStats.fontSizeMin = 11.5f;
             _drawerHeroStats.fontSizeMax = 15f;
             _drawerHeroStats.overflowMode = TextOverflowModes.Truncate;
-            _drawerHeroStats.gameObject.AddComponent<LayoutElement>().preferredHeight = 46f;
+            _drawerHeroStats.rectTransform.anchorMin = Vector2.zero;
+            _drawerHeroStats.rectTransform.anchorMax = Vector2.one;
+            _drawerHeroStats.rectTransform.offsetMin = new Vector2(6f, 4f);
+            _drawerHeroStats.rectTransform.offsetMax = new Vector2(-6f, -4f);
 
-            _drawerHeroConditions = BywaterUiHelpers.CreateLabel(heroSummaryCol.transform, "HeroConditions", "Conditions: Healthy", _font, 15f, BywaterUiHelpers.InfoCyan, wrap: false);
+            GameObject profileSpacer = new GameObject("ProfileSpacer", typeof(RectTransform));
+            profileSpacer.transform.SetParent(profileCol, false);
+            profileSpacer.AddComponent<LayoutElement>().flexibleHeight = 1f;
+
+            _drawerHeroConditions = BywaterUiHelpers.CreateLabel(profileCol, "HeroConditions", "Conditions: Healthy", _font, 15f, BywaterUiHelpers.InfoCyan, TextAlignmentOptions.Center, wrap: false);
             _drawerHeroConditions.enableAutoSizing = true;
             _drawerHeroConditions.fontSizeMin = 11.5f;
             _drawerHeroConditions.fontSizeMax = 15f;
             _drawerHeroConditions.overflowMode = TextOverflowModes.Truncate;
-            _drawerHeroConditions.gameObject.AddComponent<LayoutElement>().preferredHeight = 22f;
+            _drawerHeroConditions.gameObject.AddComponent<LayoutElement>().preferredHeight = 24f;
 
-            _drawerHeroSpells = BywaterUiHelpers.CreateLabel(heroSummaryCol.transform, "HeroSpells", "Known Spells: None", _font, 15f, BywaterUiHelpers.MutedSlate, wrap: false);
+            _drawerHeroSpells = BywaterUiHelpers.CreateLabel(profileCol, "HeroSpells", "Known Spells: None", _font, 15f, BywaterUiHelpers.MutedSlate, TextAlignmentOptions.Center, wrap: true);
             _drawerHeroSpells.enableAutoSizing = true;
-            _drawerHeroSpells.fontSizeMin = 11.5f;
+            _drawerHeroSpells.fontSizeMin = 11f;
             _drawerHeroSpells.fontSizeMax = 15f;
             _drawerHeroSpells.overflowMode = TextOverflowModes.Truncate;
-            _drawerHeroSpells.gameObject.AddComponent<LayoutElement>().preferredHeight = 22f;
+            _drawerHeroSpells.gameObject.AddComponent<LayoutElement>().preferredHeight = 36f;
 
-            BuildPaperDollAndCharSheet(leftCol);
+            GameObject gearCol = new GameObject("HeroGearCol", typeof(RectTransform), typeof(VerticalLayoutGroup));
+            gearCol.transform.SetParent(leftCol, false);
+            gearCol.AddComponent<LayoutElement>().flexibleWidth = 1f;
+            VerticalLayoutGroup gearVlg = gearCol.GetComponent<VerticalLayoutGroup>();
+            gearVlg.spacing = 8f;
+            gearVlg.childControlWidth = true;
+            gearVlg.childControlHeight = true;
+            gearVlg.childForceExpandHeight = false;
+
+            BuildPaperDollAndCharSheet(gearCol.transform);
 
             // Right Column: Shared Stash (full height, Camp buttons moved cleanly into Header)
             RectTransform rightCol = BywaterUiHelpers.CreatePanel(body.transform, "StashCampCol", BywaterUiHelpers.PanelBg, withBrassOutline: true, outlinePx: 1f);
@@ -4536,6 +4610,39 @@ namespace Realmz.Game
                 BywaterUiHelpers.MutedSlate);
             _stashEmptyLabel.gameObject.AddComponent<LayoutElement>().preferredHeight = 32f;
             _stashEmptyLabel.gameObject.SetActive(false);
+        }
+
+        private TextMeshProUGUI CreateVitalBadge(Transform parent, string name, string initialText)
+        {
+            RectTransform tile = BywaterUiHelpers.CreatePanel(parent, name, BywaterUiHelpers.PanelDarkBg, withBrassOutline: false);
+            Image tileBg = tile.GetComponent<Image>();
+            if (BywaterUiHelpers.HasChromeSprites && tileBg != null)
+            {
+                tileBg.sprite = BywaterUiHelpers.StoneWellSprite ?? BywaterUiHelpers.StoneBarSprite;
+                tileBg.type = Image.Type.Sliced;
+                tileBg.pixelsPerUnitMultiplier = BywaterUiHelpers.ChromePpuMultiplier * 1.45f;
+                tileBg.color = Color.white;
+            }
+
+            TextMeshProUGUI lbl = BywaterUiHelpers.CreateLabel(
+                tile,
+                "Label",
+                initialText,
+                _font,
+                15f,
+                BywaterUiHelpers.ParchmentText,
+                TextAlignmentOptions.Center,
+                FontStyles.Bold,
+                wrap: false);
+            lbl.enableAutoSizing = true;
+            lbl.fontSizeMin = 11.5f;
+            lbl.fontSizeMax = 15f;
+            lbl.overflowMode = TextOverflowModes.Truncate;
+            lbl.rectTransform.anchorMin = Vector2.zero;
+            lbl.rectTransform.anchorMax = Vector2.one;
+            lbl.rectTransform.offsetMin = new Vector2(6f, 2f);
+            lbl.rectTransform.offsetMax = new Vector2(-6f, -2f);
+            return lbl;
         }
 
         private void BuildShopModal(Transform parent)
