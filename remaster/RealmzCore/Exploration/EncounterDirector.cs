@@ -2443,11 +2443,14 @@ namespace RealmzCore.Exploration
                 22);
 
             bool hasAdv = report.CanAmbush || (hasRanger && hasRogue);
-            bool hasDisadv = report.IsAmbushedInDark || (report.Clock != null && report.Clock.IsNight && !report.HasLitTorch);
+            bool hasDarkDisadv = report.IsAmbushedInDark || (report.Clock != null && report.Clock.IsNight && !report.HasLitTorch);
+            bool isFatigued = party != null && party.FatigueState >= PartyFatigueState.Winded;
+            bool hasDisadv = hasDarkDisadv || isFatigued;
             RollAdvantageState adv = RollAdvantageHelper.ResolveAdvantage(hasAdv, hasDisadv);
             string breakdown = (dexMod >= 0 ? $"DEX +{dexMod}" : $"DEX {dexMod}") +
                                (hasAdv ? " | Scout Advantage" : string.Empty) +
-                               (hasDisadv ? " | Darkness Penalty" : string.Empty);
+                               (hasDarkDisadv ? " | Darkness Penalty" : string.Empty) +
+                               (isFatigued ? " | Fatigued" : string.Empty);
             string tier = dc <= 10 ? "Favored" : (dc <= 14 ? "Even Odds" : "Risky");
 
             return new EncounterCheckSpec("Evade Patrol", "DEX", dc, dexMod, breakdown, adv, tier);

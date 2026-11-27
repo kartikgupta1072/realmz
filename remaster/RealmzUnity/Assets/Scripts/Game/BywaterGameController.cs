@@ -97,6 +97,7 @@ namespace Realmz.Game
         private int _arenaHeight = 10;
         private CombatActionMode _activeCombatMode = CombatActionMode.Smart;
         private int _selectedSpellId = -1;
+        private int _selectedSpellPowerLevel = 1;
         private GridCoord _lastCombatHover = new GridCoord(-1, -1);
         private bool _combatHoverDirty = true;
         private int _speedIndex;
@@ -668,6 +669,7 @@ namespace Realmz.Game
             }
 
             _activeCombatMode = CombatActionMode.Smart;
+            _selectedSpellPowerLevel = 1;
             _selectedSpellId = current.SpellIds.Count > 0 ? current.SpellIds[0] : -1;
             _hoveredCombatUnitId = null;
 
@@ -1057,6 +1059,9 @@ namespace Realmz.Game
             hudController.OnEndTurnRequested += HandleEndTurn;
             hudController.OnCycleSpeedRequested += HandleCycleSpeed;
             hudController.OnSpellSelected += HandleSpellSelected;
+            hudController.OnSpellPowerLevelSelected += HandleSpellPowerLevelSelected;
+            hudController.OnOutOfCombatUtilitySpellRequested += HandleOutOfCombatUtilitySpell;
+            hudController.OnOutOfCombatKnownSpellRequested += HandleOutOfCombatKnownSpell;
             hudController.OnCombatPartyAllyClicked += HandleCombatPartyAllyClicked;
             hudController.OnStartBattleRequested += HandleStartBattleFromDeployment;
             hudController.OnHotbarSlotHovered += (actionId, title, body) =>
@@ -2883,6 +2888,59 @@ namespace Realmz.Game
             hudController?.ShowToast($"{label}{extra}: +{res.TotalHpRestored} HP, +{res.TotalSpRestored} SP.", 2.6f);
         }
 
+        private void HandleOutOfCombatUtilitySpell(OutOfCombatSpellKind kind)
+        {
+            if (ExploreSession == null || ExploreSession.Party == null)
+            {
+                return;
+            }
+
+            audioDirector?.PlayUiClick();
+            OutOfCombatSpellResult res = ExploreSession.Party.CastOutOfCombatUtility(
+                kind,
+                _selectedPartyHeroIndex,
+                Bundle != null ? Bundle.Spells : null,
+                _roller);
+            ApplyOutOfCombatMagicResult(res, kind == OutOfCombatSpellKind.HealParty ? "heal" : "buff");
+        }
+
+        private void HandleOutOfCombatKnownSpell(int heroIndex, int spellId)
+        {
+            if (ExploreSession == null || ExploreSession.Party == null || Bundle == null || Bundle.Spells == null)
+            {
+                return;
+            }
+
+            audioDirector?.PlayUiClick();
+            OutOfCombatSpellResult res = ExploreSession.Party.CastOutOfCombatKnownSpell(
+                heroIndex,
+                spellId,
+                heroIndex,
+                Bundle.Spells,
+                _roller);
+            string sfxKind = Bundle.Spells.TryGetValue(spellId, out SpellDefinition def) ? def.EffectKind : "buff";
+            ApplyOutOfCombatMagicResult(res, sfxKind);
+        }
+
+        private void ApplyOutOfCombatMagicResult(OutOfCombatSpellResult res, string sfxKind)
+        {
+            if (!res.Success)
+            {
+                hudController?.ShowToast(string.IsNullOrEmpty(res.Message) ? "Cannot cast spell right now." : res.Message, 2.4f);
+                hudController?.RefreshPartyDrawer(ExploreSession.Party, Bundle, _selectedPartyHeroIndex);
+                return;
+            }
+
+            audioDirector?.PlaySpell(sfxKind);
+            ExploreSession.RefreshFogOfWar();
+            EnsureExploreHeroViews();
+            ApplyAtmosphereAndTorchLighting(GridToWorldAtElevation(ExploreSession.Position), forceImmediate: false);
+            SyncFogOfWarAndWeatherVisuals();
+            hudController?.RefreshPartyDrawer(ExploreSession.Party, Bundle, _selectedPartyHeroIndex);
+            hudController?.RefreshExploreHud(ExploreSession, Bundle, null, null, 0, string.Empty, false);
+            hudController?.ShowToast(res.Message, 2.8f);
+        }
+
         private void HandleBuyItem(string shopId, int itemId)
         {
             if (Bundle.Shops.TryGetValue(shopId, out ShopDefinition shop) &&
@@ -3255,6 +3313,7 @@ namespace Realmz.Game
             _outcomeShown = false;
             _pendingQuickResolveVictorySession = null;
             _activeCombatMode = CombatActionMode.Smart;
+            _selectedSpellPowerLevel = 1;
             _selectedSpellId = -1;
             _hoveredCombatUnitId = null;
             _hoveredRimUnitId = null;
@@ -3940,6 +3999,7 @@ namespace Realmz.Game
             }
 
             _activeCombatMode = CombatActionMode.Smart;
+            _selectedSpellPowerLevel = 1;
 
             if (actor.SpellIds.Count > 0 && !ContainsInt(actor.SpellIds, _selectedSpellId))
             {
@@ -4897,7 +4957,7 @@ namespace Realmz.Game
                         break;
                     }
 
-                    TacticalSpellPreview preview = CombatSession.PreviewSpell(actor.Id, spell.Id.ToString(), localCoord);
+                    TacticalSpellPreview preview = CombatSession.PreviewSpell(actor.Id, spell.Id.ToString(), localCoord, _selectedSpellPowerLevel);
                     if (spell.Range > 0)
                     {
                         LosResult spellLos = CombatSession.CheckLineOfSight(actor.Position, localCoord, includeSteamObscuration: false);
@@ -4931,10 +4991,11 @@ namespace Realmz.Game
                         isBeneficial);
 
                     string condText = preview.ConditionTags.Count > 0 ? string.Join(", ", preview.ConditionTags) : "None";
+                    string powerTag = preview.PowerLevel > 1 ? $" [{preview.PowerLevel}x]" : string.Empty;
                     string statusLine = preview.CanExecute ? $"Cost: Main Action | READY TO CAST (Click to fire)" : $"Blocked: {preview.Reason}";
                     hudController?.SetCombatTooltip(
-                        $"Spell: {spell.Name} (Action | {spell.SpCost} SP)",
-                        $"Cost: Main Action   |   Mana: {spell.SpCost} SP\n" +
+                        $"Spell: {spell.Name}{powerTag} (Action | {preview.SpCost} SP)",
+                        $"Cost: Main Action   |   Mana: {preview.SpCost} SP   |   Power: {preview.PowerLevel}x\n" +
                         $"Effect ({spell.EffectKind}): {preview.MinAmount} - {preview.MaxAmount}\n" +
                         $"Save%: {preview.SaveChancePct}%\n" +
                         $"AoE Hits: {preview.AoeFootprint.AffectedEnemyIds.Count} Foe(s) vs {preview.AoeFootprint.AffectedAllyIds.Count} Ally(s)\n" +
@@ -5149,6 +5210,7 @@ namespace Realmz.Game
                     {
                         // Bug #5: clicking an empty reachable tile in Melee mode exits Melee and walks there.
                         _activeCombatMode = CombatActionMode.Smart;
+            _selectedSpellPowerLevel = 1;
                         CombatActionResult moveRes = ExecuteCombatMoveStep(actor, localCoord);
                         if (!moveRes.Success)
                         {
@@ -5214,7 +5276,7 @@ namespace Realmz.Game
                         return;
                     }
 
-                    CombatActionResult res = CombatSession.CastSpell(_selectedSpellId.ToString(), localCoord);
+                    CombatActionResult res = CombatSession.CastSpell(_selectedSpellId.ToString(), localCoord, _selectedSpellPowerLevel);
                     if (res.Success)
                     {
                         SpellDefinition spell = Bundle.Spells.TryGetValue(_selectedSpellId, out SpellDefinition s) ? s : null;
@@ -5479,27 +5541,36 @@ namespace Realmz.Game
                 if (_activeCombatMode == CombatActionMode.Melee && !actor.Economy.HasSlot(CombatActionSlot.MainAction))
                 {
                     _activeCombatMode = CombatActionMode.Smart;
+            _selectedSpellPowerLevel = 1;
                 }
                 else if (_activeCombatMode == CombatActionMode.Ranged && !actor.Economy.HasSlot(CombatActionSlot.MainAction))
                 {
                     _activeCombatMode = CombatActionMode.Smart;
+            _selectedSpellPowerLevel = 1;
                 }
                 else if (_activeCombatMode == CombatActionMode.Spell)
                 {
-                    int spCost = 0;
+                    int minSpCost = 0;
                     if (_selectedSpellId >= 0 && Bundle != null && Bundle.Spells.TryGetValue(_selectedSpellId, out SpellDefinition spDef))
                     {
-                        spCost = spDef.SpCost;
+                        minSpCost = TacticalCombatSession.GetEffectiveSpellSpCost(actor, spDef, 1);
+                        while (_selectedSpellPowerLevel > 1 &&
+                               actor.Sp < TacticalCombatSession.GetEffectiveSpellSpCost(actor, spDef, _selectedSpellPowerLevel))
+                        {
+                            _selectedSpellPowerLevel--;
+                        }
                     }
-                    if (!actor.Economy.HasSlot(CombatActionSlot.MainAction) || actor.Sp < spCost)
+                    if (!actor.Economy.HasSlot(CombatActionSlot.MainAction) || actor.Sp < minSpCost)
                     {
                         _activeCombatMode = CombatActionMode.Smart;
+                        _selectedSpellPowerLevel = 1;
                     }
                 }
                 else if ((_activeCombatMode == CombatActionMode.Shove || _activeCombatMode == CombatActionMode.Potion) &&
                          !actor.Economy.HasSlot(CombatActionSlot.BonusAction))
                 {
                     _activeCombatMode = CombatActionMode.Smart;
+                    _selectedSpellPowerLevel = 1;
                 }
 
                 if (TryAutoEndTurnIfExhausted(actor))
@@ -5533,6 +5604,10 @@ namespace Realmz.Game
             {
                 _selectedSpellId = actor.SpellIds[0];
             }
+            if (mode != CombatActionMode.Spell)
+            {
+                _selectedSpellPowerLevel = 1;
+            }
 
             RefreshCombatStaticOverlays(actor);
             _combatHoverDirty = true;
@@ -5554,6 +5629,7 @@ namespace Realmz.Game
             {
                 _activeCombatMode = CombatActionMode.Smart;
                 _selectedSpellId = -1;
+                _selectedSpellPowerLevel = 1;
                 RefreshCombatStaticOverlays(CombatSession?.CurrentActor);
                 _combatHoverDirty = true;
                 hudController?.ClearCombatHoverPreview();
@@ -5562,8 +5638,34 @@ namespace Realmz.Game
             }
 
             _selectedSpellId = spellId;
+            _selectedSpellPowerLevel = 1;
             _activeCombatMode = CombatActionMode.Spell;
             RefreshCombatStaticOverlays(CombatSession?.CurrentActor);
+            _combatHoverDirty = true;
+            RefreshCombatHudState();
+        }
+
+        private void HandleSpellPowerLevelSelected(int powerLevel)
+        {
+            if (!_isInCombat || CombatSession == null || Bundle == null)
+            {
+                return;
+            }
+
+            audioDirector?.PlayUiClick();
+            int clamped = Mathf.Clamp(powerLevel, TacticalCombatSession.MinSpellPowerLevel, TacticalCombatSession.MaxSpellPowerLevel);
+            CombatantState actor = CombatSession.CurrentActor;
+            if (actor != null && _selectedSpellId >= 0 && Bundle.Spells.TryGetValue(_selectedSpellId, out SpellDefinition spDef))
+            {
+                int needed = TacticalCombatSession.GetEffectiveSpellSpCost(actor, spDef, clamped);
+                if (actor.Sp < needed)
+                {
+                    hudController?.ShowToast($"{actor.Name} needs {needed} SP for {clamped}x {spDef.Name}.", 1.8f);
+                    return;
+                }
+            }
+
+            _selectedSpellPowerLevel = clamped;
             _combatHoverDirty = true;
             RefreshCombatHudState();
         }
@@ -5616,6 +5718,7 @@ namespace Realmz.Game
                 }
 
                 _activeCombatMode = CombatActionMode.Smart;
+            _selectedSpellPowerLevel = 1;
                 RefreshCombatStaticOverlays(actor);
                 _combatHoverDirty = true;
                 SyncAllCombatUnitViews();
@@ -5655,6 +5758,7 @@ namespace Realmz.Game
                     _activeCombatMode == CombatActionMode.Spell)
                 {
                     _activeCombatMode = CombatActionMode.Smart;
+            _selectedSpellPowerLevel = 1;
                 }
 
                 if (!TryAutoEndTurnIfExhausted(actor))
@@ -5750,6 +5854,7 @@ namespace Realmz.Game
                 _activeCombatRewardBonusPct = 0;
 
                 ExploreSession?.SyncAfterCombat(CombatSession, floorDeadToOne: true);
+                ExploreSession?.Party?.AddPartyFatigue(12.0);
 
                 audioDirector?.PlayMusic("treasure", 0.7f);
                 audioDirector?.PlayCoin();
@@ -5815,6 +5920,7 @@ namespace Realmz.Game
             if (syncPartyFromCombat && CombatSession != null)
             {
                 ExploreSession?.SyncAfterCombat(CombatSession, floorDeadToOne: true);
+                ExploreSession?.Party?.AddPartyFatigue(12.0);
             }
 
             UnsubscribeCombatEvents();
@@ -5999,7 +6105,8 @@ namespace Realmz.Game
                 Bundle,
                 _activeCombatMode,
                 _selectedSpellId,
-                SpeedLabels[_speedIndex]);
+                SpeedLabels[_speedIndex],
+                _selectedSpellPowerLevel);
         }
 
         private void TriggerHitStop(float durationSeconds)

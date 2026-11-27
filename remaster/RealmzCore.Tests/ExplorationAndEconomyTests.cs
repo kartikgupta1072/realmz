@@ -1,4 +1,7 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
+using RealmzCore.Combat;
 using RealmzCore.Data;
 using RealmzCore.Exploration;
 using RealmzCore.Rules;
@@ -556,6 +559,125 @@ namespace RealmzCore.Tests
                 Assert.Equal(adjacentTiles[i], approachPath.Steps[approachPath.Steps.Count - 1]);
                 Assert.DoesNotContain(npcTile, approachPath.Steps);
             }
+        }
+
+        [Fact]
+        public void PartyFatigue_EscalatesOutsideTown_AppliesWindedEvadeDisadvAndExhaustion_AndResetsOnCampOrRefresh()
+        {
+            int[] tiles = new int[36];
+            for (int i = 0; i < tiles.Length; i++) tiles[i] = 61;
+
+            TileMapData map = new TileMapData(
+                "wild_test",
+                "Wilderness",
+                0,
+                isDungeon: false,
+                width: 6,
+                height: 6,
+                tiles: tiles,
+                startSpawn: new GridCoord(0, 0),
+                tileRules: new Dictionary<int, TileRule> { [61] = new TileRule(61, passable: true, moveCost: 2, isForest: true) },
+                encounterZones: new[] { new EncounterZoneData(0, 0, 0, 5, 5, 0) });
+
+            HeroPresetData roguePreset = new HeroPresetData("hero_rogue", "Vex", archetype: "Rogue", hp: 20, maxHp: 20, agility: 18);
+            HeroPresetData magePreset = new HeroPresetData("hero_mage", "Theron", archetype: "Mage", hp: 14, maxHp: 14, sp: 16, maxSp: 16);
+            PartyState party = new PartyState(new[] { new PartyMemberState(roguePreset), new PartyMemberState(magePreset) });
+
+            ExplorationSession session = new ExplorationSession(
+                new Dictionary<string, TileMapData> { ["wild_test"] = map },
+                "wild_test",
+                party);
+
+            Assert.Equal(PartyFatigueState.Fresh, party.FatigueState);
+            Assert.True(session.StepOneTile(new GridCoord(1, 0), autoHaltOnEvents: false).Moved);
+            Assert.True(party.PartyFatigue > 0.0);
+
+            // Crossing Winded (>= 70%) inflicts Disadvantage on Evade Patrol checks.
+            party.PartyFatigue = 75.0;
+            Assert.Equal(PartyFatigueState.Winded, party.FatigueState);
+            EncounterScoutingReport report = EncounterDirector.EvaluateScouting(
+                map,
+                new GridCoord(2, 2),
+                party,
+                new WorldClock(WorldClock.DefaultStartTurns),
+                null,
+                string.Empty,
+                false,
+                new[] { new MonsterDefinition(1, "goblin", "Goblin", 1, 2, 0, 6, 8, 8, 15, 2, 10, 4, attackDice: "1d4", xpReward: 5) },
+                new QueuedDiceRoller(99)); // high roll -> CanAmbush = false, CanEvade = true
+            EncounterCheckSpec evadeSpec = EncounterDirector.BuildEvadeCheckSpec(report, party);
+            Assert.Equal(RollAdvantageState.Disadvantage, evadeSpec.AdvantageState);
+            Assert.Contains("Fatigued", evadeSpec.ModifierBreakdown);
+
+            // Crossing 100% Fatigue grants +1 ExhaustionStack once per exhaustion crossing.
+            party.PartyFatigue = 99.0;
+            bool newlyExhausted = party.AddPartyFatigue(3.0);
+            Assert.True(newlyExhausted);
+            Assert.Equal(PartyFatigueState.Exhausted, party.FatigueState);
+            Assert.Equal(1, party.Members[0].ExhaustionStacks);
+            Assert.Equal(1, party.Members[1].ExhaustionStacks);
+
+            // Out-of-combat Invigorate reduces Fatigue by 40% and eases Exhaustion below Winded.
+            OutOfCombatSpellResult refreshRes = party.CastOutOfCombatUtility(OutOfCombatSpellKind.RefreshParty, 0);
+            Assert.True(refreshRes.Success);
+            Assert.Equal(60, party.PartyFatiguePercent);
+            Assert.Equal(PartyFatigueState.Fresh, party.FatigueState);
+            Assert.Equal(0, party.Members[0].ExhaustionStacks);
+        }
+
+        [Fact]
+        public void OutOfCombatMagic_HealsCuresLightsSentryBlocksAmbush_AndBuffsCarryIntoCombat()
+        {
+            BywaterM1Bundle bundle = BywaterJsonLoader.LoadFromDirectory(
+                System.IO.Directory.Exists(@"C:\Users\karti\realmz\remaster\RealmzUnity\Assets\StreamingAssets\bywater_m1")
+                    ? @"C:\Users\karti\realmz\remaster\RealmzUnity\Assets\StreamingAssets\bywater_m1"
+                    : @"C:\Users\karti\realmz\remaster\extracted\bywater_m1");
+            PartyState party = PartyState.FromBundle(bundle);
+            // Index 1 = Liora (Cleric), Index 3 = Theron (Mage)
+            party.Members[0].Hp = Math.Max(1, party.Members[0].MaxHp - 8);
+            party.Members[0].Conditions.Apply(CharConditionId.Poisoned);
+            party.Members[0].ExhaustionStacks = 1;
+
+            int lioraSpBefore = party.Members[1].Sp;
+            OutOfCombatSpellResult healRes = party.CastOutOfCombatUtility(
+                OutOfCombatSpellKind.HealParty,
+                0,
+                bundle.Spells,
+                new QueuedDiceRoller(6));
+            Assert.True(healRes.Success);
+            Assert.True(healRes.TotalHealing > 0);
+            Assert.True(party.Members[1].Sp < lioraSpBefore);
+
+            OutOfCombatSpellResult cureRes = party.CastOutOfCombatUtility(OutOfCombatSpellKind.CureParty, 0, bundle.Spells);
+            Assert.True(cureRes.Success);
+            Assert.False(party.Members[0].Conditions.Has(CharConditionId.Poisoned));
+            Assert.Equal(0, party.Members[0].ExhaustionStacks);
+
+            double torchBefore = party.TorchMinutesRemaining;
+            OutOfCombatSpellResult lightRes = party.CastOutOfCombatUtility(OutOfCombatSpellKind.ConjureLight, 3, bundle.Spells);
+            Assert.True(lightRes.Success);
+            Assert.True(lightRes.TorchLit);
+            Assert.Equal(torchBefore + PartyState.ConjureLightDurationMinutes, party.TorchMinutesRemaining);
+
+            // Camp Sentry prevents 15% hostile ambush on FullRest even with roller rolling 1.
+            OutOfCombatSpellResult sentryRes = party.CastOutOfCombatUtility(OutOfCombatSpellKind.CampSentry, 3, bundle.Spells);
+            Assert.True(sentryRes.Success);
+            Assert.True(party.CampSentryActive);
+
+            party.PartyFatigue = 55.0;
+            RestResult restRes = party.Rest(CampMode.FullRest, isSafeZone: false, inHostileZone: true, roller: new QueuedDiceRoller(1));
+            Assert.True(restRes.Success);
+            Assert.False(restRes.Ambushed);
+            Assert.False(party.CampSentryActive);
+            Assert.Equal(0.0, party.PartyFatigue);
+
+            // Casting Magic Aura (2106) out of combat carries onto CombatantState when combat starts.
+            OutOfCombatSpellResult buffRes = party.CastOutOfCombatKnownSpell(1, 2106, 0, bundle.Spells);
+            Assert.True(buffRes.Success);
+            Assert.True(party.Members[0].Conditions.Has(CharConditionId.MagicAura));
+
+            CombatantState aldricCombat = CombatantState.FromHero(party.Members[0], new GridCoord(2, 2), bundle.Items);
+            Assert.True(aldricCombat.Conditions.Has(CharConditionId.MagicAura));
         }
     }
 }

@@ -1230,9 +1230,9 @@ namespace RealmzCore.Combat
                 advantageState: advantageState);
         }
 
-        public TacticalSpellPreview PreviewSpell(string casterId, string spellIdOrKey, GridCoord targetCenter)
+        public TacticalSpellPreview PreviewSpell(string casterId, string spellIdOrKey, GridCoord targetCenter, int powerLevel = 1)
         {
-            return PreviewSpellInternal(casterId, spellIdOrKey, targetCenter, fromPos: null, ignoreActionBudget: false);
+            return PreviewSpellInternal(casterId, spellIdOrKey, targetCenter, fromPos: null, ignoreActionBudget: false, powerLevel: powerLevel);
         }
 
         internal TacticalSpellPreview PreviewSpellInternal(
@@ -1240,8 +1240,10 @@ namespace RealmzCore.Combat
             string spellIdOrKey,
             GridCoord targetCenter,
             GridCoord? fromPos,
-            bool ignoreActionBudget)
+            bool ignoreActionBudget,
+            int powerLevel = 1)
         {
+            int p = Math.Clamp(powerLevel, MinSpellPowerLevel, MaxSpellPowerLevel);
             CombatantState? caster = GetCombatant(casterId);
             SpellDefinition? spell = ResolveSpell(spellIdOrKey);
             if (caster == null || spell == null)
@@ -1251,7 +1253,8 @@ namespace RealmzCore.Combat
                     "Caster or spell not found.",
                     0, 0, 0, 0,
                     new SpellAoeFootprint(false, targetCenter, Array.Empty<GridCoord>(), Array.Empty<string>(), Array.Empty<string>(), Array.Empty<GridCoord>(), hasLineOfSight: false),
-                    Array.Empty<string>());
+                    Array.Empty<string>(),
+                    powerLevel: p);
             }
 
             GridCoord casterPos = fromPos ?? caster.Position;
@@ -1260,8 +1263,9 @@ namespace RealmzCore.Combat
             int maxAmount = 0;
             if (!string.IsNullOrWhiteSpace(spell.EffectDice) && DiceSpec.TryParse(spell.EffectDice, out DiceSpec spec))
             {
-                minAmount = Math.Max(0, spec.Min);
-                maxAmount = Math.Max(minAmount, spec.Max);
+                DiceSpec scaled = ScaleSpellDiceForPower(spec, p);
+                minAmount = Math.Max(0, scaled.Min);
+                maxAmount = Math.Max(minAmount, scaled.Max);
             }
 
             int saveChancePct = 0;
@@ -1270,6 +1274,10 @@ namespace RealmzCore.Combat
                              !string.Equals(spell.EffectKind, "Cure", StringComparison.OrdinalIgnoreCase);
 
             List<string> tags = new List<string>();
+            if (p > 1)
+            {
+                tags.Add($"Power {p}x");
+            }
             if (spell.AppliedCondition.HasValue)
             {
                 tags.Add(ConditionEffects.GetCode(spell.AppliedCondition.Value));
@@ -1282,6 +1290,7 @@ namespace RealmzCore.Combat
                 tags.Add("High Ground +1 Range");
             }
 
+            int powerDcBonusPct = (p - 1) * 8;
             bool anyImmune = false;
             if (isHostile && footprint.AffectedEnemyIds.Count > 0)
             {
@@ -1296,7 +1305,7 @@ namespace RealmzCore.Combat
                             anyImmune = true;
                         }
 
-                        totalSave += ComputeSpellSaveChance(enemy, spell);
+                        totalSave += ComputeSpellSaveChance(enemy, spell, caster.SpellHitDcBonusPct + powerDcBonusPct);
                     }
                 }
 
@@ -1311,7 +1320,7 @@ namespace RealmzCore.Combat
             int apCost = caster.Economy.UsesApForActions
                 ? CombatWeaponCosts.GetSpellApCost(spell, caster.SetSupportSpellApDiscount)
                 : 1;
-            int effectiveSpCost = GetEffectiveSpellSpCost(caster, spell);
+            int effectiveSpCost = GetEffectiveSpellSpCost(caster, spell, p);
             bool silenced = caster.Conditions.Has(CharConditionId.Silenced);
             bool enoughSp = caster.Sp >= effectiveSpCost;
             bool hasAction = ignoreActionBudget || (caster.Economy.UsesApForActions
@@ -1322,7 +1331,7 @@ namespace RealmzCore.Combat
             string reason = silenced
                 ? "Caster is silenced."
                 : !enoughSp
-                    ? "Insufficient SP."
+                    ? $"Insufficient SP (needs {effectiveSpCost} SP)."
                     : !footprint.InRange
                         ? "Target is out of spell range."
                         : !footprint.HasLineOfSight
@@ -1340,7 +1349,8 @@ namespace RealmzCore.Combat
                 saveChancePct: saveChancePct,
                 aoeFootprint: footprint,
                 conditionTags: tags,
-                apCost: apCost);
+                apCost: apCost,
+                powerLevel: p);
         }
 
         public TacticalShovePreview PreviewShove(string actorId, string targetId, GridCoord? fromPos = null)
@@ -2504,13 +2514,14 @@ namespace RealmzCore.Combat
             return cur != targetPos ? cur : (GridCoord?)null;
         }
 
-        public CombatActionResult CastSpell(string spellIdOrKey, GridCoord targetCenter)
+        public CombatActionResult CastSpell(string spellIdOrKey, GridCoord targetCenter, int powerLevel = 1)
         {
             if (Phase != CombatPhase.Combat || Outcome != CombatOutcome.InProgress)
             {
                 return new CombatActionResult(false, Phase == CombatPhase.Deployment ? "Finish pre-battle deployment first." : "Combat has ended.");
             }
 
+            int p = Math.Clamp(powerLevel, MinSpellPowerLevel, MaxSpellPowerLevel);
             CombatantState? caster = CurrentActor;
             SpellDefinition? spell = ResolveSpell(spellIdOrKey);
             if (caster == null || spell == null)
@@ -2518,7 +2529,7 @@ namespace RealmzCore.Combat
                 return new CombatActionResult(false, "Caster or spell not found.");
             }
 
-            TacticalSpellPreview preview = PreviewSpell(caster.Id, spellIdOrKey, targetCenter);
+            TacticalSpellPreview preview = PreviewSpell(caster.Id, spellIdOrKey, targetCenter, p);
             if (!preview.CanExecute)
             {
                 return new CombatActionResult(false, preview.Reason);
@@ -2564,8 +2575,11 @@ namespace RealmzCore.Combat
             DiceSpec? effectSpec = null;
             if (!string.IsNullOrWhiteSpace(spell.EffectDice) && DiceSpec.TryParse(spell.EffectDice, out DiceSpec parsed))
             {
-                effectSpec = parsed;
+                effectSpec = ScaleSpellDiceForPower(parsed, p);
             }
+
+            int powerDurationBonus = (p - 1) * 2;
+            int powerDcBonusPct = (p - 1) * 8;
 
             for (int i = 0; i < targetIds.Count; i++)
             {
@@ -2577,7 +2591,7 @@ namespace RealmzCore.Combat
 
                 if (isHeal)
                 {
-                    int heal = (effectSpec.HasValue ? Math.Max(1, effectSpec.Value.Roll(Roller)) : 5) + caster.DivineHealingBonus;
+                    int heal = (effectSpec.HasValue ? Math.Max(1, effectSpec.Value.Roll(Roller)) : 5 * p) + caster.DivineHealingBonus;
                     int before = target.Hp;
                     target.Hp = Math.Min(target.MaxHp, target.Hp + heal);
                     int actualHeal = target.Hp - before;
@@ -2598,7 +2612,7 @@ namespace RealmzCore.Combat
                 {
                     if (spell.AppliedCondition.HasValue)
                     {
-                        int duration = spell.ConditionDuration > 0 ? spell.ConditionDuration : 4;
+                        int duration = (spell.ConditionDuration > 0 ? spell.ConditionDuration : 4) + powerDurationBonus;
                         target.Conditions.Apply(
                             spell.AppliedCondition.Value,
                             magnitude: 1,
@@ -2623,7 +2637,7 @@ namespace RealmzCore.Combat
                         continue;
                     }
 
-                    int saveChance = ComputeSpellSaveChance(target, spell, caster.SpellHitDcBonusPct);
+                    int saveChance = ComputeSpellSaveChance(target, spell, caster.SpellHitDcBonusPct + powerDcBonusPct);
                     bool saved = saveChance > 0 && Roller.NextInt(1, 101) <= saveChance;
 
                     if (effectSpec.HasValue)
@@ -2657,7 +2671,7 @@ namespace RealmzCore.Combat
                     {
                         CharConditionId cond = spell.AppliedCondition.Value;
                         int step = ConditionEffects.IsCrowdControl(cond) ? 15 : 10;
-                        int duration = spell.ConditionDuration > 0 ? spell.ConditionDuration : -1;
+                        int duration = spell.ConditionDuration > 0 ? spell.ConditionDuration + powerDurationBonus : -1;
                         target.Conditions.Apply(
                             cond,
                             magnitude: 1,
@@ -2699,7 +2713,8 @@ namespace RealmzCore.Combat
             string immuneSuffix = immuneTargetNames.Count > 0
                 ? $" [Immune: {string.Join(", ", immuneTargetNames)}]"
                 : string.Empty;
-            string msg = $"{caster.Name} casts {spell.Name} ({preview.ApCost} AP: {totalDamage} dmg, {totalHealing} heal).{immuneSuffix}";
+            string powerTag = p > 1 ? $" [{p}x]" : string.Empty;
+            string msg = $"{caster.Name} casts {spell.Name}{powerTag} ({preview.ApCost} AP: {totalDamage} dmg, {totalHealing} heal).{immuneSuffix}";
             AppendLog(caster.Id, caster.Name, "CastSpell", msg, targetIds, damageDealt: totalDamage, healingDone: totalHealing);
             CheckOutcome();
 
@@ -3630,14 +3645,31 @@ namespace RealmzCore.Combat
                 : outcome;
         }
 
-        private static int GetEffectiveSpellSpCost(CombatantState caster, SpellDefinition spell)
+        public const int MinSpellPowerLevel = 1;
+        public const int MaxSpellPowerLevel = 3;
+
+        public static DiceSpec ScaleSpellDiceForPower(DiceSpec spec, int powerLevel)
+        {
+            int p = Math.Clamp(powerLevel, MinSpellPowerLevel, MaxSpellPowerLevel);
+            if (p <= 1)
+            {
+                return spec;
+            }
+
+            int extraDicePerStep = Math.Max(1, (spec.Count + 1) / 2);
+            return new DiceSpec(spec.Count + extraDicePerStep * (p - 1), spec.Sides, spec.Modifier * p);
+        }
+
+        public static int GetEffectiveSpellSpCost(CombatantState caster, SpellDefinition spell, int powerLevel = 1)
         {
             if (spell.SpCost <= 0)
             {
                 return 0;
             }
 
-            return Math.Max(1, spell.SpCost - Math.Max(0, caster.SetSpCostDiscount));
+            int p = Math.Clamp(powerLevel, MinSpellPowerLevel, MaxSpellPowerLevel);
+            int baseCost = Math.Max(1, spell.SpCost - Math.Max(0, caster.SetSpCostDiscount));
+            return baseCost * p;
         }
 
         private static int ApplyUndeadDamageBonus(CombatantState attacker, CombatantState target, int rawDamage)

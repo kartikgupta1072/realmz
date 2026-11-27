@@ -883,12 +883,18 @@ namespace RealmzCore.Combat
                 state.EquipApBonus,
                 state.GuardApDiscount);
 
-            if (hero.Conditions.Has(CharConditionId.Poisoned)) state.Conditions.Apply(CharConditionId.Poisoned);
-            if (hero.Conditions.Has(CharConditionId.Diseased)) state.Conditions.Apply(CharConditionId.Diseased);
-            if (hero.Conditions.Has(CharConditionId.Cursed)) state.Conditions.Apply(CharConditionId.Cursed);
-            if (hero.Conditions.Has(CharConditionId.FireProtection))
+            IReadOnlyList<ConditionTracker.ConditionEntry> carriedConditions = hero.Conditions.ExportEntries();
+            for (int c = 0; c < carriedConditions.Count; c++)
             {
-                state.Conditions.Apply(CharConditionId.FireProtection, magnitude: 1, turnsRemaining: 10, baseRecoveryChancePercent: 0, canRecoverBySave: false);
+                ConditionTracker.ConditionEntry entry = carriedConditions[c];
+                state.Conditions.RestoreEntry(
+                    entry.Id,
+                    entry.Magnitude,
+                    entry.TurnsRemaining,
+                    entry.BaseRecoveryChancePercent,
+                    entry.CanRecoverBySave,
+                    entry.EscalationStepPercent,
+                    entry.ElapsedRounds);
             }
 
             return state;
@@ -1504,7 +1510,8 @@ namespace RealmzCore.Combat
             int saveChancePct,
             SpellAoeFootprint aoeFootprint,
             IReadOnlyList<string> conditionTags,
-            int apCost = 3)
+            int apCost = 3,
+            int powerLevel = 1)
         {
             CanExecute = canExecute;
             Reason = reason ?? string.Empty;
@@ -1515,6 +1522,7 @@ namespace RealmzCore.Combat
             AoeFootprint = aoeFootprint;
             ConditionTags = conditionTags ?? Array.Empty<string>();
             ApCost = apCost;
+            PowerLevel = Math.Max(1, powerLevel);
         }
 
         public bool CanExecute { get; }
@@ -1526,6 +1534,7 @@ namespace RealmzCore.Combat
         public SpellAoeFootprint AoeFootprint { get; }
         public IReadOnlyList<string> ConditionTags { get; }
         public int ApCost { get; }
+        public int PowerLevel { get; }
     }
 
     public sealed class TacticalShovePreview

@@ -102,6 +102,8 @@ namespace Realmz.Data
         public double worldTimeMinutes = -1.0;
         public bool hasWorldClockMinutes;
         public int postCombatGraceSteps;
+        public double partyFatigue;
+        public bool campSentryActive;
         public ulong prngState;
         public string prngStateText = "0";
         public string[] clearedEncounterIds = Array.Empty<string>();
@@ -270,6 +272,8 @@ namespace Realmz.Data
                 worldTimeMinutes = session.WorldClockMinutes,
                 hasWorldClockMinutes = true,
                 postCombatGraceSteps = session.PostCombatGraceStepsRemaining,
+                partyFatigue = session.Party.PartyFatigue,
+                campSentryActive = session.Party.CampSentryActive,
                 prngState = seedState,
                 prngStateText = seedState.ToString(CultureInfo.InvariantCulture),
                 clearedEncounterIds = clearedIds.ToArray(),
@@ -385,6 +389,8 @@ namespace Realmz.Data
             party.QuickBandageCharges = data.version >= 3
                 ? Clamp(data.quickBandageCharges, 0, PartyState.MaxQuickBandageCharges)
                 : PartyState.MaxQuickBandageCharges;
+            party.PartyFatigue = Math.Clamp(data.partyFatigue, 0.0, PartyState.ExhaustedFatigueThreshold);
+            party.CampSentryActive = data.campSentryActive;
 
             ClearStash(party);
             if (items != null)

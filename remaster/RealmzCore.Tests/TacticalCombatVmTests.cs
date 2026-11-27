@@ -330,5 +330,52 @@ namespace RealmzCore.Tests
             Assert.Equal(8, classicHero.Ac);
             Assert.Equal(6, classicHero.ToHit);
         }
+
+        [Fact]
+        public void PowerLevelOvercasting_ScalesSpCostDiceDuration_AndRejectsUnaffordablePower()
+        {
+            CombatGrid grid = new CombatGrid(8, 8);
+            Dictionary<int, SpellDefinition> spells = BuildTestSpells();
+
+            CombatantState mage = new CombatantState("h1", "Theron", CombatSide.Hero, new GridCoord(1, 3), 15, 15, sp: 24, maxSp: 24, spellIds: new[] { 1, 2 }, dexterity: 20);
+            CombatantState gob = new CombatantState("m1", "Goblin", CombatSide.Monster, new GridCoord(4, 3), 40, 40, ac: 10, magicResistance: 30, dexterity: 10);
+            TacticalCombatSession session = new TacticalCombatSession(
+                grid,
+                new[] { mage, gob },
+                spells: spells,
+                roller: new QueuedDiceRoller(90, 4, 4, 4, 4, 4)); // high roll fails save; 5d6 damage rolls
+
+            TacticalSpellPreview p1 = session.PreviewSpell("h1", "fireball", gob.Position, powerLevel: 1);
+            TacticalSpellPreview p2 = session.PreviewSpell("h1", "fireball", gob.Position, powerLevel: 2);
+            TacticalSpellPreview p4 = session.PreviewSpell("h1", "fireball", gob.Position, powerLevel: 4); // clamped to 3x (24 SP)
+
+            Assert.Equal(1, p1.PowerLevel);
+            Assert.Equal(8, p1.SpCost);
+            Assert.Equal(3, p1.MinAmount);
+            Assert.Equal(18, p1.MaxAmount);
+
+            Assert.Equal(2, p2.PowerLevel);
+            Assert.Equal(16, p2.SpCost);
+            Assert.Equal(5, p2.MinAmount);  // 3d6 -> +2d6 = 5d6
+            Assert.Equal(30, p2.MaxAmount);
+            Assert.Contains("Power 2x", p2.ConditionTags);
+            Assert.True(p2.SaveChancePct < p1.SaveChancePct); // +8% DC bonus
+
+            Assert.Equal(3, p4.PowerLevel);
+            Assert.Equal(24, p4.SpCost);
+            Assert.Equal(7, p4.MinAmount);
+
+            // Casting 2x spends 16 SP and deals 5d6 (20) damage cleanly.
+            CombatActionResult castRes = session.CastSpell("fireball", gob.Position, powerLevel: 2);
+            Assert.True(castRes.Success);
+            Assert.Contains("[2x]", castRes.Message);
+            Assert.Equal(8, mage.Sp);
+            Assert.Equal(20, gob.Hp);
+
+            // Casting 2x again (needs 16 SP, only 8 left) is rejected cleanly.
+            CombatActionResult failRes = session.CastSpell("fireball", gob.Position, powerLevel: 2);
+            Assert.False(failRes.Success);
+            Assert.Contains("SP", failRes.Message);
+        }
     }
 }

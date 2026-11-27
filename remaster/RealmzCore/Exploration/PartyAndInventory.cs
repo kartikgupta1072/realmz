@@ -66,6 +66,57 @@ namespace RealmzCore.Exploration
         FullRest = 1
     }
 
+    public enum PartyFatigueState
+    {
+        Fresh = 0,
+        Winded = 1,
+        Exhausted = 2
+    }
+
+    public enum OutOfCombatSpellKind
+    {
+        HealParty = 0,
+        CureParty = 1,
+        ConjureLight = 2,
+        CampSentry = 3,
+        RefreshParty = 4
+    }
+
+    public sealed class OutOfCombatSpellResult
+    {
+        public OutOfCombatSpellResult(
+            bool success,
+            string message,
+            string casterName = "",
+            int spSpent = 0,
+            int totalHealing = 0,
+            bool torchLit = false,
+            bool sentryActivated = false,
+            double fatigueReduced = 0.0,
+            int conditionsCured = 0)
+        {
+            Success = success;
+            Message = message ?? string.Empty;
+            CasterName = casterName ?? string.Empty;
+            SpSpent = spSpent;
+            TotalHealing = totalHealing;
+            TorchLit = torchLit;
+            SentryActivated = sentryActivated;
+            FatigueReduced = fatigueReduced;
+            ConditionsCured = conditionsCured;
+        }
+
+        public bool Success { get; }
+        public string Message { get; }
+        public string CasterName { get; }
+        public int SpSpent { get; }
+        public int TotalHealing { get; }
+        public bool TorchLit { get; }
+        public bool SentryActivated { get; }
+        public double FatigueReduced { get; }
+        public int ConditionsCured { get; }
+    }
+
     public sealed class InventoryItem
     {
         public InventoryItem(int itemId, int quantity = 1, bool isIdentified = true, int remainingCharges = 0)
@@ -992,6 +1043,13 @@ namespace RealmzCore.Exploration
         public const int RationItemId = 807;
         public const int DefaultFoodRations = 6;
         public const int DefaultTorchDurationMinutes = 120;
+        public const double WindedFatigueThreshold = 70.0;
+        public const double ExhaustedFatigueThreshold = 100.0;
+        public const int ConjureLightSpCost = 4;
+        public const int CurePartySpCost = 8;
+        public const int CampSentrySpCost = 6;
+        public const int RefreshPartySpCost = 6;
+        public const double ConjureLightDurationMinutes = 60.0;
 
         private readonly List<PartyMemberState> _members;
         private readonly List<InventoryItem> _stash;
@@ -1090,6 +1148,523 @@ namespace RealmzCore.Exploration
         public int QuickBandageCharges { get; set; }
         public bool DeferLevelUp { get; set; }
         public int FoodRations { get; set; }
+        public double PartyFatigue { get; set; }
+        public int PartyFatiguePercent => (int)Math.Round(Math.Clamp(PartyFatigue, 0.0, ExhaustedFatigueThreshold));
+        public PartyFatigueState FatigueState =>
+            PartyFatigue >= ExhaustedFatigueThreshold
+                ? PartyFatigueState.Exhausted
+                : (PartyFatigue >= WindedFatigueThreshold ? PartyFatigueState.Winded : PartyFatigueState.Fresh);
+        public bool CampSentryActive { get; set; }
+
+        public bool AddPartyFatigue(double amount)
+        {
+            if (amount <= 0.0)
+            {
+                return false;
+            }
+
+            bool wasExhausted = PartyFatigue >= ExhaustedFatigueThreshold;
+            PartyFatigue = Math.Clamp(PartyFatigue + amount, 0.0, ExhaustedFatigueThreshold);
+            if (!wasExhausted && PartyFatigue >= ExhaustedFatigueThreshold)
+            {
+                for (int i = 0; i < _members.Count; i++)
+                {
+                    if (_members[i].IsAlive)
+                    {
+                        _members[i].ExhaustionStacks = Math.Min(3, _members[i].ExhaustionStacks + 1);
+                    }
+                }
+                return true;
+            }
+
+            return false;
+        }
+
+        public double ReducePartyFatigue(double amount)
+        {
+            if (amount <= 0.0 || PartyFatigue <= 0.0)
+            {
+                return 0.0;
+            }
+
+            double before = Math.Clamp(PartyFatigue, 0.0, ExhaustedFatigueThreshold);
+            PartyFatigue = Math.Max(0.0, before - amount);
+            return before - PartyFatigue;
+        }
+
+        public void ClearPartyFatigue()
+        {
+            PartyFatigue = 0.0;
+        }
+
+        public OutOfCombatSpellResult CastOutOfCombatUtility(
+            OutOfCombatSpellKind kind,
+            int targetHeroIndex,
+            IReadOnlyDictionary<int, SpellDefinition>? spells = null,
+            IDiceRoller? roller = null)
+        {
+            IDiceRoller rng = roller ?? new DeterministicDiceRoller(0x43414D504D47UL);
+            int preferredIdx = Math.Clamp(targetHeroIndex, 0, Math.Max(0, _members.Count - 1));
+
+            switch (kind)
+            {
+                case OutOfCombatSpellKind.HealParty:
+                {
+                    int targetIdx = -1;
+                    if (_members.Count > 0 && preferredIdx < _members.Count && _members[preferredIdx].IsAlive && _members[preferredIdx].Hp < _members[preferredIdx].MaxHp)
+                    {
+                        targetIdx = preferredIdx;
+                    }
+                    else
+                    {
+                        double lowestFrac = 1.0;
+                        for (int i = 0; i < _members.Count; i++)
+                        {
+                            PartyMemberState m = _members[i];
+                            if (m.IsAlive && m.Hp < m.MaxHp)
+                            {
+                                double frac = m.MaxHp > 0 ? m.Hp / (double)m.MaxHp : 1.0;
+                                if (targetIdx < 0 || frac < lowestFrac)
+                                {
+                                    lowestFrac = frac;
+                                    targetIdx = i;
+                                }
+                            }
+                        }
+                    }
+
+                    if (targetIdx < 0)
+                    {
+                        return new OutOfCombatSpellResult(false, "All living heroes are already at full HP.");
+                    }
+
+                    SpellDefinition? healSpell = null;
+                    int casterIdx = FindOutOfCombatHealerIndex(preferredIdx, spells, out healSpell);
+                    if (casterIdx < 0)
+                    {
+                        return new OutOfCombatSpellResult(false, "No conscious healer has enough SP to cast a healing spell.");
+                    }
+
+                    PartyMemberState caster = _members[casterIdx];
+                    int spCost = healSpell != null ? Math.Max(1, healSpell.SpCost - caster.GetSetSpCostDiscount()) : 10;
+                    if (caster.Sp < spCost)
+                    {
+                        return new OutOfCombatSpellResult(false, $"{caster.Name} needs {spCost} SP to heal.");
+                    }
+
+                    string diceText = healSpell != null && !string.IsNullOrWhiteSpace(healSpell.EffectDice) ? healSpell.EffectDice : "1d8+2";
+                    DiceSpec healSpec = DiceSpec.TryParse(diceText, out DiceSpec parsedSpec) ? parsedSpec : new DiceSpec(1, 8, 2);
+                    int divineBonus = Math.Max(0, (caster.Judgment - 10) / 2) + caster.GetSetHealingBonus();
+                    int roll = Math.Max(1, healSpec.Roll(rng) + divineBonus);
+
+                    caster.Sp -= spCost;
+                    PartyMemberState target = _members[targetIdx];
+                    int before = target.Hp;
+                    target.Hp = Math.Min(target.MaxHp, target.Hp + roll);
+                    int gained = Math.Max(0, target.Hp - before);
+                    string spellLabel = healSpell != null ? healSpell.Name : "Heal Wounds";
+                    return new OutOfCombatSpellResult(
+                        true,
+                        $"{caster.Name} casts {spellLabel} on {target.Name} (+{gained} HP, {spCost} SP).",
+                        casterName: caster.Name,
+                        spSpent: spCost,
+                        totalHealing: gained);
+                }
+
+                case OutOfCombatSpellKind.CureParty:
+                {
+                    int targetIdx = -1;
+                    if (preferredIdx >= 0 && preferredIdx < _members.Count && HasFieldCurableAilment(_members[preferredIdx]))
+                    {
+                        targetIdx = preferredIdx;
+                    }
+                    else
+                    {
+                        for (int i = 0; i < _members.Count; i++)
+                        {
+                            if (HasFieldCurableAilment(_members[i]))
+                            {
+                                targetIdx = i;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (targetIdx < 0)
+                    {
+                        return new OutOfCombatSpellResult(false, "No living hero has Poison, Disease, Curse, or Exhaustion to purify.");
+                    }
+
+                    int casterIdx = FindOutOfCombatCasterIndex(preferredIdx, CurePartySpCost, divinePreferred: true);
+                    if (casterIdx < 0)
+                    {
+                        return new OutOfCombatSpellResult(false, $"Requires a conscious healer with {CurePartySpCost} SP.");
+                    }
+
+                    PartyMemberState caster = _members[casterIdx];
+                    PartyMemberState target = _members[targetIdx];
+                    caster.Sp -= CurePartySpCost;
+                    int cured = PurgeFieldAilments(target);
+                    return new OutOfCombatSpellResult(
+                        true,
+                        $"{caster.Name} purifies {target.Name} (-{CurePartySpCost} SP; cleared {cured} affliction(s)).",
+                        casterName: caster.Name,
+                        spSpent: CurePartySpCost,
+                        conditionsCured: cured);
+                }
+
+                case OutOfCombatSpellKind.ConjureLight:
+                {
+                    int casterIdx = FindOutOfCombatCasterIndex(preferredIdx, ConjureLightSpCost, divinePreferred: false);
+                    if (casterIdx < 0)
+                    {
+                        return new OutOfCombatSpellResult(false, $"Requires a conscious spellcaster with {ConjureLightSpCost} SP.");
+                    }
+
+                    PartyMemberState caster = _members[casterIdx];
+                    caster.Sp -= ConjureLightSpCost;
+                    TorchMinutesRemaining += ConjureLightDurationMinutes;
+                    return new OutOfCombatSpellResult(
+                        true,
+                        $"{caster.Name} casts Conjure Light (+1h 00m torchlight; {FormatTorchDuration(TorchMinutesRemaining)} active, {ConjureLightSpCost} SP).",
+                        casterName: caster.Name,
+                        spSpent: ConjureLightSpCost,
+                        torchLit: true);
+                }
+
+                case OutOfCombatSpellKind.CampSentry:
+                {
+                    if (CampSentryActive)
+                    {
+                        return new OutOfCombatSpellResult(false, "Camp Sentry ward is already active for your next Full Rest.");
+                    }
+
+                    int casterIdx = FindOutOfCombatCasterIndex(preferredIdx, CampSentrySpCost, divinePreferred: false);
+                    if (casterIdx < 0)
+                    {
+                        return new OutOfCombatSpellResult(false, $"Requires a conscious spellcaster with {CampSentrySpCost} SP.");
+                    }
+
+                    PartyMemberState caster = _members[casterIdx];
+                    caster.Sp -= CampSentrySpCost;
+                    CampSentryActive = true;
+                    return new OutOfCombatSpellResult(
+                        true,
+                        $"{caster.Name} sets a Camp Sentry ward (next Full Rest ambush-safe, {CampSentrySpCost} SP).",
+                        casterName: caster.Name,
+                        spSpent: CampSentrySpCost,
+                        sentryActivated: true);
+                }
+
+                case OutOfCombatSpellKind.RefreshParty:
+                {
+                    bool anyExhausted = false;
+                    for (int i = 0; i < _members.Count; i++)
+                    {
+                        if (_members[i].IsAlive && _members[i].ExhaustionStacks > 0)
+                        {
+                            anyExhausted = true;
+                            break;
+                        }
+                    }
+
+                    if (PartyFatigue <= 0.01 && !anyExhausted)
+                    {
+                        return new OutOfCombatSpellResult(false, "Party is already well-rested.");
+                    }
+
+                    int casterIdx = FindOutOfCombatCasterIndex(preferredIdx, RefreshPartySpCost, divinePreferred: true);
+                    if (casterIdx < 0)
+                    {
+                        return new OutOfCombatSpellResult(false, $"Requires a conscious caster with {RefreshPartySpCost} SP.");
+                    }
+
+                    PartyMemberState caster = _members[casterIdx];
+                    caster.Sp -= RefreshPartySpCost;
+                    double reduced = ReducePartyFatigue(40.0);
+                    int clearedStacks = 0;
+                    if (PartyFatigue < WindedFatigueThreshold)
+                    {
+                        for (int i = 0; i < _members.Count; i++)
+                        {
+                            if (_members[i].IsAlive && _members[i].ExhaustionStacks > 0)
+                            {
+                                _members[i].ExhaustionStacks--;
+                                clearedStacks++;
+                            }
+                        }
+                    }
+
+                    string exNote = clearedStacks > 0 ? $" & eased {clearedStacks} exhaustion" : string.Empty;
+                    return new OutOfCombatSpellResult(
+                        true,
+                        $"{caster.Name} casts Invigorate (-{(int)Math.Round(reduced)}% fatigue{exNote}; now {PartyFatiguePercent}%, {RefreshPartySpCost} SP).",
+                        casterName: caster.Name,
+                        spSpent: RefreshPartySpCost,
+                        fatigueReduced: reduced);
+                }
+
+                default:
+                    return new OutOfCombatSpellResult(false, "Unsupported field ritual.");
+            }
+        }
+
+        public OutOfCombatSpellResult CastOutOfCombatKnownSpell(
+            int casterIndex,
+            int spellId,
+            int targetHeroIndex,
+            IReadOnlyDictionary<int, SpellDefinition> spells,
+            IDiceRoller? roller = null)
+        {
+            if (spells == null || !spells.TryGetValue(spellId, out SpellDefinition? spell))
+            {
+                return new OutOfCombatSpellResult(false, "Spell definition not found.");
+            }
+
+            if (casterIndex < 0 || casterIndex >= _members.Count)
+            {
+                return new OutOfCombatSpellResult(false, "Caster not found.");
+            }
+
+            PartyMemberState caster = _members[casterIndex];
+            if (!caster.IsAlive)
+            {
+                return new OutOfCombatSpellResult(false, $"{caster.Name} is unconscious.");
+            }
+
+            bool knowsSpell = false;
+            for (int i = 0; i < caster.KnownSpellIds.Count; i++)
+            {
+                if (caster.KnownSpellIds[i] == spellId)
+                {
+                    knowsSpell = true;
+                    break;
+                }
+            }
+            if (!knowsSpell)
+            {
+                return new OutOfCombatSpellResult(false, $"{caster.Name} does not know {spell.Name}.");
+            }
+
+            int spCost = spell.SpCost > 0 ? Math.Max(1, spell.SpCost - caster.GetSetSpCostDiscount()) : 0;
+            if (caster.Sp < spCost)
+            {
+                return new OutOfCombatSpellResult(false, $"{caster.Name} needs {spCost} SP for {spell.Name}.");
+            }
+
+            IDiceRoller rng = roller ?? new DeterministicDiceRoller(0x4649454C44UL);
+            string kind = spell.EffectKind ?? string.Empty;
+            int targetIdx = Math.Clamp(targetHeroIndex, 0, _members.Count - 1);
+            PartyMemberState target = _members[targetIdx];
+
+            if (string.Equals(kind, "Heal", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!target.IsAlive || target.Hp >= target.MaxHp)
+                {
+                    int fallbackIdx = -1;
+                    for (int i = 0; i < _members.Count; i++)
+                    {
+                        if (_members[i].IsAlive && _members[i].Hp < _members[i].MaxHp)
+                        {
+                            fallbackIdx = i;
+                            break;
+                        }
+                    }
+                    if (fallbackIdx < 0)
+                    {
+                        return new OutOfCombatSpellResult(false, "No injured living hero needs healing.");
+                    }
+                    target = _members[fallbackIdx];
+                }
+
+                DiceSpec healSpec = !string.IsNullOrWhiteSpace(spell.EffectDice) && DiceSpec.TryParse(spell.EffectDice, out DiceSpec pSpec)
+                    ? pSpec
+                    : new DiceSpec(1, 8, 2);
+                int divineBonus = Math.Max(0, (caster.Judgment - 10) / 2) + caster.GetSetHealingBonus();
+                int heal = Math.Max(1, healSpec.Roll(rng) + divineBonus);
+                caster.Sp -= spCost;
+                int before = target.Hp;
+                target.Hp = Math.Min(target.MaxHp, target.Hp + heal);
+                int gained = Math.Max(0, target.Hp - before);
+                return new OutOfCombatSpellResult(
+                    true,
+                    $"{caster.Name} casts {spell.Name} on {target.Name} (+{gained} HP, {spCost} SP).",
+                    casterName: caster.Name,
+                    spSpent: spCost,
+                    totalHealing: gained);
+            }
+
+            if (string.Equals(kind, "Cure", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!HasFieldCurableAilment(target))
+                {
+                    return new OutOfCombatSpellResult(false, $"{target.Name} has no ailments to cure.");
+                }
+
+                caster.Sp -= spCost;
+                int cured = PurgeFieldAilments(target);
+                return new OutOfCombatSpellResult(
+                    true,
+                    $"{caster.Name} casts {spell.Name} on {target.Name} (cured {cured}, {spCost} SP).",
+                    casterName: caster.Name,
+                    spSpent: spCost,
+                    conditionsCured: cured);
+            }
+
+            if (string.Equals(kind, "Buff", StringComparison.OrdinalIgnoreCase) && spell.AppliedCondition.HasValue)
+            {
+                int duration = spell.ConditionDuration > 0 ? spell.ConditionDuration : 5;
+                caster.Sp -= spCost;
+                if (string.Equals(spell.TargetMode, "AllAllies", StringComparison.OrdinalIgnoreCase))
+                {
+                    int buffedCount = 0;
+                    for (int i = 0; i < _members.Count; i++)
+                    {
+                        if (_members[i].IsAlive)
+                        {
+                            _members[i].Conditions.Apply(
+                                spell.AppliedCondition.Value,
+                                magnitude: 1,
+                                turnsRemaining: duration,
+                                baseRecoveryChancePercent: 0,
+                                canRecoverBySave: false);
+                            buffedCount++;
+                        }
+                    }
+                    return new OutOfCombatSpellResult(
+                        true,
+                        $"{caster.Name} casts {spell.Name} on the party ({buffedCount} heroes buffed for next battle, {spCost} SP).",
+                        casterName: caster.Name,
+                        spSpent: spCost);
+                }
+
+                PartyMemberState buffTarget = string.Equals(spell.TargetMode, "Self", StringComparison.OrdinalIgnoreCase) || !target.IsAlive
+                    ? caster
+                    : target;
+                buffTarget.Conditions.Apply(
+                    spell.AppliedCondition.Value,
+                    magnitude: 1,
+                    turnsRemaining: duration,
+                    baseRecoveryChancePercent: 0,
+                    canRecoverBySave: false);
+                return new OutOfCombatSpellResult(
+                    true,
+                    $"{caster.Name} casts {spell.Name} on {buffTarget.Name} (ready for next battle, {spCost} SP).",
+                    casterName: caster.Name,
+                    spSpent: spCost);
+            }
+
+            return new OutOfCombatSpellResult(false, $"{spell.Name} can only be cast during tactical combat.");
+        }
+
+        private int FindOutOfCombatHealerIndex(
+            int preferredIdx,
+            IReadOnlyDictionary<int, SpellDefinition>? spells,
+            out SpellDefinition? bestHealSpell)
+        {
+            bestHealSpell = null;
+            int bestIdx = -1;
+            int bestScore = int.MinValue;
+
+            for (int i = 0; i < _members.Count; i++)
+            {
+                PartyMemberState m = _members[i];
+                if (!m.IsAlive || m.Sp <= 0)
+                {
+                    continue;
+                }
+
+                SpellDefinition? cheapestHeal = null;
+                if (spells != null)
+                {
+                    for (int ks = 0; ks < m.KnownSpellIds.Count; ks++)
+                    {
+                        if (spells.TryGetValue(m.KnownSpellIds[ks], out SpellDefinition? candidate) &&
+                            string.Equals(candidate.EffectKind, "Heal", StringComparison.OrdinalIgnoreCase))
+                        {
+                            int cost = Math.Max(1, candidate.SpCost - m.GetSetSpCostDiscount());
+                            if (m.Sp >= cost && (cheapestHeal == null || candidate.SpCost < cheapestHeal.SpCost))
+                            {
+                                cheapestHeal = candidate;
+                            }
+                        }
+                    }
+                }
+
+                bool isDivineClass = string.Equals(m.Archetype, "Cleric", StringComparison.OrdinalIgnoreCase) ||
+                                     string.Equals(m.Archetype, "Paladin", StringComparison.OrdinalIgnoreCase) ||
+                                     string.Equals(m.Archetype, "Priest", StringComparison.OrdinalIgnoreCase);
+                if (cheapestHeal == null && !(isDivineClass && m.Sp >= 10))
+                {
+                    continue;
+                }
+
+                int score = m.Sp + (i == preferredIdx ? 1000 : 0) + (string.Equals(m.Archetype, "Cleric", StringComparison.OrdinalIgnoreCase) ? 100 : 0);
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestIdx = i;
+                    bestHealSpell = cheapestHeal;
+                }
+            }
+
+            return bestIdx;
+        }
+
+        private int FindOutOfCombatCasterIndex(int preferredIdx, int spCost, bool divinePreferred)
+        {
+            int bestIdx = -1;
+            int bestScore = int.MinValue;
+            for (int i = 0; i < _members.Count; i++)
+            {
+                PartyMemberState m = _members[i];
+                if (!m.IsAlive || m.MaxSp <= 0 || m.Sp < spCost)
+                {
+                    continue;
+                }
+
+                bool isDivine = string.Equals(m.Archetype, "Cleric", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(m.Archetype, "Paladin", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(m.Archetype, "Priest", StringComparison.OrdinalIgnoreCase);
+                int score = m.Sp + (i == preferredIdx ? 1000 : 0) + (divinePreferred && isDivine ? 150 : 0);
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestIdx = i;
+                }
+            }
+
+            return bestIdx;
+        }
+
+        private static bool HasFieldCurableAilment(PartyMemberState m)
+        {
+            return m.IsAlive && (
+                m.ExhaustionStacks > 0 ||
+                m.CurseStacks > 0 ||
+                m.Conditions.Has(CharConditionId.Poisoned) ||
+                m.Conditions.Has(CharConditionId.Diseased) ||
+                m.Conditions.Has(CharConditionId.Cursed));
+        }
+
+        private static int PurgeFieldAilments(PartyMemberState m)
+        {
+            int count = 0;
+            if (m.Conditions.Remove(CharConditionId.Poisoned)) count++;
+            if (m.Conditions.Remove(CharConditionId.Diseased)) count++;
+            if (m.Conditions.Remove(CharConditionId.Cursed)) count++;
+            if (m.CurseStacks > 0)
+            {
+                count += m.CurseStacks;
+                m.CurseStacks = 0;
+            }
+            if (m.ExhaustionStacks > 0)
+            {
+                m.ExhaustionStacks--;
+                count++;
+            }
+            return count;
+        }
 
         public bool TryConsumeFoodRation()
         {
@@ -2202,6 +2777,7 @@ namespace RealmzCore.Exploration
                 hero.Sp += Math.Max(0, spGain);
                 int clearedEx = hero.ExhaustionStacks;
                 hero.ExhaustionStacks = 0;
+                double fatReduced = ReducePartyFatigue(45.0);
                 int hpHeal = 0;
                 if (!string.IsNullOrWhiteSpace(def.HealDice) && DiceSpec.TryParse(def.HealDice, out DiceSpec rSpec))
                 {
@@ -2209,7 +2785,8 @@ namespace RealmzCore.Exploration
                     hero.Hp = Math.Min(hero.MaxHp, Math.Max(1, hero.Hp) + Math.Max(1, rSpec.Roll(rng)));
                     hpHeal = Math.Max(0, hero.Hp - beforeHp);
                 }
-                feedbackMessage = $"{hero.Name} drank {def.Name}: +{hpHeal} HP, +{spGain} SP, cleared {clearedEx} Exhaustion.";
+                string fatNote = fatReduced > 0.5 ? $", -{(int)Math.Round(fatReduced)}% fatigue" : string.Empty;
+                feedbackMessage = $"{hero.Name} drank {def.Name}: +{hpHeal} HP, +{spGain} SP, cleared {clearedEx} Exhaustion{fatNote}.";
                 return true;
             }
 
@@ -2443,7 +3020,7 @@ namespace RealmzCore.Exploration
                 TorchMinutesRemaining = Math.Max(TorchMinutesRemaining, 60.0);
             }
 
-            if (inHostileZone && roller != null && roller.NextInt(1, 101) <= 15)
+            if (inHostileZone && !CampSentryActive && roller != null && roller.NextInt(1, 101) <= 15)
             {
                 return new RestResult(
                     mode,
@@ -2460,6 +3037,9 @@ namespace RealmzCore.Exploration
                     consumedRation: false,
                     foodRationsRemaining: FoodRations);
             }
+
+            CampSentryActive = false;
+            ClearPartyFatigue();
 
             bool consumedRation = false;
             if (!isSafeZone && FoodRations > 0)

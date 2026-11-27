@@ -201,6 +201,7 @@ namespace Realmz.Game
         private TextMeshProUGUI _topGoldText;
         private TextMeshProUGUI _topTorchText;
         private TextMeshProUGUI _topTurnText;
+        private TextMeshProUGUI _topFatigueText;
         private GameObject _topSpacer;
         private Button _skirmishBtn;
         private Button _partyBtn;
@@ -341,6 +342,9 @@ namespace Realmz.Game
         private GameObject _targetingBannerRoot;
         private Image _targetingBannerBg;
         private TextMeshProUGUI _targetingBannerText;
+        private GameObject _spellPowerRow;
+        private readonly Button[] _spellPowerBtns = new Button[3];
+        private readonly TextMeshProUGUI[] _spellPowerBtnLabels = new TextMeshProUGUI[3];
 
         // Dirty-check caches for zero-hitch exploration HUD updates
         private bool _hasAppliedHudActive;
@@ -354,6 +358,8 @@ namespace Realmz.Game
         private int _lastExploreGold = int.MinValue;
         private int _lastExploreTorch = int.MinValue;
         private int _lastExploreTurn = int.MinValue;
+        private int _lastExploreFatiguePct = int.MinValue;
+        private PartyFatigueState _lastExploreFatigueState;
         private bool _hasLastExploreHover;
         private GridCoord _lastExploreHoverCoord;
         private BywaterTileKind _lastExploreHoverKind;
@@ -472,6 +478,7 @@ namespace Realmz.Game
         public event Action OnEndTurnRequested;
         public event Action OnCycleSpeedRequested;
         public event Action<int> OnSpellSelected;
+        public event Action<int> OnSpellPowerLevelSelected;
         public event Action<string> OnCombatPartyAllyClicked;
         public event Action<string, string, string> OnHotbarSlotHovered;
         public event Action OnHotbarSlotHoverExited;
@@ -1303,6 +1310,27 @@ namespace Realmz.Game
             {
                 _lastExploreTurn = session.TurnCount;
                 _topTurnText.text = $"Turn: {session.TurnCount}";
+            }
+
+            int fatiguePct = session.Party.PartyFatiguePercent;
+            PartyFatigueState fatigueState = session.Party.FatigueState;
+            if (_topFatigueText != null && (_lastExploreFatiguePct != fatiguePct || _lastExploreFatigueState != fatigueState))
+            {
+                _lastExploreFatiguePct = fatiguePct;
+                _lastExploreFatigueState = fatigueState;
+                string tag = fatigueState switch
+                {
+                    PartyFatigueState.Exhausted => "Exhausted",
+                    PartyFatigueState.Winded => "Winded",
+                    _ => "Fatigue",
+                };
+                _topFatigueText.text = $"{tag}: {fatiguePct}%";
+                _topFatigueText.color = fatigueState switch
+                {
+                    PartyFatigueState.Exhausted => BywaterUiHelpers.DangerRed,
+                    PartyFatigueState.Winded => BywaterUiHelpers.BrassHighlight,
+                    _ => BywaterUiHelpers.ParchmentText,
+                };
             }
 
             RefreshEncounterDirectorExploreHud(session);
@@ -2167,7 +2195,8 @@ namespace Realmz.Game
             BywaterM1Bundle bundle,
             CombatActionMode activeMode,
             int selectedSpellId,
-            string speedLabel)
+            string speedLabel,
+            int spellPowerLevel = 1)
         {
             if (!_uiBuilt || combat == null)
             {
@@ -2317,15 +2346,33 @@ namespace Realmz.Game
             }
 
             string selectedSpellName = null;
+            SpellDefinition activeSpellDef = null;
             if (activeMode == CombatActionMode.Spell &&
                 selectedSpellId >= 0 &&
                 bundle != null &&
                 bundle.Spells != null &&
-                bundle.Spells.TryGetValue(selectedSpellId, out SpellDefinition activeSpellDef))
+                bundle.Spells.TryGetValue(selectedSpellId, out activeSpellDef))
             {
                 selectedSpellName = activeSpellDef.Name;
             }
-            SetCombatTargetingBanner(isHeroTurn ? activeMode : CombatActionMode.Smart, selectedSpellName);
+            int maxAffordablePower = 3;
+            if (activeSpellDef != null && actor != null)
+            {
+                maxAffordablePower = 1;
+                for (int p = TacticalCombatSession.MaxSpellPowerLevel; p >= 2; p--)
+                {
+                    if (actor.Sp >= TacticalCombatSession.GetEffectiveSpellSpCost(actor, activeSpellDef, p))
+                    {
+                        maxAffordablePower = p;
+                        break;
+                    }
+                }
+            }
+            SetCombatTargetingBanner(
+                isHeroTurn ? activeMode : CombatActionMode.Smart,
+                selectedSpellName,
+                spellPowerLevel,
+                maxAffordablePower);
 
             // 4. Bottom-Right 3-Line Ticker + Expandable 40-Row History Drawer
             if (_lastLogSession != combat || combat.Log.Count != _lastLogCount)
@@ -3824,7 +3871,28 @@ namespace Realmz.Game
             SyncModalScrim();
         }
 
-        public void SetCombatTargetingBanner(CombatActionMode mode, string spellName = null)
+        private (string title, string body) BuildFatigueHintTooltip()
+        {
+            if (_cachedExploreSession?.Party == null)
+            {
+                return ("Party Fatigue", "Builds outside Bywater & after combat. Full Rest at Camp or a Refresh Potion restores 0%.");
+            }
+
+            PartyState party = _cachedExploreSession.Party;
+            int pct = party.PartyFatiguePercent;
+            string statusLine = party.FatigueState switch
+            {
+                PartyFatigueState.Exhausted => "EXHAUSTED (100%): Living heroes suffer Exhaustion penalties (-AC / -To-Hit). Camp Full Rest or drink a Refresh Potion!",
+                PartyFatigueState.Winded => "WINDED (>= 70%): Disadvantage on Evade Patrol checks; at 100%, Exhaustion builds.",
+                _ => "FRESH (< 70%): No fatigue penalties active.",
+            };
+            string sentryLine = party.CampSentryActive
+                ? "\nCamp Sentry Active: next hostile Full Rest ambush is warded off."
+                : string.Empty;
+            return ($"Party Fatigue: {pct}% ({party.FatigueState})", statusLine + sentryLine);
+        }
+
+        public void SetCombatTargetingBanner(CombatActionMode mode, string spellName = null, int powerLevel = 1, int maxAffordablePower = 3)
         {
             if (!_uiBuilt || _targetingBannerRoot == null || _targetingBannerText == null)
             {
@@ -3840,6 +3908,9 @@ namespace Realmz.Game
                 return;
             }
 
+            int clampedPower = Mathf.Clamp(powerLevel, 1, TacticalCombatSession.MaxSpellPowerLevel);
+            bool isSpellMode = mode == CombatActionMode.Spell;
+
             string msg;
             Color accent = BywaterUiHelpers.BrassHighlight;
             switch (mode)
@@ -3854,7 +3925,8 @@ namespace Realmz.Game
                     break;
                 case CombatActionMode.Spell:
                     string label = string.IsNullOrWhiteSpace(spellName) ? "Spell" : spellName;
-                    msg = $"Spell Mode ({label}) - Click target, or Right-Click / [Esc] to Move";
+                    string powerTag = clampedPower > 1 ? $" [{clampedPower}x]" : string.Empty;
+                    msg = $"Spell ({label}{powerTag}) - Click target, or Right-Click / [Esc] to Move";
                     accent = BywaterUiHelpers.InfoCyan;
                     break;
                 case CombatActionMode.Shove:
@@ -3873,6 +3945,31 @@ namespace Realmz.Game
             _targetingBannerText.text = msg;
             _targetingBannerText.color = accent;
             BywaterUiHelpers.SetBorderColor(_targetingBannerRoot.transform, accent);
+
+            if (_spellPowerRow != null)
+            {
+                _spellPowerRow.SetActive(isSpellMode);
+                if (isSpellMode)
+                {
+                    for (int i = 0; i < _spellPowerBtns.Length; i++)
+                    {
+                        Button btn = _spellPowerBtns[i];
+                        if (btn == null) continue;
+                        int p = i + 1;
+                        bool affordable = p <= maxAffordablePower;
+                        bool selected = p == clampedPower;
+                        btn.interactable = affordable;
+                        BywaterUiHelpers.SetButtonColors(btn, selected && affordable);
+                        if (_spellPowerBtnLabels[i] != null)
+                        {
+                            _spellPowerBtnLabels[i].color = !affordable
+                                ? BywaterUiHelpers.MutedSlate
+                                : (selected ? BywaterUiHelpers.BrassHighlight : BywaterUiHelpers.ParchmentText);
+                        }
+                    }
+                }
+            }
+
             if (!_targetingBannerRoot.activeSelf)
             {
                 _targetingBannerRoot.SetActive(true);
@@ -3962,6 +4059,7 @@ namespace Realmz.Game
             if (_topGoldText != null) _topGoldText.gameObject.SetActive(!inCombat);
             if (_topTorchText != null) _topTorchText.gameObject.SetActive(!inCombat);
             if (_topTurnText != null) _topTurnText.gameObject.SetActive(!inCombat);
+            if (_topFatigueText != null) _topFatigueText.gameObject.SetActive(!inCombat);
             ApplyEncounterDirectorTopBarVisibility(inCombat);
             if (_topSpacer != null) _topSpacer.SetActive(true);
 
@@ -4113,12 +4211,12 @@ namespace Realmz.Game
             _topMapText = BywaterUiHelpers.CreateDisplayLabel(bar, "MapNameText", "City of Bywater (2, 1)", _font, 18f, BywaterUiHelpers.BrassHighlight, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
             _topMapText.overflowMode = TextOverflowModes.Truncate;
             LayoutElement mapLe = _topMapText.gameObject.AddComponent<LayoutElement>();
-            mapLe.preferredWidth = 315f;
+            mapLe.preferredWidth = 255f;
 
             _topGoldText = BywaterUiHelpers.CreateLabel(bar, "GoldText", "Gold: 400g", _font, 16f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
             BywaterUiHelpers.AddTextDropShadow(_topGoldText);
             LayoutElement goldLe = _topGoldText.gameObject.AddComponent<LayoutElement>();
-            goldLe.preferredWidth = 112f;
+            goldLe.preferredWidth = 106f;
 
             _topTorchText = BywaterUiHelpers.CreateLabel(bar, "TorchText", "Torch: 0t", _font, 16f, new Color(1.0f, 0.72f, 0.32f, 1f), TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
             BywaterUiHelpers.AddTextDropShadow(_topTorchText);
@@ -4128,7 +4226,17 @@ namespace Realmz.Game
             _topTurnText = BywaterUiHelpers.CreateLabel(bar, "TurnText", "Turn: 0", _font, 15.5f, BywaterUiHelpers.MutedSlate, TextAlignmentOptions.MidlineLeft, wrap: false);
             BywaterUiHelpers.AddTextDropShadow(_topTurnText);
             LayoutElement turnLe = _topTurnText.gameObject.AddComponent<LayoutElement>();
-            turnLe.preferredWidth = 92f;
+            turnLe.preferredWidth = 80f;
+
+            _topFatigueText = BywaterUiHelpers.CreateLabel(bar, "FatigueText", "Fatigue: 0%", _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+            _topFatigueText.enableAutoSizing = true;
+            _topFatigueText.fontSizeMin = 11.5f;
+            _topFatigueText.fontSizeMax = 15f;
+            _topFatigueText.overflowMode = TextOverflowModes.Truncate;
+            BywaterUiHelpers.AddTextDropShadow(_topFatigueText);
+            LayoutElement fatigueLe = _topFatigueText.gameObject.AddComponent<LayoutElement>();
+            fatigueLe.preferredWidth = 104f;
+            AttachTooltipCallbacks(_topFatigueText.gameObject, BuildFatigueHintTooltip);
 
             BuildEncounterDirectorTopBarPills(bar);
 
@@ -5732,15 +5840,27 @@ namespace Realmz.Game
             _deploymentStartBattleBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 198f;
             _deploymentBannerRoot.SetActive(false);
 
-            // Compact non-blocking targeting banner above action bar when in Melee / Ranged / Spell / Shove / Potion mode
+            // Compact targeting banner above action bar when in Melee / Ranged / Spell / Shove / Potion mode
             RectTransform bannerRt = BywaterUiHelpers.CreatePanel(_combatRoot.transform, "TargetingModeBanner", BywaterUiHelpers.PanelDarkBg, withBrassOutline: true, outlinePx: 1.4f);
             bannerRt.anchorMin = new Vector2(0.5f, 0f);
             bannerRt.anchorMax = new Vector2(0.5f, 0f);
             bannerRt.pivot = new Vector2(0.5f, 0f);
             bannerRt.anchoredPosition = new Vector2(-180f, 108f);
-            bannerRt.sizeDelta = new Vector2(680f, 34f);
+            bannerRt.sizeDelta = new Vector2(740f, 36f);
             _targetingBannerRoot = bannerRt.gameObject;
             _targetingBannerBg = bannerRt.GetComponent<Image>();
+            if (_targetingBannerBg != null)
+            {
+                _targetingBannerBg.raycastTarget = false;
+            }
+
+            HorizontalLayoutGroup bannerHlg = bannerRt.gameObject.AddComponent<HorizontalLayoutGroup>();
+            bannerHlg.padding = new RectOffset(12, 8, 3, 3);
+            bannerHlg.spacing = 6f;
+            bannerHlg.childControlWidth = true;
+            bannerHlg.childControlHeight = true;
+            bannerHlg.childForceExpandWidth = false;
+            bannerHlg.childForceExpandHeight = true;
 
             _targetingBannerText = BywaterUiHelpers.CreateLabel(
                 bannerRt,
@@ -5753,12 +5873,57 @@ namespace Realmz.Game
                 FontStyles.Bold,
                 wrap: false);
             _targetingBannerText.overflowMode = TextOverflowModes.Truncate;
-            _targetingBannerText.rectTransform.anchorMin = Vector2.zero;
-            _targetingBannerText.rectTransform.anchorMax = Vector2.one;
-            _targetingBannerText.rectTransform.offsetMin = new Vector2(12f, 2f);
-            _targetingBannerText.rectTransform.offsetMax = new Vector2(-12f, -2f);
+            _targetingBannerText.raycastTarget = false;
+            LayoutElement bannerTextLe = _targetingBannerText.gameObject.AddComponent<LayoutElement>();
+            bannerTextLe.flexibleWidth = 1f;
             BywaterUiHelpers.AddTextDropShadow(_targetingBannerText);
-            BywaterUiHelpers.SetRaycastTargetRecursive(bannerRt, false);
+
+            _spellPowerRow = new GameObject("SpellPowerRow", typeof(RectTransform), typeof(LayoutElement));
+            _spellPowerRow.transform.SetParent(bannerRt, false);
+            LayoutElement powerRowLe = _spellPowerRow.GetComponent<LayoutElement>();
+            powerRowLe.preferredWidth = 178f;
+            HorizontalLayoutGroup powerHlg = _spellPowerRow.AddComponent<HorizontalLayoutGroup>();
+            powerHlg.spacing = 4f;
+            powerHlg.childControlWidth = true;
+            powerHlg.childControlHeight = true;
+            powerHlg.childForceExpandWidth = false;
+            powerHlg.childForceExpandHeight = true;
+
+            TextMeshProUGUI powerLbl = BywaterUiHelpers.CreateLabel(
+                _spellPowerRow.transform,
+                "SpellPowerLabel",
+                "Pwr:",
+                _font,
+                15f,
+                BywaterUiHelpers.MutedSlate,
+                TextAlignmentOptions.MidlineRight,
+                FontStyles.Bold,
+                wrap: false);
+            powerLbl.overflowMode = TextOverflowModes.Truncate;
+            powerLbl.raycastTarget = false;
+            powerLbl.gameObject.AddComponent<LayoutElement>().preferredWidth = 38f;
+
+            for (int p = 1; p <= 3; p++)
+            {
+                int capturedPower = p;
+                Button pBtn = BywaterUiHelpers.CreateButton(
+                    _spellPowerRow.transform,
+                    $"SpellPowerBtn_{p}",
+                    $"{p}x",
+                    _font,
+                    () => OnSpellPowerLevelSelected?.Invoke(capturedPower),
+                    15f);
+                pBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 42f;
+                TextMeshProUGUI pLabel = pBtn.GetComponentInChildren<TextMeshProUGUI>(true);
+                if (pLabel != null)
+                {
+                    pLabel.overflowMode = TextOverflowModes.Truncate;
+                }
+                BywaterUiHelpers.SetButtonColors(pBtn, p == 1);
+                _spellPowerBtns[p - 1] = pBtn;
+                _spellPowerBtnLabels[p - 1] = pLabel;
+            }
+            _spellPowerRow.SetActive(false);
             _targetingBannerRoot.SetActive(false);
         }
 

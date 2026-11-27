@@ -140,9 +140,23 @@ namespace Realmz.Game
 
         private Button _tabEquipBtn;
         private Button _tabCharSheetBtn;
+        private Button _tabCampMagicBtn;
         private GameObject _paperDollPanel;
         private GameObject _charSheetPanel;
-        private bool _showCharSheetTab;
+        private GameObject _campMagicPanel;
+        private int _activeHeroSheetTabIndex;
+        private TextMeshProUGUI _campMagicStatusText;
+        private TextMeshProUGUI _campMagicHeroEmptyText;
+        private readonly Dictionary<OutOfCombatSpellKind, Button> _campMagicRitualBtns = new Dictionary<OutOfCombatSpellKind, Button>();
+        private readonly List<CampMagicHeroSpellRowRefs> _campMagicHeroSpellRows = new List<CampMagicHeroSpellRowRefs>(4);
+        private sealed class CampMagicHeroSpellRowRefs
+        {
+            public GameObject Root;
+            public TextMeshProUGUI NameLabel;
+            public TextMeshProUGUI CostLabel;
+            public Button CastButton;
+            public int BoundSpellId = -1;
+        }
         private readonly List<PaperDollSlotRefs> _paperDollSlots = new List<PaperDollSlotRefs>(9);
         private Image _paperDollHeroFigure;
         private TextMeshProUGUI _paperDollSummaryText;
@@ -221,6 +235,8 @@ namespace Realmz.Game
         public event Action OnEquipBestPartyRequested;
         public event Action<int, AttributeAllocation, int?> OnConfirmLevelUpRequested;
         public event Action<int[]> OnVictoryTakeLootRequested;
+        public event Action<OutOfCombatSpellKind> OnOutOfCombatUtilitySpellRequested;
+        public event Action<int, int> OnOutOfCombatKnownSpellRequested;
 
         private void BuildHeaderCampPills(Transform headerTransform)
         {
@@ -396,18 +412,22 @@ namespace Realmz.Game
 
         private void BuildPaperDollAndCharSheet(Transform gearCol)
         {
-            // Tab switcher: [Equipment] | [Character Sheet]
+            // Tab switcher: [Equipment] | [Char Sheet] | [Camp Magic]
             GameObject tabRow = new GameObject("DrawerModeTabs", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             tabRow.transform.SetParent(gearCol, false);
             tabRow.AddComponent<LayoutElement>().preferredHeight = 34f;
             HorizontalLayoutGroup tabHlg = tabRow.GetComponent<HorizontalLayoutGroup>();
-            tabHlg.spacing = 8f;
+            tabHlg.spacing = 6f;
             tabHlg.childControlWidth = true;
             tabHlg.childControlHeight = true;
             tabHlg.childForceExpandWidth = true;
 
-            _tabEquipBtn = BywaterUiHelpers.CreateButton(tabRow.transform, "TabEquipmentBtn", "Equipment (9 Slots)", _font, () => SwitchHeroSheetTab(false), 15.5f);
-            _tabCharSheetBtn = BywaterUiHelpers.CreateButton(tabRow.transform, "TabCharSheetBtn", "Character Sheet", _font, () => SwitchHeroSheetTab(true), 15.5f);
+            _tabEquipBtn = BywaterUiHelpers.CreateButton(tabRow.transform, "TabEquipmentBtn", "Equipment", _font, () => SwitchHeroSheetTab(0), 15f);
+            _tabCharSheetBtn = BywaterUiHelpers.CreateButton(tabRow.transform, "TabCharSheetBtn", "Char Sheet", _font, () => SwitchHeroSheetTab(1), 15f);
+            _tabCampMagicBtn = BywaterUiHelpers.CreateButton(tabRow.transform, "TabCampMagicBtn", "Camp Magic", _font, () => SwitchHeroSheetTab(2), 15f);
+            ConfigureDrawerTabButtonLabel(_tabEquipBtn);
+            ConfigureDrawerTabButtonLabel(_tabCharSheetBtn);
+            ConfigureDrawerTabButtonLabel(_tabCampMagicBtn);
 
             // Paper-Doll 9-slot container (clean icon-first anatomical ring around hero figure)
             RectTransform dollRt = BywaterUiHelpers.CreatePanel(gearCol, "PaperDollPanel", BywaterUiHelpers.PanelDarkBg, withBrassOutline: true, outlinePx: 1f);
@@ -675,7 +695,174 @@ namespace Realmz.Game
             _charSheetExtraText = BywaterUiHelpers.CreateLabel(derivedCol, "ExtraBody", string.Empty, _font, 15f, BywaterUiHelpers.InfoCyan, TextAlignmentOptions.TopLeft, wrap: true);
             _charSheetExtraText.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
 
-            SwitchHeroSheetTab(false);
+            // Camp Magic View (3rd tab: Party Rituals + Hero Field Spells whose buffs carry into combat)
+            RectTransform cmRt = BywaterUiHelpers.CreatePanel(gearCol, "CampMagicPanel", BywaterUiHelpers.PanelDarkBg, withBrassOutline: true, outlinePx: 1f);
+            LayoutElement cmLe = cmRt.gameObject.AddComponent<LayoutElement>();
+            cmLe.preferredHeight = 520f;
+            cmLe.flexibleHeight = 1f;
+            _campMagicPanel = cmRt.gameObject;
+
+            VerticalLayoutGroup cmVlg = cmRt.gameObject.AddComponent<VerticalLayoutGroup>();
+            cmVlg.padding = new RectOffset(10, 10, 10, 10);
+            cmVlg.spacing = 6f;
+            cmVlg.childControlWidth = true;
+            cmVlg.childControlHeight = true;
+            cmVlg.childForceExpandHeight = false;
+
+            _campMagicStatusText = BywaterUiHelpers.CreateLabel(
+                cmRt,
+                "CampMagicStatus",
+                "Fatigue: 0% (Fresh)  |  Sentry: Off",
+                _font,
+                15f,
+                BywaterUiHelpers.ParchmentText,
+                TextAlignmentOptions.MidlineLeft,
+                FontStyles.Bold,
+                wrap: false);
+            _campMagicStatusText.enableAutoSizing = true;
+            _campMagicStatusText.fontSizeMin = 11.5f;
+            _campMagicStatusText.fontSizeMax = 15f;
+            _campMagicStatusText.overflowMode = TextOverflowModes.Truncate;
+            _campMagicStatusText.gameObject.AddComponent<LayoutElement>().preferredHeight = 28f;
+
+            TextMeshProUGUI ritualHdr = BywaterUiHelpers.CreateLabel(
+                cmRt,
+                "CampRitualsHeader",
+                "Field Rituals (Party Caster SP)",
+                _font,
+                15f,
+                BywaterUiHelpers.BrassHighlight,
+                TextAlignmentOptions.MidlineLeft,
+                FontStyles.Bold,
+                wrap: false);
+            ritualHdr.overflowMode = TextOverflowModes.Truncate;
+            ritualHdr.gameObject.AddComponent<LayoutElement>().preferredHeight = 24f;
+
+            AddCampMagicRitualRow(cmRt, "CampMagicBtn_HealParty", OutOfCombatSpellKind.HealParty, "Heal Injured", "Spend party healer SP to mend the selected/lowest HP hero.");
+            AddCampMagicRitualRow(cmRt, "CampMagicBtn_ConjureLight", OutOfCombatSpellKind.ConjureLight, $"Conjure Light ({PartyState.ConjureLightSpCost} SP)", "Adds +60m torchlight without spending a torch item.");
+            AddCampMagicRitualRow(cmRt, "CampMagicBtn_CureParty", OutOfCombatSpellKind.CureParty, $"Purify Ailments ({PartyState.CurePartySpCost} SP)", "Clears poison, disease, curse, or exhaustion from an afflicted hero.");
+            AddCampMagicRitualRow(cmRt, "CampMagicBtn_CampSentry", OutOfCombatSpellKind.CampSentry, $"Ward Camp / Sentry ({PartyState.CampSentrySpCost} SP)", "Wards the next hostile-zone Full Rest against the 15% ambush.");
+            AddCampMagicRitualRow(cmRt, "CampMagicBtn_RefreshParty", OutOfCombatSpellKind.RefreshParty, $"Invigorate ({PartyState.RefreshPartySpCost} SP)", "Restores stamina and lowers Party Fatigue by 40%.");
+
+            TextMeshProUGUI heroSpellHdr = BywaterUiHelpers.CreateLabel(
+                cmRt,
+                "HeroFieldSpellsHeader",
+                "Hero Field Spells (Buffs Carry to Battle)",
+                _font,
+                15f,
+                BywaterUiHelpers.BrassHighlight,
+                TextAlignmentOptions.MidlineLeft,
+                FontStyles.Bold,
+                wrap: false);
+            heroSpellHdr.enableAutoSizing = true;
+            heroSpellHdr.fontSizeMin = 11.5f;
+            heroSpellHdr.fontSizeMax = 15f;
+            heroSpellHdr.overflowMode = TextOverflowModes.Truncate;
+            heroSpellHdr.gameObject.AddComponent<LayoutElement>().preferredHeight = 24f;
+
+            _campMagicHeroEmptyText = BywaterUiHelpers.CreateLabel(
+                cmRt,
+                "CampMagicHeroEmpty",
+                "Selected hero knows no field Heal/Cure/Buff spells.",
+                _font,
+                15f,
+                BywaterUiHelpers.MutedSlate,
+                TextAlignmentOptions.MidlineLeft,
+                wrap: true);
+            _campMagicHeroEmptyText.enableAutoSizing = true;
+            _campMagicHeroEmptyText.fontSizeMin = 11.5f;
+            _campMagicHeroEmptyText.fontSizeMax = 15f;
+            _campMagicHeroEmptyText.overflowMode = TextOverflowModes.Truncate;
+            _campMagicHeroEmptyText.gameObject.AddComponent<LayoutElement>().preferredHeight = 32f;
+
+            _campMagicHeroSpellRows.Clear();
+            for (int i = 0; i < 4; i++)
+            {
+                RectTransform rowRt = BywaterUiHelpers.CreatePanel(cmRt, $"CampMagicHeroSpellRow_{i}", BywaterUiHelpers.CardBg, withBrassOutline: false);
+                rowRt.gameObject.AddComponent<LayoutElement>().preferredHeight = 36f;
+                HorizontalLayoutGroup rHlg = rowRt.gameObject.AddComponent<HorizontalLayoutGroup>();
+                rHlg.padding = new RectOffset(8, 6, 3, 3);
+                rHlg.spacing = 6f;
+                rHlg.childControlWidth = true;
+                rHlg.childControlHeight = true;
+                rHlg.childForceExpandWidth = false;
+
+                TextMeshProUGUI sName = BywaterUiHelpers.CreateLabel(rowRt, "SpellName", string.Empty, _font, 15f, BywaterUiHelpers.ParchmentText, TextAlignmentOptions.MidlineLeft, FontStyles.Bold, wrap: false);
+                sName.enableAutoSizing = true;
+                sName.fontSizeMin = 11.5f;
+                sName.fontSizeMax = 15f;
+                sName.overflowMode = TextOverflowModes.Truncate;
+                sName.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+
+                TextMeshProUGUI sCost = BywaterUiHelpers.CreateLabel(rowRt, "SpellCost", "0 SP", _font, 15f, BywaterUiHelpers.InfoCyan, TextAlignmentOptions.MidlineRight, wrap: false);
+                sCost.overflowMode = TextOverflowModes.Truncate;
+                sCost.gameObject.AddComponent<LayoutElement>().preferredWidth = 64f;
+
+                CampMagicHeroSpellRowRefs rowRef = new CampMagicHeroSpellRowRefs
+                {
+                    Root = rowRt.gameObject,
+                    NameLabel = sName,
+                    CostLabel = sCost
+                };
+                Button castBtn = BywaterUiHelpers.CreateButton(rowRt, "CastFieldSpellBtn", "Cast", _font, () =>
+                {
+                    if (rowRef.BoundSpellId >= 0)
+                    {
+                        OnOutOfCombatKnownSpellRequested?.Invoke(_selectedHeroIndex, rowRef.BoundSpellId);
+                    }
+                }, 15f);
+                castBtn.gameObject.AddComponent<LayoutElement>().preferredWidth = 74f;
+                TextMeshProUGUI castLbl = castBtn.GetComponentInChildren<TextMeshProUGUI>(true);
+                if (castLbl != null)
+                {
+                    castLbl.overflowMode = TextOverflowModes.Truncate;
+                }
+                rowRef.CastButton = castBtn;
+                _campMagicHeroSpellRows.Add(rowRef);
+                rowRef.Root.SetActive(false);
+            }
+
+            SwitchHeroSheetTab(0);
+        }
+
+        private void ConfigureDrawerTabButtonLabel(Button btn)
+        {
+            if (btn == null) return;
+            TextMeshProUGUI lbl = btn.GetComponentInChildren<TextMeshProUGUI>(true);
+            if (lbl != null)
+            {
+                lbl.enableAutoSizing = true;
+                lbl.fontSizeMin = 11.5f;
+                lbl.fontSizeMax = 15f;
+                lbl.overflowMode = TextOverflowModes.Truncate;
+            }
+        }
+
+        private void AddCampMagicRitualRow(
+            Transform parent,
+            string btnName,
+            OutOfCombatSpellKind kind,
+            string label,
+            string tooltipBody)
+        {
+            Button btn = BywaterUiHelpers.CreateButton(
+                parent,
+                btnName,
+                label,
+                _font,
+                () => OnOutOfCombatUtilitySpellRequested?.Invoke(kind),
+                15f);
+            btn.gameObject.AddComponent<LayoutElement>().preferredHeight = 36f;
+            TextMeshProUGUI lbl = btn.GetComponentInChildren<TextMeshProUGUI>(true);
+            if (lbl != null)
+            {
+                lbl.enableAutoSizing = true;
+                lbl.fontSizeMin = 11.5f;
+                lbl.fontSizeMax = 15f;
+                lbl.overflowMode = TextOverflowModes.Truncate;
+            }
+            _campMagicRitualBtns[kind] = btn;
+            AttachTooltipCallbacks(btn.gameObject, () => (label, tooltipBody));
         }
 
         private Transform CreateAnatomyColumn(Transform parent, string name, float preferredWidth = 0f, float spacing = 6f)
@@ -823,13 +1010,17 @@ namespace Realmz.Game
             });
         }
 
-        private void SwitchHeroSheetTab(bool showCharSheet)
+        private void SwitchHeroSheetTab(bool showCharSheet) => SwitchHeroSheetTab(showCharSheet ? 1 : 0);
+
+        private void SwitchHeroSheetTab(int tabIndex)
         {
-            _showCharSheetTab = showCharSheet;
-            if (_paperDollPanel != null) _paperDollPanel.SetActive(!showCharSheet);
-            if (_charSheetPanel != null) _charSheetPanel.SetActive(showCharSheet);
-            if (_tabEquipBtn != null) BywaterUiHelpers.SetButtonColors(_tabEquipBtn, !showCharSheet);
-            if (_tabCharSheetBtn != null) BywaterUiHelpers.SetButtonColors(_tabCharSheetBtn, showCharSheet);
+            _activeHeroSheetTabIndex = Mathf.Clamp(tabIndex, 0, 2);
+            if (_paperDollPanel != null) _paperDollPanel.SetActive(_activeHeroSheetTabIndex == 0);
+            if (_charSheetPanel != null) _charSheetPanel.SetActive(_activeHeroSheetTabIndex == 1);
+            if (_campMagicPanel != null) _campMagicPanel.SetActive(_activeHeroSheetTabIndex == 2);
+            if (_tabEquipBtn != null) BywaterUiHelpers.SetButtonColors(_tabEquipBtn, _activeHeroSheetTabIndex == 0);
+            if (_tabCharSheetBtn != null) BywaterUiHelpers.SetButtonColors(_tabCharSheetBtn, _activeHeroSheetTabIndex == 1);
+            if (_tabCampMagicBtn != null) BywaterUiHelpers.SetButtonColors(_tabCampMagicBtn, _activeHeroSheetTabIndex == 2);
         }
 
         private void BuildStashControls(Transform rightCol)
@@ -1263,8 +1454,9 @@ namespace Realmz.Game
                 }
             }
 
-            // Character Sheet Tab Refresh
+            // Character Sheet & Camp Magic Tabs Refresh
             RefreshCharacterSheet(party, bundle, hero, encumbered);
+            RefreshCampMagicPanel(party, bundle, hero);
 
             // Stash Filter / Sort Buttons State
             foreach (KeyValuePair<StashFilterKind, Button> kvp in _stashFilterBtns)
@@ -1327,6 +1519,114 @@ namespace Realmz.Game
                     $"Hero Carry Cap: {carry} wt (Party Avg Luck Gold: +{party.GetGoldLootBonusPercent()}%)\n" +
                     $"{setsLine}\n" +
                     $"{_drawerHeroConditions.text}\n{_drawerHeroSpells.text}";
+            }
+        }
+
+        private void RefreshCampMagicPanel(PartyState party, BywaterM1Bundle bundle, PartyMemberState hero)
+        {
+            if (_campMagicPanel == null || party == null)
+            {
+                return;
+            }
+
+            if (_campMagicStatusText != null)
+            {
+                string sentryTag = party.CampSentryActive ? "Ward Active" : "Sentry Off";
+                _campMagicStatusText.text = $"Fatigue: {party.PartyFatiguePercent}% ({party.FatigueState})  |  {sentryTag}";
+                _campMagicStatusText.color = party.FatigueState switch
+                {
+                    PartyFatigueState.Exhausted => BywaterUiHelpers.DangerRed,
+                    PartyFatigueState.Winded => BywaterUiHelpers.BrassHighlight,
+                    _ => BywaterUiHelpers.ParchmentText,
+                };
+            }
+
+            int maxLivingSp = 0;
+            bool anyInjured = false;
+            bool anyAilment = false;
+            for (int i = 0; i < party.Members.Count; i++)
+            {
+                PartyMemberState m = party.Members[i];
+                if (!m.IsAlive) continue;
+                if (m.Sp > maxLivingSp) maxLivingSp = m.Sp;
+                if (m.Hp < m.MaxHp) anyInjured = true;
+                if (m.ExhaustionStacks > 0 ||
+                    m.CurseStacks > 0 ||
+                    m.Conditions.Has(CharConditionId.Poisoned) ||
+                    m.Conditions.Has(CharConditionId.Diseased) ||
+                    m.Conditions.Has(CharConditionId.Cursed))
+                {
+                    anyAilment = true;
+                }
+            }
+
+            UpdateCampRitualButton(OutOfCombatSpellKind.HealParty, anyInjured && maxLivingSp >= 2, false);
+            UpdateCampRitualButton(OutOfCombatSpellKind.ConjureLight, maxLivingSp >= PartyState.ConjureLightSpCost, false);
+            UpdateCampRitualButton(OutOfCombatSpellKind.CureParty, anyAilment && maxLivingSp >= PartyState.CurePartySpCost, false);
+            UpdateCampRitualButton(OutOfCombatSpellKind.CampSentry, !party.CampSentryActive && maxLivingSp >= PartyState.CampSentrySpCost, party.CampSentryActive);
+            UpdateCampRitualButton(OutOfCombatSpellKind.RefreshParty, party.PartyFatigue > 0.5 && maxLivingSp >= PartyState.RefreshPartySpCost, false);
+
+            int rowIdx = 0;
+            IReadOnlyDictionary<int, SpellDefinition> spells = bundle != null ? bundle.Spells : null;
+            if (hero != null && spells != null)
+            {
+                for (int i = 0; i < hero.KnownSpellIds.Count && rowIdx < _campMagicHeroSpellRows.Count; i++)
+                {
+                    int spellId = hero.KnownSpellIds[i];
+                    if (!spells.TryGetValue(spellId, out SpellDefinition def) || def == null)
+                    {
+                        continue;
+                    }
+
+                    bool isFieldSpell =
+                        string.Equals(def.EffectKind, "Heal", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(def.EffectKind, "Cure", StringComparison.OrdinalIgnoreCase) ||
+                        (string.Equals(def.EffectKind, "Buff", StringComparison.OrdinalIgnoreCase) && def.AppliedCondition.HasValue);
+                    if (!isFieldSpell)
+                    {
+                        continue;
+                    }
+
+                    int spCost = def.SpCost > 0 ? Mathf.Max(1, def.SpCost - hero.GetSetSpCostDiscount()) : 0;
+                    bool canCast = hero.IsAlive && hero.Sp >= spCost;
+                    CampMagicHeroSpellRowRefs row = _campMagicHeroSpellRows[rowIdx++];
+                    row.BoundSpellId = def.Id;
+                    row.NameLabel.text = $"{def.Name} ({def.EffectKind})";
+                    row.CostLabel.text = $"{spCost} SP";
+                    row.CostLabel.color = canCast ? BywaterUiHelpers.InfoCyan : BywaterUiHelpers.MutedSlate;
+                    row.CastButton.interactable = canCast;
+                    BywaterUiHelpers.SetButtonColors(row.CastButton, canCast);
+                    row.Root.SetActive(true);
+                }
+            }
+
+            for (int i = rowIdx; i < _campMagicHeroSpellRows.Count; i++)
+            {
+                _campMagicHeroSpellRows[i].BoundSpellId = -1;
+                _campMagicHeroSpellRows[i].Root.SetActive(false);
+            }
+
+            if (_campMagicHeroEmptyText != null)
+            {
+                _campMagicHeroEmptyText.gameObject.SetActive(rowIdx == 0);
+            }
+        }
+
+        private void UpdateCampRitualButton(OutOfCombatSpellKind kind, bool canUse, bool activeFlag)
+        {
+            if (!_campMagicRitualBtns.TryGetValue(kind, out Button btn) || btn == null)
+            {
+                return;
+            }
+
+            btn.interactable = canUse;
+            BywaterUiHelpers.SetButtonColors(btn, activeFlag);
+            TextMeshProUGUI lbl = btn.GetComponentInChildren<TextMeshProUGUI>(true);
+            if (lbl != null)
+            {
+                lbl.color = activeFlag
+                    ? BywaterUiHelpers.SuccessGreen
+                    : (canUse ? BywaterUiHelpers.ParchmentText : BywaterUiHelpers.MutedSlate);
             }
         }
 

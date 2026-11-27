@@ -673,6 +673,24 @@ namespace RealmzCore.Exploration
             }
 
             bool torchExpired = Party.BurnTorchMinutes(WorldClock.MinutesPerStep);
+            if (!EncounterDirector.IsZoneInBywaterTownLimits(CurrentMap, nextTile) && !IsInSafeZone())
+            {
+                TileRule tileRule = CurrentMap.GetTileRule(CurrentMap.GetTile(nextTile.X, nextTile.Y));
+                double fatigueStep = 1.0;
+                if (CurrentWorldClock.IsNight)
+                {
+                    fatigueStep += 0.4;
+                }
+                if (Weather == WeatherState.LightRain || Weather == WeatherState.Storm)
+                {
+                    fatigueStep += 0.4;
+                }
+                if (!tileRule.IsPath && (tileRule.IsForest || tileRule.MoveCost > 1))
+                {
+                    fatigueStep += 0.5;
+                }
+                Party.AddPartyFatigue(fatigueStep);
+            }
 
             RefreshFogOfWar();
 
@@ -1147,6 +1165,7 @@ namespace RealmzCore.Exploration
 
             Party.Gold -= goldCost;
             Party.QuickBandageCharges = PartyState.MaxQuickBandageCharges;
+            Party.ClearPartyFatigue();
 
             for (int i = 0; i < Party.Members.Count; i++)
             {
@@ -1194,6 +1213,7 @@ namespace RealmzCore.Exploration
 
             Party.Gold -= goldCost;
             Party.QuickBandageCharges = PartyState.MaxQuickBandageCharges;
+            Party.ClearPartyFatigue();
 
             for (int i = 0; i < Party.Members.Count; i++)
             {

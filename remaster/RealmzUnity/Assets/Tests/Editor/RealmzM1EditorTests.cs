@@ -2738,6 +2738,8 @@ namespace Realmz.EditorTests
             IReadOnlyList<EncounterZoneData> zonesAtBank = session.CurrentMap.GetZonesAt(41, 54);
             Assert.That(zonesAtBank.Count, Is.GreaterThan(0));
             session.CompleteEncounterZone(zonesAtBank[0], graceSteps: 10);
+            party.PartyFatigue = 78.5;
+            party.CampSentryActive = true;
             Assert.That(session.PostCombatGraceStepsRemaining, Is.EqualTo(10));
             Assert.That(session.ZoneCooldownUntilTurns.Count, Is.EqualTo(1));
 
@@ -2751,6 +2753,8 @@ namespace Realmz.EditorTests
                 Assert.That(snap.worldTimeMinutes, Is.EqualTo(WorldClock.LegacyTurnsToMinutes(58)).Within(0.01));
                 Assert.That(snap.postCombatGraceSteps, Is.EqualTo(10));
                 Assert.That(snap.zoneCooldowns.Length, Is.EqualTo(1));
+                Assert.That(snap.partyFatigue, Is.EqualTo(78.5).Within(0.01));
+                Assert.That(snap.campSentryActive, Is.True);
                 Assert.That(BywaterSaveService.TryWriteSave(tempSave, snap), Is.True);
 
                 Assert.That(BywaterSaveService.TryLoadSave(tempSave, out BywaterSaveData loaded, out string _), Is.True);
@@ -2763,6 +2767,9 @@ namespace Realmz.EditorTests
                 Assert.That(restored.CurrentWorldClock.DisplayLabel, Is.EqualTo("Day 1 - 08:29 PM (Night)"));
                 Assert.That(restored.PostCombatGraceStepsRemaining, Is.EqualTo(10));
                 Assert.That(restored.IsEncounterZoneOnCooldown("land_0", zonesAtBank[0]), Is.True);
+                Assert.That(restored.Party.PartyFatigue, Is.EqualTo(78.5).Within(0.01));
+                Assert.That(restored.Party.FatigueState, Is.EqualTo(PartyFatigueState.Winded));
+                Assert.That(restored.Party.CampSentryActive, Is.True);
 
                 // Backward compatibility with legacy saves missing world clock fields (worldTimeTurns = -1, hasWorldClock = false)
                 BywaterSaveData legacyData = new BywaterSaveData
@@ -3640,6 +3647,51 @@ namespace Realmz.EditorTests
                 Assert.That(settingsImg, Is.Not.Null);
                 Assert.That(settingsImg.sprite, Is.Not.Null, "SettingsModal must have a sliced chrome sprite.");
                 Assert.That(settingsImg.type, Is.EqualTo(UnityEngine.UI.Image.Type.Sliced));
+
+                Transform fatigueTf = FindDescendantByName(topBarTf, "FatigueText");
+                Assert.That(fatigueTf, Is.Not.Null, "TopHudBar/FatigueText missing.");
+
+                int firedPower = -1;
+                hud.OnSpellPowerLevelSelected += p => firedPower = p;
+                for (int p = 1; p <= 3; p++)
+                {
+                    Transform pBtnTf = FindDescendantByName(canvas.transform, $"SpellPowerBtn_{p}");
+                    Assert.That(pBtnTf, Is.Not.Null, $"SpellPowerBtn_{p} missing.");
+                    if (p == 2)
+                    {
+                        pBtnTf.GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                    }
+                }
+                Assert.That(firedPower, Is.EqualTo(2), "Clicking SpellPowerBtn_2 should fire OnSpellPowerLevelSelected(2).");
+
+                Transform tabCampMagicTf = FindDescendantByName(canvas.transform, "TabCampMagicBtn");
+                Transform campMagicPanelTf = FindDescendantByName(canvas.transform, "CampMagicPanel");
+                Assert.That(tabCampMagicTf, Is.Not.Null, "TabCampMagicBtn missing.");
+                Assert.That(campMagicPanelTf, Is.Not.Null, "CampMagicPanel missing.");
+                Assert.That(campMagicPanelTf.gameObject.activeSelf, Is.False, "CampMagicPanel should start hidden on Equipment tab.");
+                tabCampMagicTf.GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                Assert.That(campMagicPanelTf.gameObject.activeSelf, Is.True, "Clicking TabCampMagicBtn should activate CampMagicPanel.");
+
+                string[] campRitualNames =
+                {
+                    "CampMagicBtn_HealParty",
+                    "CampMagicBtn_ConjureLight",
+                    "CampMagicBtn_CureParty",
+                    "CampMagicBtn_CampSentry",
+                    "CampMagicBtn_RefreshParty"
+                };
+                OutOfCombatSpellKind? firedUtility = null;
+                hud.OnOutOfCombatUtilitySpellRequested += k => firedUtility = k;
+                for (int i = 0; i < campRitualNames.Length; i++)
+                {
+                    Transform btnTf = FindDescendantByName(campMagicPanelTf, campRitualNames[i]);
+                    Assert.That(btnTf, Is.Not.Null, $"{campRitualNames[i]} missing from CampMagicPanel.");
+                    if (campRitualNames[i] == "CampMagicBtn_ConjureLight")
+                    {
+                        btnTf.GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                    }
+                }
+                Assert.That(firedUtility, Is.EqualTo(OutOfCombatSpellKind.ConjureLight));
 
                 TextMeshProUGUI[] labels = canvas.GetComponentsInChildren<TextMeshProUGUI>(true);
                 for (int i = 0; i < labels.Length; i++)
